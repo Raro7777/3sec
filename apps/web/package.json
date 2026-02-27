@@ -9,7 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@3sec/database": "workspace:*",
+    "@3sec/ocr": "workspace:*",
+    "@3sec/receipt-parser": "workspace:*",
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.98.0",
+    "archiver": "^7.0.1",
     "axios": "^1.13.5",
     "clsx": "^2.1.1",
     "framer-motion": "^12.34.3",
@@ -21,6 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/archiver": "^7.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@eslint/eslintrc": "^3.3.4",

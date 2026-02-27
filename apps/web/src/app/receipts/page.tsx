@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import Link from "next/link";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 interface Receipt {
     id: string;

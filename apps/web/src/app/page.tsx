@@ -29,7 +29,7 @@ interface DashboardStats {
   categorySummary: Record<string, number>;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);

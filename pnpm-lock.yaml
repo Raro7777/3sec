@@ -150,9 +150,27 @@ importers:
 
   apps/web:
     dependencies:
+      '@3sec/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@3sec/ocr':
+        specifier: workspace:*
+        version: link:../../packages/ocr
+      '@3sec/receipt-parser':
+        specifier: workspace:*
+        version: link:../../packages/receipt-parser
       '@ducanh2912/next-pwa':
         specifier: ^10.2.9
         version: 10.2.9(@types/babel__core@7.20.5)(next@16.1.6(@babel/core@7.29.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.104.1)
+      '@prisma/client':
+        specifier: ^6.19.2
+        version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
+      '@supabase/supabase-js':
+        specifier: ^2.98.0
+        version: 2.98.0
+      archiver:
+        specifier: ^7.0.1
+        version: 7.0.1
       axios:
         specifier: ^1.13.5
         version: 1.13.5
@@ -184,6 +202,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.1
+      '@types/archiver':
+        specifier: ^7.0.0
+        version: 7.0.0
       '@types/node':
         specifier: ^20
         version: 20.19.35

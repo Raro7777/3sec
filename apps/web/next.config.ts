@@ -9,6 +9,7 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   /* config options here */
+  transpilePackages: ['@3sec/database', '@3sec/ocr', '@3sec/receipt-parser'],
   turbopack: {}
 };
 
