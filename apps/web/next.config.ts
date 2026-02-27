@@ -9,6 +9,9 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   /* config options here */
+  experimental: {
+    turbopack: {}
+  }
 };
 
 export default withPWA(nextConfig);
