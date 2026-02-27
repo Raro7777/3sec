@@ -16,7 +16,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     try {
         const data = await request.json();
-        const { id: _, companyId, userId, createdAt, updatedAt, ...safeData } = data;
+        
+        // Exclude unchangeable/unmapped properties from frontend like rawText
+        const { id: _, companyId, userId, createdAt, updatedAt, rawText, ...safeData } = data;
 
         if (safeData.paidAt) safeData.paidAt = new Date(safeData.paidAt);
 

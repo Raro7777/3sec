@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import imageCompression from 'browser-image-compression';
 
 // 유틸리티 함수
 function cn(...inputs: ClassValue[]) {
@@ -72,17 +73,37 @@ export default function Home() {
     init();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      setFile(selectedFile);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
-      setStatus("idle");
-      setResult(null);
+      try {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        };
+        const compressedFile = await imageCompression(selectedFile, options);
+        setFile(compressedFile as File);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result as string);
+        };
+        reader.readAsDataURL(compressedFile);
+        setStatus("idle");
+        setResult(null);
+      } catch (error) {
+        console.error("Image compression failed:", error);
+        // Fallback to original
+        setFile(selectedFile);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+        setStatus("idle");
+        setResult(null);
+      }
     }
   };
 
