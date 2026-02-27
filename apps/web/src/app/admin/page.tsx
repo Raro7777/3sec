@@ -21,13 +21,15 @@ export default function AdminDashboardPage() {
             </header>
 
             <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 flex flex-col items-start">
                     <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mb-4">
                         <Users className="w-6 h-6" />
                     </div>
                     <h3 className="font-bold text-lg">사용자 관리</h3>
-                    <p className="text-zinc-500 text-sm mt-2">사내 계정 추가 및 역할 수정</p>
-                    <button className="mt-4 text-indigo-400 text-sm font-bold hover:underline">관리하기 &rarr;</button>
+                    <p className="text-zinc-500 text-sm mt-2 flex-grow">사내 계정 추가 및 역할 수정</p>
+                    <Link href="/admin/users" className="mt-4 px-4 py-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-xl text-sm font-bold transition-colors w-full text-center">
+                        관리하기 &rarr;
+                    </Link>
                 </div>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
