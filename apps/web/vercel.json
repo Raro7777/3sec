@@ -1,9 +1,3 @@
 {
-    "version": 2,
-    "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "https://[YOUR_BACKEND_URL]/$1"
-        }
-    ]
+    "version": 2
 }
