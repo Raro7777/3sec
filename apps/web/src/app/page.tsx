@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
