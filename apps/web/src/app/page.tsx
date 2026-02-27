@@ -42,7 +42,7 @@ export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReceipts, setRecentReceipts] = useState<ParsedReceipt[]>([]);
 
-  const router = useRouter();
+  // const router = useRouter();
 
   /* 
   const handleLogout = () => {
@@ -330,7 +330,7 @@ export default function Home() {
                           setPreview(null);
                           setFile(null);
                           fetchDashboardData();
-                        } catch (err) {
+                        } catch {
                           alert('저장에 실패했습니다.');
                         }
                       }}
