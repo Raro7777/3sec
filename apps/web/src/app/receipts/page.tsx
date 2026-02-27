@@ -165,7 +165,44 @@ export default function ReceiptsPage() {
                                 className="w-full px-3 py-2 rounded-xl border border-zinc-100 bg-zinc-50 text-xs font-bold focus:ring-1 focus:ring-indigo-200 outline-none"
                             />
                         </div>
-                        <div className="md:col-span-2 flex items-end">
+                        <div className="md:col-span-2 flex flex-col justify-end gap-2">
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        const now = new Date();
+                                        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                                        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+                                        // Adjust for locale output (YYYY-MM-DD)
+                                        const format = (d: Date) => {
+                                            const offset = d.getTimezoneOffset() * 60000;
+                                            return new Date(d.getTime() - offset).toISOString().split('T')[0];
+                                        };
+
+                                        setFilters({ ...filters, startDate: format(firstDay), endDate: format(lastDay) });
+                                    }}
+                                    className="flex-1 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                                >
+                                    이번달
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const now = new Date();
+                                        const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                                        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+
+                                        const format = (d: Date) => {
+                                            const offset = d.getTimezoneOffset() * 60000;
+                                            return new Date(d.getTime() - offset).toISOString().split('T')[0];
+                                        };
+
+                                        setFilters({ ...filters, startDate: format(firstDay), endDate: format(lastDay) });
+                                    }}
+                                    className="flex-1 py-1.5 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-bold hover:bg-zinc-200 transition-colors"
+                                >
+                                    저번달
+                                </button>
+                            </div>
                             <button
                                 onClick={() => setFilters({ q: "", category: "", startDate: "", endDate: "" })}
                                 className="px-4 py-2 text-zinc-400 hover:text-zinc-600 text-xs font-bold hover:underline"
