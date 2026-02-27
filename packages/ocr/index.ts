@@ -55,9 +55,10 @@ export class NaverOcrProvider implements OcrProvider {
         rawText,
         fullJson,
       };
-    } catch (error) {
-      console.error('Naver OCR API error:', error);
-      throw new Error('Failed to process image with Naver OCR');
+    } catch (error: any) {
+      const responseData = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      console.error('Naver OCR API error:', responseData);
+      throw new Error(`Naver OCR Error: ${responseData}`);
     }
   }
 

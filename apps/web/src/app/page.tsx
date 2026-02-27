@@ -81,15 +81,21 @@ export default function Home() {
           maxSizeMB: 1,
           maxWidthOrHeight: 1920,
           useWebWorker: true,
+          fileType: "image/jpeg" as string,
         };
-        const compressedFile = await imageCompression(selectedFile, options);
-        setFile(compressedFile as File);
+        const compressedBlob = await imageCompression(selectedFile, options);
+        
+        // Ensure the file maintains a valid name and extension for Naver OCR
+        const safeName = selectedFile.name.replace(/\.[^/.]+$/, "") + ".jpg";
+        const finalFile = new File([compressedBlob], safeName, { type: "image/jpeg" });
+        
+        setFile(finalFile);
 
         const reader = new FileReader();
         reader.onloadend = () => {
           setPreview(reader.result as string);
         };
-        reader.readAsDataURL(compressedFile);
+        reader.readAsDataURL(finalFile);
         setStatus("idle");
         setResult(null);
       } catch (error) {
