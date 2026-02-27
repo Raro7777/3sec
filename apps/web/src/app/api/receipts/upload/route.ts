@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
                 merchantName: parsedData.merchantName,
                 amount: parsedData.amount,
                 paidAt: parsedData.paidAt,
+                category: parsedData.category,
                 status: 'DRAFT',
             }
         });

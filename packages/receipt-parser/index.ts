@@ -2,99 +2,119 @@ export interface ParsedReceipt {
     merchantName?: string;
     amount?: number;
     paidAt?: Date;
+    category?: string;
 }
 
 export function parseReceiptText(text: string): ParsedReceipt {
     const result: ParsedReceipt = {};
+    const lines = text.split(/\s{2,}|[\n\r]/).map(l => l.trim()).filter(l => l.length > 0);
+    const fullTextStr = lines.join(' ');
 
-    // 1. 합계 금액 추출 (다양한 공백 및 키워드 대응)
-    // "합 계", "합계", "결제금액", "TOTAL AMOUNT" 등 대응
-    const amountKeywords = ['합\\s*계', '결제금액', '금액', '총\\s*금액', 'TOTAL', 'AMOUNT'];
-    const amountRegex = new RegExp(`(?:${amountKeywords.join('|')})\\s*[:]?\\s*([\\d,]{3,})`, 'i');
+    // 1. 카테고리(Category) 자동 추론
+    const textForCategory = fullTextStr.replace(/\s/g, '').toLowerCase();
+    
+    const foodKeywords = ['식당', '카페', '커피', '치킨', '베이커리', '맥도날드', '스타벅스', '버거', '피자', '음식', '제과', '가든', '분식', '아메리카노', '라떼'];
+    const transportKeywords = ['택시', 'ktx', '코레일', '주유소', '주차', '고속버스', '항공', '주유', '톨게이트', '통행료', '대리운전', '모범'];
+    const shoppingKeywords = ['편의점', '마트', '다이소', 'cu', 'gs25', '이마트', '홈플러스', '롯데마트', '쇼핑', '백화점', '세븐일레븐', '올리브영'];
 
-    const amountMatch = text.match(amountRegex);
-    if (amountMatch) {
-        result.amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
+    if (foodKeywords.some(k => textForCategory.includes(k))) {
+        result.category = '식비';
+    } else if (transportKeywords.some(k => textForCategory.includes(k))) {
+        result.category = '교통비';
+    } else if (shoppingKeywords.some(k => textForCategory.includes(k))) {
+        result.category = '비품/쇼핑';
+    }
+
+    // 2. 금액 추출 (고도화: 특정 강력한 키워드 우선)
+    const strongAmountKeywords = ['승\\s*인\\s*금\\s*액', '청\\s*구\\s*금\\s*액', '결\\s*제\\s*대\\s*상\\s*금\\s*액', '받\\s*은\\s*금\\s*액', '결\\s*제\\s*금\\s*액'];
+    const genericAmountKeywords = ['합\\s*계', '총\\s*금\\s*액', '금\\s*액', 'total', 'amount'];
+    
+    const extractAmount = (keywords: string[]) => {
+        const regex = new RegExp(`(?:${keywords.join('|')})\\s*[:：]?\\s*([\\d,]{3,})`, 'i');
+        const match = fullTextStr.match(regex);
+        if (match) return parseInt(match[1].replace(/,/g, ''), 10);
+        return null;
+    };
+
+    let amount = extractAmount(strongAmountKeywords) || extractAmount(genericAmountKeywords);
+    
+    if (amount) {
+        result.amount = amount;
     } else {
-        // 키워드 매칭 실패 시 가장 큰 숫자 후보군 중 금액일 확률이 높은 것 선택
-        // 가맹번호(8자리 이상) 등은 제외하고 보통 10만원 이하가 많으므로 필터링 보강
-        const numbers = text.match(/[\d,]{4,}/g);
-        if (numbers) {
-            const candidates = numbers
-                .map(n => parseInt(n.replace(/,/g, ''), 10))
-                .filter(n => n > 100 && n < 10000000) // 100원 초과 1000만원 미만 (가맹번호 등 제외)
-                .filter(n => n % 10 === 0) // 보통 0으로 끝남
+        // Fallback: 가장 큰 금액 (원, \ 등으로 끝나는/시작하는 숫자 우대)
+        const wonRegex = /(?:[\\]|원)?\s*([\d,]{3,})\s*(?:원)?/g;
+        const matches = [...fullTextStr.matchAll(wonRegex)];
+        if (matches.length > 0) {
+            const candidates = matches
+                .map(m => parseInt(m[1].replace(/,/g, ''), 10))
+                .filter(n => n > 100 && n < 10000000 && n % 10 === 0)
                 .sort((a, b) => b - a);
-
             if (candidates.length > 0) {
-                // 상향 기준: 100만 이하의 가장 큰 숫자를 우선 고려
-                const reasonableAmount = candidates.find(c => c < 1000000);
-                result.amount = reasonableAmount || candidates[0];
+                result.amount = candidates.find(c => c < 1000000) || candidates[0];
             }
         }
     }
 
-    // 2. 날짜 추출 (전화번호와 혼동 방지를 위해 연도 패턴 강화)
-    // 20xx 또는 19xx로 시작하는지 우선 확인
-    const dateRegex = /(20\d{2}|19\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/;
-    const dateMatch = text.match(dateRegex);
-    if (dateMatch) {
-        const year = parseInt(dateMatch[1], 10);
-        const month = parseInt(dateMatch[2], 10) - 1;
-        const day = parseInt(dateMatch[3], 10);
+    // 3. 날짜 추출 (한국어 YYYY년 MM월 DD일 등 지원 강화)
+    const koreanDateRegex = /(20\d{2}|2[0-5]|19\d{2})\s*년\s*0?([1-9]|1[0-2])\s*월\s*0?([1-9]|[12]\d|3[01])\s*일/i;
+    const standardDateRegex = /(20\d{2}|19\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
+    const shortDateRegex = /(\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
 
-        if (month >= 0 && month < 12 && day > 0 && day <= 31) {
-            // 시간 추출 시도 (HH:mm:ss 또는 HH:mm)
-            const timeRegex = /(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/;
-            const timeMatch = text.match(timeRegex);
-            if (timeMatch) {
-                result.paidAt = new Date(year, month, day, parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10));
-            } else {
-                result.paidAt = new Date(year, month, day);
-            }
-        }
+    let year = 0, month = 0, day = 0;
+
+    const krMatch = fullTextStr.match(koreanDateRegex);
+    if (krMatch) {
+        year = krMatch[1].length === 2 ? 2000 + parseInt(krMatch[1], 10) : parseInt(krMatch[1], 10);
+        month = parseInt(krMatch[2], 10) - 1;
+        day = parseInt(krMatch[3], 10);
     } else {
-        // YY/MM/DD 형식 시도
-        const shortDateRegex = /(\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/;
-        const shortMatch = text.match(shortDateRegex);
-        if (shortMatch) {
-            const year = 2000 + parseInt(shortMatch[1], 10);
-            const month = parseInt(shortMatch[2], 10) - 1;
-            const day = parseInt(shortMatch[3], 10);
-            if (month >= 0 && month < 12 && day > 0 && day <= 31) {
-                result.paidAt = new Date(year, month, day);
+        const stdMatch = fullTextStr.match(standardDateRegex);
+        if (stdMatch) {
+            year = parseInt(stdMatch[1], 10);
+            month = parseInt(stdMatch[2], 10) - 1;
+            day = parseInt(stdMatch[3], 10);
+        } else {
+            const shMatch = fullTextStr.match(shortDateRegex);
+            if (shMatch) {
+                year = 2000 + parseInt(shMatch[1], 10);
+                month = parseInt(shMatch[2], 10) - 1;
+                day = parseInt(shMatch[3], 10);
             }
         }
     }
 
-    // 3. 상호명 추출 (키워드 매칭 및 가상 광고 문구 제외)
-    const lines = text.split(/\s{2,}|[\n\r]/);
+    if (year > 0) {
+        // 시간 파싱
+        const timeRegex = /(\d{1,2})[시:]\s*(\d{1,2})(?:[분:]\s*(\d{1,2})초?)?/;
+        const timeMatch = fullTextStr.match(timeRegex);
+        if (timeMatch) {
+            result.paidAt = new Date(year, month, day, parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10));
+        } else {
+            result.paidAt = new Date(year, month, day);
+        }
+    }
 
-    // "가맹점명", "상호명", "상호" 키워드 다음에 오는 텍스트 찾기 (글자 사이 공백 무시)
-    const merchantKeywords = ['가\\s*맹\\s*점\\s*명', '상\\s*호\\s*명', '상\\s*호'];
-    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})\\s*[:：]?\\s*([^\\n\\r\\t\\s]+)`, 'i');
-    const merchantMatch = text.match(merchantRegex);
+    // 4. 상호명 추출 (더 스마트해진 Fallback 포함)
+    const merchantKeywords = ['매\\s*장\\s*명', '가\\s*맹\\s*점\\s*명', '상\\s*호\\s*명', '상\\s*호', '업\\s*소\\s*명', '지\\s*점\\s*명'];
+    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})\\s*[:：]?\\s*([^\\n\\r\\t\\s]+(?!대표|주소|전화|사업|고객|현금|신용))`, 'i');
+    const merchantMatch = fullTextStr.match(merchantRegex);
 
     if (merchantMatch && merchantMatch[1].length > 1) {
         result.merchantName = merchantMatch[1].replace(/[:：]/g, '').trim();
     } else {
-        // 키워드 매칭 실패 시 (주)가 포함되거나 적절한 길이의 첫 줄 선택
-        const merchantLine = lines.find(line =>
-            (line.includes('(주)') || line.includes('주식회사')) &&
-            !line.includes('가맹점주소') // 안내 문구 제외
+        const validMerchantLine = lines.find(line => 
+            (line.includes('점') || line.includes('식당') || line.includes('카페') || line.includes('(주)') || line.includes('주식회사')) &&
+            !line.includes('대표') && !line.includes('주소') && !line.includes('전화') && !line.includes('사업자') && !line.includes('가맹점')
         );
 
-        if (merchantLine) {
-            result.merchantName = merchantLine.trim().substring(0, 30);
+        if (validMerchantLine) {
+            result.merchantName = validMerchantLine.trim().substring(0, 30);
         } else {
-            // 의미 있는 실제 상호명을 찾기 위해 앞쪽 라인들 탐색
-            const candidate = lines.find(line =>
-                line.length > 2 &&
-                !line.includes('가맹점명') &&
-                !line.includes('www.') &&
-                !line.includes('안내')
+            const candidate = lines.find(line => 
+                line.length > 2 && line.length < 25 &&
+                !line.match(/\d{4}/) && !line.includes('영수증') && !line.includes('카드') && !line.includes('승인')
             );
-            result.merchantName = candidate ? candidate.trim().substring(0, 25) : '알 수 없는 상점';
+            result.merchantName = candidate ? candidate.trim() : '알 수 없는 상호명';
         }
     }
 
