@@ -119,9 +119,10 @@ export default function Home() {
       setResult(response.data.data);
       setStatus("success");
       fetchDashboardData(); // 데이터 로드 후 갱신
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload failed:", error);
-      setStatus("error");
+      alert(error.response?.data?.message || "영수증 인식에 실패했습니다.");
+      setStatus("idle");
     }
   };
 

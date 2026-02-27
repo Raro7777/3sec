@@ -3,6 +3,7 @@ import { NaverOcrProvider } from '@3sec/ocr';
 import { parseReceiptText } from '@3sec/receipt-parser';
 import { createClient } from '@supabase/supabase-js';
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
     try {
@@ -74,25 +75,22 @@ export async function POST(request: NextRequest) {
         const ocrResult = await ocrProvider.processImage(buffer, file.name);
         const parsedData = parseReceiptText(ocrResult.rawText);
 
-        // Save to DB
-        let company = await prisma.company.findFirst();
-        if (!company) company = await prisma.company.create({ data: { name: 'Test Company' } });
+        // Get user session
+        const cookie = request.cookies.get('auth_token')?.value;
+        const session = await decrypt(cookie);
 
-        let user = await prisma.user.findFirst();
+        if (!session) {
+            return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: session.userId } });
         if (!user) {
-            user = await prisma.user.create({
-                data: {
-                    email: 'test@example.com',
-                    name: 'Test User',
-                    passwordHash: 'hashed',
-                    companyId: company.id
-                }
-            });
+            return NextResponse.json({ success: false, message: 'User not found in DB' }, { status: 404 });
         }
 
         const savedReceipt = await prisma.receipt.create({
             data: {
-                companyId: company.id,
+                companyId: user.companyId,
                 userId: user.id,
                 imageOriginalUrl: imagePublicUrl || `/uploads/${fileName}`,
                 ocrStatus: 'COMPLETED',

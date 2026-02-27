@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
+    const cookie = request.cookies.get('auth_token')?.value;
+    const session = await decrypt(cookie);
+
+    if (!session) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month');
     const year = searchParams.get('year');
@@ -16,6 +24,7 @@ export async function GET(request: NextRequest) {
     try {
         const receipts = await prisma.receipt.findMany({
             where: {
+                userId: session.userId,
                 paidAt: { gte: startDate, lte: endDate },
             },
         });
