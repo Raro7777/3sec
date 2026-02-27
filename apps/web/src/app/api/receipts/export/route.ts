@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
         const archive = archiver('zip', { zlib: { level: 9 } });
 
         // Pipe archiver output to the writable stream
-        archive.on('data', (chunk) => writer.write(chunk));
+        archive.on('data', (chunk: any) => writer.write(chunk));
         archive.on('end', () => writer.close());
-        archive.on('error', (err) => {
+        archive.on('error', (err: any) => {
             console.error('Archive error:', err);
             writer.abort(err);
         });

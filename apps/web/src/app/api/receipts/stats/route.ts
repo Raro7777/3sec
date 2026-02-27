@@ -20,14 +20,14 @@ export async function GET(request: NextRequest) {
             },
         });
 
-        const totalAmount = receipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+        const totalAmount = receipts.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
 
         return NextResponse.json({
             year: targetYear,
             month: targetMonth,
             totalAmount,
             count: receipts.length,
-            categorySummary: receipts.reduce((acc, r) => {
+            categorySummary: receipts.reduce((acc: Record<string, number>, r: any) => {
                 const cat = r.category || '기타';
                 acc[cat] = (acc[cat] || 0) + (r.amount || 0);
                 return acc;
