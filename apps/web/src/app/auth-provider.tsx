@@ -16,7 +16,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             if (isLoggedIn === "true") {
                 router.push("/");
             } else {
-                setIsReady(true);
+                Promise.resolve().then(() => setIsReady(true));
             }
             return;
         }
@@ -25,7 +25,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         if (isLoggedIn !== "true") {
             router.push("/login");
         } else {
-            setIsReady(true);
+            Promise.resolve().then(() => setIsReady(true));
         }
     }, [pathname, router]);
 

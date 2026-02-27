@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Edit2, Trash2, Calendar, FileText, Check, X, Search, Filter, Download, ListFilter } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Edit2, Trash2, Calendar, FileText, Check, X, Search, Download, ListFilter } from "lucide-react";
+import { motion } from "framer-motion";
 import axios from "axios";
 import Link from "next/link";
 
@@ -52,14 +52,14 @@ export default function ReceiptsPage() {
 
     useEffect(() => {
         fetchReceipts();
-    }, [filters]);
+    }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleDelete = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
         try {
             await axios.delete(`${API_BASE_URL}/receipts/${id}`);
             setReceipts(receipts.filter(r => r.id !== id));
-        } catch (err) {
+        } catch {
             alert("삭제 실패");
         }
     };
@@ -85,7 +85,7 @@ export default function ReceiptsPage() {
             await axios.patch(`${API_BASE_URL}/receipts/${editingId}`, editForm);
             setEditingId(null);
             fetchReceipts();
-        } catch (err) {
+        } catch {
             alert("수정 실패");
         }
     };

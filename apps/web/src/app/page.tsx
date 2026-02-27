@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark, LogOut } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { clsx, type ClassValue } from "clsx";
@@ -44,10 +44,12 @@ export default function Home() {
 
   const router = useRouter();
 
+  /* 
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
     router.push("/login");
   };
+  */
 
   const fetchDashboardData = async () => {
     try {
@@ -62,7 +64,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    const init = async () => {
+      await fetchDashboardData();
+    };
+    init();
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,7 +313,7 @@ export default function Home() {
                         <textarea
                           placeholder="특이사항을 입력하세요"
                           value={result.memo || ""}
-                          onChange={(e) => setResult({ ...result, memo: e.target.value } as any)}
+                          onChange={(e) => setResult(prev => prev ? { ...prev, memo: e.target.value } : null)}
                           className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white transition-all text-sm font-medium min-h-[80px]"
                         />
                       </div>
