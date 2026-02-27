@@ -1,0 +1,12 @@
+{
+  "name": "receipt-ocr-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --filter !web dev",
+    "web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter database generate",
+    "db:push": "pnpm --filter database push"
+  }
+}

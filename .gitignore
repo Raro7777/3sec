@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+.env
+.env.local
+.env.production
+public/uploads/*
+!public/uploads/.gitkeep
+*.log
+.pnpm-debug.log*
+.npm
+.eslintcache
+.stylelintcache
+.prettiercache
+.vercel
+.turbo

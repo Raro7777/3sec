@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  ACCOUNTANT
+  ADMIN
+}
+
+enum ReceiptStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum OcrStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model Company {
+  id        String    @id @default(cuid())
+  name      String
+  users     User[]
+  receipts  Receipt[]
+  reports   ExpenseReport[]
+  createdAt DateTime  @default(now())
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  name         String
+  role         Role            @default(EMPLOYEE)
+  companyId    String
+  company      Company         @relation(fields: [companyId], references: [id])
+  receipts     Receipt[]
+  reports      ExpenseReport[] @relation("submittedBy")
+  reviewed     ExpenseReport[] @relation("reviewedBy")
+  createdAt    DateTime        @default(now())
+}
+
+model Receipt {
+  id               String        @id @default(cuid())
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id])
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  imageOriginalUrl String
+  imageThumbUrl    String?
+  ocrStatus        OcrStatus     @default(PENDING)
+  ocrTextRaw       String?       @db.Text
+  ocrResultJson    Json?
+  ocrErrorMessage  String?
+  merchantName     String?
+  amount           Float?
+  paidAt           DateTime?
+  category         String?
+  memo             String?
+  status           ReceiptStatus @default(DRAFT)
+  reportItems      ExpenseReportItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model ExpenseReport {
+  id             String              @id @default(cuid())
+  companyId      String
+  company        Company             @relation(fields: [companyId], references: [id])
+  submittedById  String
+  submittedBy    User                @relation("submittedBy", fields: [submittedById], references: [id])
+  periodYear     Int
+  periodMonth    Int
+  status         ReportStatus        @default(DRAFT)
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedBy     User?               @relation("reviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  rejectReason   String?
+  items          ExpenseReportItem[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model ExpenseReportItem {
+  id        String        @id @default(cuid())
+  reportId  String
+  report    ExpenseReport @relation(fields: [reportId], references: [id])
+  receiptId String
+  receipt   Receipt       @relation(fields: [receiptId], references: [id])
+}
