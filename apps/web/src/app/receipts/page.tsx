@@ -23,6 +23,7 @@ export default function ReceiptsPage() {
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Partial<Receipt>>({});
+    const [user, setUser] = useState<{ name?: string, email?: string, role?: string } | null>(null);
 
     // 필터 상태
     const [filters, setFilters] = useState({
@@ -49,6 +50,19 @@ export default function ReceiptsPage() {
             setLoading(false);
         }
     };
+
+    const fetchUser = async () => {
+        try {
+            const authRes = await axios.get('/api/auth/me');
+            setUser(authRes.data.user);
+        } catch (err) {
+            console.error("Not authenticated");
+        }
+    };
+
+    useEffect(() => {
+        fetchUser();
+    }, []);
 
     useEffect(() => {
         fetchReceipts();
@@ -93,8 +107,8 @@ export default function ReceiptsPage() {
     return (
         <div className="min-h-screen bg-[#fafafa] text-zinc-900 font-sans p-4 md:p-8">
             <header className="max-w-4xl mx-auto mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href="/" className="p-2 rounded-full bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors shadow-sm">
+                <div className="flex items-center gap-4 border-b pb-4 sm:border-0 sm:pb-0 border-zinc-200 w-full sm:w-auto overflow-hidden">
+                    <Link href="/" className="shrink-0 p-2 rounded-full bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors shadow-sm">
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div>
@@ -102,13 +116,31 @@ export default function ReceiptsPage() {
                         <p className="text-zinc-500 text-sm">총 {receipts.length}건의 내역</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleDownload}
-                    disabled={receipts.length === 0}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 text-white rounded-2xl font-bold text-sm hover:bg-black transition-all shadow-md active:scale-95 disabled:opacity-50"
-                >
-                    <Download className="w-4 h-4" /> 내역 다운로드 (ZIP)
-                </button>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={handleDownload}
+                        disabled={receipts.length === 0}
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 text-white rounded-2xl font-bold text-sm hover:bg-black transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    >
+                        <Download className="w-4 h-4" /> 내역 다운로드 (ZIP)
+                    </button>
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {user?.role === 'ADMIN' && (
+                            <Link href="/admin" className="px-3 py-1.5 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100">
+                                관리자 페이지
+                            </Link>
+                        )}
+                        <button 
+                            onClick={async () => {
+                                await axios.post('/api/auth/logout');
+                                window.location.href = '/login';
+                            }} 
+                            className="px-3 py-1.5 bg-zinc-200 text-zinc-600 text-xs font-bold rounded-lg hover:bg-zinc-300 transition-colors"
+                        >
+                            로그아웃
+                        </button>
+                    </div>
+                </div>
             </header>
 
             <main className="max-w-4xl mx-auto space-y-6">

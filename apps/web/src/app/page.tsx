@@ -37,7 +37,7 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [result, setResult] = useState<ParsedReceipt | null>(null);
 
-  // 대시보드 데이터 상태
+  const [user, setUser] = useState<{ name?: string, email?: string, role?: string } | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReceipts, setRecentReceipts] = useState<ParsedReceipt[]>([]);
 
@@ -52,6 +52,9 @@ export default function Home() {
 
   const fetchDashboardData = async () => {
     try {
+      const authRes = await axios.get('/api/auth/me');
+      setUser(authRes.data.user);
+
       const statsRes = await axios.get(`${API_BASE_URL}/receipts/stats`);
       setStats(statsRes.data);
 
