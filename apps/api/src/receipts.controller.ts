@@ -131,10 +131,25 @@ export class ReceiptsController {
     }
 
     @Get()
-    async getReceipts(@Query('category') category?: string, @Query('q') q?: string) {
+    async getReceipts(
+        @Query('category') category?: string,
+        @Query('q') q?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string
+    ) {
         const where: any = {};
         if (category) where.category = category;
         if (q) where.merchantName = { contains: q, mode: 'insensitive' };
+
+        if (startDate || endDate) {
+            where.paidAt = {};
+            if (startDate) where.paidAt.gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                where.paidAt.lte = end;
+            }
+        }
 
         return (this.prisma as any).receipt.findMany({
             where,

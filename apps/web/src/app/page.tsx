@@ -379,6 +379,14 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* 모바일 퀵 업로드 FAB */}
+      <div className="fixed bottom-6 right-6 md:hidden z-50">
+        <label className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl shadow-indigo-200 flex items-center justify-center cursor-pointer active:scale-90 transition-transform">
+          <Upload className="w-6 h-6" />
+          <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+        </label>
+      </div>
     </div>
   );
 }

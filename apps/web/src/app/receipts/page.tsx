@@ -38,20 +38,11 @@ export default function ReceiptsPage() {
             const params = new URLSearchParams();
             if (filters.q) params.append("q", filters.q);
             if (filters.category) params.append("category", filters.category);
-            // 서버에서 startDate/endDate 검색은 getReceipts에 아직 반영 안했지만 
-            // 클라이언트 필터링으로 일단 처리하거나 API 보강 예정
+            if (filters.startDate) params.append("startDate", filters.startDate);
+            if (filters.endDate) params.append("endDate", filters.endDate);
+
             const res = await axios.get(`${API_BASE_URL}/receipts?${params.toString()}`);
-
-            let data = res.data;
-            // 클라이언트 측 날짜 필터링
-            if (filters.startDate) {
-                data = data.filter((r: any) => new Date(r.paidAt) >= new Date(filters.startDate));
-            }
-            if (filters.endDate) {
-                data = data.filter((r: any) => new Date(r.paidAt) <= new Date(filters.endDate));
-            }
-
-            setReceipts(data);
+            setReceipts(res.data);
         } catch (err) {
             console.error("Failed to fetch receipts:", err);
         } finally {
