@@ -60,8 +60,8 @@ export default function LoginPage() {
                         <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                             <input
-                                type="email"
-                                placeholder="이메일 (Email)"
+                                type="text"
+                                placeholder="아이디(이메일)"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full pl-12 pr-4 py-4 bg-zinc-800/50 border border-zinc-700/50 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
