@@ -8,5 +8,9 @@
     "build": "pnpm -r build",
     "db:generate": "pnpm --filter database generate",
     "db:push": "pnpm --filter database push"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.4",
+    "eslint": "^9"
   }
 }
