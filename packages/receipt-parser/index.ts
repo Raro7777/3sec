@@ -9,9 +9,11 @@ export function parseReceiptText(text: string): ParsedReceipt {
     const result: ParsedReceipt = {};
     const lines = text.split(/\s{2,}|[\n\r]/).map(l => l.trim()).filter(l => l.length > 0);
     const fullTextStr = lines.join(' ');
+    // 모든 공백을 제거한 텍스트로, 여백 오인식에 의한 파싱 오류를 방지합니다.
+    const spacelessText = fullTextStr.replace(/\s+/g, '');
 
     // 1. 카테고리(Category) 자동 추론
-    const textForCategory = fullTextStr.replace(/\s/g, '').toLowerCase();
+    const textForCategory = spacelessText.toLowerCase();
     
     const foodKeywords = ['식당', '카페', '커피', '치킨', '베이커리', '맥도날드', '스타벅스', '버거', '피자', '음식', '제과', '가든', '분식', '아메리카노', '라떼'];
     const transportKeywords = ['택시', 'ktx', '코레일', '주유소', '주차', '고속버스', '항공', '주유', '톨게이트', '통행료', '대리운전', '모범'];
@@ -26,27 +28,25 @@ export function parseReceiptText(text: string): ParsedReceipt {
     }
 
     // 2. 금액 추출 (고도화: 특정 강력한 키워드 우선)
-    const strongAmountKeywords = ['승\\s*인\\s*금\\s*액', '청\\s*구\\s*금\\s*액', '결\\s*제\\s*대\\s*상\\s*금\\s*액', '받\\s*은\\s*금\\s*액', '결\\s*제\\s*금\\s*액', '합\\s*계', '총\\s*결\\s*제', '총\\s*금\\s*액'];
+    const strongAmountKeywords = ['승인금액', '청구금액', '결제대상금액', '받은금액', '결제금액', '합계', '총결제', '총금액'];
     
-    // Look specifically for the line that contains these keywords
-    // and extract the number that follows right after on the same line or next line.
     const extractAmount = (keywords: string[]) => {
-        const regex = new RegExp(`(?:${keywords.join('|')})\\s*[:：]?\\s*([\\d,]{3,})`, 'i');
-        const match = fullTextStr.match(regex);
+        // 공백이 제거된 spacelessText에서 바로 검색 (',' 콤마는 유지)
+        const regex = new RegExp(`(?:${keywords.join('|')})[:：]?([\\d,]{3,})`, 'i');
+        const match = spacelessText.match(regex);
         if (match) return parseInt(match[1].replace(/,/g, ''), 10);
 
-        // Fallback: look line by line
+        // Fallback: 문장 단위로 검사하되, 각 줄의 공백도 제거하여 확인
         for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const hasKeyword = keywords.some(k => new RegExp(k, 'i').test(line));
+            const lineSpaceless = lines[i].replace(/\s+/g, '');
+            const hasKeyword = keywords.some(k => new RegExp(k, 'i').test(lineSpaceless));
             if (hasKeyword) {
-                // Number might be on same line
-                const numMatch = line.match(/([\d,]{3,})/);
+                const numMatch = lineSpaceless.match(/([\d,]{3,})/);
                 if (numMatch) return parseInt(numMatch[1].replace(/,/g, ''), 10);
                 
-                // Number might be on the immediate next line
                 if (i + 1 < lines.length) {
-                    const nextLineMatch = lines[i+1].match(/([\d,]{3,})/);
+                    const nextLineSpaceless = lines[i+1].replace(/\s+/g, '');
+                    const nextLineMatch = nextLineSpaceless.match(/([\d,]{3,})/);
                     if (nextLineMatch) return parseInt(nextLineMatch[1].replace(/,/g, ''), 10);
                 }
             }
@@ -60,8 +60,8 @@ export function parseReceiptText(text: string): ParsedReceipt {
         result.amount = amount;
     } else {
         // Fallback: 가장 큰 금액 (원, \ 등으로 끝나는/시작하는 숫자 우대)
-        const wonRegex = /(?:[\\]|원)?\s*([\d,]{3,})\s*(?:원)?/g;
-        const matches = [...fullTextStr.matchAll(wonRegex)];
+        const wonRegex = /(?:[\\]|원)?([\\d,]{3,})(?:원)?/g;
+        const matches = [...spacelessText.matchAll(wonRegex)];
         if (matches.length > 0) {
             const candidates = matches
                 .map(m => parseInt(m[1].replace(/,/g, ''), 10))
@@ -73,18 +73,18 @@ export function parseReceiptText(text: string): ParsedReceipt {
         }
     }
 
-    // 3. 날짜 추출 (한국어 YYYY년 MM월 DD일 등 지원 강화)
-    const koreanDateRegex = /(20\d{2}|19\d{2})\s*년\s*0?([1-9]|1[0-2])\s*월\s*0?([1-9]|[12]\d|3[01])\s*일/i;
-    const standardDateRegex = /(20\d{2}|19\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
-    const shortDateRegex = /(\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
+    // 3. 날짜 추출 (한국어 YYYY년 MM월 DD일 등 지원 강화 및 공백 제거된 텍스트 활용)
+    const koreanDateRegex = /(20\d{2}|19\d{2})년0?([1-9]|1[0-2])월0?([1-9]|[12]\d|3[01])일/i;
+    const standardDateRegex = /(20\d{2}|19\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
+    const shortDateRegex = /(\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
     const continuousDateRegex = /(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/; // 8자리 연속 숫자 (YYYYMMDD)
 
     let year = 0, month = 0, day = 0;
 
-    const krMatch = fullTextStr.match(koreanDateRegex);
-    const stdMatch = fullTextStr.match(standardDateRegex);
-    const shortMatch = fullTextStr.match(shortDateRegex);
-    const contMatch = fullTextStr.match(continuousDateRegex);
+    const krMatch = spacelessText.match(koreanDateRegex);
+    const stdMatch = spacelessText.match(standardDateRegex);
+    const shortMatch = spacelessText.match(shortDateRegex);
+    const contMatch = spacelessText.match(continuousDateRegex);
 
     if (krMatch) {
         year = parseInt(krMatch[1], 10);
@@ -106,8 +106,8 @@ export function parseReceiptText(text: string): ParsedReceipt {
 
     if (year > 0) {
         // 시간 파싱
-        const timeRegex = /(\d{1,2})[시:]\s*(\d{1,2})(?:[분:]\s*(\d{1,2})초?)?/;
-        const timeMatch = fullTextStr.match(timeRegex);
+        const timeRegex = /(\d{1,2})[시:](\d{1,2})(?:[분:](\d{1,2})초?)?/;
+        const timeMatch = spacelessText.match(timeRegex);
         if (timeMatch) {
             result.paidAt = new Date(year, month, day, parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10));
         } else {
@@ -116,9 +116,9 @@ export function parseReceiptText(text: string): ParsedReceipt {
     }
 
     // 4. 상호명 추출 (더 스마트해진 Fallback 포함)
-    const merchantKeywords = ['매\\s*장\\s*명', '가\\s*맹\\s*점\\s*명', '상\\s*호\\s*명', '상\\s*호', '업\\s*소\\s*명', '지\\s*점\\s*명'];
-    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})\\s*[:：]?\\s*([^\\n\\r\\t]+(?!대표|주소|전화|사업|고객|현금|신용))`, 'i');
-    const merchantMatch = fullTextStr.match(merchantRegex);
+    const merchantKeywords = ['매장명', '가맹점명', '상호명', '상호', '업소명', '지점명'];
+    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})[:：]?([^\\n\\r\\t]+(?!대표|주소|전화|사업|고객|현금|신용))`, 'i');
+    const merchantMatch = spacelessText.match(merchantRegex);
 
     if (merchantMatch && merchantMatch[1].length > 1) {
         result.merchantName = merchantMatch[1].replace(/[:：]/g, '').trim();
