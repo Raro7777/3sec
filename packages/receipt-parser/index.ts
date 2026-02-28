@@ -77,12 +77,14 @@ export function parseReceiptText(text: string): ParsedReceipt {
     const koreanDateRegex = /(20\d{2}|19\d{2})\s*년\s*0?([1-9]|1[0-2])\s*월\s*0?([1-9]|[12]\d|3[01])\s*일/i;
     const standardDateRegex = /(20\d{2}|19\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
     const shortDateRegex = /(\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
+    const continuousDateRegex = /(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/; // 8자리 연속 숫자 (YYYYMMDD)
 
     let year = 0, month = 0, day = 0;
 
     const krMatch = fullTextStr.match(koreanDateRegex);
     const stdMatch = fullTextStr.match(standardDateRegex);
-    const shMatch = fullTextStr.match(shortDateRegex);
+    const shortMatch = fullTextStr.match(shortDateRegex);
+    const contMatch = fullTextStr.match(continuousDateRegex);
 
     if (krMatch) {
         year = parseInt(krMatch[1], 10);
@@ -92,10 +94,14 @@ export function parseReceiptText(text: string): ParsedReceipt {
         year = parseInt(stdMatch[1], 10);
         month = parseInt(stdMatch[2], 10) - 1;
         day = parseInt(stdMatch[3], 10);
-    } else if (shMatch) {
-        year = 2000 + parseInt(shMatch[1], 10);
-        month = parseInt(shMatch[2], 10) - 1;
-        day = parseInt(shMatch[3], 10);
+    } else if (contMatch) {
+        year = parseInt(contMatch[1], 10);
+        month = parseInt(contMatch[2], 10) - 1;
+        day = parseInt(contMatch[3], 10);
+    } else if (shortMatch) {
+        year = 2000 + parseInt(shortMatch[1], 10);
+        month = parseInt(shortMatch[2], 10) - 1;
+        day = parseInt(shortMatch[3], 10);
     }
 
     if (year > 0) {
@@ -111,7 +117,7 @@ export function parseReceiptText(text: string): ParsedReceipt {
 
     // 4. 상호명 추출 (더 스마트해진 Fallback 포함)
     const merchantKeywords = ['매\\s*장\\s*명', '가\\s*맹\\s*점\\s*명', '상\\s*호\\s*명', '상\\s*호', '업\\s*소\\s*명', '지\\s*점\\s*명'];
-    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})\\s*[:：]?\\s*([^\\n\\r\\t\\s]+(?!대표|주소|전화|사업|고객|현금|신용))`, 'i');
+    const merchantRegex = new RegExp(`(?:${merchantKeywords.join('|')})\\s*[:：]?\\s*([^\\n\\r\\t]+(?!대표|주소|전화|사업|고객|현금|신용))`, 'i');
     const merchantMatch = fullTextStr.match(merchantRegex);
 
     if (merchantMatch && merchantMatch[1].length > 1) {
@@ -125,11 +131,22 @@ export function parseReceiptText(text: string): ParsedReceipt {
         if (validMerchantLine) {
             result.merchantName = validMerchantLine.trim().substring(0, 30);
         } else {
-            const candidate = lines.find(line => 
-                line.length > 2 && line.length < 25 &&
-                !line.match(/\d{4}/) && !line.includes('영수증') && !line.includes('카드') && !line.includes('승인')
+            // 가장 상단에 있는 텍스트 중 사업자, 전화 등이 아닌 첫 줄을 상호명으로 추정 (첫 3줄 이내)
+            const topLines = lines.slice(0, 3).filter(line => 
+                line.length > 1 &&
+                !line.includes('대표') && !line.includes('주소') && !line.includes('전화') && !line.includes('사업') &&
+                !line.match(/\d{4}/) && !line.includes('영수증') && !line.includes('승인') && !line.includes('카드')
             );
-            result.merchantName = candidate ? candidate.trim() : '알 수 없는 상호명';
+            
+            if (topLines.length > 0) {
+                result.merchantName = topLines[0].trim();
+            } else {            
+                const candidate = lines.find(line => 
+                    line.length > 2 && line.length < 25 &&
+                    !line.match(/\d{4}/) && !line.includes('영수증') && !line.includes('카드') && !line.includes('승인')
+                );
+                result.merchantName = candidate ? candidate.trim() : '알 수 없는 상호명';
+            }
         }
     }
 

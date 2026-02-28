@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark, Sun, Moon, X } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark, Sun, Moon, X, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -50,12 +50,14 @@ export default function Home() {
 
   // const router = useRouter();
 
-  /* 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await axios.post('/api/auth/logout');
+      window.location.href = '/login';
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
   };
-  */
 
   const { theme, setTheme } = useTheme();
   const [monthOffset, setMonthOffset] = useState<number>(0);
@@ -183,8 +185,17 @@ export default function Home() {
           >
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
-          <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center overflow-hidden">
-            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{user?.email?.substring(0, 2).toUpperCase() || 'US'}</span>
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center overflow-hidden">
+              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{user?.name?.substring(0, 2).toUpperCase() || user?.email?.substring(0, 2).toUpperCase() || 'US'}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+              title="로그아웃"
+            >
+              <LogOut className="w-4 h-4 ml-0.5" />
+            </button>
           </div>
         </div>
       </header>
