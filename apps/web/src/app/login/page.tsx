@@ -40,6 +40,22 @@ export default function LoginPage() {
         }
     };
 
+    const handleTestLogin = async () => {
+        setError("");
+        setIsLoading(true);
+
+        try {
+            const res = await axios.post("/api/auth/test-login");
+            if (res.data.success) {
+                router.push("/");
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error || "테스트 계정 로그인 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -118,6 +134,13 @@ export default function LoginPage() {
                         </div>
                     </div>
 
+                    {isSignUp && (
+                        <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl p-4 text-xs text-zinc-400">
+                            <strong>※ 개인정보 처리방침 안내</strong><br/>
+                            입력하신 정보는 오직 영수증 사용 내역을 격리하고 분류하는 용도로만 사용됩니다. 다른 곳에 절대 제공되거나 활용되지 않으며, 서비스 이용에 필요한 최소한의 정보만 요청합니다.
+                        </div>
+                    )}
+
                     {error && (
                         <motion.p
                             initial={{ opacity: 0 }}
@@ -139,6 +162,16 @@ export default function LoginPage() {
                             <>{isSignUp ? "가입하기" : "로그인"} <ArrowRight className="w-5 h-5" /></>
                         )}
                     </button>
+                    {!isSignUp && (
+                        <button
+                            type="button"
+                            onClick={handleTestLogin}
+                            disabled={isLoading}
+                            className="w-full py-4 bg-zinc-800/80 border border-zinc-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-700 transition-all active:scale-[0.98] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            체험용 테스트 계정으로 로그인 (가입 없음)
+                        </button>
+                    )}
                 </form>
 
                 <div className="mt-6 text-center">
