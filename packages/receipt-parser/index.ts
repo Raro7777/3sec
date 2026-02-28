@@ -26,17 +26,35 @@ export function parseReceiptText(text: string): ParsedReceipt {
     }
 
     // 2. 금액 추출 (고도화: 특정 강력한 키워드 우선)
-    const strongAmountKeywords = ['승\\s*인\\s*금\\s*액', '청\\s*구\\s*금\\s*액', '결\\s*제\\s*대\\s*상\\s*금\\s*액', '받\\s*은\\s*금\\s*액', '결\\s*제\\s*금\\s*액'];
-    const genericAmountKeywords = ['합\\s*계', '총\\s*금\\s*액', '금\\s*액', 'total', 'amount'];
+    const strongAmountKeywords = ['승\\s*인\\s*금\\s*액', '청\\s*구\\s*금\\s*액', '결\\s*제\\s*대\\s*상\\s*금\\s*액', '받\\s*은\\s*금\\s*액', '결\\s*제\\s*금\\s*액', '합\\s*계', '총\\s*결\\s*제', '총\\s*금\\s*액'];
     
+    // Look specifically for the line that contains these keywords
+    // and extract the number that follows right after on the same line or next line.
     const extractAmount = (keywords: string[]) => {
         const regex = new RegExp(`(?:${keywords.join('|')})\\s*[:：]?\\s*([\\d,]{3,})`, 'i');
         const match = fullTextStr.match(regex);
         if (match) return parseInt(match[1].replace(/,/g, ''), 10);
+
+        // Fallback: look line by line
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const hasKeyword = keywords.some(k => new RegExp(k, 'i').test(line));
+            if (hasKeyword) {
+                // Number might be on same line
+                const numMatch = line.match(/([\d,]{3,})/);
+                if (numMatch) return parseInt(numMatch[1].replace(/,/g, ''), 10);
+                
+                // Number might be on the immediate next line
+                if (i + 1 < lines.length) {
+                    const nextLineMatch = lines[i+1].match(/([\d,]{3,})/);
+                    if (nextLineMatch) return parseInt(nextLineMatch[1].replace(/,/g, ''), 10);
+                }
+            }
+        }
         return null;
     };
 
-    let amount = extractAmount(strongAmountKeywords) || extractAmount(genericAmountKeywords);
+    let amount = extractAmount(strongAmountKeywords);
     
     if (amount) {
         result.amount = amount;

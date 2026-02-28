@@ -107,15 +107,15 @@ export default function ReceiptsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#fafafa] text-zinc-900 font-sans p-4 md:p-8">
-            <header className="max-w-4xl mx-auto mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 border-b pb-4 sm:border-0 sm:pb-0 border-zinc-200 w-full sm:w-auto overflow-hidden">
-                    <Link href="/" className="shrink-0 p-2 rounded-full bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors shadow-sm">
+        <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans p-4 md:p-8 transition-colors duration-200">
+            <header className="max-w-4xl mx-auto mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md p-4 rounded-3xl border border-slate-200/60 dark:border-zinc-800/60 shadow-sm">
+                <div className="flex items-center gap-4 border-b pb-4 sm:border-0 sm:pb-0 border-zinc-200 dark:border-zinc-800 w-full sm:w-auto overflow-hidden">
+                    <Link href="/" className="shrink-0 p-2 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm text-zinc-700 dark:text-zinc-300">
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">전체 내역 관리</h1>
-                        <p className="text-zinc-500 text-sm">총 {receipts.length}건의 내역</p>
+                        <p className="text-zinc-500 dark:text-zinc-400 text-sm">총 {receipts.length}건의 내역</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -147,7 +147,7 @@ export default function ReceiptsPage() {
 
             <main className="max-w-4xl mx-auto space-y-6">
                 {/* 필터 섹션 */}
-                <section className="bg-white rounded-3xl p-6 border border-zinc-100 shadow-sm space-y-4">
+                <section className="bg-white dark:bg-zinc-900/80 backdrop-blur-sm rounded-3xl p-5 md:p-6 border border-slate-100 dark:border-zinc-800 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 mb-2 text-zinc-400">
                         <ListFilter className="w-4 h-4" />
                         <h2 className="text-xs font-black uppercase tracking-widest">Filters</h2>
@@ -160,14 +160,14 @@ export default function ReceiptsPage() {
                                 placeholder="상호명 검색..."
                                 value={filters.q}
                                 onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-                                className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-zinc-100 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm font-bold"
+                                className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 outline-none transition-all text-sm font-bold shadow-sm"
                             />
                         </div>
                         <div>
                             <select
                                 value={filters.category}
                                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                                className="w-full px-4 py-2.5 rounded-2xl border border-zinc-100 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm font-bold appearance-none"
+                                className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 outline-none transition-all text-sm font-bold appearance-none shadow-sm"
                             >
                                 <option value="">모든 카테고리</option>
                                 <option value="식대">식대</option>
@@ -182,21 +182,21 @@ export default function ReceiptsPage() {
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 pl-1">시작일</label>
+                            <label className="text-[10px] font-bold text-zinc-400 pl-1 dark:text-zinc-500">시작일</label>
                             <input
                                 type="date"
                                 value={filters.startDate}
                                 onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                                className="w-full px-3 py-2 rounded-xl border border-zinc-100 bg-zinc-50 text-xs font-bold focus:ring-1 focus:ring-indigo-200 outline-none"
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 text-xs font-bold outline-none shadow-sm"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 pl-1">종료일</label>
+                            <label className="text-[10px] font-bold text-zinc-400 pl-1 dark:text-zinc-500">종료일</label>
                             <input
                                 type="date"
                                 value={filters.endDate}
                                 onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                                className="w-full px-3 py-2 rounded-xl border border-zinc-100 bg-zinc-50 text-xs font-bold focus:ring-1 focus:ring-indigo-200 outline-none"
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 text-xs font-bold outline-none shadow-sm"
                             />
                         </div>
                         <div className="md:col-span-2 flex flex-col justify-end gap-2">
@@ -257,7 +257,7 @@ export default function ReceiptsPage() {
                             <motion.div
                                 key={r.id}
                                 layout
-                                className="bg-white rounded-3xl p-5 border border-zinc-100 shadow-sm overflow-hidden group hover:border-indigo-100 transition-colors"
+                                className="bg-white dark:bg-zinc-900/80 backdrop-blur-sm rounded-3xl p-5 border border-slate-100 dark:border-zinc-800 shadow-sm overflow-hidden group hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-colors"
                             >
                                 {editingId === r.id ? (
                                     <div className="space-y-4">
@@ -365,10 +365,10 @@ export default function ReceiptsPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-8 border-t sm:border-t-0 pt-4 sm:pt-0 border-zinc-50">
+                                        <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-8 border-t sm:border-t-0 pt-4 sm:pt-0 border-zinc-100 dark:border-zinc-800">
                                             <div className="text-right">
                                                 <p className="text-[9px] text-zinc-400 font-black mb-0.5 uppercase tracking-tighter">Amount</p>
-                                                <p className="text-lg font-black text-indigo-600">
+                                                <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">
                                                     {r.amount.toLocaleString()}원
                                                 </p>
                                             </div>

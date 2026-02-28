@@ -44,6 +44,9 @@ export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReceipts, setRecentReceipts] = useState<ParsedReceipt[]>([]);
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  
+  // Drag and Drop State
+  const [isDragging, setIsDragging] = useState(false);
 
   // const router = useRouter();
 
@@ -141,9 +144,34 @@ export default function Home() {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+        // Create a synthetic event to pass to handleFileChange
+        const syntheticEvent = {
+            target: { files: [droppedFile] }
+        } as unknown as React.ChangeEvent<HTMLInputElement>;
+        
+        await handleFileChange(syntheticEvent);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#fafafa] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans p-4 md:p-8 transition-colors duration-200">
-      <header className="max-w-5xl mx-auto mb-10 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans p-4 md:p-8 transition-colors duration-200">
+      <header className="max-w-5xl mx-auto mb-8 flex justify-between items-center bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md p-4 rounded-3xl border border-slate-200/60 dark:border-zinc-800/60 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">3초 영수증</h1>
           <p className="text-zinc-500 dark:text-zinc-400 text-sm">지출 내역을 가장 빠르게 관리하세요</p>
@@ -161,13 +189,13 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto space-y-8">
+      <main className="max-w-5xl mx-auto space-y-6 md:space-y-8">
         {/* 요약 통계 대시보드 */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-indigo-600 dark:bg-indigo-500 text-white p-5 rounded-3xl shadow-lg shadow-indigo-100 dark:shadow-none flex flex-col justify-between"
+            className="bg-indigo-600 dark:bg-indigo-500 text-white p-5 md:p-6 rounded-3xl shadow-lg shadow-indigo-200/50 dark:shadow-none flex flex-col justify-between"
           >
             <div className="flex justify-between items-start">
               <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
@@ -188,7 +216,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between"
+            className="bg-white dark:bg-zinc-900/80 backdrop-blur-sm p-5 md:p-6 rounded-3xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between"
           >
             <div className="flex justify-between items-start">
               <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400">
@@ -236,15 +264,23 @@ export default function Home() {
                 영수증 등록
               </h2>
 
-              <label className={cn(
-                "relative group flex flex-col items-center justify-center w-full aspect-[4/5] rounded-2xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer overflow-hidden",
-                preview ? "border-solid border-indigo-200" : ""
+            <label 
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cn(
+                "relative flex flex-col items-center justify-center w-full aspect-[4/5] rounded-3xl border-2 border-dashed bg-zinc-50 dark:bg-zinc-800/20 transition-all cursor-pointer overflow-hidden group",
+                isDragging
+                  ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20 scale-[1.02]"
+                  : preview 
+                    ? "border-solid border-indigo-200 dark:border-zinc-700" 
+                    : "border-slate-300 dark:border-zinc-700 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-slate-50 dark:hover:bg-zinc-800/50"
               )}>
                 {preview ? (
                   <div className="relative w-full h-full">
                     <img src={preview} alt="Receipt Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-all flex items-center justify-center">
-                      <p className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">이미지 변경</p>
+                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-all flex items-center justify-center">
+                      <p className="text-white text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">다른 파일 선택 또는 드래그</p>
                     </div>
                   </div>
                 ) : (
@@ -252,9 +288,11 @@ export default function Home() {
                     <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center group-hover:scale-110 transition-transform">
                       <Upload className="w-6 h-6 text-zinc-500 dark:text-zinc-400" />
                     </div>
-                    <div className="text-center">
-                      <p className="text-sm font-medium">영수증 이미지 업로드</p>
-                      <p className="text-xs text-zinc-400 dark:text-zinc-500">JPG, PNG 파일 지원</p>
+                    <div className="text-center px-4">
+                      <p className="text-base font-bold text-zinc-700 dark:text-zinc-200">
+                        {isDragging ? "여기로 끌어다 놓으세요!" : "영수증 이미지 업로드"}
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">터치하거나 파일을 드래그 하세요 (JPG, PNG)</p>
                     </div>
                   </div>
                 )}
@@ -265,10 +303,10 @@ export default function Home() {
                 onClick={handleUpload}
                 disabled={!file || status === "uploading"}
                 className={cn(
-                  "w-full mt-6 py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+                  "w-full mt-6 py-4 min-h-[3.5rem] rounded-2xl font-bold transition-all flex items-center justify-center gap-2",
                   !file || status === "uploading"
-                    ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
-                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 dark:shadow-none"
+                    ? "bg-zinc-200 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-500 cursor-not-allowed"
+                    : "bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 shadow-lg shadow-indigo-200/50 dark:shadow-none"
                 )}
               >
                 {status === "uploading" ? (
@@ -293,57 +331,57 @@ export default function Home() {
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-zinc-100 dark:border-zinc-800"
+                  className="bg-white dark:bg-zinc-900/80 backdrop-blur-sm rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100 dark:border-zinc-800"
                 >
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm tracking-tight uppercase">
-                      <CheckCircle2 className="w-4 h-4" />
+                      <CheckCircle2 className="w-5 h-5" />
                       인식 완료
                     </div>
-                    <span className="text-[10px] bg-indigo-50 dark:bg-zinc-800 text-indigo-700 dark:text-zinc-300 px-2 py-0.5 rounded-full font-bold">내용을 확인 후 저장해 주세요</span>
+                    <span className="text-[10px] md:text-xs bg-indigo-50 dark:bg-zinc-800/80 text-indigo-700 dark:text-zinc-300 px-3 py-1 rounded-full font-bold border border-indigo-100 dark:border-zinc-700">내용 확인 후 저장하세요</span>
                   </div>
 
                   <div className="space-y-5">
                     <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">상호명</label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10.5px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest pl-1">상호명</label>
                         <input
                           type="text"
                           value={result.merchantName || ""}
                           onChange={(e) => setResult({ ...result, merchantName: e.target.value })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950 transition-all text-sm font-bold"
+                          className="w-full px-4 py-3 min-h-[3rem] rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 transition-all text-sm font-bold shadow-sm"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">금액</label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10.5px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest pl-1">금액</label>
                         <input
                           type="number"
                           value={result.amount || 0}
                           onChange={(e) => setResult({ ...result, amount: parseInt(e.target.value) })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950 transition-all text-sm font-bold text-indigo-600 dark:text-indigo-400"
+                          className="w-full px-4 py-3 min-h-[3rem] rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 transition-all text-sm font-black text-indigo-600 dark:text-indigo-400 shadow-sm"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">날짜</label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10.5px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest pl-1">날짜</label>
                         <input
                           type="date"
                           value={result.paidAt ? new Date(result.paidAt).toISOString().split('T')[0] : ""}
                           onChange={(e) => setResult({ ...result, paidAt: e.target.value })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950 transition-all text-sm font-bold"
+                          className="w-full px-4 py-3 min-h-[3rem] rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 transition-all text-sm font-bold shadow-sm"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">용도 (카테고리)</label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10.5px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest pl-1">용도 (카테고리)</label>
                         <select
                           value={result.category || ""}
                           onChange={(e) => setResult({ ...result, category: e.target.value })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950 transition-all text-sm font-bold"
+                          className="w-full px-4 py-3 min-h-[3rem] rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 transition-all text-sm font-bold shadow-sm"
                         >
                           <option value="">선택하세요</option>
                           <option value="식대">식대</option>
@@ -358,13 +396,13 @@ export default function Home() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">비고 (메모)</label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10.5px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest pl-1">비고 (메모)</label>
                         <textarea
                           placeholder="특이사항을 입력하세요"
                           value={result.memo || ""}
                           onChange={(e) => setResult(prev => prev ? { ...prev, memo: e.target.value } : null)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950 transition-all text-sm font-medium min-h-[80px]"
+                          className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-zinc-950/50 transition-all text-sm font-medium min-h-[5rem] shadow-sm"
                         />
                       </div>
                     </div>
