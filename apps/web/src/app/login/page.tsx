@@ -72,8 +72,8 @@ export default function LoginPage() {
                     <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/20">
                         <ShieldCheck className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-2xl font-black text-white tracking-tight">3sec Workspace</h1>
-                    <p className="text-zinc-500 text-sm mt-1">{isSignUp ? "새로운 계정을 생성해 주세요" : "사내 계정으로 로그인해 주세요"}</p>
+                    <h1 className="text-2xl font-black text-white tracking-tight">3초영수증</h1>
+                    <p className="text-zinc-500 text-sm mt-1">{isSignUp ? "새로운 계정을 생성해 주세요" : "누구나 편하게 무료로 사용하세요"}</p>
                 </div>
 
                 <div className="mb-8 space-y-3 bg-zinc-800/30 p-5 rounded-2xl border border-zinc-800/50">
