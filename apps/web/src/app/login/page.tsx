@@ -2,24 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
+import { Lock, Mail, ArrowRight, ShieldCheck, Loader2, User } from "lucide-react";
 import { motion } from "framer-motion";
 import axios from "axios";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [name, setName] = useState("");
+    const [isSignUp, setIsSignUp] = useState(false);
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
         setIsLoading(true);
 
         try {
-            const res = await axios.post("/api/auth/login", { email, password });
+            const endpoint = isSignUp ? "/api/auth/register" : "/api/auth/login";
+            const payload = isSignUp ? { email, password, name } : { email, password };
+            
+            const res = await axios.post(endpoint, payload);
             if (res.data.success) {
                 // Determine routing based on role
                 if (res.data.user.role === 'ADMIN') {
@@ -29,7 +34,7 @@ export default function LoginPage() {
                 }
             }
         } catch (err: any) {
-            setError(err.response?.data?.error || "로그인 중 오류가 발생했습니다.");
+            setError(err.response?.data?.error || (isSignUp ? "회원가입 중 오류가 발생했습니다." : "로그인 중 오류가 발생했습니다."));
         } finally {
             setIsLoading(false);
         }
@@ -52,11 +57,24 @@ export default function LoginPage() {
                         <ShieldCheck className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-black text-white tracking-tight">3sec Workspace</h1>
-                    <p className="text-zinc-500 text-sm mt-1">사내 계정으로 로그인해 주세요</p>
+                    <p className="text-zinc-500 text-sm mt-1">{isSignUp ? "새로운 계정을 생성해 주세요" : "사내 계정으로 로그인해 주세요"}</p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-4">
+                        {isSignUp && (
+                            <div className="relative">
+                                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                                <input
+                                    type="text"
+                                    placeholder="이름"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full pl-12 pr-4 py-4 bg-zinc-800/50 border border-zinc-700/50 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                                    required={isSignUp}
+                                />
+                            </div>
+                        )}
                         <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                             <input
@@ -99,10 +117,19 @@ export default function LoginPage() {
                         {isLoading ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
-                            <>로그인 <ArrowRight className="w-5 h-5" /></>
+                            <>{isSignUp ? "가입하기" : "로그인"} <ArrowRight className="w-5 h-5" /></>
                         )}
                     </button>
                 </form>
+
+                <div className="mt-6 text-center">
+                    <button 
+                        onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+                        className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors"
+                    >
+                        {isSignUp ? "이미 계정이 있으신가요? 로그인" : "계정이 없으신가요? 가입하기"}
+                    </button>
+                </div>
 
                 <p className="mt-8 text-center text-zinc-600 text-xs font-medium">
                     Secured by 3sec Infrastructure

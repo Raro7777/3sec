@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/auth';
 import archiver from 'archiver';
 import axios from 'axios';
 import path from 'path';
@@ -11,7 +12,21 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
+    const cookie = request.cookies.get('auth_token')?.value;
+    const session = await decrypt(cookie);
+
+    if (!session) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+        where: { id: session.userId }
+    });
+
     const where: any = {};
+    if (user?.role !== 'ADMIN') {
+        where.userId = session.userId;
+    }
     if (category) where.category = category;
     if (q) where.merchantName = { contains: q, mode: 'insensitive' };
     if (startDate || endDate) {

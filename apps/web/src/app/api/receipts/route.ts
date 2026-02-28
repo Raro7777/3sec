@@ -16,7 +16,17 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    const where: any = { userId: session.userId };
+    const user = await prisma.user.findUnique({
+        where: { id: session.userId }
+    });
+
+    const where: any = {};
+    
+    // 일반 사용자는 본인 내역만 탈색
+    if (user?.role !== 'ADMIN') {
+        where.userId = session.userId;
+    }
+
     if (category) where.category = category;
     if (q) where.merchantName = { contains: q, mode: 'insensitive' };
 

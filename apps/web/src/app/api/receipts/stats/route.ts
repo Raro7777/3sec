@@ -22,11 +22,20 @@ export async function GET(request: NextRequest) {
     const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: session.userId }
+        });
+
+        const where: any = {
+            paidAt: { gte: startDate, lte: endDate },
+        };
+
+        if (user?.role !== 'ADMIN') {
+            where.userId = session.userId;
+        }
+
         const receipts = await prisma.receipt.findMany({
-            where: {
-                userId: session.userId,
-                paidAt: { gte: startDate, lte: endDate },
-            },
+            where,
         });
 
         const totalAmount = receipts.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
