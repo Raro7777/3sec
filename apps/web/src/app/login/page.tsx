@@ -52,12 +52,31 @@ export default function LoginPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="w-full max-w-md bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-8 rounded-[2.5rem] shadow-2xl relative z-10"
             >
-                <div className="text-center mb-10">
+                <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/20">
                         <ShieldCheck className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-black text-white tracking-tight">3sec Workspace</h1>
                     <p className="text-zinc-500 text-sm mt-1">{isSignUp ? "새로운 계정을 생성해 주세요" : "사내 계정으로 로그인해 주세요"}</p>
+                </div>
+
+                <div className="mb-8 space-y-3 bg-zinc-800/30 p-5 rounded-2xl border border-zinc-800/50">
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-4 mt-0.5 flex justify-center"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1"/></div>
+                        <p className="text-sm text-zinc-300 leading-relaxed">단순회원 가입 시 <span className="text-white font-bold">승인 없이 바로 사용 가능</span></p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-4 mt-0.5 flex justify-center"><div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1"/></div>
+                        <p className="text-sm text-zinc-300 leading-relaxed">카드 영수증 사진을 찍으면 <span className="text-white font-bold">1초 만에 인식하고 저장·관리</span></p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-4 mt-0.5 flex justify-center"><div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1"/></div>
+                        <p className="text-sm text-zinc-300 leading-relaxed"><span className="text-white font-bold">회계 및 증빙 자료 제출용</span>으로 완벽 대응</p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-4 mt-0.5 flex justify-center"><ShieldCheck className="w-4 h-4 text-green-400 mt-[2px]"/></div>
+                        <p className="text-sm text-green-400 font-bold leading-relaxed">모든 업로드 자료는 안전하게 암호화 보관됨</p>
+                    </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
