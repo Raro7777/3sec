@@ -4,8 +4,6 @@ import { parseReceiptText } from '@3sec/receipt-parser';
 import { createClient } from '@supabase/supabase-js';
 import { prisma } from '@/lib/prisma';
 import { decrypt } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export async function POST(request: NextRequest) {
     try {
@@ -72,15 +70,9 @@ export async function POST(request: NextRequest) {
 
             imagePublicUrl = publicUrl;
         } else {
-            // Local File Storage Fallback
-            try {
-                const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-                await mkdir(uploadDir, { recursive: true });
-                await writeFile(path.join(uploadDir, fileName), buffer);
-            } catch (fsError) {
-                console.error('Local file save error:', fsError);
-                throw new Error('Failed to save image locally');
-            }
+            // Vercel Fallback: Convert to Base64 data URL
+            const base64Str = buffer.toString('base64');
+            imagePublicUrl = `data:${file.type || 'image/jpeg'};base64,${base64Str}`;
         }
 
         // Process OCR
@@ -104,7 +96,7 @@ export async function POST(request: NextRequest) {
             data: {
                 companyId: user.companyId,
                 userId: user.id,
-                imageOriginalUrl: imagePublicUrl || `/uploads/${fileName}`,
+                imageOriginalUrl: imagePublicUrl,
                 ocrStatus: 'COMPLETED',
                 ocrTextRaw: ocrResult.rawText,
                 ocrResultJson: ocrResult.fullJson || {},
