@@ -4,6 +4,8 @@ import { parseReceiptText } from '@3sec/receipt-parser';
 import { createClient } from '@supabase/supabase-js';
 import { prisma } from '@/lib/prisma';
 import { decrypt } from '@/lib/auth';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
 
 export async function POST(request: NextRequest) {
     try {
@@ -69,6 +71,16 @@ export async function POST(request: NextRequest) {
                 .getPublicUrl(`uploads/${fileName}`);
 
             imagePublicUrl = publicUrl;
+        } else {
+            // Local File Storage Fallback
+            try {
+                const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+                await mkdir(uploadDir, { recursive: true });
+                await writeFile(path.join(uploadDir, fileName), buffer);
+            } catch (fsError) {
+                console.error('Local file save error:', fsError);
+                throw new Error('Failed to save image locally');
+            }
         }
 
         // Process OCR
