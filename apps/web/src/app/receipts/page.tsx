@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ArrowLeft, Edit2, Trash2, Calendar, FileText, Check, X, Search, Download, ListFilter } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import Link from "next/link";
 
@@ -16,6 +16,7 @@ interface Receipt {
     category?: string;
     memo?: string;
     status: string;
+    imageOriginalUrl?: string;
 }
 
 export default function ReceiptsPage() {
@@ -24,6 +25,7 @@ export default function ReceiptsPage() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Partial<Receipt>>({});
     const [user, setUser] = useState<{ name?: string, email?: string, role?: string } | null>(null);
+    const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
     // 필터 상태
     const [filters, setFilters] = useState({
@@ -328,9 +330,18 @@ export default function ReceiptsPage() {
                                 ) : (
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                         <div className="flex items-start gap-4">
-                                            <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-2xl flex-shrink-0 border border-zinc-100 group-hover:bg-indigo-50 transition-colors">
-                                                🧾
-                                            </div>
+                                            {r.imageOriginalUrl ? (
+                                                <div 
+                                                    className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 border border-zinc-200 cursor-zoom-in group-hover:border-indigo-200 transition-colors"
+                                                    onClick={() => setViewImageUrl(r.imageOriginalUrl!)}
+                                                >
+                                                    <img src={r.imageOriginalUrl} alt="receipt" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                                                </div>
+                                            ) : (
+                                                <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-2xl flex-shrink-0 border border-zinc-100 group-hover:bg-indigo-50 transition-colors">
+                                                    🧾
+                                                </div>
+                                            )}
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <h3 className="font-bold text-zinc-900 truncate max-w-[150px]">{r.merchantName}</h3>
@@ -387,6 +398,35 @@ export default function ReceiptsPage() {
                     </div>
                 )}
             </main>
+
+            {/* 이미지 뷰어 모달 */}
+            <AnimatePresence>
+                {viewImageUrl && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm cursor-zoom-out"
+                        onClick={() => setViewImageUrl(null)}
+                    >
+                        <button 
+                            className="absolute top-6 right-6 w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"
+                            onClick={(e) => { e.stopPropagation(); setViewImageUrl(null); }}
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                        <motion.img
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            src={viewImageUrl}
+                            alt="Receipt Full View"
+                            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

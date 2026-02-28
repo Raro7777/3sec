@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark, Sun, Moon } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Loader2, Plus, ArrowRight, Wallet, PieChart, Landmark, Sun, Moon, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -43,6 +43,7 @@ export default function Home() {
   const [user, setUser] = useState<{ name?: string, email?: string, role?: string } | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReceipts, setRecentReceipts] = useState<ParsedReceipt[]>([]);
+  const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
   // const router = useRouter();
 
@@ -414,7 +415,10 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-3">
                       {r.imageOriginalUrl ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-zinc-200 dark:border-zinc-700">
+                        <div 
+                          className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-zinc-200 dark:border-zinc-700 cursor-zoom-in"
+                          onClick={() => setViewImageUrl(r.imageOriginalUrl!)}
+                        >
                           <img src={r.imageOriginalUrl} alt="receipt" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                         </div>
                       ) : (
@@ -439,6 +443,35 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* 이미지 뷰어 모달 */}
+      <AnimatePresence>
+        {viewImageUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm cursor-zoom-out"
+            onClick={() => setViewImageUrl(null)}
+          >
+            <button 
+              className="absolute top-6 right-6 w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"
+              onClick={(e) => { e.stopPropagation(); setViewImageUrl(null); }}
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <motion.img
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              src={viewImageUrl}
+              alt="Receipt Full View"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 모바일 퀵 업로드 FAB */}
       <div className="fixed bottom-6 right-6 md:hidden z-50">

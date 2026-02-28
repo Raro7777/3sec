@@ -56,31 +56,28 @@ export function parseReceiptText(text: string): ParsedReceipt {
     }
 
     // 3. 날짜 추출 (한국어 YYYY년 MM월 DD일 등 지원 강화)
-    const koreanDateRegex = /(20\d{2}|2[0-5]|19\d{2})\s*년\s*0?([1-9]|1[0-2])\s*월\s*0?([1-9]|[12]\d|3[01])\s*일/i;
-    const standardDateRegex = /(20\d{2}|19\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
-    const shortDateRegex = /(\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
+    const koreanDateRegex = /(20\d{2}|19\d{2})\s*년\s*0?([1-9]|1[0-2])\s*월\s*0?([1-9]|[12]\d|3[01])\s*일/i;
+    const standardDateRegex = /(20\d{2}|19\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
+    const shortDateRegex = /(\d{2})\s*[-/.]\s*0?([1-9]|1[0-2])\s*[-/.]\s*0?([1-9]|[12]\d|3[01])/;
 
     let year = 0, month = 0, day = 0;
 
     const krMatch = fullTextStr.match(koreanDateRegex);
+    const stdMatch = fullTextStr.match(standardDateRegex);
+    const shMatch = fullTextStr.match(shortDateRegex);
+
     if (krMatch) {
-        year = krMatch[1].length === 2 ? 2000 + parseInt(krMatch[1], 10) : parseInt(krMatch[1], 10);
+        year = parseInt(krMatch[1], 10);
         month = parseInt(krMatch[2], 10) - 1;
         day = parseInt(krMatch[3], 10);
-    } else {
-        const stdMatch = fullTextStr.match(standardDateRegex);
-        if (stdMatch) {
-            year = parseInt(stdMatch[1], 10);
-            month = parseInt(stdMatch[2], 10) - 1;
-            day = parseInt(stdMatch[3], 10);
-        } else {
-            const shMatch = fullTextStr.match(shortDateRegex);
-            if (shMatch) {
-                year = 2000 + parseInt(shMatch[1], 10);
-                month = parseInt(shMatch[2], 10) - 1;
-                day = parseInt(shMatch[3], 10);
-            }
-        }
+    } else if (stdMatch) {
+        year = parseInt(stdMatch[1], 10);
+        month = parseInt(stdMatch[2], 10) - 1;
+        day = parseInt(stdMatch[3], 10);
+    } else if (shMatch) {
+        year = 2000 + parseInt(shMatch[1], 10);
+        month = parseInt(shMatch[2], 10) - 1;
+        day = parseInt(shMatch[3], 10);
     }
 
     if (year > 0) {
