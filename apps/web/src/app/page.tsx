@@ -64,18 +64,19 @@ export default function Home() {
 
   const fetchDashboardData = async (offset = monthOffset) => {
     try {
-      const authRes = await axios.get('/api/auth/me');
-      setUser(authRes.data.user);
-
       const targetDate = new Date();
       targetDate.setMonth(targetDate.getMonth() + offset);
       const m = targetDate.getMonth() + 1;
       const y = targetDate.getFullYear();
 
-      const statsRes = await axios.get(`${API_BASE_URL}/receipts/stats?month=${m}&year=${y}`);
-      setStats(statsRes.data);
+      const [authRes, statsRes, listRes] = await Promise.all([
+        axios.get('/api/auth/me'),
+        axios.get(`${API_BASE_URL}/receipts/stats?month=${m}&year=${y}`),
+        axios.get(`${API_BASE_URL}/receipts`)
+      ]);
 
-      const listRes = await axios.get(`${API_BASE_URL}/receipts`);
+      setUser(authRes.data.user);
+      setStats(statsRes.data);
       setRecentReceipts(listRes.data.slice(0, 10)); // 최근 10개
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -86,22 +87,81 @@ export default function Home() {
     fetchDashboardData(monthOffset);
   }, [monthOffset]);
 
+  const processImageForOCR = (file: File | Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas ctx null'));
+          
+          ctx.drawImage(img, 0, 0);
+          
+          try {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Grayscale & Contrast (Contrast = 60)
+            const contrast = 60;
+            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              
+              const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+              
+              let finalColor = factor * (gray - 128) + 128;
+              if (finalColor > 255) finalColor = 255;
+              if (finalColor < 0) finalColor = 0;
+              
+              data[i] = finalColor;
+              data[i + 1] = finalColor;
+              data[i + 2] = finalColor;
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Canvas to Blob failed'));
+            }, 'image/jpeg', 0.9);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       try {
+        // 1. 먼저 이미지를 압축하여 핸들링하기 쉬운 사이즈로 변환
         const options = {
-          maxSizeMB: 2,
-          maxWidthOrHeight: 2560,
-          initialQuality: 0.95,
+          maxSizeMB: 0.8,
+          maxWidthOrHeight: 1600,
+          initialQuality: 0.85,
           useWebWorker: true,
           fileType: "image/jpeg" as string,
         };
         const compressedBlob = await imageCompression(selectedFile, options);
         
-        // Ensure the file maintains a valid name and extension for Naver OCR
+        // 2. 압축된 이미지 캔버스에 올려서 흑백화(Grayscale) 및 대비(Contrast) 극대화 처리
+        const processedBlob = await processImageForOCR(compressedBlob);
+        
+        // 3. 최종적으로 추출된 이미지를 업로드용 File 객체로 변환
         const safeName = selectedFile.name.replace(/\.[^/.]+$/, "") + ".jpg";
-        const finalFile = new File([compressedBlob], safeName, { type: "image/jpeg" });
+        const finalFile = new File([processedBlob], safeName, { type: "image/jpeg" });
         
         setFile(finalFile);
 
