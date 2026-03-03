@@ -27,66 +27,63 @@ export function parseReceiptText(text: string): ParsedReceipt {
         result.category = '비품/쇼핑';
     }
 
-    // 2. 금액 추출 (고도화: 특정 강력한 키워드 우선)
-    const strongAmountKeywords = ['승인금액', '청구금액', '결제대상금액', '받은금액', '결제금액', '합계', '총결제', '총금액'];
-    
-    const extractAmount = (keywords: string[]) => {
-        // 공백이 제거된 spacelessText에서 바로 검색 (',' 콤마는 유지)
-        const regex = new RegExp(`(?:${keywords.join('|')})[:：]?([\\d,]{3,})`, 'i');
-        const match = spacelessText.match(regex);
-        if (match) return parseInt(match[1].replace(/,/g, ''), 10);
-
-        // Fallback: 문장 단위로 검사하되, 각 줄의 공백도 제거하여 확인
-        for (let i = 0; i < lines.length; i++) {
-            const lineSpaceless = lines[i].replace(/\s+/g, '');
-            const hasKeyword = keywords.some(k => new RegExp(k, 'i').test(lineSpaceless));
-            if (hasKeyword) {
-                const numMatch = lineSpaceless.match(/([\d,]{3,})/);
-                if (numMatch) return parseInt(numMatch[1].replace(/,/g, ''), 10);
+    // 2. 금액 추출 (가장 큰 금액을 최우선으로, 키워드 의존도 낮춤)
+    // 텍스트 전체에서 등장하는 모든 숫자 중 가장 큰 금액(현실적인 범위 내)을 추출
+    const findMaxAmount = (): number | null => {
+        // 공백이 이미 제거된 상태이므로, 쉼표가 들어간 숫자 또는 연속된 숫자를 찾음
+        const numRegex = /([1-9]\d{0,2}(?:,\d{3})+|[1-9]\d{3,})/g;
+        const matches = [...spacelessText.matchAll(numRegex)];
+        
+        if (matches.length > 0) {
+            const candidates = matches
+                .map(m => parseInt(m[1].replace(/,/g, ''), 10))
+                .filter(n => n > 100 && n < 10000000) // 100원 초과, 1천만원 미만의 합리적인 금액 필터
+                .sort((a, b) => b - a);
                 
-                if (i + 1 < lines.length) {
-                    const nextLineSpaceless = lines[i+1].replace(/\s+/g, '');
-                    const nextLineMatch = nextLineSpaceless.match(/([\d,]{3,})/);
-                    if (nextLineMatch) return parseInt(nextLineMatch[1].replace(/,/g, ''), 10);
-                }
+            if (candidates.length > 0) {
+                return candidates[0]; // 가장 큰 금액 반환
             }
         }
         return null;
     };
 
-    let amount = extractAmount(strongAmountKeywords);
+    // 혹시 모를 상황 대비(특정 키워드가 붙어있는 금액을 우선시 할 경우)
+    const strongAmountKeywords = ['결제요금', '카드매출', '승인금액', '청구금액', '결제대상금액', '받은금액', '결제금액', '합계', '총결제', '총금액'];
+    
+    const extractAmountByKeywords = (keywords: string[]) => {
+        const regex = new RegExp(`(?:${keywords.join('|')})[:：]?([\\d,]{3,})`, 'i');
+        const match = spacelessText.match(regex);
+        if (match) return parseInt(match[1].replace(/,/g, ''), 10);
+        return null;
+    };
+
+    // 1순위: 전체에서 가장 큰 금액, 2순위: 키워드 기반
+    let amount = findMaxAmount() || extractAmountByKeywords(strongAmountKeywords);
     
     if (amount) {
         result.amount = amount;
-    } else {
-        // Fallback: 가장 큰 금액 (원, \ 등으로 끝나는/시작하는 숫자 우대)
-        const wonRegex = /(?:[\\]|원)?([\\d,]{3,})(?:원)?/g;
-        const matches = [...spacelessText.matchAll(wonRegex)];
-        if (matches.length > 0) {
-            const candidates = matches
-                .map(m => parseInt(m[1].replace(/,/g, ''), 10))
-                .filter(n => n > 100 && n < 10000000 && n % 10 === 0)
-                .sort((a, b) => b - a);
-            if (candidates.length > 0) {
-                result.amount = candidates.find(c => c < 1000000) || candidates[0];
-            }
-        }
     }
 
     // 3. 날짜 추출 (한국어 YYYY년 MM월 DD일 등 지원 강화 및 공백 제거된 텍스트 활용)
     const koreanDateRegex = /(20\d{2}|19\d{2})년0?([1-9]|1[0-2])월0?([1-9]|[12]\d|3[01])일/i;
     const standardDateRegex = /(20\d{2}|19\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
     const shortDateRegex = /(\d{2})[-/.]0?([1-9]|1[0-2])[-/.]0?([1-9]|[12]\d|3[01])/;
+    const fourteenDigitRegex = /(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{6}/; // 14자리 연속 숫자 (YYYYMMDDHHMMSS)
     const continuousDateRegex = /(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/; // 8자리 연속 숫자 (YYYYMMDD)
 
     let year = 0, month = 0, day = 0;
 
+    const fourteenMatch = spacelessText.match(fourteenDigitRegex);
     const krMatch = spacelessText.match(koreanDateRegex);
     const stdMatch = spacelessText.match(standardDateRegex);
     const shortMatch = spacelessText.match(shortDateRegex);
     const contMatch = spacelessText.match(continuousDateRegex);
 
-    if (krMatch) {
+    if (fourteenMatch) {
+        year = parseInt(fourteenMatch[1], 10);
+        month = parseInt(fourteenMatch[2], 10) - 1;
+        day = parseInt(fourteenMatch[3], 10);
+    } else if (krMatch) {
         year = parseInt(krMatch[1], 10);
         month = parseInt(krMatch[2], 10) - 1;
         day = parseInt(krMatch[3], 10);
