@@ -164,6 +164,7 @@ export interface TeamStats {
   offsides: number;
   passes: number;
   passesCompleted: number;
+  crosses: number;
   tackles: number;
   saves: number;
   xg: number;

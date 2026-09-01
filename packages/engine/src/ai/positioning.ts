@@ -102,7 +102,8 @@ export function computePositioning(m: Match, _dt: number): void {
       const dir = m.dirOf(p.team);
       const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
       const dGoal = dist(opp.pos, ownGoal);
-      const gap = dGoal < 20 ? 1.2 : dGoal < 35 ? 1.8 : 2.5;
+      // Tight near goal, looser upfield (a marker 3-4 m off still shadows the lane but leaves time on the ball).
+      const gap = dGoal < 20 ? 1.0 : dGoal < 35 ? 1.7 : 2.8;
       const toGoal = norm(sub(ownGoal, opp.pos));
       // Also lean toward the ball so the pass lane is shadowed.
       const toBall = norm(sub(ball.pos, opp.pos));
@@ -260,7 +261,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   if (inPoss && isForward(role)) {
     const line = m.offsideLine(team);
     const ant = m.def(p.id).attrs.anticipation / 20;
-    const wobble = Math.sin(s.tick * 0.013 + p.pos.y) * (2.6 - 2.0 * ant); // deterministic, slow drift
+    const wobble = Math.sin(s.tick * 0.013 + p.pos.y) * (3.0 - 2.4 * ant); // deterministic, slow drift
     if (x > line - 0.8 + wobble) x = line - 0.8 + wobble;
   }
 

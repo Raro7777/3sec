@@ -4,16 +4,20 @@ import { angleOf, dist, len, norm, scale, sub, type Vec2 } from "../math/vec";
 /** Map a 1..20 attribute to [0,1]. */
 export const a01 = (x: number): number => Math.min(20, Math.max(1, x)) / 20;
 
-/** Top speed in m/s: 1 => 6.0, 20 => 9.6 (elite sprinter ~ 9.5–10 m/s). */
+/**
+ * Top speed in m/s: 1 => 7.0, 20 => 9.6 (elite sprinter ~ 9.5–10 m/s).
+ * The range is deliberately compressed: professional players differ by ~10-15% in top speed,
+ * and a wider spread makes every loose-ball race a foregone conclusion.
+ */
 export function maxSpeed(attrs: Attributes, fatigue: number): number {
-  const base = 6.0 + 3.6 * a01(attrs.pace);
-  return base * (1 - 0.25 * fatigue);
+  const base = 7.0 + 2.6 * a01(attrs.pace);
+  return base * (1 - 0.22 * fatigue);
 }
 
-/** Max acceleration in m/s^2: 1 => 3.0, 20 => 7.0. */
+/** Max acceleration in m/s^2: 1 => 4.0, 20 => 7.0. */
 export function maxAccel(attrs: Attributes, fatigue: number): number {
-  const base = 3.0 + 4.0 * a01(attrs.acceleration);
-  return base * (1 - 0.2 * fatigue);
+  const base = 4.0 + 3.0 * a01(attrs.acceleration);
+  return base * (1 - 0.18 * fatigue);
 }
 
 /** Max turn rate in rad/s: agile players turn faster; turning is harder at high speed. */

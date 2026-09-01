@@ -22,6 +22,8 @@ const totals = {
   yellows: 0,
   reds: 0,
   saves: 0,
+  crosses: 0,
+  blocks: 0,
   xg: 0,
   homeWins: 0,
   draws: 0,
@@ -48,6 +50,8 @@ for (let i = 0; i < n; i++) {
   totals.yellows += a.yellows + b.yellows;
   totals.reds += a.reds + b.reds;
   totals.saves += a.saves + b.saves;
+  totals.crosses += a.crosses + b.crosses;
+  totals.blocks += s.events.filter((e) => e.type === "BLOCK").length;
   totals.xg += a.xg + b.xg;
   if (s.score[0] > s.score[1]) totals.homeWins++;
   else if (s.score[0] < s.score[1]) totals.awayWins++;
@@ -72,7 +76,9 @@ console.log(`goals      ${(totals.goals / n).toFixed(2)}   (real-world ~2.7)`);
 console.log(`xG         ${(totals.xg / n).toFixed(2)}`);
 console.log(`shots      ${(totals.shots / n).toFixed(1)}   (real-world ~25)`);
 console.log(`on target  ${(totals.onTarget / n).toFixed(1)}   (real-world ~8-9)`);
-console.log(`saves      ${(totals.saves / n).toFixed(1)}`);
+console.log(`saves      ${(totals.saves / n).toFixed(1)}   (${((100 * totals.saves) / Math.max(1, totals.onTarget)).toFixed(0)}% of on-target; real-world ~70%)`);
+console.log(`blocks     ${(totals.blocks / n).toFixed(1)}   (real-world ~6-7)`);
+console.log(`crosses    ${(totals.crosses / n).toFixed(1)}   (real-world ~35)`);
 console.log(`corners    ${(totals.corners / n).toFixed(1)}   (real-world ~10)`);
 console.log(`fouls      ${(totals.fouls / n).toFixed(1)}   (real-world ~22)`);
 console.log(`offsides   ${(totals.offsides / n).toFixed(1)}   (real-world ~3-4)`);

@@ -105,6 +105,39 @@ export function rollDistance(v0: number): number {
 }
 
 /**
+ * Horizontal range of a lofted kick with launch speed `v` at elevation `theta`,
+ * integrated with air drag until the first bounce.
+ */
+export function loftedRange(v: number, theta: number): number {
+  let x = 0;
+  let z = 0.01;
+  let vx = v * Math.cos(theta);
+  let vz = v * Math.sin(theta);
+  const h = 0.02;
+  for (let i = 0; i < 500 && z > 0; i++) {
+    const sp = Math.hypot(vx, vz);
+    const drag = BALL.dragK * sp;
+    vx -= vx * drag * h;
+    vz -= (BALL.gravity + vz * drag) * h;
+    x += vx * h;
+    z += vz * h;
+  }
+  return x;
+}
+
+/** Launch speed so that a lofted kick at `theta` first lands `distance` meters away (drag-aware). */
+export function loftedSpeedFor(distance: number, theta: number): number {
+  let lo = 5;
+  let hi = 40;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2;
+    if (loftedRange(mid, theta) < distance) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
  * Ground speed required so that a rolling ball travels `distance` meters
  * and arrives with `arrivalSpeed` (exact inverse of the rolling model).
  */

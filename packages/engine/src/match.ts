@@ -40,6 +40,7 @@ const emptyStats = (): TeamStats => ({
   offsides: 0,
   passes: 0,
   passesCompleted: 0,
+  crosses: 0,
   tackles: 0,
   saves: 0,
   xg: 0,
@@ -124,6 +125,11 @@ export class Match {
   shot: ShotInFlight | null = null;
   /** simple per-player decision throttle */
   private nextDecision = new Map<string, number>();
+  /** optional debug hooks (used by tuning scripts) */
+  debug: {
+    onSave?: (info: { lateral: number; reach: number; pSave: number; speed: number; saved: boolean; distToBall: number }) => void;
+    onPass?: (info: { from: string; to: string; d: number; margin: number; lane: number; lofted: boolean; score: number; pressure: number }) => void;
+  } = {};
 
   constructor(home: TeamDef, away: TeamDef, opts: MatchOptions = {}) {
     this.teams = [home, away];
@@ -517,6 +523,12 @@ export class Match {
     const prevPos = { x: b.pos.x - b.vel.x * DT, y: b.pos.y - b.vel.y * DT };
     let best: PlayerState | null = null;
     let bestD = Infinity;
+    // High balls: an outfield player can head a descending ball between 1.3 m and 2.4 m.
+    if (b.z > 1.3 && b.z < 2.4 && b.vz < 0) {
+      this.resolveHeader();
+      return;
+    }
+
     for (const p of this.activePlayers()) {
       if (p.kickCooldown > 0) continue;
       const isGk = this.isKeeper(p.id);
@@ -526,7 +538,9 @@ export class Match {
       if (d >= this.controlRadius(p, ballSpeed)) continue;
       // Contested receptions: the intended receiver (who shields and reads the pass) has priority
       // over a marker unless the marker is clearly closer.
-      const bias = p.id === this.intendedReceiver ? 0.5 : p.team === b.lastTouchTeam ? 0.15 : 0;
+      // Inside the defending team's penalty area defenders win contested balls (no attacker priority).
+      const inOppBox = inPenaltyArea(b.pos, this.dirOf(p.team)) && p.team === b.lastTouchTeam;
+      const bias = inOppBox ? 0 : p.id === this.intendedReceiver ? 0.7 : p.team === b.lastTouchTeam ? 0.2 : 0;
       if (d - bias >= bestD) continue;
       if (ballSpeed > 4) {
         const toP = sub(p.pos, b.pos);
@@ -551,6 +565,11 @@ export class Match {
     const prevToucher = b.lastTouch;
 
     if (this.rng.chance(Math.max(0.1, control))) {
+      // Keeper gathering an on-target shot counts as a save.
+      if (isGk && this.shot && this.shot.team !== best.team && this.shot.onTargetCounted) {
+        s.stats[best.team].saves++;
+        this.emit("SAVE", best.team, best.id, `Save by ${this.name(best.id)}`);
+      }
       this.gainPossession(best);
       // Pass completion / interception bookkeeping
       if (prevTeam !== null && prevToucher && prevToucher !== best.id) {
@@ -571,6 +590,106 @@ export class Match {
       this.touch(best);
       if (this.shot && this.shot.team !== best.team) this.shot = null;
     }
+  }
+
+  /**
+   * Aerial duel / header. The keeper may catch; outfield players head the ball:
+   * defenders clear away from goal, attackers head toward goal or a team-mate.
+   */
+  private resolveHeader(): void {
+    const s = this.state;
+    const b = s.ball;
+    let best: PlayerState | null = null;
+    let bestScore = -Infinity;
+    for (const p of this.activePlayers()) {
+      if (p.kickCooldown > 0) continue;
+      const d = dist(p.pos, b.pos);
+      const reach = this.isKeeper(p.id) ? 1.8 : 0.8;
+      if (d > reach) continue;
+      const attrs = this.def(p.id).attrs;
+      // Defenders facing the ball near their own goal hold the aerial advantage.
+      const defDir = this.dirOf(p.team);
+      const defending = dist(p.pos, { x: -PITCH.halfLength * defDir, y: 0 }) < 25;
+      const score =
+        (this.isKeeper(p.id) ? 1.5 : 0) +
+        (defending ? 0.35 : 0) +
+        0.5 * a01(attrs.strength) +
+        0.5 * a01(attrs.anticipation) -
+        d +
+        this.rng.range(0, 0.4);
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    if (!best) return;
+
+    if (this.isKeeper(best.id)) {
+      const attrs = this.def(best.id).attrs;
+      if (this.rng.chance(0.5 + 0.45 * a01(attrs.handling))) {
+        b.pos = { ...best.pos };
+        this.gainPossession(best);
+        if (this.shot && this.shot.team !== best.team) this.shot = null;
+        return;
+      }
+      // Punch clear
+      const dir = this.dirOf(best.team);
+      kickBall(b, fromAngle(Math.atan2(this.rng.range(-1, 1), dir), this.rng.range(8, 14)), this.rng.range(3, 6));
+      best.kickCooldown = 0.5;
+      this.touch(best);
+      this.shot = null;
+      return;
+    }
+
+    const dir = this.dirOf(best.team);
+    const attrs = this.def(best.id).attrs;
+    const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
+    const nearOwnGoal = dist(best.pos, ownGoal) < 30;
+    const oppGoal = goalCenter(dir);
+    const nearOppGoal = dist(best.pos, oppGoal) < 14;
+    const acc = 0.5 * (1 - a01(attrs.technique)) + 0.25;
+    let ang: number;
+    let speed: number;
+    let vz: number;
+    if (nearOppGoal && Math.abs(best.pos.y) < 20) {
+      // Header at goal
+      const aimY = this.rng.range(-PITCH.goalHalfWidth + 0.5, PITCH.goalHalfWidth - 0.5);
+      ang = Math.atan2(aimY - best.pos.y, oppGoal.x - best.pos.x) + this.rng.gauss(0, acc * 0.5);
+      speed = this.rng.range(10, 17);
+      vz = this.rng.range(-1, 2.5);
+      this.touch(best);
+      kickBall(b, fromAngle(ang, speed), vz);
+      b.z = 1.6;
+      best.kickCooldown = 0.5;
+      this.registerShot(best, this.xgAt(best.pos, best.team) * 0.5, true);
+      return;
+    }
+    if (nearOwnGoal) {
+      // Defensive clearance: away from goal, high and wide. Under pressure (or facing own goal)
+      // a fair share is only headed sideways/behind – the classic source of corners.
+      const pressed = this.pressureAt(best.pos, best.team) < 2;
+      const side = best.pos.y >= 0 ? 1 : -1;
+      if (pressed && this.rng.chance(0.45)) {
+        ang = Math.atan2(side * this.rng.range(0.7, 1.2), dir * this.rng.range(-0.7, 0.3)) + this.rng.gauss(0, acc);
+        speed = this.rng.range(6, 12);
+        vz = this.rng.range(1, 4);
+      } else {
+        ang = Math.atan2(side * this.rng.range(0.2, 1), dir) + this.rng.gauss(0, acc);
+        speed = this.rng.range(10, 16);
+        vz = this.rng.range(3, 6);
+      }
+    } else {
+      // Flick toward the opponent's half
+      ang = Math.atan2(this.rng.range(-0.8, 0.8), dir) + this.rng.gauss(0, acc);
+      speed = this.rng.range(6, 11);
+      vz = this.rng.range(0, 3);
+    }
+    this.touch(best);
+    kickBall(b, fromAngle(ang, speed), vz);
+    b.z = 1.6;
+    best.kickCooldown = 0.5;
+    this.intendedReceiver = null;
+    if (this.shot && this.shot.team !== best.team) this.shot = null;
   }
 
   /** Register a touch for attribution (throw-ins, own goals, offside reset). */
@@ -615,8 +734,8 @@ export class Match {
       const d = dist(p.pos, b.pos);
       if (d > 1.2) continue;
       const attrs = this.def(p.id).attrs;
-      // Attempt rate ~1.8/s when in range.
-      if (!this.rng.chance(1.8 * DT)) continue;
+      // Attempt rate ~1.5/s when in range.
+      if (!this.rng.chance(1.5 * DT)) continue;
 
       const isGk = this.isKeeper(p.id);
       const tackleSkill = isGk ? a01(attrs.handling) * 0.8 : a01(attrs.tackling);
@@ -659,8 +778,9 @@ export class Match {
 
     // Cards: promising attack / from behind increases card chance (simplified).
     const distToGoal = dist(spot, goalCenter(attackDir));
-    const pYellow = 0.12 + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0);
-    let text = `Foul by ${this.name(offender.id)} on ${this.name(victim.id)}`;
+    // Referees are noticeably more lenient with a player already booked (second yellow ≈ rare).
+    const pYellow = (0.12 + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.35 : 1);
+    const text = `Foul by ${this.name(offender.id)} on ${this.name(victim.id)}`;
     this.emit("FOUL", offender.team, offender.id, text, spot);
     if (this.rng.chance(pYellow)) {
       offender.yellow++;
@@ -672,7 +792,7 @@ export class Match {
         s.stats[offender.team].yellows++;
         this.emit("YELLOW_CARD", offender.team, offender.id, `Yellow card: ${this.name(offender.id)}`);
       }
-    } else if (this.rng.chance(0.01)) {
+    } else if (this.rng.chance(0.004)) {
       offender.sentOff = true;
       s.stats[offender.team].reds++;
       this.emit("RED_CARD", offender.team, offender.id, `Straight red – ${this.name(offender.id)} is sent off`);
@@ -690,20 +810,23 @@ export class Match {
 
   // ---------------------------------------------------------------- shots & saves
 
-  registerShot(shooter: PlayerState, xg: number): void {
+  registerShot(shooter: PlayerState, xg: number, header = false): void {
     const s = this.state;
     s.stats[shooter.team].shots++;
     s.stats[shooter.team].xg += xg;
     this.shot = { shooterId: shooter.id, team: shooter.team, xg, saveAttempted: false, onTargetCounted: false };
-    this.emit("SHOT", shooter.team, shooter.id, `${this.name(shooter.id)} shoots (xG ${xg.toFixed(2)})`, shooter.pos);
+    this.emit("SHOT", shooter.team, shooter.id, `${this.name(shooter.id)} ${header ? "heads at goal" : "shoots"} (xG ${xg.toFixed(2)})`, shooter.pos);
   }
 
   /** A defender blocks the shot: the ball ricochets off them. */
   blockShot(blocker: PlayerState): void {
     const b = this.state.ball;
     const speed = Math.hypot(b.vel.x, b.vel.y);
-    const ang = Math.atan2(b.vel.y, b.vel.x) + this.rng.range(-1.6, 1.6) + Math.PI * (this.rng.chance(0.6) ? 1 : 0);
-    kickBall(b, fromAngle(ang, speed * this.rng.range(0.15, 0.45)), this.rng.range(0, 3));
+    const shotAng = Math.atan2(b.vel.y, b.vel.x);
+    // Roughly half of blocks ricochet back toward the shooter, the rest deflect onward (often behind for a corner).
+    const back = this.rng.chance(0.5);
+    const ang = back ? shotAng + Math.PI + this.rng.range(-1.2, 1.2) : shotAng + this.rng.range(-1.1, 1.1);
+    kickBall(b, fromAngle(ang, speed * (back ? this.rng.range(0.15, 0.4) : this.rng.range(0.3, 0.7))), this.rng.range(0, 3));
     b.pos = { x: blocker.pos.x, y: blocker.pos.y };
     blocker.kickCooldown = 0.4;
     this.touch(blocker);
@@ -742,19 +865,25 @@ export class Match {
     const attrs = this.def(gk.id).attrs;
     const speed = Math.hypot(b.vel.x, b.vel.y, b.vz);
     // Diving reach (m) grows with reflexes; positioning lets the keeper be closer to the line of the shot.
-    const reach = 1.6 + 1.0 * a01(attrs.reflexes) + 0.5 * a01(attrs.gkPositioning);
+    // Full diving reach (m): ~2.6 for an average keeper, ~3.3 for an elite one.
+    const reach = 1.9 + 1.0 * a01(attrs.reflexes) + 0.6 * a01(attrs.gkPositioning);
     const lateral = Math.abs(gk.pos.y - yCross);
     const distToBall = dist(gk.pos, b.pos);
-    if (lateral > reach + 0.5 || distToBall > reach + 4) return; // nowhere near: goal
+    if (lateral > reach + 0.4 || distToBall > reach + 4) {
+      this.debug.onSave?.({ lateral, reach, pSave: 0, speed, saved: false, distToBall });
+      return; // nowhere near: goal
+    }
 
     // Save probability: quadratic fall-off with distance from the keeper's body, penalised by
-    // shot speed and high corners. Calibrated for ~65-70% of on-target shots being saved.
-    const rel = Math.min(1.2, lateral / reach);
-    const base = 0.92 - 0.55 * rel * rel - Math.max(0, speed - 22) * 0.015;
+    // shot speed and high corners. Calibrated for ~70% of on-target shots being saved.
+    const rel = Math.min(1.15, lateral / reach);
+    const base = 0.95 - 0.5 * rel * rel - Math.max(0, speed - 24) * 0.015;
     const cornerHigh = zCross > 1.7 ? -0.1 : 0;
     const closeRange = distToBall < 6 ? -0.12 : 0; // less reaction time
     const pSave = Math.max(0.03, Math.min(0.97, base + 0.25 * (a01(attrs.reflexes) - 0.5) + cornerHigh + closeRange));
-    if (!this.rng.chance(pSave)) return;
+    const saved = this.rng.chance(pSave);
+    this.debug.onSave?.({ lateral, reach, pSave, speed, saved, distToBall });
+    if (!saved) return;
 
     // Saved!
     s.stats[defTeam].saves++;
@@ -767,10 +896,13 @@ export class Match {
       this.gainPossession(gk);
       gk.possessionTime = 0;
     } else {
-      // Parry: ball deflected back into play, away from the goal.
+      // Parry: mostly pushed wide/behind (corner) or back into play, away from the goal.
       const outDir = -this.dirOf(shot.team);
-      const ang = Math.atan2(this.rng.range(-1, 1), outDir) ;
-      kickBall(b, fromAngle(ang, this.rng.range(4, 9)), this.rng.range(0.5, 2.5));
+      const wide = this.rng.chance(0.55);
+      const ang = wide
+        ? Math.atan2((yCross >= 0 ? 1 : -1) * this.rng.range(0.8, 1.5), outDir * this.rng.range(-0.7, 0.3))
+        : Math.atan2(this.rng.range(-1, 1), outDir);
+      kickBall(b, fromAngle(ang, this.rng.range(6, 12)), this.rng.range(0.5, 2.5));
       b.pos = { x: gk.pos.x, y: gk.pos.y };
       gk.kickCooldown = 0.5;
       this.touch(gk);

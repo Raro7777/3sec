@@ -1,7 +1,7 @@
 import type { Match } from "../match";
 import type { PlayerState, Restart } from "../types";
 import { PITCH, clampToPitch, inPenaltyArea } from "../pitch";
-import { kickBall, passSpeedFor, rollTimeFor } from "../physics/ball";
+import { kickBall, loftedSpeedFor, passSpeedFor, rollTimeFor } from "../physics/ball";
 import { a01, maxSpeed, timeToReach } from "../physics/player";
 
 /** Time for a ball kicked at `v0` along the ground to cover `dist`; a ball that stops short counts as late. */
@@ -27,7 +27,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const noise = 0.18 * (1.2 - a01(attrs.decisions));
 
   interface Option {
-    kind: "shoot" | "pass" | "dribble" | "clear" | "hold";
+    kind: "shoot" | "pass" | "cross" | "dribble" | "clear" | "hold";
     score: number;
     target?: PlayerState;
     point?: Vec2;
@@ -67,13 +67,17 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     const inBox = inPenaltyArea(p.pos, dir);
     // Blocked lane in front of the shooter makes a shot unattractive.
     const blockers = countBlockers(m, p, goal);
+    // Long-range appetite: space on the edge of the box tempts a strike from distance.
+    const longRange = !inBox && dGoal < 28 && pressure > 2.5 && blockers === 0
+      ? 0.35 + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) - (dGoal - 16) * 0.02
+      : 0;
     const shotScore =
-      0.1 +
-      xg * (6.5 + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
+      0.05 +
+      xg * (5.0 + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
       (inBox ? 0.15 : 0) +
       (pressure < 1.5 ? -0.3 : 0) -
       blockers * 0.35 +
-      (dGoal > 25 ? -0.3 : 0);
+      longRange;
     options.push({ kind: "shoot", score: shotScore + m.rng.gauss(0, noise) });
   }
 
@@ -81,17 +85,43 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const pass = bestPass(m, p, { longAllowed: true, minScore: -Infinity });
   if (pass) options.push({ kind: "pass", score: pass.score + m.rng.gauss(0, noise), target: pass.target });
 
+  // ---- Cross: wide in the final third, team-mates in the box
+  const inWideFinalThird = p.pos.x * dir > 22 && Math.abs(p.pos.y) > 13;
+  let cross: PlayerState | null = null;
+  if (inWideFinalThird) {
+    const spot = { x: (PITCH.halfLength - 10) * dir, y: 0 };
+    let best = -Infinity;
+    for (const q of m.activePlayers(team)) {
+      if (q.id === p.id || m.isKeeper(q.id)) continue;
+      const dq = dist(q.pos, spot);
+      if (dq > 13) continue;
+      const sc = m.pressureAt(q.pos, team) * 0.3 - dq * 0.05 - (m.inOffsidePosition(q) ? 5 : 0);
+      if (sc > best) {
+        best = sc;
+        cross = q;
+      }
+    }
+    if (cross) {
+      const crossScore = 0.3 + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0);
+      options.push({ kind: "cross", score: crossScore + m.rng.gauss(0, noise), target: cross });
+    }
+  }
+
   // ---- Dribble
   const fwd = m.forward(team);
   const space = spaceAhead(m, p, fwd);
+  // Carry: with time and space a player brings the ball forward for a moment before releasing it
+  // (keeps the pass rate realistic: ~1 pass every 5-6 s of possession).
+  const carry = pressure > 4 && p.possessionTime < 1.6 ? 0.55 : pressure > 2.5 && p.possessionTime < 0.9 ? 0.3 : 0;
   const dribbleScore =
     0.35 +
+    carry +
     Math.min(space, 12) * 0.04 +
     0.3 * a01(attrs.dribbling) +
     (pressure < 1.8 ? -0.4 : pressure < 3 ? -0.15 : 0) +
     (p.pos.x * dir < -20 ? -0.25 : 0) + // don't dribble out of defence
     (dGoal < 25 ? 0.1 : 0) -
-    Math.min(0.4, p.possessionTime * 0.06); // don't dribble forever
+    Math.min(0.5, Math.max(0, p.possessionTime - 1.6) * 0.15); // don't dribble forever
   options.push({ kind: "dribble", score: dribbleScore + m.rng.gauss(0, noise) });
 
   // ---- Clear (own third, under pressure, no good pass)
@@ -110,7 +140,13 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       executeShot(m, p, xg);
       return 0.6;
     case "pass":
+      m.debug.onPass?.({ from: p.id, to: pass!.target.id, d: pass!.d, margin: pass!.margin, lane: pass!.lane, lofted: pass!.lofted, score: pass!.score, pressure });
       executePass(m, p, choice.target!, pass!.lofted, false);
+      return 0.6;
+    case "cross":
+      executePass(m, p, choice.target!, true, false, true);
+      p.intent = "cross";
+      m.state.stats[team].crosses++;
       return 0.6;
     case "clear":
       executeClear(m, p);
@@ -134,6 +170,9 @@ interface PassEval {
   target: PlayerState;
   score: number;
   lofted: boolean;
+  margin: number;
+  lane: number;
+  d: number;
 }
 
 function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minScore: number }): PassEval | null {
@@ -174,22 +213,26 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     }
     const receiverSpace = m.pressureAt(lead, team);
     const progress = (lead.x - p.pos.x) * dir;
-    // Offside awareness: clearly offside team-mates are ignored; marginal cases are misjudged
-    // by players with weak decisions/vision.
-    const offMargin = q.pos.x * dir - m.offsideLine(team);
-    const offside = q.pos.x * dir > 0 && offMargin > 0;
+    // Offside awareness with perception latency: the passer judges the runner's position a
+    // fraction of a second late, so a well-timed run can look onside. Clearly offside
+    // team-mates are ignored; marginal cases are misjudged by players with weak decisions.
+    const latency = 0.35 * (1.3 - a01(attrs.vision));
+    const perceivedX = (q.pos.x - q.vel.x * latency) * dir;
+    const offMargin = perceivedX - m.offsideLine(team);
+    const offside = perceivedX > 0 && offMargin > 0;
     const offsidePenalty = !offside ? 0 : offMargin > 1.5 ? 2 : 2 * (0.3 + 0.7 * a01(attrs.decisions));
-    const lofted = d > 28 || (margin < 0.4 && d > 12);
+    // Lofted only when the ground lane is shut or the distance demands it (real football is ~15-20% aerial).
+    const lofted = d > 36 || (margin < 0.15 && d > 18 && lane < 1.5);
 
     let score = 0.3;
     // Safe lanes are worth a lot; a lane a defender reaches first is nearly worthless (unless lofted over).
-    if (lofted) score += Math.min(lane, 4) * 0.06;
-    else if (margin < 0) score -= 0.8;
-    else score += Math.min(margin, 1.5) * 0.3; // ≤ 0.45
+    if (lofted) score += Math.min(lane, 4) * 0.05;
+    else if (margin < 0) score -= 1.0;
+    else score += (Math.min(margin, 1.5) - 0.6) * 0.6; // -0.36 .. +0.54: tight lanes are a gamble
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
     score += progress * (0.008 + 0.014 * tactics.directness); // 20 m ≈ 0.3
-    score -= d > 30 ? (d - 30) * 0.02 : 0;
-    score -= lofted ? 0.2 * (1 - a01(attrs.technique)) : 0;
+    score -= d > 22 ? (d - 22) * (0.02 - 0.01 * tactics.directness) : 0; // long balls are risky
+    score -= lofted ? 0.25 * (1 - a01(attrs.technique)) + 0.1 : 0;
     score -= offsidePenalty;
     if (isGkTarget) score -= pressure < 3 ? 0.1 : 0.9;
     // Passing back under no pressure is dull
@@ -202,12 +245,12 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     const rxg = m.xgAt(lead, team);
     score += rxg * 2.5;
 
-    if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted };
+    if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted, margin, lane, d };
   }
   return best;
 }
 
-export function executePass(m: Match, p: PlayerState, target: PlayerState, lofted: boolean, exemptOffside: boolean): void {
+export function executePass(m: Match, p: PlayerState, target: PlayerState, lofted: boolean, exemptOffside: boolean, isCross = false): void {
   const attrs = m.def(p.id).attrs;
   const ball = m.state.ball;
   const pressure = m.pressureAt(p.pos, p.team);
@@ -215,10 +258,11 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   const d = dist(p.pos, aim);
 
   // Execution error: angle & speed, worse under pressure and for weak passers.
+  // Crosses into a crowded box are the least precise delivery in the game (~20-25% find a team-mate).
   const skill = a01(attrs.passing) * 0.7 + a01(attrs.technique) * 0.3;
   const pressureFactor = 1 + Math.max(0, 3 - pressure) * 0.35;
-  const angSd = (0.14 - 0.11 * skill) * pressureFactor * (lofted ? 1.4 : 1);
-  const spdSd = (0.16 - 0.1 * skill) * pressureFactor;
+  const angSd = (0.14 - 0.11 * skill) * pressureFactor * (isCross ? 2.2 : lofted ? 1.4 : 1);
+  const spdSd = (0.16 - 0.1 * skill) * pressureFactor * (isCross ? 1.8 : 1);
 
   const baseAng = angleOf(sub(aim, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
@@ -226,10 +270,9 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   let speed: number;
   let vz = 0;
   if (lofted) {
-    // Choose a launch angle ~ 25-35 degrees and solve for range (drag ignored, slightly overhit).
-    const theta = (28 + 8 * m.rng.next()) * (Math.PI / 180);
-    const v0 = Math.sqrt((d * 9.81) / Math.sin(2 * theta)) * 1.05;
-    const v = v0 * (1 + m.rng.gauss(0, spdSd));
+    // Launch angle ~ 22-34 degrees; solve the drag-aware range for the launch speed.
+    const theta = (22 + 12 * m.rng.next()) * (Math.PI / 180);
+    const v = loftedSpeedFor(d, theta) * (1 + m.rng.gauss(0, spdSd));
     speed = v * Math.cos(theta);
     vz = v * Math.sin(theta);
   } else {
@@ -267,7 +310,7 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   const pressureFactor = 1 + Math.max(0, 2.5 - pressure) * 0.4;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
-  const angSd = (0.26 - 0.14 * skill) * pressureFactor * (isPenalty ? 0.25 : 1);
+  const angSd = (0.3 - 0.16 * skill) * pressureFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
 
@@ -284,14 +327,14 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   m.intendedReceiver = null;
   m.registerShot(p, isPenalty ? 0.76 : xg);
 
-  // Blocks: a defender standing in the first few metres of the shot line gets in the way.
+  // Blocks: a defender standing in the first metres of the shot line gets in the way.
   if (!isPenalty) {
-    const end = add(p.pos, fromAngle(ang, 5));
+    const end = add(p.pos, fromAngle(ang, 8));
     for (const o of m.activePlayers(m.opp(p.team))) {
       if (m.isKeeper(o.id)) continue;
       const { d: od, t } = pointSegment(o.pos, p.pos, end);
-      if (t <= 0 || od > 0.9) continue;
-      const pBlock = (0.75 - od * 0.5) * (elev > 0.3 ? 0.4 : 1);
+      if (t <= 0 || od > 1.3) continue;
+      const pBlock = (0.7 - od * 0.35) * (elev > 0.3 ? 0.4 : 1);
       if (m.rng.chance(pBlock)) {
         m.blockShot(o);
         break;
