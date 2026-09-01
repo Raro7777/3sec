@@ -39,7 +39,9 @@ export function computePositioning(m: Match, _dt: number): void {
       if (m.intendedReceiver && m.teamOf.get(m.intendedReceiver) === team) {
         chasers.add(m.intendedReceiver);
       }
-      const n = possession === team ? 1 : tactics.pressing > 0.65 ? 2 : 1;
+      // Defenders need a moment to read a pass; the passing team's receiver reacts at once.
+      const reacting = team !== ball.lastTouchTeam && s.tick - m.lastKickTick < TUNING.reactionDelay * 20;
+      const n = reacting ? 0 : possession === team ? 1 : tactics.pressing > 0.65 ? 2 : 1;
       for (let i = 0; i < Math.min(n, ranked.length); i++) chasers.add(ranked[i]!.p.id);
     }
   } else {

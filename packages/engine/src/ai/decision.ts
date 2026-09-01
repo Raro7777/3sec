@@ -364,11 +364,23 @@ function countBlockers(m: Match, p: PlayerState, goal: Vec2): number {
 function executeClear(m: Match, p: PlayerState): void {
   const ball = m.state.ball;
   const dir = m.dirOf(p.team);
-  // Hoof it upfield toward the nearer touchline side, high and long.
   const sideY = p.pos.y >= 0 ? 1 : -1;
-  const ang = angleOf({ x: dir, y: sideY * 0.5 }) + m.rng.gauss(0, 0.15);
-  const theta = (30 + 10 * m.rng.next()) * (Math.PI / 180);
-  const v = 22 + 6 * m.rng.next();
+  const pressure = m.pressureAt(p.pos, p.team);
+  const inOwnBox = inPenaltyArea(p.pos, (-dir) as 1 | -1);
+  let ang: number;
+  let theta: number;
+  let v: number;
+  if (inOwnBox && pressure < 2.5 && m.rng.chance(TUNING.panicClear)) {
+    // Hurried clearance facing own goal: sideways or behind – corners and throw-ins come from here.
+    ang = angleOf({ x: dir * m.rng.range(-0.8, 0.2), y: sideY }) + m.rng.gauss(0, 0.2);
+    theta = (10 + 25 * m.rng.next()) * (Math.PI / 180);
+    v = 10 + 8 * m.rng.next();
+  } else {
+    // Hoof it upfield toward the nearer touchline side, high and long.
+    ang = angleOf({ x: dir, y: sideY * 0.5 }) + m.rng.gauss(0, 0.15);
+    theta = (30 + 10 * m.rng.next()) * (Math.PI / 180);
+    v = 22 + 6 * m.rng.next();
+  }
   m.touch(p);
   m.recordPass(p, false);
   kickBall(ball, fromAngle(ang, v * Math.cos(theta)), v * Math.sin(theta));

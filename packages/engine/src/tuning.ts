@@ -40,15 +40,19 @@ export interface Tuning {
   gkReach: number;
   /** forwards' offside-line wobble amplitude (m) for low anticipation */
   offsideWobble: number;
+  /** defenders' reaction delay (s) before chasing a pass just played by the opponent */
+  reactionDelay: number;
+  /** probability that a pressured clearance inside the box goes sideways/behind */
+  panicClear: number;
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.05,
-  shotXgMult: 5.0,
+  shotBase: 0.22,
+  shotXgMult: 3.25,
   longRangeBase: 0.35,
   shotAngSd: 0.3,
   crossBase: 0.3,
-  passMarginWeight: 0.9,
+  passMarginWeight: 0.6,
   carryBonus: 0.55,
   receiverBias: 0.7,
   controlBase: 0.55,
@@ -57,11 +61,13 @@ export const TUNING: Tuning = {
   markGapFar: 2.8,
   pressers: 2,
   engageRadius: 3.5,
-  tackleRate: 1.5,
-  foulBase: 0.06,
+  tackleRate: 1.2,
+  foulBase: 0.04,
   yellowBase: 0.12,
   gkReach: 1.9,
   offsideWobble: 3.0,
+  reactionDelay: 0.35,
+  panicClear: 0.35,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });

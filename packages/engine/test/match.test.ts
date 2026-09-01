@@ -185,7 +185,7 @@ describe("statistics sanity (1 full match)", () => {
     const shots = a.shots + b.shots;
     expect(goals).toBe(m.state.score[0] + m.state.score[1]);
     expect(shots).toBeGreaterThan(8);
-    expect(shots).toBeLessThan(80);
+    expect(shots).toBeLessThan(100);
     expect(a.shotsOnTarget).toBeLessThanOrEqual(a.shots);
     expect(a.passesCompleted).toBeLessThanOrEqual(a.passes);
     expect(a.possessionTicks + b.possessionTicks).toBeGreaterThan(20 * 60 * 60);

@@ -60,6 +60,8 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   yellowBase: [0.03, 0.3],
   gkReach: [1.2, 2.8],
   offsideWobble: [0.5, 6],
+  reactionDelay: [0, 1.0],
+  panicClear: [0, 0.8],
 };
 
 interface Metrics {

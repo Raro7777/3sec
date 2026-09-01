@@ -74,6 +74,8 @@ export class Match {
 
   /** who a pass was aimed at (for chasing / completion stats) */
   intendedReceiver: string | null = null;
+  /** tick of the last pass/clearance kick (defenders react with a delay) */
+  lastKickTick = -1000;
   /** players currently assigned to chase/press the ball (recomputed periodically by the AI) */
   chasers = new Set<string>();
   /** man-marking assignments: defender id -> opponent id (recomputed periodically by the AI) */
@@ -1178,6 +1180,8 @@ export class Match {
     s.phase = "GOAL_CELEBRATION";
     s.phaseTimer = 4;
     s.stoppages++;
+    // The ball is dead: queued substitutions come on now.
+    this.applyPendingSubs();
   }
 
   name(id: string): string {
@@ -1216,6 +1220,7 @@ export class Match {
       }
     }
     this.state.lastPass = { fromId: from.id, team: from.team, t: this.matchSeconds(), offsidePositions: positions };
+    this.lastKickTick = this.state.tick;
   }
 
   /** Nearest opponent distance to a point. */
