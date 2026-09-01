@@ -4,7 +4,7 @@
   "longRangeBase": 0.35,
   "shotAngSd": 0.3,
   "crossBase": 0.51,
-  "passMarginWeight": 0.9,
+  "passMarginWeight": 0.5850000000000001,
   "carryBonus": 0.55,
   "receiverBias": 0.7,
   "controlBase": 0.55,
