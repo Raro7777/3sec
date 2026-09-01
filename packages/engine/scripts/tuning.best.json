@@ -1,0 +1,21 @@
+{
+  "shotBase": 0.21800000000000003,
+  "shotXgMult": 3.25,
+  "longRangeBase": 0.35,
+  "shotAngSd": 0.3,
+  "crossBase": 0.51,
+  "passMarginWeight": 0.9,
+  "carryBonus": 0.55,
+  "receiverBias": 0.7,
+  "controlBase": 0.55,
+  "markGapNear": 1,
+  "markGapMid": 1.7,
+  "markGapFar": 2.8,
+  "pressers": 2,
+  "engageRadius": 3.5,
+  "tackleRate": 1.5,
+  "foulBase": 0.06,
+  "yellowBase": 0.12,
+  "gkReach": 1.9,
+  "offsideWobble": 3
+}

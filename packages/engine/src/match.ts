@@ -1,4 +1,5 @@
 import { Rng } from "./rng";
+import { TUNING } from "./tuning";
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
 import { FORMATIONS, roleDistance, slotToPitch } from "./formation";
 import { BALL, kickBall, stepBall } from "./physics/ball";
@@ -729,7 +730,7 @@ export class Match {
       // over a marker unless the marker is clearly closer.
       // Inside the defending team's penalty area defenders win contested balls (no attacker priority).
       const inOppBox = inPenaltyArea(b.pos, this.dirOf(p.team)) && p.team === b.lastTouchTeam;
-      const bias = inOppBox ? 0 : p.id === this.intendedReceiver ? 0.7 : p.team === b.lastTouchTeam ? 0.2 : 0;
+      const bias = inOppBox ? 0 : p.id === this.intendedReceiver ? TUNING.receiverBias : p.team === b.lastTouchTeam ? 0.2 : 0;
       if (d - bias >= bestD) continue;
       if (ballSpeed > 4) {
         const toP = sub(p.pos, b.pos);
@@ -748,7 +749,7 @@ export class Match {
     // Fast ball: chance to control depends on first touch; failing = deflection.
     const control = isGk
       ? 0.6 + 0.4 * a01(attrs.handling) - Math.max(0, ballSpeed - 15) * 0.02
-      : 0.55 + 0.45 * a01(attrs.firstTouch) - Math.max(0, ballSpeed - 8) * 0.035;
+      : TUNING.controlBase + 0.45 * a01(attrs.firstTouch) - Math.max(0, ballSpeed - 8) * 0.035;
 
     const prevTeam = b.lastTouchTeam;
     const prevToucher = b.lastTouch;
@@ -924,7 +925,7 @@ export class Match {
       if (d > 1.2) continue;
       const attrs = this.def(p.id).attrs;
       // Attempt rate ~1.5/s when in range.
-      if (!this.rng.chance(1.5 * DT)) continue;
+      if (!this.rng.chance(TUNING.tackleRate * DT)) continue;
 
       const isGk = this.isKeeper(p.id);
       const tackleSkill = isGk ? a01(attrs.handling) * 0.8 : a01(attrs.tackling);
@@ -934,7 +935,7 @@ export class Match {
       // Foul probability: clumsy tacklers (low tackling) foul more; tackles from behind more.
       const facingDot = Math.cos(owner.facing - Math.atan2(p.pos.y - owner.pos.y, p.pos.x - owner.pos.x));
       const fromBehind = facingDot < -0.3;
-      const pFoul = (0.06 + 0.1 * (1 - a01(attrs.tackling))) * (fromBehind ? 1.8 : 1) * (isGk ? 0.4 : 1);
+      const pFoul = (TUNING.foulBase + 0.1 * (1 - a01(attrs.tackling))) * (fromBehind ? 1.8 : 1) * (isGk ? 0.4 : 1);
 
       if (this.rng.chance(pFoul)) {
         this.foul(p, owner);
@@ -968,7 +969,7 @@ export class Match {
     // Cards: promising attack / from behind increases card chance (simplified).
     const distToGoal = dist(spot, goalCenter(attackDir));
     // Referees are noticeably more lenient with a player already booked (second yellow ≈ rare).
-    const pYellow = (0.12 + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.35 : 1);
+    const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.35 : 1);
     const text = `Foul by ${this.name(offender.id)} on ${this.name(victim.id)}`;
     this.emit("FOUL", offender.team, offender.id, text, spot);
     if (this.rng.chance(pYellow)) {
@@ -1055,7 +1056,7 @@ export class Match {
     const speed = Math.hypot(b.vel.x, b.vel.y, b.vz);
     // Diving reach (m) grows with reflexes; positioning lets the keeper be closer to the line of the shot.
     // Full diving reach (m): ~2.6 for an average keeper, ~3.3 for an elite one.
-    const reach = 1.9 + 1.0 * a01(attrs.reflexes) + 0.6 * a01(attrs.gkPositioning);
+    const reach = TUNING.gkReach + 1.0 * a01(attrs.reflexes) + 0.6 * a01(attrs.gkPositioning);
     const lateral = Math.abs(gk.pos.y - yCross);
     const distToBall = dist(gk.pos, b.pos);
     if (lateral > reach + 0.4 || distToBall > reach + 4) {

@@ -7,3 +7,4 @@ export { BALL, stepBall, kickBall, passSpeedFor, rollSpeedAfter, rollTimeFor, ro
 export { maxSpeed, maxAccel, stepPlayer, timeToReach } from "./physics/player";
 export { generateTeam, generateAttributes, defaultTactics } from "./teams";
 export { Match, TICK_HZ, DT, MAX_SUBS, type MatchOptions } from "./match";
+export { TUNING, DEFAULT_TUNING, setTuning, resetTuning, type Tuning } from "./tuning";

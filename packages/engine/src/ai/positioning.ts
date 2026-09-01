@@ -1,4 +1,5 @@
 import type { Match } from "../match";
+import { TUNING } from "../tuning";
 import type { PlayerState, TeamId } from "../types";
 import { PITCH, clampToPitch, inPenaltyArea } from "../pitch";
 import { isDefender, isForward, isMidfielder } from "../formation";
@@ -52,7 +53,7 @@ export function computePositioning(m: Match, _dt: number): void {
       .filter((p) => !m.isKeeper(p.id))
       .map((p) => ({ p, d: dist(p.pos, ball.pos) }))
       .sort((a, b) => a.d - b.d);
-    const n = tactics.pressing > 0.65 ? 3 : 2;
+    const n = Math.round(TUNING.pressers) + (tactics.pressing > 0.65 ? 1 : 0);
     for (let i = 0; i < Math.min(n, ranked.length); i++) chasers.add(ranked[i]!.p.id);
   }
 
@@ -86,7 +87,7 @@ export function computePositioning(m: Match, _dt: number): void {
     // Engage: an opponent dribbling within reach gets challenged even if we are not the designated presser.
     if (carrier && carrierTeam !== p.team) {
       const d = dist(carrier.pos, p.pos);
-      if (d < 3.5 + 3 * m.teams[p.team].tactics.pressing) {
+      if (d < TUNING.engageRadius + 3 * m.teams[p.team].tactics.pressing) {
         const ahead = add(ball.pos, scale(carrier.vel, 0.3));
         setTarget(p, ahead, 99, "engage");
         continue;
@@ -103,7 +104,7 @@ export function computePositioning(m: Match, _dt: number): void {
       const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
       const dGoal = dist(opp.pos, ownGoal);
       // Tight near goal, looser upfield (a marker 3-4 m off still shadows the lane but leaves time on the ball).
-      const gap = dGoal < 20 ? 1.0 : dGoal < 35 ? 1.7 : 2.8;
+      const gap = dGoal < 20 ? TUNING.markGapNear : dGoal < 35 ? TUNING.markGapMid : TUNING.markGapFar;
       const toGoal = norm(sub(ownGoal, opp.pos));
       // Also lean toward the ball so the pass lane is shadowed.
       const toBall = norm(sub(ball.pos, opp.pos));
@@ -263,7 +264,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   if (inPoss && isForward(role)) {
     const line = m.offsideLine(team);
     const ant = m.def(p.id).attrs.anticipation / 20;
-    const wobble = Math.sin(s.tick * 0.013 + p.pos.y) * (3.0 - 2.4 * ant); // deterministic, slow drift
+    const wobble = Math.sin(s.tick * 0.013 + p.pos.y) * (TUNING.offsideWobble - 0.8 * TUNING.offsideWobble * ant); // deterministic, slow drift
     if (x > line - 0.8 + wobble) x = line - 0.8 + wobble;
   }
 

@@ -1,4 +1,5 @@
 import type { Match } from "../match";
+import { TUNING } from "../tuning";
 import type { PlayerState, Restart } from "../types";
 import { PITCH, clampToPitch, inPenaltyArea } from "../pitch";
 import { kickBall, loftedSpeedFor, passSpeedFor, rollTimeFor } from "../physics/ball";
@@ -69,12 +70,12 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     const blockers = countBlockers(m, p, goal);
     // Long-range appetite: space on the edge of the box tempts a strike from distance.
     const longRange = !inBox && dGoal < 28 && pressure > 2.5 && blockers === 0
-      ? 0.35 + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) - (dGoal - 16) * 0.02
+      ? TUNING.longRangeBase + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) - (dGoal - 16) * 0.02
       : 0;
     const shotScore =
-      0.05 +
+      TUNING.shotBase +
       (tactics.mentality - 0.5) * 0.4 +
-      xg * (5.0 + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
+      xg * (TUNING.shotXgMult + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
       (inBox ? 0.15 : 0) +
       (pressure < 1.5 ? -0.3 : 0) -
       blockers * 0.35 +
@@ -103,7 +104,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       }
     }
     if (cross) {
-      const crossScore = 0.3 + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0);
+      const crossScore = TUNING.crossBase + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0);
       options.push({ kind: "cross", score: crossScore + m.rng.gauss(0, noise), target: cross });
     }
   }
@@ -113,7 +114,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const space = spaceAhead(m, p, fwd);
   // Carry: with time and space a player brings the ball forward for a moment before releasing it
   // (keeps the pass rate realistic: ~1 pass every 5-6 s of possession).
-  const carry = pressure > 4 && p.possessionTime < 1.6 ? 0.55 : pressure > 2.5 && p.possessionTime < 0.9 ? 0.3 : 0;
+  const carry = pressure > 4 && p.possessionTime < 1.6 ? TUNING.carryBonus : pressure > 2.5 && p.possessionTime < 0.9 ? TUNING.carryBonus * 0.55 : 0;
   const dribbleScore =
     0.35 +
     carry +
@@ -229,7 +230,7 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     // Safe lanes are worth a lot; a lane a defender reaches first is nearly worthless (unless lofted over).
     if (lofted) score += Math.min(lane, 4) * 0.05;
     else if (margin < 0) score -= 1.0;
-    else score += (Math.min(margin, 1.5) - 0.6) * (0.9 - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
+    else score += (Math.min(margin, 1.5) - 0.6) * (TUNING.passMarginWeight - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
     // Directness and mentality both reward vertical passes; a defensive mentality prefers safety.
     score += progress * (0.008 + 0.014 * tactics.directness) * (0.6 + 0.8 * tactics.mentality); // 20 m ≈ 0.3
@@ -312,7 +313,7 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   const pressureFactor = 1 + Math.max(0, 2.5 - pressure) * 0.4;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
-  const angSd = (0.3 - 0.16 * skill) * pressureFactor * (isPenalty ? 0.22 : 1);
+  const angSd = (TUNING.shotAngSd - 0.16 * skill) * pressureFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
 
