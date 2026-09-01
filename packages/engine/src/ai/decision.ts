@@ -203,13 +203,15 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     const passSpeed = passSpeedFor(d, 6);
     let lane = Infinity; // nearest opponent to the line (m)
     let margin = Infinity; // worst-case time margin (s)
+    // The whole lane counts, including the reception point: a defender who reaches the receiver
+    // before the ball is the most common way a pass dies. Defenders start after a reaction delay.
     for (const o of opponents) {
       const { d: od, t } = pointSegment(o.pos, p.pos, lead);
-      if (t <= 0.03 || t >= 0.97) continue;
+      if (t <= 0.03) continue;
       if (od < lane) lane = od;
       const along = t * d;
       const ballT = ballTimeToDistance(passSpeed, along);
-      const oppT = timeToReach(o, m.def(o.id).attrs, add(p.pos, scale(sub(lead, p.pos), t)));
+      const oppT = timeToReach(o, m.def(o.id).attrs, add(p.pos, scale(sub(lead, p.pos), t))) + TUNING.reactionDelay;
       const mg = oppT - ballT;
       if (mg < margin) margin = mg;
     }
@@ -291,6 +293,7 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   p.intent = lofted ? "long pass" : "pass";
   m.intendedReceiver = target.id;
   m.state.stats[p.team].passes++;
+  m.notePass(p);
   // Receiver runs to meet the ball
   target.target = aim;
   target.desiredSpeed = 99;

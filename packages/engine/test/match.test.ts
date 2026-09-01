@@ -95,7 +95,7 @@ describe("laws of the game", () => {
     expect(goal?.playerId).toBe(scorer.id);
     // celebration ends with the conceding team kicking off
     let n = 0;
-    while (m.state.phase === "GOAL_CELEBRATION" && n++ < 200) m.step();
+    while (m.state.phase === "GOAL_CELEBRATION" && n++ < 2000) m.step();
     expect(m.state.restart?.kind).toBe("KICK_OFF");
     expect(m.state.restart?.team).toBe(1);
   });

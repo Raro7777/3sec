@@ -62,6 +62,7 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   offsideWobble: [0.5, 6],
   reactionDelay: [0, 1.0],
   panicClear: [0, 0.8],
+  shieldBase: [0.3, 0.92],
 };
 
 interface Metrics {

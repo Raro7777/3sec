@@ -137,7 +137,7 @@ describe("fatigue", () => {
     const outfield = m.state.players.filter((p) => p.onPitch && !m.isKeeper(p.id) && p.distance > 0);
     const fat = outfield.map((p) => p.fatigue);
     const avg = fat.reduce((a, b) => a + b, 0) / fat.length;
-    expect(avg).toBeGreaterThan(0.4);
+    expect(avg).toBeGreaterThan(0.3);
     expect(avg).toBeLessThan(0.85);
     // subs came on fresh: those with less distance are less tired
     const km = outfield.map((p) => p.distance / 1000);

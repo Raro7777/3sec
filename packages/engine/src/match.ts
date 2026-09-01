@@ -76,6 +76,13 @@ export class Match {
   intendedReceiver: string | null = null;
   /** tick of the last pass/clearance kick (defenders react with a delay) */
   lastKickTick = -1000;
+  /** a pass whose outcome is not yet settled (completed when a team-mate gains possession, failed on opponent touch/dead ball) */
+  passInFlight: { team: TeamId; fromId: string } | null = null;
+
+  /** Called by the decision layer when a genuine pass (not a clearance) is played. */
+  notePass(from: PlayerState): void {
+    this.passInFlight = { team: from.team, fromId: from.id };
+  }
   /** players currently assigned to chase/press the ball (recomputed periodically by the AI) */
   chasers = new Set<string>();
   /** man-marking assignments: defender id -> opponent id (recomputed periodically by the AI) */
@@ -585,17 +592,19 @@ export class Match {
     this.intendedReceiver = null;
     this.shot = null;
     s.lastPass = null;
+    this.passInFlight = null; // ball went dead: the pass did not find a team-mate
 
     // Law 3: substitutions happen while the ball is dead.
     this.applyPendingSubs();
 
+    // Realistic dead-ball durations: the ball is in play for roughly 55-60 of the 90 minutes.
     const timers: Record<RestartKind, number> = {
-      KICK_OFF: 3,
-      THROW_IN: 2.5,
-      GOAL_KICK: 4,
-      CORNER: 5,
-      FREE_KICK: 4,
-      PENALTY: 6,
+      KICK_OFF: 8,
+      THROW_IN: 7,
+      GOAL_KICK: 16,
+      CORNER: 22,
+      FREE_KICK: 18,
+      PENALTY: 30,
     };
 
     let taker: PlayerState;
@@ -745,6 +754,23 @@ export class Match {
     }
     if (!best) return;
 
+    // Shielding: when the intended receiver is right there, a defender who is merely a little
+    // closer to the ball does not simply take it – the receiver uses their body. The receiver
+    // wins most of these duels (first touch/strength vs anticipation/marking), except inside
+    // the defending team's own penalty area where defenders attack the ball.
+    if (this.intendedReceiver && best.id !== this.intendedReceiver && best.team !== b.lastTouchTeam) {
+      const recv = this.byId.get(this.intendedReceiver);
+      if (recv && recv.onPitch && !recv.sentOff && recv.kickCooldown <= 0 && dist(recv.pos, b.pos) < 1.6 && b.z < 1.3) {
+        const ra = this.def(recv.id).attrs;
+        const da = this.def(best.id).attrs;
+        const inDefBox = inPenaltyArea(b.pos, this.dirOf(recv.team));
+        const pReceiver =
+          (inDefBox ? 0.45 : TUNING.shieldBase) +
+          0.3 * (a01(ra.firstTouch) * 0.5 + a01(ra.strength) * 0.5 - a01(da.anticipation) * 0.5 - a01(da.marking) * 0.5);
+        if (this.rng.chance(Math.max(0.15, Math.min(0.92, pReceiver)))) best = recv;
+      }
+    }
+
     const attrs = this.def(best.id).attrs;
     const isGk = this.isKeeper(best.id);
 
@@ -762,15 +788,11 @@ export class Match {
         s.stats[best.team].saves++;
         this.emit("SAVE", best.team, best.id, `Save by ${this.name(best.id)}`);
       }
-      this.gainPossession(best);
-      // Pass completion / interception bookkeeping
-      if (prevTeam !== null && prevToucher && prevToucher !== best.id) {
-        if (prevTeam === best.team) {
-          if (this.intendedReceiver) s.stats[best.team].passesCompleted++;
-        } else if (this.intendedReceiver) {
-          this.emit("INTERCEPTION", best.team, best.id, `${this.name(best.id)} intercepts`);
-        }
+      // Interception bookkeeping (pass completion itself is settled in gainPossession/touch)
+      if (prevTeam !== null && prevToucher && prevToucher !== best.id && prevTeam !== best.team && this.intendedReceiver) {
+        this.emit("INTERCEPTION", best.team, best.id, `${this.name(best.id)} intercepts`);
       }
+      this.gainPossession(best);
       this.intendedReceiver = null;
       if (this.shot && this.shot.team !== best.team) this.shot = null;
     } else {
@@ -892,6 +914,8 @@ export class Match {
     b.lastTouchTeam = p.team;
     // An opponent touching the ball resets the offside snapshot (deliberate play simplification).
     if (this.state.lastPass && this.state.lastPass.team !== p.team) this.state.lastPass = null;
+    // An opponent touch means the pass failed.
+    if (this.passInFlight && this.passInFlight.team !== p.team) this.passInFlight = null;
   }
 
   gainPossession(p: PlayerState): void {
@@ -908,6 +932,11 @@ export class Match {
       return;
     }
     s.lastPass = null;
+    // Pass completed: a team-mate (anyone but the passer) has the ball under control.
+    if (this.passInFlight && this.passInFlight.team === p.team && this.passInFlight.fromId !== p.id) {
+      s.stats[p.team].passesCompleted++;
+    }
+    this.passInFlight = null;
     b.owner = p.id;
     b.vel = { ...p.vel };
     b.z = 0;
@@ -1178,7 +1207,7 @@ export class Match {
     b.vel = { x: 0, y: 0 };
     b.vz = 0;
     s.phase = "GOAL_CELEBRATION";
-    s.phaseTimer = 4;
+    s.phaseTimer = 40;
     s.stoppages++;
     // The ball is dead: queued substitutions come on now.
     this.applyPendingSubs();

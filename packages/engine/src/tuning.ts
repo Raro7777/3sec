@@ -44,6 +44,8 @@ export interface Tuning {
   reactionDelay: number;
   /** probability that a pressured clearance inside the box goes sideways/behind */
   panicClear: number;
+  /** base probability the intended receiver wins a contested reception (shielding) */
+  shieldBase: number;
 }
 
 export const TUNING: Tuning = {
@@ -68,6 +70,7 @@ export const TUNING: Tuning = {
   offsideWobble: 3.0,
   reactionDelay: 0.35,
   panicClear: 0.35,
+  shieldBase: 0.72,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });

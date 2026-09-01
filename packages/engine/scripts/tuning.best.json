@@ -1,12 +1,12 @@
 {
-  "shotBase": 0.22,
-  "shotXgMult": 2.1125000000000003,
+  "shotBase": 0.05199999999999999,
+  "shotXgMult": 3.25,
   "longRangeBase": 0.35,
-  "shotAngSd": 0.3,
-  "crossBase": 0.3,
+  "shotAngSd": 0.405,
+  "crossBase": 0.51,
   "passMarginWeight": 0.6,
   "carryBonus": 0.55,
-  "receiverBias": 0.7,
+  "receiverBias": 0.945,
   "controlBase": 0.55,
   "markGapNear": 1,
   "markGapMid": 1.7,
@@ -19,5 +19,6 @@
   "gkReach": 1.9,
   "offsideWobble": 3,
   "reactionDelay": 0.35,
-  "panicClear": 0.35
+  "panicClear": 0.35,
+  "shieldBase": 0.72
 }
