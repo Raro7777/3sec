@@ -1,6 +1,6 @@
 import { Rng } from "./rng";
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
-import { FORMATIONS, slotToPitch } from "./formation";
+import { FORMATIONS, roleDistance, slotToPitch } from "./formation";
 import { BALL, kickBall, stepBall } from "./physics/ball";
 import { a01, stepPlayer } from "./physics/player";
 import { add, dist, fromAngle, len, norm, pointSegment, scale, sub, type Vec2 } from "./math/vec";
@@ -16,6 +16,7 @@ import type {
   PlayerState,
   Restart,
   RestartKind,
+  Tactics,
   TeamDef,
   TeamId,
   TeamStats,
@@ -28,7 +29,11 @@ export interface MatchOptions {
   seed?: number;
   /** seconds per half (default 45 * 60) */
   halfLength?: number;
+  /** teams whose substitutions/tactics are handled by the built-in AI manager (default: [1]) */
+  aiManaged?: TeamId[];
 }
+
+export const MAX_SUBS = 5;
 
 const emptyStats = (): TeamStats => ({
   possessionTicks: 0,
@@ -138,18 +143,21 @@ export class Match {
 
     const players: PlayerState[] = [];
     for (const team of this.teams) {
-      for (const def of team.players) {
+      for (const [i, def] of [...team.players, ...team.bench].entries()) {
         this.defs.set(def.id, def);
         this.teamOf.set(def.id, team.id);
+        const onPitch = i < team.players.length;
         const ps: PlayerState = {
           id: def.id,
           team: team.id,
-          pos: { x: 0, y: 0 },
+          pos: { x: 0, y: (PITCH.halfWidth + 3) * (team.id === 0 ? -1 : 1) },
           vel: { x: 0, y: 0 },
           facing: 0,
           target: { x: 0, y: 0 },
           desiredSpeed: 0,
           fatigue: 0,
+          onPitch,
+          distance: 0,
           yellow: 0,
           sentOff: false,
           kickCooldown: 0,
@@ -160,6 +168,7 @@ export class Match {
         this.byId.set(def.id, ps);
       }
     }
+    this.aiManaged = new Set(opts.aiManaged ?? [1]);
 
     const ball: BallState = {
       pos: { x: 0, y: 0 },
@@ -184,6 +193,9 @@ export class Match {
       attackDir: [1, -1],
       ball,
       players,
+      lineups: [home.players.map((p) => p.id), away.players.map((p) => p.id)],
+      subsUsed: [0, 0],
+      pendingSubs: [],
       restart: null,
       secondHalfKickoff: kickoffTeam === 0 ? 1 : 0,
       events: [],
@@ -219,11 +231,16 @@ export class Match {
   private activeAll: PlayerState[] = [];
   private activeTeam: [PlayerState[], PlayerState[]] = [[], []];
 
-  /** Refresh cached lists (once per tick and after a sending-off). */
+  /** Refresh cached lists (once per tick and after a sending-off / substitution). */
   refreshActive(): void {
-    this.activeAll = this.state.players.filter((p) => !p.sentOff);
+    this.activeAll = this.state.players.filter((p) => p.onPitch && !p.sentOff);
     this.activeTeam = [this.activeAll.filter((p) => p.team === 0), this.activeAll.filter((p) => p.team === 1)];
   }
+
+  /** Teams managed by the built-in AI manager. */
+  aiManaged: Set<TeamId>;
+  private lastAiCheck = -1;
+  private aiShifted: [boolean, boolean] = [false, false];
 
   activePlayers(team?: TeamId): PlayerState[] {
     return team === undefined ? this.activeAll : this.activeTeam[team];
@@ -251,29 +268,42 @@ export class Match {
     this.state.events.push(ev);
   }
 
-  /** The goalkeeper of a team (index 0 by convention). */
+  /** The goalkeeper of a team: whoever occupies formation slot 0. */
   keeper(team: TeamId): PlayerState {
-    return this.player(this.teams[team].players[0]!.id);
+    return this.player(this.state.lineups[team][0]!);
   }
 
+  /** Is this player currently playing in goal? */
   isKeeper(id: string): boolean {
-    return this.def(id).role === "GK";
+    const team = this.teamOf.get(id)!;
+    return this.state.lineups[team][0] === id;
+  }
+
+  /** Formation slot index of an on-pitch player, or -1. */
+  slotIndex(id: string): number {
+    return this.state.lineups[this.teamOf.get(id)!].indexOf(id);
   }
 
   homeSlot(id: string): Vec2 {
     const team = this.teamOf.get(id)!;
     const t = this.teams[team];
-    const idx = t.players.findIndex((p) => p.id === id);
+    const idx = Math.max(0, this.slotIndex(id));
     const slot = FORMATIONS[t.tactics.formation][idx]!;
     return slotToPitch(slot, this.dirOf(team), 0.7 + 0.5 * t.tactics.width);
   }
 
+  /** Bench players still available to come on. */
+  benchAvailable(team: TeamId): PlayerState[] {
+    return this.teams[team].bench.map((d) => this.player(d.id)).filter((p) => !p.onPitch && !p.sentOff && !this.usedSubs.has(p.id));
+  }
+  private usedSubs = new Set<string>();
+
   /** Place a team in formation inside its own half (kick-off shape, Law 8). */
   private placeFormation(team: TeamId): void {
     const dir = this.dirOf(team);
-    for (const def of this.teams[team].players) {
-      const p = this.player(def.id);
-      const home = this.homeSlot(def.id);
+    for (const id of this.state.lineups[team]) {
+      const p = this.player(id);
+      const home = this.homeSlot(id);
       // Compress the formation into the own half: x in forward coords maps [-52.5, +52.5] -> [-50, -2]
       const fx = home.x * dir; // forward coords
       const ownHalfX = -2 - (52.5 - fx) * 0.5 * 0.92;
@@ -295,6 +325,159 @@ export class Match {
     return b.lastTouchTeam;
   }
 
+  // ---------------------------------------------------------------- substitutions & tactics
+
+  /**
+   * Request a substitution. Applied immediately if the ball is dead, otherwise queued for the
+   * next stoppage (Law 3). Returns an error string, or null when accepted.
+   */
+  requestSubstitution(team: TeamId, outId: string, inId: string): string | null {
+    const s = this.state;
+    const out = this.byId.get(outId);
+    const inn = this.byId.get(inId);
+    if (!out || !inn || out.team !== team || inn.team !== team) return "unknown player";
+    if (!out.onPitch || out.sentOff) return "player is not on the pitch";
+    if (inn.onPitch || inn.sentOff || this.usedSubs.has(inn.id)) return "substitute not available";
+    if (!this.teams[team].bench.some((d) => d.id === inId)) return "not a bench player";
+    const queued = s.pendingSubs.filter((q) => q.team === team).length;
+    if (s.subsUsed[team] + queued >= MAX_SUBS) return `substitution limit (${MAX_SUBS}) reached`;
+    if (s.pendingSubs.some((q) => q.outId === outId || q.inId === inId)) return "already queued";
+    if (s.phase === "FULL_TIME") return "match is over";
+    s.pendingSubs.push({ team, outId, inId });
+    if (s.phase !== "PLAY") this.applyPendingSubs();
+    return null;
+  }
+
+  cancelSubstitution(team: TeamId, outId: string): void {
+    const s = this.state;
+    s.pendingSubs = s.pendingSubs.filter((q) => !(q.team === team && q.outId === outId));
+  }
+
+  private applyPendingSubs(): void {
+    const s = this.state;
+    if (s.pendingSubs.length === 0) return;
+    const subs = s.pendingSubs;
+    s.pendingSubs = [];
+    for (const sub of subs) {
+      const out = this.player(sub.outId);
+      const inn = this.player(sub.inId);
+      if (!out.onPitch || out.sentOff || inn.onPitch) continue;
+      const slot = this.slotIndex(out.id);
+      if (slot < 0) continue;
+      s.lineups[sub.team][slot] = inn.id;
+      out.onPitch = false;
+      out.intent = "off";
+      inn.onPitch = true;
+      this.usedSubs.add(inn.id);
+      s.subsUsed[sub.team]++;
+      // Enter from the touchline at the halfway line; walk off to the same side.
+      const side = sub.team === 0 ? -1 : 1;
+      inn.pos = { x: 0, y: (PITCH.halfWidth - 0.5) * side };
+      inn.vel = { x: 0, y: 0 };
+      inn.fatigue = 0;
+      out.pos = { x: 0, y: (PITCH.halfWidth + 3) * side };
+      out.vel = { x: 0, y: 0 };
+      if (s.ball.owner === out.id) s.ball.owner = null;
+      this.chasers.delete(out.id);
+      this.marks.delete(out.id);
+      if (s.restart?.takerId === out.id) s.restart.takerId = inn.id;
+      this.emit(
+        "SUBSTITUTION",
+        sub.team,
+        inn.id,
+        `Substitution (${this.teams[sub.team].shortName}): ${this.name(inn.id)} on for ${this.name(out.id)}`,
+      );
+    }
+    this.refreshActive();
+  }
+
+  /** Change tactics live. A formation change re-assigns the eleven to the new slots by role fit. */
+  setTactics(team: TeamId, patch: Partial<Tactics>): void {
+    const t = this.teams[team];
+    const prev = t.tactics;
+    const next: Tactics = { ...prev, ...patch };
+    for (const k of ["mentality", "defensiveLine", "pressing", "directness", "width"] as const) {
+      next[k] = Math.max(0, Math.min(1, next[k]));
+    }
+    t.tactics = next;
+    if (next.formation !== prev.formation) {
+      this.reassignLineup(team);
+      this.emit("TACTICS", team, null, `${t.shortName} switch to ${next.formation}`);
+    } else {
+      const changed = (Object.keys(patch) as (keyof Tactics)[]).filter((k) => prev[k] !== next[k]);
+      if (changed.length) this.emit("TACTICS", team, null, `${t.shortName} adjust ${changed.join(", ")}`);
+    }
+  }
+
+  /** Greedy assignment of the current eleven to the formation's slots by role distance. */
+  private reassignLineup(team: TeamId): void {
+    const s = this.state;
+    const slots = FORMATIONS[this.teams[team].tactics.formation];
+    const current = [...s.lineups[team]];
+    const gk = current[0]!;
+    const outfield = current.slice(1);
+    const assigned: string[] = [gk];
+    // Fill slots in order of "hardest to fill" (wide/specialist roles first) to avoid poor leftovers.
+    const order = slots.map((slot, i) => ({ slot, i })).slice(1);
+    order.sort((a, b) => (a.slot.role.startsWith("L") || a.slot.role.startsWith("R") ? -1 : 0) - (b.slot.role.startsWith("L") || b.slot.role.startsWith("R") ? -1 : 0));
+    const picks = new Map<number, string>();
+    const pool = new Set(outfield);
+    for (const { slot, i } of order) {
+      let best: string | null = null;
+      let bestD = Infinity;
+      for (const id of pool) {
+        const d = roleDistance(this.def(id).role, slot.role) + (1 - a01(this.def(id).attrs.positioning)) * 0.2;
+        if (d < bestD) {
+          bestD = d;
+          best = id;
+        }
+      }
+      picks.set(i, best!);
+      pool.delete(best!);
+    }
+    for (let i = 1; i < slots.length; i++) assigned[i] = picks.get(i)!;
+    s.lineups[team] = assigned;
+  }
+
+  /** Built-in manager for AI teams: tired legs off after the hour, tactical shift when chasing/protecting. */
+  private aiManage(): void {
+    const s = this.state;
+    const minute = this.minute();
+    if (minute === this.lastAiCheck) return;
+    this.lastAiCheck = minute;
+    for (const team of this.aiManaged) {
+      const opp = this.opp(team);
+      const diff = s.score[team] - s.score[opp];
+      // Tactical shift once, late in the game.
+      if (!this.aiShifted[team] && minute >= 70) {
+        if (diff < 0) {
+          this.setTactics(team, { mentality: 0.8, defensiveLine: 0.7, pressing: 0.75, directness: 0.65 });
+          this.aiShifted[team] = true;
+        } else if (diff > 0 && minute >= 80) {
+          this.setTactics(team, { mentality: 0.25, defensiveLine: 0.3, pressing: 0.4 });
+          this.aiShifted[team] = true;
+        }
+      }
+      // Substitutions: from the hour, replace the most fatigued outfielder with the best-fitting sub.
+      if (minute >= 60 && minute % 5 === 0 && s.subsUsed[team] < 3) {
+        const eleven = s.lineups[team].slice(1).map((id) => this.player(id)).filter((p) => !p.sentOff);
+        const tired = eleven.filter((p) => p.fatigue > 0.6).sort((a, b) => b.fatigue - a.fatigue)[0];
+        if (!tired) continue;
+        const bench = this.benchAvailable(team).filter((p) => this.def(p.id).role !== "GK");
+        let best: PlayerState | null = null;
+        let bestD = 4;
+        for (const b of bench) {
+          const d = roleDistance(this.def(b.id).role, this.def(tired.id).role);
+          if (d < bestD) {
+            bestD = d;
+            best = b;
+          }
+        }
+        if (best) this.requestSubstitution(team, tired.id, best.id);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- main loop
 
   step(): void {
@@ -302,6 +485,7 @@ export class Match {
     if (s.phase === "FULL_TIME") return;
     s.tick++;
     this.refreshActive();
+    if (this.aiManaged.size) this.aiManage();
 
     for (const p of s.players) {
       if (p.kickCooldown > 0) p.kickCooldown -= DT;
@@ -324,6 +508,7 @@ export class Match {
         break;
       case "HALF_TIME":
         s.phaseTimer -= DT;
+        this.applyPendingSubs();
         if (s.phaseTimer <= 0) this.startSecondHalf();
         break;
       case "PLAY":
@@ -398,6 +583,9 @@ export class Match {
     this.shot = null;
     s.lastPass = null;
 
+    // Law 3: substitutions happen while the ball is dead.
+    this.applyPendingSubs();
+
     const timers: Record<RestartKind, number> = {
       KICK_OFF: 3,
       THROW_IN: 2.5,
@@ -421,7 +609,8 @@ export class Match {
       taker = candidates.reduce((best, p) => (dist(p.pos, pos) < dist(best.pos, pos) ? p : best));
     }
 
-    const restart: Restart = { kind, team, pos: { ...pos }, takerId: taker.id, timer: timers[kind] };
+    // A substitution during the stoppage adds a little time.
+    const restart: Restart = { kind, team, pos: { ...pos }, takerId: taker.id, timer: timers[kind] + (s.pendingSubs.length ? 0 : 0) };
     s.restart = restart;
     s.phase = kind === "KICK_OFF" && s.tick === 0 ? "PRE_KICKOFF" : "RESTART_SETUP";
     if (kind !== "KICK_OFF") s.stoppages++;

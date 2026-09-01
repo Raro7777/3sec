@@ -42,6 +42,8 @@ export type FormationName = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2";
 
 export interface Tactics {
   formation: FormationName;
+  /** 0..1 – 0 = ultra defensive, 0.5 = balanced, 1 = all-out attack */
+  mentality: number;
   /** 0..1 – how high the defensive line sits */
   defensiveLine: number;
   /** 0..1 – how aggressively the team presses */
@@ -58,7 +60,14 @@ export interface TeamDef {
   shortName: string;
   color: string;
   players: PlayerDef[]; // 11 starters, index 0 is GK
+  bench: PlayerDef[]; // substitutes (typically 7, index 0 is the reserve GK)
   tactics: Tactics;
+}
+
+export interface PendingSubstitution {
+  team: TeamId;
+  outId: string;
+  inId: string;
 }
 
 export interface BallState {
@@ -87,6 +96,10 @@ export interface PlayerState {
   desiredSpeed: number;
   /** 0..1 */
   fatigue: number;
+  /** on the pitch right now (false for bench players and those substituted off) */
+  onPitch: boolean;
+  /** metres covered */
+  distance: number;
   yellow: number;
   sentOff: boolean;
   /** cooldown before this player may kick again (s) */
@@ -142,7 +155,9 @@ export type MatchEventType =
   | "FULL_TIME"
   | "INTERCEPTION"
   | "BLOCK"
-  | "TACKLE";
+  | "TACKLE"
+  | "SUBSTITUTION"
+  | "TACTICS";
 
 export interface MatchEvent {
   t: number; // match seconds
@@ -184,6 +199,10 @@ export interface MatchState {
   attackDir: [AttackDir, AttackDir];
   ball: BallState;
   players: PlayerState[];
+  /** the eleven on the pitch per team, in formation-slot order (index 0 = GK slot) */
+  lineups: [string[], string[]];
+  subsUsed: [number, number];
+  pendingSubs: PendingSubstitution[];
   restart: Restart | null;
   /** team that kicks off the second half */
   secondHalfKickoff: TeamId;

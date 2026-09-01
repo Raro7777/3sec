@@ -41,8 +41,11 @@ export function generateAttributes(rng: Rng, role: Role, quality: number): Attri
 }
 
 export function defaultTactics(formation: FormationName = "4-3-3"): Tactics {
-  return { formation, defensiveLine: 0.5, pressing: 0.5, directness: 0.5, width: 0.6 };
+  return { formation, mentality: 0.5, defensiveLine: 0.5, pressing: 0.5, directness: 0.5, width: 0.6 };
 }
+
+/** Bench roles: reserve keeper plus cover for each line. */
+const BENCH_ROLES: Role[] = ["GK", "CB", "LB", "CM", "AM", "RW", "ST"];
 
 export interface GenerateTeamOptions {
   id: TeamId;
@@ -67,12 +70,21 @@ export function generateTeam(opts: GenerateTeamOptions): TeamDef {
     role: slot.role,
     attrs: generateAttributes(rng, slot.role, quality),
   }));
+  // Bench players are a touch weaker on average (quality - 1) but fresher legs matter late on.
+  const bench: PlayerDef[] = BENCH_ROLES.map((role, i) => ({
+    id: `${opts.shortName}-${12 + i}`,
+    name: `${rng.pick(FIRST)} ${rng.pick(GIVEN)}`,
+    number: 12 + i,
+    role,
+    attrs: generateAttributes(rng, role, quality - 1),
+  }));
   return {
     id: opts.id,
     name: opts.name,
     shortName: opts.shortName,
     color: opts.color,
     players,
+    bench,
     tactics: { ...defaultTactics(formation), ...opts.tactics },
   };
 }

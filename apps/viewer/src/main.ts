@@ -9,6 +9,7 @@ import {
   type TeamId,
 } from "@3sec/engine";
 import { drawPitch, type View } from "./render";
+import { ManagerPanel } from "./panel";
 
 const canvas = document.getElementById("pitch") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -30,15 +31,21 @@ let acc = 0;
 let lastTs = 0;
 let loggedEvents = 0;
 let selected: string | null = null;
+const USER_TEAM: TeamId = 0;
+const panel = new ManagerPanel(USER_TEAM, (id) => {
+  selected = id;
+  render();
+});
 
 function newMatch(): void {
   const seed = Number(seedInput.value) || 1;
   const home = generateTeam({ id: 0, name: "Seoul FC", shortName: "SEO", color: "#e63946", formation: "4-3-3", quality: 13, seed: seed + 100 });
   const away = generateTeam({ id: 1, name: "Busan United", shortName: "BUS", color: "#4cc9f0", formation: "4-4-2", quality: 12, seed: seed + 200 });
-  match = new Match(home, away, { seed });
+  match = new Match(home, away, { seed, aiManaged: [1] });
   loggedEvents = 0;
   logEl.innerHTML = "";
   selected = null;
+  panel.attach(match);
   render();
 }
 
@@ -61,6 +68,7 @@ function appendLog(e: MatchEvent): void {
   const color = e.team === null ? "#e6edf3" : match.teams[e.team].color;
   div.innerHTML = `<span style="opacity:.6">${String(e.minute).padStart(2, "0")}'</span> <span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
   if (e.type === "GOAL" || e.type === "OWN_GOAL") div.style.color = "#ffd166";
+  if (e.type === "SUBSTITUTION" || e.type === "TACTICS") div.style.color = "#8ecae6";
   logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
 }
@@ -83,8 +91,8 @@ function renderStats(): void {
 
 function resize(): void {
   const stage = document.getElementById("stage")!;
-  const maxW = stage.clientWidth - 16;
-  const maxH = stage.clientHeight - 16;
+  const maxW = Math.max(200, stage.clientWidth - 16);
+  const maxH = Math.max(140, stage.clientHeight - 16);
   const ratio = (PITCH.length + 8) / (PITCH.width + 8);
   let w = maxW;
   let h = w / ratio;
@@ -136,7 +144,7 @@ function render(): void {
 
   // Players
   for (const p of s.players) {
-    if (p.sentOff) continue;
+    if (p.sentOff || !p.onPitch) continue;
     const team = match.teams[p.team];
     const def = match.def(p.id);
     const [px, py] = toPx(p.pos.x, p.pos.y);
@@ -239,6 +247,7 @@ function render(): void {
   // Log
   while (loggedEvents < s.events.length) appendLog(s.events[loggedEvents++]!);
   renderStats();
+  panel.update();
 }
 
 function restartLabel(kind: string): string {
@@ -330,6 +339,7 @@ canvas.addEventListener("pointerdown", (e) => {
   let best: string | null = null;
   let bestD = 2.5;
   for (const p of match.state.players) {
+    if (!p.onPitch || p.sentOff) continue;
     const d = Math.hypot(p.pos.x - x, p.pos.y - y);
     if (d < bestD) {
       bestD = d;
@@ -337,6 +347,7 @@ canvas.addEventListener("pointerdown", (e) => {
     }
   }
   selected = best;
+  panel.selectFromPitch(best);
   render();
 });
 

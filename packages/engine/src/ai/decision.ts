@@ -73,6 +73,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       : 0;
     const shotScore =
       0.05 +
+      (tactics.mentality - 0.5) * 0.4 +
       xg * (5.0 + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
       (inBox ? 0.15 : 0) +
       (pressure < 1.5 ? -0.3 : 0) -
@@ -228,9 +229,10 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     // Safe lanes are worth a lot; a lane a defender reaches first is nearly worthless (unless lofted over).
     if (lofted) score += Math.min(lane, 4) * 0.05;
     else if (margin < 0) score -= 1.0;
-    else score += (Math.min(margin, 1.5) - 0.6) * 0.6; // -0.36 .. +0.54: tight lanes are a gamble
+    else score += (Math.min(margin, 1.5) - 0.6) * (0.9 - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
-    score += progress * (0.008 + 0.014 * tactics.directness); // 20 m ≈ 0.3
+    // Directness and mentality both reward vertical passes; a defensive mentality prefers safety.
+    score += progress * (0.008 + 0.014 * tactics.directness) * (0.6 + 0.8 * tactics.mentality); // 20 m ≈ 0.3
     score -= d > 22 ? (d - 22) * (0.02 - 0.01 * tactics.directness) : 0; // long balls are risky
     score -= lofted ? 0.25 * (1 - a01(attrs.technique)) + 0.1 : 0;
     score -= offsidePenalty;

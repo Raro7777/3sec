@@ -86,7 +86,7 @@ export function computePositioning(m: Match, _dt: number): void {
     // Engage: an opponent dribbling within reach gets challenged even if we are not the designated presser.
     if (carrier && carrierTeam !== p.team) {
       const d = dist(carrier.pos, p.pos);
-      if (d < 5) {
+      if (d < 3.5 + 3 * m.teams[p.team].tactics.pressing) {
         const ahead = add(ball.pos, scale(carrier.vel, 0.3));
         setTarget(p, ahead, 99, "engage");
         continue;
@@ -227,8 +227,10 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   const inPoss = possession === team;
 
   // Shift the whole block along the length toward the ball, and a little across.
+  // Mentality pushes the whole block up (attacking) or drops it (defensive) in both phases.
   const ballX = ball.pos.x * dir; // in team-forward coordinates
-  let shiftX = ballX * 0.4;
+  const ment = (tactics.mentality - 0.5) * 12; // -6 .. +6 m
+  let shiftX = ballX * 0.4 + ment;
   shiftX += inPoss ? 4 + 6 * tactics.directness : -6 + 8 * tactics.defensiveLine;
   const shiftY = ball.pos.y * (inPoss ? 0.25 : 0.4);
 
@@ -367,14 +369,14 @@ function restartPositioning(m: Match, p: PlayerState): void {
       if (attackers) {
         const role = m.def(p.id).role;
         if (isForward(role) || isMidfielder(role)) {
-          const idx = m.teams[p.team].players.findIndex((d) => d.id === p.id);
+          const idx = Math.max(0, m.slotIndex(p.id));
           const spreadY = ((idx % 5) - 2) * 3.5;
           target = { x: goalX - Math.sign(goalX) * (6 + (idx % 3) * 3), y: spreadY };
         } else {
           target = { x: goalX - Math.sign(goalX) * 30, y: home.y * 0.6 };
         }
       } else {
-        const idx = m.teams[p.team].players.findIndex((d) => d.id === p.id);
+        const idx = Math.max(0, m.slotIndex(p.id));
         const role = m.def(p.id).role;
         if (isDefender(role) || isMidfielder(role)) {
           target = { x: goalX - Math.sign(goalX) * (4 + (idx % 3) * 2.5), y: ((idx % 5) - 2) * 3 };
@@ -388,7 +390,7 @@ function restartPositioning(m: Match, p: PlayerState): void {
       // Outside the box, behind the ball, outside the arc.
       const goalDir = Math.sign(r.pos.x || 1);
       const x = r.pos.x - goalDir * (PITCH.penaltyAreaDepth - PITCH.penaltySpotDist + 2.5);
-      const idx = m.teams[p.team].players.findIndex((d) => d.id === p.id);
+      const idx = Math.max(0, m.slotIndex(p.id));
       target = { x, y: (idx - 5) * 4 };
       break;
     }
@@ -425,7 +427,7 @@ function restartPositioning(m: Match, p: PlayerState): void {
       const goal = { x: -PITCH.halfLength * dir, y: 0 };
       const dGoal = dist(r.pos, goal);
       if (dGoal < 30) {
-        const idx = m.teams[p.team].players.findIndex((d) => d.id === p.id);
+        const idx = Math.max(0, m.slotIndex(p.id));
         const wallSize = dGoal < 22 ? 4 : 3;
         const wallSlot = idx - 1; // outfield index 0..9
         if (wallSlot >= 0 && wallSlot < wallSize) {

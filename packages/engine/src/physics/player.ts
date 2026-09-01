@@ -62,6 +62,7 @@ export function stepPlayer(p: PlayerState, attrs: Attributes, dt: number): void 
 
   p.pos.x += p.vel.x * dt;
   p.pos.y += p.vel.y * dt;
+  p.distance += speed * dt;
 
   // Facing follows velocity (or target when standing still), limited by turn rate.
   const faceTarget = speed > 0.3 ? angleOf(p.vel) : d > 0.3 ? angleOf(toTarget) : p.facing;
@@ -71,10 +72,12 @@ export function stepPlayer(p: PlayerState, attrs: Attributes, dt: number): void 
   const maxTurn = maxTurnRate(attrs, speed) * dt;
   p.facing += Math.max(-maxTurn, Math.min(maxTurn, diff));
 
-  // Fatigue: accumulate with effort, recover when idle. Full match => ~0.5-0.7 for low stamina.
+  // Fatigue: a baseline cost of being on the pitch plus an effort cost that grows steeply with
+  // sprinting. After 90 minutes an average outfielder sits around 0.6-0.7, a stamina-18 player
+  // around 0.45 and a stamina-7 player near 0.85 (before half-time recovery).
   const effort = speed / vMax;
-  const staminaFactor = 1.6 - a01(attrs.stamina);
-  p.fatigue += (effort * effort * 0.00011 * staminaFactor - 0.00002) * dt * 20;
+  const staminaFactor = 1.7 - a01(attrs.stamina);
+  p.fatigue += (0.00004 + 0.00027 * Math.pow(effort, 1.5)) * staminaFactor * dt;
   if (p.fatigue < 0) p.fatigue = 0;
   if (p.fatigue > 1) p.fatigue = 1;
 }

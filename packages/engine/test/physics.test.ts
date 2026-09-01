@@ -83,6 +83,8 @@ describe("player kinematics", () => {
       target: { x: 100, y: 0 },
       desiredSpeed: 99,
       fatigue: 0,
+      onPitch: true,
+      distance: 0,
       yellow: 0,
       sentOff: false,
       kickCooldown: 0,

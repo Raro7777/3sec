@@ -73,6 +73,19 @@ export function slotToPitch(slot: { x: number; y: number }, dir: 1 | -1, width =
   return { x: slot.x * 52.5 * dir, y: slot.y * 34 * width * 0.92 };
 }
 
+/** How well a player of role `have` fits a slot of role `want` (0 = perfect, larger = worse). */
+export function roleDistance(have: Role, want: Role): number {
+  if (have === want) return 0;
+  const group = (r: Role): number => (r === "GK" ? 0 : isDefender(r) ? 1 : isMidfielder(r) ? 2 : 3);
+  const side = (r: Role): "L" | "R" | "C" => (r[0] === "L" ? "L" : r[0] === "R" ? "R" : "C");
+  const gh = group(have);
+  const gw = group(want);
+  if (gh === 0 || gw === 0) return 10; // keepers only in goal
+  let d = Math.abs(gh - gw) * 2 + 1;
+  if (side(have) !== side(want)) d += side(have) === "C" || side(want) === "C" ? 0.5 : 1.5;
+  return d;
+}
+
 export const isDefender = (r: Role): boolean => r === "CB" || r === "LB" || r === "RB";
 export const isMidfielder = (r: Role): boolean =>
   r === "DM" || r === "CM" || r === "LM" || r === "RM" || r === "AM";
