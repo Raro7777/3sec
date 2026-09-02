@@ -1,6 +1,8 @@
-import { FORMATIONS, type FormationName, type Match, type Tactics, type TeamId } from "@3sec/engine";
+import { FORMATIONS, ROLES, TACTIC_PRESETS, autoRoles, normalizeTactics, rolesForSlot, type FormationName, type Match, type PlayerRoleId, type Tactics, type TeamId } from "@3sec/engine";
+
+type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 import {
-  SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
+  CLUBS, SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
   overall, playerOf, prepareRound, recordResult, roundsPerSeason, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
   MAX_SQUAD, MIN_SQUAD, bestOffer, buyPlayer, playerValue, sellPlayer, transferTargets, windowOpen,
@@ -9,15 +11,39 @@ import {
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
-type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide";
+type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding";
 
-const SLIDERS: { key: keyof Omit<Tactics, "formation">; label: string; lo: string; hi: string }[] = [
+/** One-line character per club for the club picker (indexed like CLUBS). */
+const CLUB_BLURBS: string[] = [
+  "수도의 명문, 중간 전력에 큰 기대",
+  "항구 도시의 자존심, 롱볼과 투지로 버틴다",
+  "탄탄한 조직력의 다크호스, 우승 도전 가능",
+  "젊은 스쿼드, 스리백으로 도박을 건다",
+  "빛고을의 공격 축구, 수비는 불안",
+  "재건 중인 구단, 예산이 빠듯하다",
+  "빠른 측면 공격, 상위권 단골 후보",
+  "리그 최강 전력, 우승이 목표",
+  "전통의 강호, 두터운 스쿼드로 타이틀 경쟁",
+  "철강 도시의 뚝심, 중위권 안정이 현실적",
+  "최약체, 잔류가 목표",
+  "신흥 구단, 성장 가능성에 베팅",
+];
+
+/** 1..5 전력 stars derived from reputation (10 → 1, 14.5 → 5). */
+const clubStars = (rep: number): number => Math.max(1, Math.min(5, Math.round(1 + (rep - 10) / 4.5 * 4)));
+
+
+const SLIDERS: { key: SliderKey; label: string; lo: string; hi: string }[] = [
   { key: "mentality", label: "멘탈리티", lo: "수비", hi: "공격" },
   { key: "defensiveLine", label: "수비라인", lo: "낮게", hi: "높게" },
   { key: "pressing", label: "프레싱", lo: "약하게", hi: "강하게" },
   { key: "directness", label: "직접성", lo: "짧게", hi: "롱볼" },
   { key: "width", label: "폭", lo: "좁게", hi: "넓게" },
+  { key: "tempo", label: "템포", lo: "느리게", hi: "빠르게" },
+  { key: "counter", label: "역습", lo: "자제", hi: "적극" },
+  { key: "engageLine", label: "압박선", lo: "낮게", hi: "높게" },
 ];
+void (null as unknown as Tactics);
 
 /** Season controller: owns the game state, the screens and the matchday flow. */
 export class Game {
@@ -26,6 +52,7 @@ export class Game {
   private live: { fixture: Fixture; match: Match }[] | null = null;
   private selA: string | null = null;
   private current: ScreenName = "home";
+  private pickedClub: number | null = null;
 
   private readonly el = {
     home: document.getElementById("home")!,
@@ -34,6 +61,7 @@ export class Game {
     transfers: document.getElementById("transfers")!,
     youth: document.getElementById("youth")!,
     guide: document.getElementById("guide")!,
+    onboarding: document.getElementById("onboarding")!,
     results: document.getElementById("results")!,
     season: document.getElementById("seasonLabel")!,
     tabMatch: document.getElementById("tabMatch") as HTMLButtonElement,
@@ -43,20 +71,87 @@ export class Game {
   };
 
   constructor() {
-    this.state = this.load() ?? newGame(Math.floor(Math.random() * 1e6) + 1);
+    const saved = this.load();
+    // Without a save the state is a placeholder until onboarding finishes; nothing of it is shown.
+    this.state = saved ?? newGame(Math.floor(Math.random() * 1e6) + 1);
     prepareRound(this.state);
     this.screen = new MatchScreen((work, label) => this.runChunked(work, label));
     for (const b of document.querySelectorAll<HTMLButtonElement>("#nav button.tab")) {
       b.addEventListener("click", () => this.show(b.dataset.screen as ScreenName));
     }
-    this.renderAll();
     this.renderGuide();
+    if (!saved) {
+      this.startOnboarding();
+      return;
+    }
+    this.renderAll();
+    this.showFirstScreen();
+  }
+
+  /** Guide once for a fresh manager (existing flag), otherwise home. */
+  private showFirstScreen(): void {
     let seen = false;
     try { seen = localStorage.getItem("3sec.guide.seen") === "1"; } catch { /* ignore */ }
     if (!seen && this.state.round === 0 && this.state.season === 1) {
       this.show("guide");
       try { localStorage.setItem("3sec.guide.seen", "1"); } catch { /* ignore */ }
     } else this.show("home");
+  }
+
+  // ------------------------------------------------------------ onboarding
+  private startOnboarding(): void {
+    this.pickedClub = null;
+    document.body.classList.add("onboarding");
+    this.renderOnboarding();
+    this.show("onboarding");
+  }
+
+  private renderOnboarding(): void {
+    const stars = (n: number) => `<span class="stars" title="전력 ${n}/5">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
+    const h: string[] = [];
+    h.push(`<div class="card onb-welcome"><h3>환영합니다</h3>
+      <div class="onb-title">3sec 풋볼 매니저에 오신 것을 환영합니다</div>
+      <div class="hint">12개 구단이 22라운드 리그를 치릅니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요. 전력이 강한 팀은 우승을, 약한 팀은 잔류를 목표로 합니다.</div>
+      <label style="margin-top:4px">감독 이름 <input id="onbName" type="text" placeholder="감독 이름" maxlength="12" autocomplete="off" /></label>
+      <div class="hint">비워두면 "감독"으로 불립니다.</div></div>`);
+    h.push(`<div class="card"><h3>팀 선택 <span>카드를 눌러 선택</span></h3><div class="club-grid">`);
+    CLUBS.forEach((c, i) => {
+      const n = clubStars(c.reputation);
+      h.push(`<button type="button" class="club-card${this.pickedClub === i ? " sel" : ""}" data-club="${i}" style="--club:${c.color}">
+        <div class="cc-head"><span class="dot" style="background:${c.color}"></span><b>${c.name}</b><small>${c.shortName}</small></div>
+        <div class="cc-meta">${stars(n)}<span class="cc-form">${c.formation}</span></div>
+        <div class="cc-blurb">${CLUB_BLURBS[i] ?? ""}</div>
+      </button>`);
+    });
+    h.push(`</div></div>`);
+    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${this.pickedClub === null ? "disabled" : ""}>이 팀으로 시작 →</button><span class="hint" id="onbHint">${this.pickedClub === null ? "팀을 먼저 선택하세요." : `${CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
+    this.el.onboarding.innerHTML = h.join("");
+
+    const nameInput = document.getElementById("onbName") as HTMLInputElement;
+    const startBtn = document.getElementById("onbStart") as HTMLButtonElement;
+    const hint = document.getElementById("onbHint")!;
+    this.el.onboarding.querySelectorAll<HTMLButtonElement>(".club-card").forEach((b) => b.addEventListener("click", () => {
+      this.pickedClub = Number(b.dataset.club);
+      this.el.onboarding.querySelectorAll<HTMLElement>(".club-card").forEach((x) => x.classList.toggle("sel", x === b));
+      startBtn.disabled = false;
+      hint.textContent = `${CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`;
+    }));
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) startBtn.click(); });
+    startBtn.addEventListener("click", () => {
+      if (this.pickedClub === null) return;
+      this.finishOnboarding(this.pickedClub, nameInput.value);
+    });
+  }
+
+  private finishOnboarding(club: number, name: string): void {
+    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독");
+    prepareRound(this.state);
+    this.live = null;
+    this.pickedClub = null;
+    this.save();
+    document.body.classList.remove("onboarding");
+    this.renderAll();
+    this.showFirstScreen();
   }
 
   // ------------------------------------------------------------ guide
@@ -138,7 +233,7 @@ export class Game {
 
   private renderAll(): void {
     const s = this.state;
-    this.el.season.textContent = `시즌 ${s.season} · ${Math.min(s.round + 1, roundsPerSeason(s.clubs.length))}/${roundsPerSeason(s.clubs.length)}R`;
+    this.el.season.textContent = `${s.managerName} 감독 · 시즌 ${s.season} · ${Math.min(s.round + 1, roundsPerSeason(s.clubs.length))}/${roundsPerSeason(s.clubs.length)}R`;
     this.el.tabMatch.disabled = !this.live;
     this.renderHome();
     this.renderSquad();
@@ -160,7 +255,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3>${me.name} <span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3>${me.name} <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     const expiring = expiringContracts(s);
     if (expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
     if (me.budget < 0) h.push(`<div class="hint" style="color:var(--bad)">예산이 적자입니다. 연봉이 매주 빠져나가니 선수를 팔거나 다음 시즌 상금을 기다려야 합니다.</div>`);
@@ -219,12 +314,9 @@ export class Game {
       case "nextSeason": startNextSeason(this.state); this.save(); this.renderAll(); break;
       case "newGame":
         if (confirm("현재 진행 상황을 지우고 새 게임을 시작할까요?")) {
-          this.state = newGame(Math.floor(Math.random() * 1e6) + 1);
-          prepareRound(this.state);
+          if (this.current === "match") this.screen.leave();
           this.live = null;
-          this.save();
-          this.renderAll();
-          this.show("home");
+          this.startOnboarding();
         }
         break;
     }
@@ -246,8 +338,12 @@ export class Game {
       </div>
       ${prob ? `<div class="hint" style="color:var(--bad)">⚠ ${prob}</div>` : `<div class="hint" style="color:var(--good)">선발 명단 이상 없음</div>`}
     </div>`);
-    const row = (p: SquadPlayer, slotRole: string | null) => {
+    const rolesNow = normalizeTactics({ ...me.tactics, formation: sel.formation }).roles!;
+    const row = (p: SquadPlayer, slotRole: string | null, slotIdx = -1) => {
       const ovr = slotRole ? slotFit(p.attrs, p.role, slotRole as SquadPlayer["role"]) : overall(p.attrs, p.role);
+      const roleSel = slotIdx >= 0 && !locked
+        ? `<select class="rolesel" data-slot="${slotIdx}" style="grid-column:2 / -1;padding:1px 4px;font-size:11px;margin-top:2px">${rolesForSlot(slotRole as SquadPlayer["role"]).map((r) => `<option value="${r}" ${r === rolesNow[slotIdx] ? "selected" : ""}>${ROLES[r].name}</option>`).join("")}</select>`
+        : slotIdx >= 0 ? `<span style="grid-column:2 / -1;font-size:11px;color:var(--muted)">${ROLES[rolesNow[slotIdx]!].name}</span>` : "";
       const cond = p.condition;
       const status = p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : p.contractUntil <= this.state.season ? "계약 만료 예정" : p.age <= 23 && p.potential - ovr >= 1.5 ? `잠재 ${p.potential.toFixed(0)}` : "";
       const roleText = slotRole && slotRole !== p.role ? `${slotRole}<span style="opacity:.5">(${p.role})</span>` : p.role;
@@ -257,11 +353,11 @@ export class Game {
         <span class="ovr" style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</span>
         <span class="age">${p.age}세</span>
         <span class="bar" title="컨디션 ${Math.round(cond * 100)}%"><i style="width:${Math.round(cond * 100)}%;background:${cond > 0.7 ? "var(--good)" : cond > 0.45 ? "var(--warn)" : "var(--bad)"}"></i></span>
-        <span class="st">${status}</span></div>`;
+        <span class="st">${status}</span>${roleSel}</div>`;
     };
     const header = `<div class="row wide" style="cursor:default;color:var(--muted);font-size:11px"><span>#</span><span>포지션</span><span>이름</span><span style="text-align:right">능력</span><span style="text-align:right">나이</span><span>컨디션</span><span style="text-align:right">상태</span></div>`;
     h.push(`<div class="grid2">`);
-    h.push(`<div class="card"><h3>선발 XI <span>${sel.formation}</span></h3>${header}<div class="roster">${sel.starters.map((id, i) => row(playerOf(me, id), slots[i]?.role ?? null)).join("")}</div></div>`);
+    h.push(`<div class="card"><h3>선발 XI <span>${sel.formation}</span></h3>${header}<div class="roster">${sel.starters.map((id, i) => row(playerOf(me, id), slots[i]?.role ?? null, i)).join("")}</div></div>`);
     const reserves = me.squad.filter((p) => !sel.starters.includes(p.id) && !sel.bench.includes(p.id));
     h.push(`<div class="card"><h3>벤치 <span>${sel.bench.length}/7</span></h3>${header}<div class="roster">${sel.bench.map((id) => row(playerOf(me, id), null)).join("")}</div>
       <h3 style="margin-top:8px">예비 <span>${reserves.length}</span></h3><div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></div>`);
@@ -273,11 +369,17 @@ export class Game {
         <label>강도 <select id="trIntensity">${(Object.keys(INTENSITY_LABEL) as TrainingIntensity[]).map((i) => `<option value="${i}" ${i === tr.intensity ? "selected" : ""}>${INTENSITY_LABEL[i]}</option>`).join("")}</select></label>
       </div>
       <div class="hint">어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만 회복이 느리고 부상이 잦아집니다.</div></div>`);
-    h.push(`<div class="card"><h3>기본 전술 <span>경기 중에도 변경 가능</span></h3><div id="sqSliders"></div></div>`);
+    h.push(`<div class="card"><h3>기본 전술 <span>경기 중에도 변경 가능</span></h3>
+      <div class="actions">${Object.keys(TACTIC_PRESETS).map((n) => `<button data-preset="${n}" ${locked ? "disabled" : ""}>${n}</button>`).join("")}<button data-autoroles ${locked ? "disabled" : ""}>역할 자동</button></div>
+      <label style="margin:4px 0"><input type="checkbox" id="sqTrap" ${me.tactics.offsideTrap ? "checked" : ""} ${locked ? "disabled" : ""}> 오프사이드 트랩 (라인을 평평하게 유지해 침투를 잡되, 뚫리면 위험)</label>
+      <div id="sqSliders"></div>
+      <div class="hint">역할은 선발 명단의 각 줄에서 고릅니다. 예: 윙어 ↔ 인사이드 포워드(중앙으로 파고들어 슛), 풀백 ↔ 윙백(오버랩), 앵커 ↔ 딥라잉 플레이메이커, 어드밴스드 포워드 ↔ 타겟맨·포처·폴스 나인.</div></div>`);
     this.el.squad.innerHTML = h.join("");
 
     (document.getElementById("sqFormation") as HTMLSelectElement).addEventListener("change", (e) => {
-      me.selection = autoSelect(me, (e.target as HTMLSelectElement).value as FormationName);
+      const f = (e.target as HTMLSelectElement).value as FormationName;
+      me.selection = autoSelect(me, f);
+      me.tactics = { ...me.tactics, formation: f, roles: autoRoles(f, me.selection.starters.map((id) => playerOf(me, id).attrs)) };
       this.afterSquadChange();
     });
     document.getElementById("sqAuto")!.addEventListener("click", () => {
@@ -300,6 +402,29 @@ export class Game {
     }
     (document.getElementById("trFocus") as HTMLSelectElement).addEventListener("change", (e) => { me.training = { ...me.training, focus: (e.target as HTMLSelectElement).value as TrainingFocus }; this.save(); });
     (document.getElementById("trIntensity") as HTMLSelectElement).addEventListener("change", (e) => { me.training = { ...me.training, intensity: (e.target as HTMLSelectElement).value as TrainingIntensity }; this.save(); });
+    this.el.squad.querySelectorAll<HTMLSelectElement>("select.rolesel").forEach((sel2) =>
+      sel2.addEventListener("click", (e) => e.stopPropagation()));
+    this.el.squad.querySelectorAll<HTMLSelectElement>("select.rolesel").forEach((sel2) =>
+      sel2.addEventListener("change", (e) => {
+        e.stopPropagation();
+        const roles = [...rolesNow] as PlayerRoleId[];
+        roles[Number(sel2.dataset.slot)] = sel2.value as PlayerRoleId;
+        me.tactics = { ...me.tactics, formation: sel.formation, roles };
+        this.save();
+      }));
+    this.el.squad.querySelectorAll<HTMLButtonElement>("button[data-preset]").forEach((b) =>
+      b.addEventListener("click", () => {
+        me.tactics = normalizeTactics({ ...me.tactics, ...TACTIC_PRESETS[b.dataset.preset!]!, formation: sel.formation });
+        this.afterSquadChange();
+      }));
+    this.el.squad.querySelector<HTMLButtonElement>("button[data-autoroles]")?.addEventListener("click", () => {
+      me.tactics = { ...me.tactics, formation: sel.formation, roles: autoRoles(sel.formation, sel.starters.map((id) => playerOf(me, id).attrs)) };
+      this.afterSquadChange();
+    });
+    (document.getElementById("sqTrap") as HTMLInputElement).addEventListener("change", (e) => {
+      me.tactics = { ...me.tactics, offsideTrap: (e.target as HTMLInputElement).checked };
+      this.save();
+    });
     const sl = document.getElementById("sqSliders")!;
     for (const def of SLIDERS) {
       const div = document.createElement("div");
@@ -335,10 +460,31 @@ export class Game {
       .join("")}</tbody></table>`;
   }
 
+  private scheduleHtml(): string {
+    const s = this.state;
+    const me = s.userClub;
+    const mine = s.fixtures.filter((f) => f.home === me || f.away === me).sort((a, b) => a.round - b.round);
+    return `<table class="std"><thead><tr><th>R</th><th class="l">상대</th><th>홈/원정</th><th>결과</th></tr></thead><tbody>${mine
+      .map((f) => {
+        const home = f.home === me;
+        const opp = clubOf(s, home ? f.away : f.home);
+        let res = "—", cls = "";
+        if (f.score) {
+          const gf = home ? f.score[0] : f.score[1], ga = home ? f.score[1] : f.score[0];
+          res = `${gf} - ${ga}`;
+          cls = gf > ga ? "color:var(--good)" : gf < ga ? "color:var(--bad)" : "color:var(--muted)";
+        }
+        const next = f.round === s.round && !f.score;
+        return `<tr class="${next ? "me" : ""}"><td>${f.round + 1}</td><td class="l"><span class="dot" style="background:${opp.color}"></span>${opp.name}</td><td>${home ? "홈" : "원정"}</td><td style="${cls};font-family:'IBM Plex Mono',monospace">${res}</td></tr>`;
+      })
+      .join("")}</tbody></table>`;
+  }
+
   private renderTable(): void {
     const s = this.state;
     const scorers = topScorers(s, 10);
     this.el.table.innerHTML = `<div class="card"><h3>리그 순위 <span>시즌 ${s.season}</span></h3>${this.tableHtml(table(s))}</div>
+      <div class="card"><h3>내 일정 <span>${clubOf(s, s.userClub).name}</span></h3>${this.scheduleHtml()}</div>
       <div class="card"><h3>득점 순위</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th></tr></thead><tbody>${scorers
         .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`)
         .join("")}</tbody></table>` : `<div class="hint">아직 득점이 없습니다.</div>`}</div>`;

@@ -108,6 +108,8 @@ export interface GameState {
   /** index of the next round to play (0-based); === roundsPerSeason when the season is over */
   round: number;
   userClub: number;
+  /** the human manager's display name (default "감독") */
+  managerName: string;
   clubs: Club[];
   fixtures: Fixture[];
   /** newest first, human-readable news (injuries, bans, results) */

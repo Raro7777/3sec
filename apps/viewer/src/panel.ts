@@ -1,4 +1,6 @@
-import { FORMATIONS, MAX_SUBS, type FormationName, type Match, type PlayerState, type Tactics, type TeamId } from "@3sec/engine";
+import { FORMATIONS, MAX_SUBS, ROLES, TACTIC_PRESETS, rolesForSlot, type FormationName, type Match, type PlayerRoleId, type PlayerState, type Tactics, type TeamId } from "@3sec/engine";
+
+type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 
 /**
  * Manager panel for the user's team: live tactics, lineup/bench with fatigue, substitutions.
@@ -23,12 +25,15 @@ export class ManagerPanel {
     pending: document.getElementById("pending")!,
   };
 
-  private readonly sliderDefs: { key: keyof Omit<Tactics, "formation">; label: string; lo: string; hi: string }[] = [
+  private readonly sliderDefs: { key: SliderKey; label: string; lo: string; hi: string }[] = [
     { key: "mentality", label: "멘탈리티", lo: "수비", hi: "공격" },
     { key: "defensiveLine", label: "수비라인", lo: "낮게", hi: "높게" },
     { key: "pressing", label: "프레싱", lo: "약하게", hi: "강하게" },
     { key: "directness", label: "직접성", lo: "짧게", hi: "롱볼" },
     { key: "width", label: "폭", lo: "좁게", hi: "넓게" },
+    { key: "tempo", label: "템포", lo: "느리게", hi: "빠르게" },
+    { key: "counter", label: "역습", lo: "자제", hi: "적극" },
+    { key: "engageLine", label: "압박선", lo: "낮게", hi: "높게" },
   ];
 
   constructor(team: TeamId, public onSelectPlayer: (id: string | null) => void) {
@@ -63,6 +68,27 @@ export class ManagerPanel {
 
   private buildSliders(): void {
     this.el.sliders.innerHTML = "";
+    // presets
+    const pre = document.createElement("div");
+    pre.className = "actions";
+    pre.style.margin = "4px 0 2px";
+    for (const name of Object.keys(TACTIC_PRESETS)) {
+      const b = document.createElement("button");
+      b.textContent = name;
+      b.style.cssText = "padding:3px 8px;font-size:12px";
+      b.addEventListener("click", () => {
+        this.match.setTactics(this.team, TACTIC_PRESETS[name]!);
+        this.syncSliders();
+      });
+      pre.appendChild(b);
+    }
+    this.el.sliders.appendChild(pre);
+    // offside trap
+    const trap = document.createElement("label");
+    trap.style.cssText = "margin:4px 0";
+    trap.innerHTML = `<input type="checkbox" data-key="offsideTrap"> 오프사이드 트랩`;
+    trap.querySelector("input")!.addEventListener("change", (e) => this.match.setTactics(this.team, { offsideTrap: (e.target as HTMLInputElement).checked }));
+    this.el.sliders.appendChild(trap);
     for (const def of this.sliderDefs) {
       const row = document.createElement("div");
       row.className = "tactic";
@@ -84,8 +110,10 @@ export class ManagerPanel {
 
   private syncSliders(): void {
     const t = this.match.teams[this.team].tactics;
+    const trap = this.el.sliders.querySelector<HTMLInputElement>('input[data-key="offsideTrap"]');
+    if (trap) trap.checked = !!t.offsideTrap;
     for (const input of this.el.sliders.querySelectorAll<HTMLInputElement>("input[type=range]")) {
-      const key = input.dataset.key as keyof Omit<Tactics, "formation">;
+      const key = input.dataset.key as SliderKey;
       input.value = String(Math.round(t[key] * 100));
       const def = this.sliderDefs.find((d) => d.key === key)!;
       input.parentElement!.querySelector(".val")!.textContent = this.describe(def, t[key]);
@@ -131,7 +159,21 @@ export class ManagerPanel {
     const slotRole = kind === "lineup" ? m.slotIndex(p.id) >= 0 ? this.slotRole(m.slotIndex(p.id)) : def.role : def.role;
     const roleText = slotRole !== def.role ? `${slotRole}<span style="opacity:.5">(${def.role})</span>` : slotRole;
     const cards = p.sentOff ? `<span class="card red"></span>` : p.yellow ? `<span class="card"></span>` : "";
-    div.innerHTML = `<span class="num">${def.number}</span><span class="role">${roleText}</span><span class="name" title="${def.name}">${def.name}${cards}</span><span class="bar"><i></i></span>`;
+    const hurt = p.injured ? `<span style="color:var(--bad);font-size:11px;margin-left:4px">부상</span>` : "";
+    const slot = kind === "lineup" ? m.slotIndex(p.id) : -1;
+    const rid = slot >= 0 ? m.roleOf(p.id).id : null;
+    const roleSel = slot >= 0 ? `<select class="rolesel" data-slot="${slot}" style="grid-column:2 / 4;padding:1px 4px;font-size:11px">${rolesForSlot(this.slotRole(slot) as PlayerRoleId extends never ? never : Parameters<typeof rolesForSlot>[0]).map((r) => `<option value="${r}" ${r === rid ? "selected" : ""}>${ROLES[r].name}</option>`).join("")}</select>` : "";
+    div.innerHTML = `<span class="num">${def.number}</span><span class="role">${roleText}</span><span class="name" title="${def.name}">${def.name}${cards}${hurt}</span><span class="bar"><i></i></span>${roleSel}`;
+    const sel = div.querySelector<HTMLSelectElement>("select.rolesel");
+    if (sel) {
+      sel.addEventListener("click", (e) => e.stopPropagation());
+      sel.addEventListener("change", (e) => {
+        e.stopPropagation();
+        const roles = [...(m.teams[this.team].tactics.roles ?? [])] as PlayerRoleId[];
+        roles[slot] = sel.value as PlayerRoleId;
+        m.setTactics(this.team, { roles });
+      });
+    }
     this.paintBar(div.querySelector<HTMLElement>(".bar i")!, p);
     if (!p.sentOff && !used) {
       div.addEventListener("click", () => {

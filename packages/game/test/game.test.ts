@@ -118,3 +118,30 @@ describe("season progression", () => {
     expect(s.clubs.every((c) => selectionProblem(c) === null)).toBe(true);
   });
 });
+
+describe("onboarding", () => {
+  it("newGame takes the user's club and manager name; the user's side is human-managed", () => {
+    const s = newGame(1, 7, "홍길동");
+    expect(s.userClub).toBe(7);
+    expect(s.managerName).toBe("홍길동");
+    expect(s.news.some((n) => n.includes("홍길동"))).toBe(true);
+    const f = currentFixtures(s).find((x) => x.home === 7 || x.away === 7)!;
+    const m = createMatch(s, f, SHORT);
+    const userSide = f.home === 7 ? 0 : 1;
+    expect(m.aiManaged.has(userSide as 0 | 1)).toBe(false);
+    expect(m.aiManaged.has((1 - userSide) as 0 | 1)).toBe(true);
+    // No name / blank name falls back to the default.
+    expect(newGame(1, 3).managerName).toBe("감독");
+    expect(newGame(1, 3, "   ").managerName).toBe("감독");
+  });
+
+  it("serializes the manager name and defaults it for old saves", () => {
+    const s = newGame(1, 7, "홍길동");
+    expect(deserialize(serialize(s))!.managerName).toBe("홍길동");
+    const old = JSON.parse(serialize(newGame(2, 4))) as Record<string, unknown>;
+    delete old.managerName;
+    const back = deserialize(JSON.stringify(old))!;
+    expect(back.managerName).toBe("감독");
+    expect(back.userClub).toBe(4);
+  });
+});

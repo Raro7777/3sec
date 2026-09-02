@@ -4,7 +4,7 @@ export { buildFixtures, roundsPerSeason } from "./fixtures";
 export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
-  newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
+  DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
   prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers,
 } from "./season";
 export { SAVE_KEY, serialize, deserialize } from "./save";

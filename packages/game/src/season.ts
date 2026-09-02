@@ -1,4 +1,4 @@
-import { Match, Rng, type MatchOptions, type PlayerDef, type TeamDef, type TeamId } from "@3sec/engine";
+import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type TeamDef, type TeamId } from "@3sec/engine";
 import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
@@ -8,9 +8,12 @@ import { trainWeek, ATTR_LABEL } from "./training";
 import { payWages, settleContracts } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
 
-export function newGame(seed: number, userClub = 0): GameState {
+export const DEFAULT_MANAGER_NAME = "감독";
+
+export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. 당신은 ${clubs[userClub]!.name} 감독입니다.`] };
+  const name = managerName.trim() || DEFAULT_MANAGER_NAME;
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`] };
   youthIntake(s, new Rng(seed * 29 + 3));
   return s;
 }
@@ -30,6 +33,7 @@ export function fixtureSeed(s: GameState, f: Fixture): number {
 export function prepareRound(s: GameState): void {
   for (const c of s.clubs) {
     c.selection = c.id === s.userClub ? repairSelection(c) : autoSelect(c, c.selection.formation);
+    if (c.id !== s.userClub) c.tactics = { ...c.tactics, formation: c.selection.formation, roles: autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) };
   }
 }
 
@@ -43,7 +47,7 @@ export function teamDef(c: Club, side: TeamId): TeamDef {
     color: c.color,
     players: c.selection.starters.map((id) => strip(playerOf(c, id))),
     bench: c.selection.bench.map((id) => strip(playerOf(c, id))),
-    tactics: { ...c.tactics, formation: c.selection.formation },
+    tactics: normalizeTactics({ ...c.tactics, formation: c.selection.formation, roles: c.tactics.roles ?? autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) }),
   };
 }
 
@@ -88,6 +92,11 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
       if (e.team !== side || !e.playerId) continue;
       const p = playerOf(c, e.playerId);
       if (e.type === "GOAL") p.stats.goals++;
+      if (e.type === "INJURY" && p.injuryDays === 0) {
+        const days = Math.min(90, Math.round(5 + Math.pow(rng.next(), 1.8) * 50));
+        p.injuryDays = days;
+        s.news.unshift(`${c.shortName}: ${p.name} 경기 중 부상, 약 ${days}일 결장.`);
+      }
       if (e.type === "YELLOW_CARD") {
         p.stats.yellows++;
         p.seasonYellows++;
