@@ -206,11 +206,19 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     let margin = Infinity; // worst-case time margin (s)
     // The whole lane counts, including the reception point: a defender who reaches the receiver
     // before the ball is the most common way a pass dies. Defenders start after a reaction delay.
+    let blockedAtFeet = false;
     for (const o of opponents) {
       const { d: od, t } = pointSegment(o.pos, p.pos, lead);
-      if (t <= 0.03) continue;
+      if (t <= 0.02) continue;
       if (od < lane) lane = od;
       const along = t * d;
+      // A body within a metre of the line in the first few metres simply blocks the pass –
+      // no reaction time needed. Players pass around a presser, not through them.
+      if (along < 3.5 && od < 1.0) {
+        blockedAtFeet = true;
+        margin = Math.min(margin, -1);
+        continue;
+      }
       const ballT = ballTimeToDistance(passSpeed, along);
       const oppT = timeToReach(o, m.def(o.id).attrs, add(p.pos, scale(sub(lead, p.pos), t))) + TUNING.reactionDelay;
       const mg = oppT - ballT;
@@ -221,24 +229,27 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     // Offside awareness with perception latency: the passer judges the runner's position a
     // fraction of a second late, so a well-timed run can look onside. Clearly offside
     // team-mates are ignored; marginal cases are misjudged by players with weak decisions.
-    const latency = 0.35 * (1.3 - a01(attrs.vision));
+    // Real offsides are timing errors of a metre or two: the passer sees the runner ~0.4-0.6 s late
+    // and gambles on marginal cases; only a clearly offside runner is ruled out.
+    const latency = 0.55 * (1.4 - a01(attrs.vision));
     const perceivedX = (q.pos.x - q.vel.x * latency) * dir;
     const offMargin = perceivedX - m.offsideLine(team);
     const offside = perceivedX > 0 && offMargin > 0;
-    const offsidePenalty = !offside ? 0 : offMargin > 1.5 ? 2 : 2 * (0.3 + 0.7 * a01(attrs.decisions));
+    const offsidePenalty = !offside ? 0 : offMargin > 2 ? 2 : offMargin > 0.8 ? 1.0 * (0.3 + 0.7 * a01(attrs.decisions)) : 0.25;
     // Lofted only when the ground lane is shut or the distance demands it (real football is ~15-20% aerial).
-    const lofted = d > 36 || (margin < 0.15 && d > 18 && lane < 1.5);
+    const lofted = d > 40 || (!blockedAtFeet && margin < 0.15 && d > 20 && lane < 1.5);
 
     let score = 0.3;
     // Safe lanes are worth a lot; a lane a defender reaches first is nearly worthless (unless lofted over).
-    if (lofted) score += Math.min(lane, 4) * 0.05;
+    if (blockedAtFeet && !lofted) score -= 1.5;
+    else if (lofted) score += Math.min(lane, 4) * 0.05;
     else if (margin < 0) score -= 1.0;
     else score += (Math.min(margin, 1.5) - 0.6) * (TUNING.passMarginWeight - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
     // Directness and mentality both reward vertical passes; a defensive mentality prefers safety.
     score += progress * (0.008 + 0.014 * tactics.directness) * (0.6 + 0.8 * tactics.mentality); // 20 m ≈ 0.3
-    score -= d > 22 ? (d - 22) * (0.02 - 0.01 * tactics.directness) : 0; // long balls are risky
-    score -= lofted ? 0.25 * (1 - a01(attrs.technique)) + 0.1 : 0;
+    score -= d > 22 ? (d - 22) * (0.035 - 0.015 * tactics.directness) : 0; // long balls are risky
+    score -= lofted ? 0.3 * (1 - a01(attrs.technique)) + 0.25 : 0;
     score -= offsidePenalty;
     if (isGkTarget) score -= pressure < 3 ? 0.1 : 0.9;
     // Passing back under no pressure is dull
