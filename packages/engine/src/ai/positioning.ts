@@ -142,9 +142,10 @@ export function computePositioning(m: Match, _dt: number): void {
 
     const target = shapePosition(m, p, possession);
     const d = dist(p.pos, target);
-    // Shape adjustments are jogs and walks, not sprints (players cover ~10-11 km, not 15).
-    const speed = d > 14 ? 7 : d > 6 ? 4.5 : d > 2 ? 2.5 : 1.2;
-    setTarget(p, target, speed, possession === p.team ? "support" : "shape");
+    // Shape adjustments are jogs and walks, not sprints (players cover ~10-11 km, not 15);
+    // a run in behind is the exception.
+    const speed = runFlag ? 99 : d > 14 ? 7 : d > 6 ? 4.5 : d > 2 ? 2.5 : 1.2;
+    setTarget(p, target, speed, runFlag ? "run" : possession === p.team ? "support" : "shape");
   }
 }
 
@@ -253,7 +254,11 @@ function interceptPoint(m: Match, p: PlayerState): Vec2 {
 }
 
 /** Team shape: formation slot shifted toward the ball, adjusted for possession & tactics. */
+/** Set by shapePosition when the player should sprint (a run in behind). */
+let runFlag = false;
+
 function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec2 {
+  runFlag = false;
   const s = m.state;
   const ball = s.ball;
   const team = p.team;
@@ -302,8 +307,21 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   if (inPoss && isForward(role)) {
     const line = m.offsideLine(team);
     const ant = m.def(p.id).attrs.anticipation / 20;
-    const wobble = Math.sin(s.tick * 0.013 + p.pos.y) * (TUNING.offsideWobble - 0.8 * TUNING.offsideWobble * ant); // deterministic, slow drift
-    if (x > line - 0.8 + wobble) x = line - 0.8 + wobble;
+    // Runs in behind: every few seconds, when a team-mate has the ball behind them with time to
+    // pick a pass, the forward darts beyond the line for about a second. Players with poor
+    // anticipation go early (offside), good ones time it on the whistle of the pass.
+    const cycle = 5.5 + (m.def(p.id).number % 4) * 0.7; // desynchronise the forwards
+    const phase = ((s.tick / 20 + m.def(p.id).number * 1.3) % cycle) / cycle;
+    const carrierBehind = ball.owner !== null && ball.owner !== p.id && ballX < x - 3 && dist(ball.pos, p.pos) < 35;
+    const carrierFree = ball.owner !== null && m.pressureAt(ball.pos, team) > 2.5;
+    if (carrierBehind && carrierFree && phase < 0.32) {
+      // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
+      const early = (1 - ant) * TUNING.offsideWobble * 0.9; // 0 .. ~4.5 m
+      x = line + 0.5 + early;
+      runFlag = true;
+    } else if (x > line - 0.8) {
+      x = line - 0.8;
+    }
   }
 
   // Never stand behind own goal line or in front of the opposite one.
