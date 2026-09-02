@@ -9,6 +9,27 @@ export interface View {
   oy: number; // px of y=0
 }
 
+/** Camera state in pitch metres plus a zoom factor (1 = the whole pitch). */
+export interface Camera { x: number; y: number; zoom: number }
+
+/**
+ * Zoom the canvas transform on `focus` (pitch metres) by `zoom`. The focus is clamped so the
+ * zoomed viewport never leaves the painted canvas, so no bare corners appear; zoom 1 is the
+ * identity. Call inside ctx.save()/restore() before drawPitch() and the players.
+ */
+export function applyCamera(ctx: CanvasRenderingContext2D, v: View, focus: { x: number; y: number }, zoom: number): void {
+  const z = Math.max(1, zoom);
+  if (z === 1) return;
+  const spare = 1 - 1 / z;
+  const maxX = (v.w / 2) * spare / v.scale;
+  const maxY = (v.h / 2) * spare / v.scale;
+  const fx = Math.max(-maxX, Math.min(maxX, focus.x));
+  const fy = Math.max(-maxY, Math.min(maxY, focus.y));
+  ctx.translate(v.w / 2, v.h / 2);
+  ctx.scale(z, z);
+  ctx.translate(-(v.ox + fx * v.scale), -(v.oy + fy * v.scale));
+}
+
 /** grass apron beyond the touch/goal lines (m) */
 const APRON = 1.6;
 /** ad-board band: distance from the touchline and its height (m) */

@@ -1,18 +1,30 @@
 import { DT, PITCH, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
-import { drawPitch, type View } from "./render";
+import { applyCamera, drawPitch, type Camera, type View } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
 import { Sfx } from "./sfx";
-import { CLIP_SECONDS, Recorder, type Clip, type Frame } from "./replay";
+import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
+import { drawKitDisc, kitTextColor, resolveKits, type Kit, type MatchKits } from "./kits";
 
 /** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
 interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
 /** Slow-motion playback of a clip; `intro` is the freeze before the first frame. */
 interface Replay { clip: Clip; pos: number; started: number; auto: boolean }
+/** Live goal cam: a short push-in on the scorer right after the goal, before any replay. */
+interface GoalCam { t0: number; x: number; y: number; caption: string; color: string }
 
 const REPLAY_RATE = 0.5;
 const REPLAY_INTRO_MS = 900;
-const REPLAY_ZOOM = 1.55;
+/** replay zoom ramps from the first to the second value over the clip */
+const REPLAY_ZOOM_FROM = 1.15;
+const REPLAY_ZOOM_TO = 1.6;
+const GOAL_CAM_MS = 1200;
+const GOAL_CAM_ZOOM = 1.5;
+/** camera easing time constants (ms): position and zoom */
+const CAM_TAU_POS = 170;
+const CAM_TAU_ZOOM = 260;
+
+const reducedMotion = (): boolean => { try { return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false; } catch { return false; } };
 
 export interface SideMatch {
   label: string;
@@ -48,6 +60,16 @@ export class MatchScreen {
   /** event index → clip, for the ▶ buttons in the log */
   private clipByEvent = new Map<number, Clip>();
   private replay: Replay | null = null;
+  /** an auto replay waiting for the live goal cam to finish */
+  private pendingReplay: { clip: Clip; at: number } | null = null;
+  private goalCam: GoalCam | null = null;
+  /** eased camera; zoom 1 at the pitch centre is the ordinary full view */
+  private cam: Camera = { x: 0, y: 0, zoom: 1 };
+  private camTs = 0;
+  private kits: MatchKits = resolveKits({ name: "", color: "#e63946" }, { name: "", color: "#4cc9f0" });
+  private readonly btnTags = document.getElementById("btnTags") as HTMLButtonElement | null;
+  /** name tags under the discs */
+  private showTags = (() => { try { return localStorage.getItem("3sec.tags") !== "0"; } catch { return true; } })();
   private fx: Fx[] = [];
   private shakeT0 = -1e9;
   private shakeAmp = 0;
@@ -94,6 +116,11 @@ export class MatchScreen {
       paint();
       this.btnReplay.addEventListener("click", () => { this.autoReplay = !this.autoReplay; try { localStorage.setItem("3sec.replay", this.autoReplay ? "1" : "0"); } catch { /* ignore */ } paint(); });
     }
+    if (this.btnTags) {
+      const paint = () => { this.btnTags!.title = this.showTags ? "선수 이름표 켜짐 (누르면 끔)" : "선수 이름표 꺼짐 (누르면 켬)"; this.btnTags!.style.opacity = this.showTags ? "1" : ".55"; };
+      paint();
+      this.btnTags.addEventListener("click", () => { this.showTags = !this.showTags; try { localStorage.setItem("3sec.tags", this.showTags ? "1" : "0"); } catch { /* ignore */ } paint(); this.render(); });
+    }
     this.logEl.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-clip]");
       if (!b) return;
@@ -127,6 +154,10 @@ export class MatchScreen {
   start(match: Match, userTeam: TeamId, others: SideMatch[], onFinish: () => void): void {
     this.match = match;
     this.stadium = stadiumFor(match.teams[0].name);
+    this.kits = resolveKits(match.teams[0], match.teams[1]);
+    this.cam = { x: 0, y: 0, zoom: 1 };
+    this.goalCam = null;
+    this.pendingReplay = null;
     this.bannerT0 = null;
     this.userTeam = userTeam;
     this.others = others;
@@ -186,6 +217,9 @@ export class MatchScreen {
   /** Called by the controller when leaving the match screen. */
   leave(): void {
     this.replay = null;
+    this.pendingReplay = null;
+    this.goalCam = null;
+    this.cam = { x: 0, y: 0, zoom: 1 };
     this.fx = [];
     this.ftOverlay.hidden = true;
     document.body.classList.remove("finished");
@@ -231,6 +265,11 @@ export class MatchScreen {
     if (!this.lastTs) this.lastTs = ts;
     const elapsed = Math.min(0.25, (ts - this.lastTs) / 1000);
     this.lastTs = ts;
+    if (this.pendingReplay && !this.replay && ts >= this.pendingReplay.at) {
+      const { clip } = this.pendingReplay;
+      this.pendingReplay = null;
+      if (this.playing && this.autoReplay) this.startReplay(clip, true);
+    }
     if (this.replay) {
       const r = this.replay;
       const age = ts - r.started;
@@ -243,6 +282,8 @@ export class MatchScreen {
       // engine; at any fixed speed they run at least 4x faster so the game never drags.
       const dead = this.match.state.phase !== "PLAY";
       this.effSpeed = this.speed === "auto" ? this.autoSpeed() : dead ? Math.max(8, this.speed * 4) : this.speed;
+      // the goal cam is a real-time moment: hold the sim near 1x so the celebration is not skipped
+      if (this.goalCam && ts - this.goalCam.t0 < GOAL_CAM_MS) this.effSpeed = Math.min(this.effSpeed, 2);
       this.acc += elapsed * this.effSpeed;
       let steps = 0;
       while (this.acc >= DT && steps < 400) {
@@ -272,12 +313,18 @@ export class MatchScreen {
           const clip: Clip = { id: this.clips.length + 1, type: e.type, minute: e.minute, team: e.team, text: e.text, frames };
           this.clips.push(clip);
           this.clipByEvent.set(idx, clip);
-          if ((e.type === "GOAL" || e.type === "OWN_GOAL") && this.playing && !this.replay && this.autoReplay) this.startReplay(clip, true);
+          // the replay waits for the live goal cam (below) to finish its push-in
+          if ((e.type === "GOAL" || e.type === "OWN_GOAL") && this.playing && !this.replay && this.autoReplay) this.pendingReplay = { clip, at: performance.now() + GOAL_CAM_MS };
         }
       }
       const team = e.team === null ? null : this.match.teams[e.team];
       const color = team?.color ?? "#ffd166";
       const now = performance.now();
+      if ((e.type === "GOAL" || e.type === "OWN_GOAL") && !this.finished) {
+        const scorer = e.playerId ? this.match.def(e.playerId).name : team?.shortName ?? "";
+        const at = e.pos ?? s.ball.pos;
+        this.goalCam = { t0: now, x: at.x, y: at.y, caption: `⚽ ${scorer} · ${e.minute}'${e.type === "OWN_GOAL" ? " (자책골)" : ""}`, color };
+      }
       switch (e.type) {
         case "GOAL":
           this.burst("골!!!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
@@ -485,17 +532,8 @@ export class MatchScreen {
     }
     const rp = this.replay;
     const frame: Frame | null = rp ? rp.clip.frames[Math.min(rp.clip.frames.length - 1, Math.floor(rp.pos))] ?? null : null;
-    if (rp && frame) {
-      // slow-motion zoom on the action: the camera eases toward the ball of the clip's last frame
-      const last = rp.clip.frames[rp.clip.frames.length - 1]!;
-      const age = now - rp.started;
-      const z = 1 + (REPLAY_ZOOM - 1) * Math.min(1, age / 1400);
-      const fx = Math.max(-PITCH.halfLength + 20, Math.min(PITCH.halfLength - 20, (frame.bx + last.bx) / 2));
-      const fy = Math.max(-PITCH.halfWidth + 14, Math.min(PITCH.halfWidth - 14, (frame.by + last.by) / 2));
-      ctx.translate(v.w / 2, v.h / 2);
-      ctx.scale(z, z);
-      ctx.translate(-(v.ox + fx * v.scale), -(v.oy + fy * v.scale));
-    }
+    this.updateCamera(now, rp);
+    applyCamera(ctx, v, this.cam, this.cam.zoom);
     drawPitch(ctx, v, this.stadium);
     const toPx = (x: number, y: number): [number, number] => [v.ox + x * v.scale, v.oy + y * v.scale];
     const debug = this.debugChk.checked && !rp;
@@ -507,6 +545,8 @@ export class MatchScreen {
       this.updateHud();
       return;
     }
+    const r = Math.max(5, 1.45 * v.scale);
+    const tagsFor = this.showTags ? (r >= 7 ? "all" : "user") : "none";
 
     if (debug) {
       for (const team of [0, 1] as TeamId[]) {
@@ -529,7 +569,7 @@ export class MatchScreen {
       const team = match.teams[p.team];
       const def = match.def(p.id);
       const [px, py] = toPx(p.pos.x, p.pos.y);
-      const r = Math.max(5, 1.45 * v.scale);
+      const kit = this.kitOf(p.team, def.role === "GK");
       if (debug) {
         const [tx, ty] = toPx(p.target.x, p.target.y);
         ctx.strokeStyle = team.color;
@@ -544,12 +584,11 @@ export class MatchScreen {
       ctx.beginPath();
       ctx.ellipse(px + 1, py + 2, r, r * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = def.role === "GK" ? shade(team.color, -0.35) : team.color;
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fill();
+      drawKitDisc(ctx, kit, px, py, r);
       ctx.lineWidth = this.selected === p.id ? 3 : 1.2;
       ctx.strokeStyle = this.selected === p.id ? "#ffd166" : s.ball.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)";
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = "rgba(255,255,255,0.8)";
       ctx.lineWidth = 1.5;
@@ -557,7 +596,8 @@ export class MatchScreen {
       ctx.moveTo(px, py);
       ctx.lineTo(px + Math.cos(p.facing) * r * 1.3, py + Math.sin(p.facing) * r * 1.3);
       ctx.stroke();
-      this.drawNumber(px, py, r, def.number, team.color, this.selected === p.id);
+      const tag = tagsFor === "all" || (tagsFor === "user" && p.team === this.userTeam) ? def.name : null;
+      this.drawNumber(px, py, r, def.number, kit, this.selected === p.id, tag);
     }
 
     const b = s.ball;
@@ -591,6 +631,7 @@ export class MatchScreen {
       ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - flashAge / 260)})`;
       ctx.fillRect(0, 0, v.w, v.h);
     }
+    if (this.goalCam && now - this.goalCam.t0 < GOAL_CAM_MS + 600) this.drawGoalCaption(this.goalCam, v, now);
     this.drawFx(v, now);
     const bannerAge = this.bannerT0 === null ? 0 : performance.now() - this.bannerT0;
     if (!this.finished && bannerAge < BANNER_MS) this.drawStadiumBanner(v, bannerAge);
@@ -637,46 +678,149 @@ export class MatchScreen {
     }
   }
 
-  /** Shirt number: inside the disc when there is room (contrast picked from the kit colour), else just below it. */
-  private drawNumber(px: number, py: number, r: number, num: number, kit: string, selected: boolean): void {
+  /** Outfield kit of a side, or the keeper's plain colour. */
+  private kitOf(team: TeamId, gk: boolean): Kit {
+    if (gk) { const c = this.kits.gk[team]; return { primary: c, secondary: c, pattern: "solid" }; }
+    return this.kits.outfield[team];
+  }
+
+  /**
+   * Camera target for this frame, eased into `this.cam`:
+   * - replay: the ball of the current frame with a bit of lead, zoom ramping over the clip;
+   * - live goal cam: the scorer/ball at GOAL_CAM_ZOOM for GOAL_CAM_MS, then back out;
+   * - otherwise the full pitch. With prefers-reduced-motion the camera cuts instead of easing.
+   */
+  private updateCamera(now: number, rp: Replay | null): void {
+    const dt = this.camTs ? Math.min(100, now - this.camTs) : 16;
+    this.camTs = now;
+    const reduce = reducedMotion();
+    let tx = 0, ty = 0, tz = 1;
+    let snap = false;
+    if (rp) {
+      const n = rp.clip.frames.length;
+      if (reduce) {
+        const last = rp.clip.frames[n - 1]!;
+        tx = last.bx; ty = last.by; tz = 1.4; snap = true;
+      } else {
+        const t = cameraTarget(rp.clip.frames, rp.pos);
+        tx = t.x; ty = t.y;
+        const prog = Math.max(0, Math.min(1, rp.pos / Math.max(1, n)));
+        tz = REPLAY_ZOOM_FROM + (REPLAY_ZOOM_TO - REPLAY_ZOOM_FROM) * prog;
+        // the intro freeze starts already framed on the build-up
+        if (now - rp.started < 32) snap = true;
+      }
+    } else if (this.goalCam) {
+      const age = now - this.goalCam.t0;
+      if (age < GOAL_CAM_MS) {
+        tx = this.goalCam.x; ty = this.goalCam.y; tz = GOAL_CAM_ZOOM;
+        snap = reduce;
+      } else if (reduce) snap = true;
+    }
+    if (snap) { this.cam.x = tx; this.cam.y = ty; this.cam.zoom = tz; return; }
+    const kp = 1 - Math.exp(-dt / CAM_TAU_POS);
+    const kz = 1 - Math.exp(-dt / CAM_TAU_ZOOM);
+    this.cam.x += (tx - this.cam.x) * kp;
+    this.cam.y += (ty - this.cam.y) * kp;
+    this.cam.zoom += (tz - this.cam.zoom) * kz;
+    if (Math.abs(this.cam.zoom - 1) < 0.004 && tz === 1) { this.cam.zoom = 1; this.cam.x = tx; this.cam.y = ty; }
+  }
+
+  /** "⚽ 이름 · 분'" near the top while the goal cam runs (fades out after it). */
+  private drawGoalCaption(g: GoalCam, v: View, now: number): void {
+    const ctx = this.ctx;
+    const age = now - g.t0;
+    const alpha = age < 200 ? age / 200 : age > GOAL_CAM_MS ? Math.max(0, 1 - (age - GOAL_CAM_MS) / 600) : 1;
+    if (alpha <= 0) return;
+    const immersive = document.body.classList.contains("immersive");
+    const fs = Math.max(13, Math.min(22, v.scale * 1.7));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `700 ${fs}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = ctx.measureText(g.caption).width + fs * 1.6;
+    const h = fs + 14;
+    const y0 = (immersive ? 46 : 10) + h / 2;
+    ctx.fillStyle = "rgba(10,14,20,0.78)";
+    ctx.fillRect(v.w / 2 - w / 2, y0 - h / 2, w, h);
+    ctx.fillStyle = g.color;
+    ctx.fillRect(v.w / 2 - w / 2, y0 - h / 2, 4, h);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(g.caption, v.w / 2 + 2, y0 + 1);
+    ctx.restore();
+  }
+
+  /**
+   * Shirt number: inside the disc when there is room (contrast from the kit's dominant colour,
+   * with a thin counter-outline so it survives stripes), else just below it. The optional name
+   * tag goes under the disc, or under the number when that sits below the disc.
+   */
+  private drawNumber(px: number, py: number, r: number, num: number, kit: Kit, selected: boolean, tag: string | null = null): void {
     const ctx = this.ctx;
     const text = String(num);
+    let tagY: number;
     if (r >= 5.5) {
       const size = Math.max(7, r * (text.length > 1 ? 1.05 : 1.3));
       ctx.font = `700 ${size}px 'IBM Plex Mono', ui-monospace, monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = luminance(kit) > 0.5 ? "#101418" : "#ffffff";
+      const fill = kitTextColor(kit);
+      if (kit.pattern !== "solid") {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = Math.max(1.5, size * 0.22);
+        ctx.strokeStyle = fill === "#ffffff" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)";
+        ctx.strokeText(text, px, py + 0.5);
+      }
+      ctx.fillStyle = fill;
       ctx.fillText(text, px, py + 0.5);
+      tagY = py + r + 1.5;
     } else {
-      ctx.font = `700 ${Math.max(8, r * 1.6)}px 'IBM Plex Mono', ui-monospace, monospace`;
+      const size = Math.max(8, r * 1.6);
+      ctx.font = `700 ${size}px 'IBM Plex Mono', ui-monospace, monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
+      ctx.lineJoin = "round";
       ctx.lineWidth = 2;
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
       ctx.strokeText(text, px, py + r + 1);
       ctx.fillStyle = selected ? "#ffd166" : "#ffffff";
       ctx.fillText(text, px, py + r + 1);
+      tagY = py + r + 1 + size + 1;
     }
+    if (tag) this.drawTag(px, tagY, r, tag, selected);
   }
 
-  /** Replay scene: players and ball from a recorded frame. */
+  /** Name tag: small white text with a dark outline, centred under (px, y). */
+  private drawTag(px: number, y: number, r: number, name: string, selected: boolean): void {
+    const ctx = this.ctx;
+    const size = Math.max(8, Math.min(13, r * 1.15));
+    ctx.font = `600 ${size}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(2, size * 0.28);
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
+    ctx.strokeText(name, px, y);
+    ctx.fillStyle = selected ? "#ffd166" : "rgba(255,255,255,0.95)";
+    ctx.fillText(name, px, y);
+  }
+
+  /** Replay scene: players and ball from a recorded frame. Name tags are always on here. */
   private drawFrame(f: Frame, v: View): void {
     const ctx = this.ctx;
     const match = this.match;
     const r = Math.max(5, 1.45 * v.scale);
     for (const p of f.players) {
-      const team = match.teams[p.team];
       const def = match.def(p.id);
+      const kit = this.kitOf(p.team, def.role === "GK");
       const px = v.ox + p.x * v.scale, py = v.oy + p.y * v.scale;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(px + 1, py + 2, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = def.role === "GK" ? shade(team.color, -0.35) : team.color;
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 1.2; ctx.strokeStyle = f.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)"; ctx.stroke();
+      drawKitDisc(ctx, kit, px, py, r);
+      ctx.lineWidth = 1.2; ctx.strokeStyle = f.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)";
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(p.f) * r * 1.3, py + Math.sin(p.f) * r * 1.3); ctx.stroke();
-      this.drawNumber(px, py, r, def.number, team.color, false);
+      this.drawNumber(px, py, r, def.number, kit, false, this.showTags ? def.name : null);
     }
     const bx = v.ox + f.bx * v.scale, by = v.oy + f.by * v.scale;
     const br = Math.max(2.5, 0.45 * v.scale) * (1 + f.bz * 0.12);
@@ -836,15 +980,3 @@ function restartLabel(kind: string): string {
   return ({ KICK_OFF: "킥오프", THROW_IN: "스로인", GOAL_KICK: "골킥", CORNER: "코너킥", FREE_KICK: "프리킥", PENALTY: "페널티킥" } as Record<string, string>)[kind] ?? kind;
 }
 
-/** Relative luminance (0..1) of a #rrggbb colour. */
-function luminance(hex: string): number {
-  const n = parseInt(hex.replace("#", "").padEnd(6, "0").slice(0, 6), 16);
-  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => { const s = x / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
-}
-
-function shade(hex: string, amt: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (c: number) => Math.max(0, Math.min(255, Math.round(c + (amt < 0 ? c * amt : (255 - c) * amt))));
-  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
-}

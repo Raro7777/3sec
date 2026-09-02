@@ -35,5 +35,23 @@ export class Recorder {
   }
 }
 
+/**
+ * Where the replay camera should look at frame index `i` (may be fractional): the ball plus a
+ * little lead in its direction of travel (`leadSeconds` ahead, capped) so the shot arrives in
+ * the picture rather than the camera chasing it. Frames are 1/hz apart.
+ */
+export function cameraTarget(frames: Frame[], i: number, leadSeconds = 0.35, hz = 20, maxLead = 9): { x: number; y: number } {
+  if (frames.length === 0) return { x: 0, y: 0 };
+  const k = Math.max(0, Math.min(frames.length - 1, Math.floor(i)));
+  const f = frames[k]!;
+  const back = frames[Math.max(0, k - 3)]!;
+  const dt = Math.max(1, k - Math.max(0, k - 3)) / hz;
+  let lx = ((f.bx - back.bx) / dt) * leadSeconds;
+  let ly = ((f.by - back.by) / dt) * leadSeconds;
+  const m = Math.hypot(lx, ly);
+  if (m > maxLead) { lx *= maxLead / m; ly *= maxLead / m; }
+  return { x: f.bx + lx, y: f.by + ly };
+}
+
 /** Which events earn a clip, and how many seconds before them to keep. */
 export const CLIP_SECONDS: Partial<Record<MatchEventType, number>> = { GOAL: 7, OWN_GOAL: 7, OFFSIDE: 5, RED_CARD: 5, PENALTY: 5 };
