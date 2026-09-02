@@ -1,3 +1,5 @@
-# 3sec
+# 3sec — 여자 배구 매니저 게임
 
-_Empty project — ready to start fresh._
+육성 수집형 모바일 스포츠 매니지먼트 게임 프로젝트.
+
+- 기획 문서: [docs/GDD.md](docs/GDD.md)
