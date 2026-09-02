@@ -73,13 +73,17 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     const longRange = !inBox && dGoal < 28 && pressure > 2.5 && blockers === 0
       ? TUNING.longRangeBase + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) - (dGoal - 16) * 0.02
       : 0;
+    // A first-time finish under pressure is the hardest skill in the game: most players take a
+    // touch first (during which the defender arrives), only the composed strike immediately.
+    const firstTime = p.possessionTime < 0.5 && pressure < 2.5 ? -0.9 * (1.1 - a01(attrs.composure)) : 0;
     const shotScore =
       TUNING.shotBase +
       (tactics.mentality - 0.5) * 0.4 +
       xg * (TUNING.shotXgMult + 1.5 * a01(attrs.finishing) + 0.5 * a01(attrs.composure)) +
       (inBox ? 0.15 : 0) +
       (pressure < 1.5 ? -0.3 : 0) -
-      blockers * 0.35 +
+      blockers * 0.6 +
+      firstTime +
       longRange;
     options.push({ kind: "shoot", score: shotScore + m.rng.gauss(0, noise) });
   }

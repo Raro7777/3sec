@@ -3,7 +3,7 @@
   "shotXgMult": 3.5,
   "longRangeBase": 0.1,
   "shotAngSd": 0.42,
-  "crossBase": -0.1,
+  "crossBase": -0.4,
   "passMarginWeight": 0.6,
   "carryBonus": 0.55,
   "receiverBias": 1.2825,
