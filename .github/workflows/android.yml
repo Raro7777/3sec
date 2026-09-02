@@ -10,6 +10,9 @@ on:
       - "pnpm-lock.yaml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   apk:
     name: build debug APK
@@ -34,8 +37,24 @@ jobs:
       - name: Assemble debug APK
         working-directory: apps/viewer/android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Name the APK by version and commit
+        run: cp apps/viewer/android/app/build/outputs/apk/debug/app-debug.apk 3sec-fm-${GITHUB_SHA::7}.apk && cp apps/viewer/android/app/build/outputs/apk/debug/app-debug.apk 3sec-fm-latest.apk
       - uses: actions/upload-artifact@v4
         with:
           name: 3sec-fm-debug-apk
-          path: apps/viewer/android/app/build/outputs/apk/debug/app-debug.apk
+          path: 3sec-fm-latest.apk
           retention-days: 30
+      # A rolling "apk-latest" pre-release so the newest build is always one click away:
+      # https://github.com/<owner>/<repo>/releases/tag/apk-latest
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: "3sec FM — latest Android build"
+          prerelease: true
+          body: |
+            자동 빌드된 디버그 APK입니다. `3sec-fm-latest.apk`를 내려받아 설치하세요 (설정에서 "출처를 알 수 없는 앱" 허용 필요).
+            커밋: ${{ github.sha }} · 브랜치: ${{ github.ref_name }}
+          files: |
+            3sec-fm-latest.apk
+            3sec-fm-*.apk
