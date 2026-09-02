@@ -144,7 +144,8 @@ export function computePositioning(m: Match, _dt: number): void {
     const d = dist(p.pos, target);
     // Shape adjustments are jogs and walks, not sprints (players cover ~10-11 km, not 15);
     // a run in behind is the exception.
-    const speed = runFlag ? 99 : d > 14 ? 7 : d > 6 ? 4.5 : d > 2 ? 2.5 : 1.2;
+    // Dead zone: within a metre of the spot players stand and scan instead of shuffling.
+    const speed = runFlag ? 99 : d > 14 ? 7 : d > 6 ? 4.5 : d > 2.5 ? 2.5 : d > 1.0 ? 1.2 : 0;
     setTarget(p, target, speed, runFlag ? "run" : possession === p.team ? "support" : "shape");
   }
 }
