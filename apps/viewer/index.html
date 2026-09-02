@@ -113,6 +113,9 @@
       .immersive #topbar { position:absolute; top:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.72); backdrop-filter:blur(6px); padding:4px 10px; padding-left:calc(10px + env(safe-area-inset-left)); gap:8px; flex-wrap:nowrap; overflow-x:auto; border-bottom:0; }
       .immersive #topbar #phase { flex-basis:auto; }
       .immersive #topbar label { white-space:nowrap; }
+      .immersive #topbar button, .immersive #topbar select { white-space:nowrap; padding:4px 8px; font-size:13px; }
+      .immersive #topbar #score { min-width:0; font-size:20px; white-space:nowrap; }
+      .immersive #topbar #clock { min-width:0; white-space:nowrap; }
       .immersive #main { flex-direction:row !important; overflow:hidden !important; height:100%; }
       .immersive #stage { flex:1 !important; height:100% !important; max-height:none !important; padding:0 !important; }
       .immersive #panel { position:absolute; top:0; right:0; bottom:0; width:min(340px, 88vw); transform:translateX(100%); transition:transform .2s ease; z-index:3; border-left:1px solid var(--line); border-top:0; padding-top:44px; padding-right:calc(12px + env(safe-area-inset-right)); box-shadow:-8px 0 24px rgba(0,0,0,.5); }
