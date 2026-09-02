@@ -66,6 +66,7 @@ export class MatchScreen {
   private readonly btnPlay = document.getElementById("btnPlay") as HTMLButtonElement;
   private readonly btnSkip = document.getElementById("btnSkip") as HTMLButtonElement;
   private readonly btnContinue = document.getElementById("btnContinue") as HTMLButtonElement;
+  private readonly ftOverlay = document.getElementById("ftOverlay") as HTMLDivElement;
   private readonly btnFull = document.getElementById("btnFull") as HTMLButtonElement;
   private readonly btnPanel = document.getElementById("btnPanel") as HTMLButtonElement;
   /** user explicitly toggled immersive mode (otherwise it follows phone orientation) */
@@ -93,6 +94,7 @@ export class MatchScreen {
     });
     this.btnSkip.addEventListener("click", () => void this.skipToEnd());
     this.btnContinue.addEventListener("click", () => this.onFinish?.());
+    document.getElementById("btnContinue2")!.addEventListener("click", () => this.onFinish?.());
     this.speedSel.addEventListener("change", () => (this.speed = this.speedSel.value === "auto" ? "auto" : Number(this.speedSel.value)));
     this.debugChk.addEventListener("change", () => this.render());
     this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
@@ -136,6 +138,8 @@ export class MatchScreen {
     this.flashT0 = -1e9;
     this.logEl.innerHTML = "";
     this.btnContinue.style.display = "none";
+    this.ftOverlay.hidden = true;
+    document.body.classList.remove("finished");
     this.btnSkip.disabled = false;
     this.btnPlay.disabled = false;
     this.setPlaying(false);
@@ -175,6 +179,8 @@ export class MatchScreen {
   leave(): void {
     this.replay = null;
     this.fx = [];
+    this.ftOverlay.hidden = true;
+    document.body.classList.remove("finished");
     this.immersiveByUser = null;
     this.setImmersive(false, false);
   }
@@ -381,6 +387,18 @@ export class MatchScreen {
 
   private resize(): void {
     const stage = document.getElementById("stage")!;
+    const ratio0 = (PITCH.length + 8) / (PITCH.width + 8);
+    // Immersive landscape: when the pitch at full height leaves room on the right, dock the manager panel there.
+    const body = document.body;
+    if (body.classList.contains("immersive")) {
+      const main = document.getElementById("main")!;
+      const pitchW = (main.clientHeight - 16) * ratio0;
+      const leftover = main.clientWidth - pitchW - 16;
+      const dock = leftover >= 230;
+      body.classList.toggle("dock", dock);
+      if (dock) body.style.setProperty("--dockw", `${Math.round(Math.min(460, leftover))}px`);
+      if (dock) body.classList.remove("panel-open");
+    } else body.classList.remove("dock");
     const maxW = Math.max(200, stage.clientWidth - 16);
     const maxH = Math.max(140, stage.clientHeight - 16);
     const ratio = (PITCH.length + 8) / (PITCH.width + 8);
@@ -501,7 +519,7 @@ export class MatchScreen {
       const team = match.teams[p.team];
       const def = match.def(p.id);
       const [px, py] = toPx(p.pos.x, p.pos.y);
-      const r = Math.max(4, 1.1 * v.scale);
+      const r = Math.max(5, 1.45 * v.scale);
       if (debug) {
         const [tx, ty] = toPx(p.target.x, p.target.y);
         ctx.strokeStyle = team.color;
@@ -597,6 +615,12 @@ export class MatchScreen {
       this.btnSkip.disabled = true;
       this.btnContinue.style.display = "";
       document.body.classList.remove("panel-open");
+      document.body.classList.add("finished");
+      const [hc, ac] = match.teams;
+      const mine = this.userTeam === 0 ? s.score[0] - s.score[1] : s.score[1] - s.score[0];
+      document.getElementById("ftScore")!.innerHTML = `<span style="color:${hc.color}">${hc.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${ac.color}">${ac.shortName}</span>`;
+      document.getElementById("ftNote")!.textContent = mine > 0 ? "승리! 라운드 결과와 순위를 확인하세요." : mine < 0 ? "패배… 결과 화면에서 다른 경기장 결과도 확인하세요." : "무승부. 결과 화면으로 이동합니다.";
+      this.ftOverlay.hidden = false;
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
       this.btnSkip.textContent = "⏩ 다른 구장 종료";
@@ -630,7 +654,7 @@ export class MatchScreen {
   private drawFrame(f: Frame, v: View): void {
     const ctx = this.ctx;
     const match = this.match;
-    const r = Math.max(4, 1.1 * v.scale);
+    const r = Math.max(5, 1.45 * v.scale);
     for (const p of f.players) {
       const team = match.teams[p.team];
       const def = match.def(p.id);

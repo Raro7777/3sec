@@ -28,6 +28,31 @@ type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results"
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
 const APP_VERSION = "0.19";
 
+/**
+ * Formation diagram as inline SVG, attack pointing up. With a club and starters it labels each slot with the
+ * player's number and name; without, it is a small silhouette for the picker.
+ */
+export function formationSvg(f: FormationName, club: Club | null, starters: string[], width: number): string {
+  const W = 120, H = 146;
+  const slots = FORMATIONS[f];
+  const big = width >= 120;
+  const dots = slots.map((s, i) => {
+    const cx = 60 + s.y * 49;
+    const cy = 131 - ((s.x + 1) / 2) * 123;
+    const p = club && starters[i] ? club.squad.find((q) => q.id === starters[i]) : undefined;
+    const r = big ? 5.6 : 4.2;
+    const fill = s.role === "GK" ? "#e8b84a" : i === 0 ? "#e8b84a" : "#f2c14e";
+    const label = big && p ? `<text x="${cx}" y="${cy + 0.8}" text-anchor="middle" dominant-baseline="middle" font-size="5.4" font-weight="700" fill="#1a1400" font-family="IBM Plex Mono, monospace">${p.number}</text>
+      <text x="${cx}" y="${cy + r + 4.8}" text-anchor="middle" font-size="4.7" fill="#e7edf2" font-family="IBM Plex Sans KR, sans-serif" stroke="#1f4d2a" stroke-width="0.9" paint-order="stroke">${p.name}</text>
+      <text x="${cx}" y="${cy + r + 8.6}" text-anchor="middle" font-size="3.4" fill="#cfe3d5" font-family="IBM Plex Mono, monospace">${s.role}</text>` : "";
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#1a1400" stroke-width="${big ? 1 : 0.6}"/>${label}`;
+  }).join("");
+  const lines = big
+    ? `<rect x="36" y="2" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><rect x="36" y="124" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><circle cx="60" cy="70" r="10" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>`
+    : `<line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".6"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${width}" height="${Math.round(width * H / W)}" role="img" aria-label="${f}"><rect x="0" y="0" width="${W}" height="${H}" rx="4" fill="#2f7a3e"/><rect x="2" y="2" width="${W - 4}" height="${H - 4}" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>${lines}${dots}</svg>`;
+}
+
 /** One-line character per club for the club picker (indexed like CLUBS). */
 const CLUB_BLURBS: string[] = [
   "수도의 명문, 중간 전력에 큰 기대",
@@ -706,9 +731,14 @@ export class Game {
     const h: string[] = [];
     h.push(`<div class="card"><h3>${me.name} 스쿼드 <span>${me.squad.length}명</span></h3>
       <div class="squad-tools">
-        <label>포메이션 <select id="sqFormation" ${locked ? "disabled" : ""}>${(Object.keys(FORMATIONS) as FormationName[]).map((f) => `<option ${f === sel.formation ? "selected" : ""}>${f}</option>`).join("")}</select></label>
+        <span>포메이션 <b style="color:var(--accent)">${sel.formation}</b></span>
         <button id="sqAuto" ${locked ? "disabled" : ""}>자동 선발</button>
         <span class="hint">선수 두 명을 차례로 누르면 자리를 맞바꿉니다 (선발 ↔ 벤치 ↔ 예비).</span>
+      </div>
+      <div class="fmWrap">
+        <div class="fmBig">${formationSvg(sel.formation, me, sel.starters, 250)}</div>
+        <div class="fmList">${(Object.keys(FORMATIONS) as FormationName[]).map((f) => `<button class="fmBtn ${f === sel.formation ? "on" : ""}" data-formation="${f}" ${locked ? "disabled" : ""} title="${f} 적용 (자동 선발)">${formationSvg(f, null, [], 56)}<div>${f}</div></button>`).join("")}
+          <div class="hint" style="flex-basis:100%">포메이션을 누르면 그 대형으로 자동 선발되고 역할이 다시 배정됩니다. 경기 중에는 전술 패널에서 바꿉니다.</div></div>
       </div>
       ${prob ? `<div class="hint" style="color:var(--bad)">⚠ ${prob}</div>` : `<div class="hint" style="color:var(--good)">선발 명단 이상 없음</div>`}
     </div>`);
@@ -768,12 +798,13 @@ export class Game {
     }).join("")}</div><div class="hint">서로 반대되는 지시(예: 강하게 압박 / 압박 자제)는 한쪽만 켭니다.</div></div>`);
     this.el.squad.innerHTML = h.join("");
 
-    (document.getElementById("sqFormation") as HTMLSelectElement).addEventListener("change", (e) => {
-      const f = (e.target as HTMLSelectElement).value as FormationName;
+    this.el.squad.querySelectorAll<HTMLButtonElement>("button[data-formation]").forEach((b) => b.addEventListener("click", () => {
+      const f = b.dataset.formation as FormationName;
+      if (f === me.selection.formation) return;
       me.selection = autoSelect(me, f);
       me.tactics = { ...me.tactics, formation: f, roles: autoRoles(f, me.selection.starters.map((id) => playerOf(me, id).attrs)) };
       this.afterSquadChange();
-    });
+    }));
     document.getElementById("sqAuto")!.addEventListener("click", () => {
       me.selection = autoSelect(me, me.selection.formation);
       this.afterSquadChange();

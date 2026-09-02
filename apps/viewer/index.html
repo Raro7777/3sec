@@ -116,6 +116,14 @@
       @media (max-width: 860px) { .bracket { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
       /* squad */
       .squad-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+      .fmWrap { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:8px; }
+      .fmBig { flex:none; width:min(100%, 250px); }
+      .fmBig svg { width:100%; height:auto; display:block; border-radius:8px; }
+      .fmList { flex:1; min-width:180px; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; }
+      .fmBtn { width:62px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:4px 3px 3px; text-align:center; font-size:11px; color:var(--text); cursor:pointer; }
+      .fmBtn svg { width:100%; height:auto; display:block; }
+      .fmBtn.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; color:var(--accent); }
+      .fmBtn:disabled { opacity:.5; cursor:default; }
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
       .row { display:grid; grid-template-columns: 26px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px 24px; }
@@ -182,7 +190,13 @@
       #stats b { color:var(--text); font-weight:600; margin-right:4px; }
       #others { display:flex; gap:14px; padding:4px 14px; font-size:12px; color:var(--muted); background:var(--panel2); border-top:1px solid var(--line); flex-wrap:wrap; font-family:"IBM Plex Mono", monospace; }
       #main { flex:1; display:flex; min-height:0; }
-      #stage { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; min-width:0; padding:8px; }
+      #stage { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; min-width:0; padding:8px; position:relative; }
+      #ftOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; }
+      #ftOverlay .ftCard { pointer-events:auto; background:rgba(11,16,20,.88); border:1px solid var(--accent); border-radius:14px; padding:14px 22px 16px; text-align:center; box-shadow:0 0 40px rgba(242,193,78,.25); backdrop-filter:blur(4px); }
+      #ftOverlay .ftTitle { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+      #ftOverlay #ftScore { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:30px; font-weight:700; margin:2px 0 4px; white-space:nowrap; }
+      #ftOverlay #btnContinue2 { margin-top:8px; font-size:16px; padding:10px 22px; }
+      .finished #btnPlay, .finished #btnSkip, .finished #speed { display:none !important; }
       canvas { max-width:100%; max-height:100%; touch-action:none; border-radius:4px; }
       #panel { width:320px; flex:none; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:10px 12px 16px; display:flex; flex-direction:column; gap:14px; font-size:13px; }
       #panel h3 { margin:0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:16px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:baseline; }
@@ -196,13 +210,18 @@
       #log { height:120px; overflow-y:auto; font-size:12px; padding:6px 14px; background:var(--panel2); border-top:1px solid var(--line); font-family:"IBM Plex Mono", ui-monospace, monospace; }
       #log div { opacity:.9; line-height:1.55; }
       /* immersive match view: pitch fills the screen, manager panel becomes a drawer */
-      .immersive #intro, .immersive #nav, .immersive #stats, .immersive #log { display:none !important; }
+      .immersive #intro, .immersive #nav, .immersive #stats { display:none !important; }
+      /* the running commentary stays visible as a translucent strip over the bottom-left of the pitch */
+      .immersive #log { position:absolute; left:calc(8px + env(safe-area-inset-left)); bottom:32px; z-index:2; width:min(48vw, 440px); height:auto; max-height:84px; overflow:hidden; background:rgba(11,16,20,.55); backdrop-filter:blur(4px); border:0; border-radius:8px; padding:4px 8px; font-size:12px; line-height:1.35; pointer-events:none; display:flex; flex-direction:column; justify-content:flex-end; }
+      .immersive.dock #log { width:min(40vw, 400px); }
       .immersive #app { padding-bottom:0 !important; }
       .immersive #screen-match { position:fixed; inset:0; z-index:15; background:#000; }
       .immersive #topbar { position:absolute; top:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.72); backdrop-filter:blur(6px); padding:4px 10px; padding-left:calc(10px + env(safe-area-inset-left)); gap:8px; flex-wrap:nowrap; overflow-x:auto; border-bottom:0; }
       .immersive #topbar #phase { flex-basis:auto; }
       .immersive #topbar label { white-space:nowrap; }
       .immersive #topbar button, .immersive #topbar select { white-space:nowrap; padding:4px 8px; font-size:13px; }
+      .immersive #topbar > * { flex:none; }
+      .immersive #topbar label.dbg { display:none; }
       .immersive #topbar #score { min-width:0; font-size:20px; white-space:nowrap; }
       .immersive #topbar #clock { min-width:0; white-space:nowrap; }
       .immersive #main { flex-direction:row !important; overflow:hidden !important; height:100%; }
@@ -211,6 +230,12 @@
       .immersive.panel-open #panel { transform:none; }
       .immersive #others { position:absolute; bottom:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.6); border-top:0; padding:3px 10px calc(3px + env(safe-area-inset-bottom)); justify-content:center; }
       .immersive #btnPanel { display:inline-block !important; }
+      /* landscape with spare width: pitch on the left, manager panel docked on the right */
+      .immersive.dock #stage { justify-content:flex-start; padding-left:calc(env(safe-area-inset-left)) !important; }
+      .immersive.dock #panel { position:relative; transform:none; width:var(--dockw, 320px); flex:none; height:auto; border-left:1px solid var(--line); padding-top:52px; padding-bottom:28px; }
+      .immersive.dock #btnPanel { display:none !important; }
+      .immersive.dock #topbar { right:var(--dockw, 320px); }
+      .immersive.dock #others { left:0; right:var(--dockw, 320px); }
       #overlay { position:fixed; inset:0; background:rgba(5,8,11,0.82); display:none; align-items:center; justify-content:center; z-index:20; flex-direction:column; gap:10px; }
       #overlay.show { display:flex; }
       #overlay .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; min-width:260px; text-align:center; }
@@ -308,11 +333,13 @@
           <button id="btnFull" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
           <button id="btnSound" title="효과음">🔊</button>
           <button id="btnPanel" style="display:none">☰ 전술·교체</button>
-          <label><input id="debug" type="checkbox" /> 디버그</label>
+          <label class="dbg"><input id="debug" type="checkbox" /> 디버그</label>
         </div>
         <div id="stats"></div>
         <div id="main">
-          <div id="stage"><canvas id="pitch"></canvas></div>
+          <div id="stage"><canvas id="pitch"></canvas>
+            <div id="ftOverlay" hidden><div class="ftCard"><div class="ftTitle">경기 종료</div><div id="ftScore"></div><div id="ftNote" class="hint"></div><button id="btnContinue2" class="primary">다음으로 →</button></div></div>
+          </div>
           <aside id="panel">
             <section>
               <h3>전술 <span id="teamName"></span></h3>
