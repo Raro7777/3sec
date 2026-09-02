@@ -32,6 +32,8 @@ export interface MatchOptions {
   halfLength?: number;
   /** teams whose substitutions/tactics are handled by the built-in AI manager (default: [1]) */
   aiManaged?: TeamId[];
+  /** starting fatigue (0..1) per player id, e.g. tired legs carried over from a congested schedule */
+  initialFatigue?: Record<string, number>;
 }
 
 export const MAX_SUBS = 5;
@@ -154,7 +156,10 @@ export class Match {
     onPass?: (info: { from: string; to: string; d: number; margin: number; lane: number; lofted: boolean; score: number; pressure: number }) => void;
   } = {};
 
+  private readonly initialFatigue: Record<string, number>;
+
   constructor(home: TeamDef, away: TeamDef, opts: MatchOptions = {}) {
+    this.initialFatigue = opts.initialFatigue ?? {};
     this.teams = [home, away];
     this.rng = new Rng(opts.seed ?? 1);
     this.halfLength = opts.halfLength ?? 45 * 60;
@@ -173,7 +178,7 @@ export class Match {
           facing: 0,
           target: { x: 0, y: 0 },
           desiredSpeed: 0,
-          fatigue: 0,
+          fatigue: Math.max(0, Math.min(0.6, this.initialFatigue[def.id] ?? 0)),
           onPitch,
           distance: 0,
           yellow: 0,
@@ -404,7 +409,7 @@ export class Match {
       const side = sub.team === 0 ? -1 : 1;
       inn.pos = { x: 0, y: (PITCH.halfWidth - 0.5) * side };
       inn.vel = { x: 0, y: 0 };
-      inn.fatigue = 0;
+      inn.fatigue = Math.max(0, Math.min(0.6, this.initialFatigue[inn.id] ?? 0));
       out.pos = { x: 0, y: (PITCH.halfWidth + 3) * side };
       out.vel = { x: 0, y: 0 };
       if (s.ball.owner === out.id) s.ball.owner = null;

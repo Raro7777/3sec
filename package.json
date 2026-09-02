@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter viewer dev",
     "build": "pnpm -r build",
-    "test": "pnpm --filter @3sec/engine test",
+    "test": "pnpm -r --workspace-concurrency=1 test",
     "typecheck": "pnpm -r typecheck",
     "sim": "pnpm --filter @3sec/engine sim"
   },
