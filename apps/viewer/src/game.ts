@@ -243,11 +243,11 @@ export class Game {
   // ------------------------------------------------------------ table
   private tableHtml(rows: ReturnType<typeof table>, compact = false): string {
     const s = this.state;
-    const all = table(s);
+    const posOf = new Map(table(s).map((r, i) => [r.club, i + 1]));
     return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th><th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th></tr></thead><tbody>${rows
       .map((r) => {
         const c = clubOf(s, r.club);
-        const pos = all.indexOf(r) + 1;
+        const pos = posOf.get(r.club)!;
         return `<tr class="${r.club === s.userClub ? "me" : ""}"><td>${pos}</td><td class="l"><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
       })
       .join("")}</tbody></table>`;
