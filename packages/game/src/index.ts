@@ -24,5 +24,10 @@ export {
   type TransferTarget, type BidResult, type NegotiationResult, type LoanTarget, type MarketSummary,
 } from "./transfers";
 export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, INTENSITY_MULT, BENCHED_FACTOR, ATTR_LABEL, weeklyRate, playingTimeBonus, trainWeek, spendGrowth, type Development, type Grower } from "./training";
-export { MAX_PROSPECTS, MIN_PROMOTE_AGE, LEAVE_AGE, SCOUTING, COACHING, youthWeeklyCost, prospectOverall, youthIntake, youthWeek, youthRollover, promoteProspect, releaseProspect } from "./youth";
+export { MAX_PROSPECTS, MIN_PROMOTE_AGE, LEAVE_AGE, EARLY_PROMOTE_AGE, EARLY_PROMOTE_POTENTIAL, SCOUTING, COACHING, youthWeeklyCost, prospectOverall, youthIntake, youthWeek, youthRollover, promoteProspect, releaseProspect } from "./youth";
 export { weeklyRevenue, wageFor, wageBill, loanWageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";
+export {
+  MAX_FREE_MANAGERS, REVIEW_FROM_ROUND, PRESSURE_GAP, PRESSURE_LIMIT, SACK_CHANCE, RETIRE_AGE, TRAIT_IDS,
+  generateManager, differentManager, traitDistance, managerFormation, managerTactics, adaptsTo, applyManagerMatchday, managerTraining, applyManagerPolicy,
+  managerTags, expectedPositions, managerOfYear, boardReview, managerRollover, clearUserManager,
+} from "./managers";

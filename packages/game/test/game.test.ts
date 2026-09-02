@@ -122,7 +122,8 @@ describe("season progression", () => {
     expect(s.clubs[0]!.squad[0]!.age).toBe(age + 1);
     expect(s.fixtures.every((f) => !f.score)).toBe(true);
     expect(s.clubs.every((c) => selectionProblem(c) === null)).toBe(true);
-    expect(s.seasonHistory).toEqual([{ season: 1, champion: rows[0]!.club, cupWinner: null, userPosition: rows.findIndex((r) => r.club === s.userClub) + 1, userPts: rows.find((r) => r.club === s.userClub)!.pts }]);
+    expect(s.seasonHistory).toMatchObject([{ season: 1, champion: rows[0]!.club, cupWinner: null, userPosition: rows.findIndex((r) => r.club === s.userClub) + 1, userPts: rows.find((r) => r.club === s.userClub)!.pts }]);
+    expect(s.seasonHistory[0]!.managerOfYear).toBeTruthy();
     for (const c of s.clubs) { expect(c.seasonInjuries).toBe(0); expect(c.seasonWages).toBe(0); expect(c.seasonRevenue).toBe(0); expect(c.seasonStartBudget).toBe(c.budget); }
   });
 

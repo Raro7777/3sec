@@ -96,6 +96,42 @@ export interface Youth {
   nextId: number;
 }
 
+/** Personality of an AI head coach; every trait runs 0..1 (0.5 = unremarkable). */
+export interface ManagerTraits {
+  /** attacking (1) vs defensive (0) football */
+  attack: number;
+  /** possession (1) vs direct / long-ball (0) */
+  possession: number;
+  /** how hard the side presses */
+  pressing: number;
+  /** pragmatist (1) adapts to the opponent; idealist (0) never changes */
+  pragmatism: number;
+  /** trusts youngsters, hoards prospects */
+  youth: number;
+  /** big spender (1) vs frugal (0) */
+  spending: number;
+  /** hard-nosed negotiator */
+  stubborn: number;
+  /** hot-headed: more extreme tactics, hard training */
+  temper: number;
+}
+
+export type ManagerTraitId = keyof ManagerTraits;
+
+/** One finished season on a manager's CV. */
+export interface ManagerHistory { season: number; club: number; position: number }
+
+/** An AI head coach; the user's club has none (the human is the manager). */
+export interface Manager {
+  id: string;
+  name: string;
+  age: number;
+  traits: ManagerTraits;
+  /** the season he took charge of the current club (or joined the free pool) */
+  since: number;
+  history: ManagerHistory[];
+}
+
 export type TrainingFocus = "balanced" | "attacking" | "defending" | "technical" | "physical" | "tactical";
 export type TrainingIntensity = "low" | "normal" | "high";
 
@@ -113,6 +149,10 @@ export interface Club {
   selection: Selection;
   training: { focus: TrainingFocus; intensity: TrainingIntensity };
   youth: Youth;
+  /** the AI head coach; null for the user's club */
+  manager: Manager | null;
+  /** consecutive board reviews the club sat well below its expected position (sacking follows) */
+  pressure: number;
   /** budget when the season began (the review screen shows the change since) */
   seasonStartBudget: number;
   /** injuries suffered this season (league + cup); reset at the rollover */
@@ -187,7 +227,12 @@ export interface SeasonRecord {
   cupWinner: number | null;
   userPosition: number;
   userPts: number;
+  /** 올해의 감독: the manager who beat his club's expectation by the most */
+  managerOfYear?: ManagerOfYear;
 }
+
+/** Winner of the season's manager award (the user may win it too). */
+export interface ManagerOfYear { name: string; club: number; position: number; expected: number }
 
 export interface GameState {
   version: 1;
@@ -216,4 +261,6 @@ export interface GameState {
   marketLog: MarketEntry[];
   /** finished seasons, oldest first */
   seasonHistory: SeasonRecord[];
+  /** sacked managers waiting for a job, newest first, capped at 10 */
+  freeManagers: Manager[];
 }

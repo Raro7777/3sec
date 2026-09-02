@@ -4,6 +4,7 @@ import { autoSelect } from "./selection";
 import { seasonBudget } from "./transfers";
 import { overall } from "./rating";
 import { wageFor } from "./contracts";
+import { generateManager, managerTraining } from "./managers";
 
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
 const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
@@ -82,8 +83,13 @@ export function buildClubs(seed: number): Club[] {
       selection: { formation: c.formation, starters: [], bench: [] },
       training: { focus: "balanced", intensity: "normal" },
       youth: { prospects: [], scouting: "local", coaching: 1, nextId: 1 },
+      manager: null,
+      pressure: 0,
     };
     for (const p of club.squad) p.wage = wageFor(p);
+    // The dugout: a personality drawn after the squad so squads are unchanged by the manager's dice.
+    club.manager = generateManager(rng, 1, `M${id}-S1`);
+    club.training = managerTraining(club.manager);
     club.selection = autoSelect(club, c.formation);
     return club;
   });

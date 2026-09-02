@@ -2,7 +2,8 @@ import type { GameState } from "./types";
 import { CLUBS } from "./world";
 import { overall } from "./rating";
 import { wageFor } from "./contracts";
-import { normalizeTactics } from "@3sec/engine";
+import { Rng, normalizeTactics } from "@3sec/engine";
+import { generateManager } from "./managers";
 
 /** Romanized names from saves made before the Korean localisation → Hangul. */
 const FAMILY: Record<string, string> = { Kim: "김", Lee: "이", Park: "박", Choi: "최", Jung: "정", Kang: "강", Cho: "조", Yoon: "윤", Jang: "장", Lim: "임", Han: "한", Oh: "오", Seo: "서", Shin: "신", Kwon: "권", Hwang: "황", Ahn: "안", Song: "송", Ryu: "류", Hong: "홍", Moon: "문", Yang: "양", Bae: "배", Baek: "백", Nam: "남" };
@@ -45,6 +46,11 @@ export function deserialize(json: string | null | undefined): GameState | null {
       if (!c.youth || !Array.isArray(c.youth.prospects)) c.youth = { prospects: [], scouting: "local", coaching: 1, nextId: 1 };
       if (typeof c.youth.nextId !== "number") c.youth.nextId = c.youth.prospects.length + 1;
       for (const y of c.youth.prospects) if (typeof y.growth !== "number") y.growth = 0;
+      // Saves from before AI manager personalities: give every AI dugout a head coach, the user's club none.
+      if (c.id === s.userClub) c.manager = null;
+      else if (!c.manager || typeof c.manager !== "object" || !c.manager.traits) c.manager = generateManager(new Rng(s.seed * 31 + c.id * 1009 + 7 + 99), Math.max(1, s.season - 1), `M${c.id}-S${s.season}`);
+      else if (!Array.isArray(c.manager.history)) c.manager.history = [];
+      if (typeof c.pressure !== "number") c.pressure = 0;
       for (const p of c.squad) {
         p.name = koreanName(p.name);
         if (typeof p.potential !== "number") { const o = overall(p.attrs, p.role); p.potential = Math.max(o, Math.min(20, Math.round((o + Math.max(0, 27 - p.age) * 0.55 + 0.5) * 10) / 10)); }
@@ -66,6 +72,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
     // Saves from before the market log and the season history.
     if (!Array.isArray(s.marketLog)) s.marketLog = [];
     if (!Array.isArray(s.seasonHistory)) s.seasonHistory = [];
+    if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
     for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); }
     return s;
   } catch {

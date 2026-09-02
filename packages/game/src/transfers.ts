@@ -1,4 +1,4 @@
-import type { Club, GameState, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
+import type { Club, GameState, ManagerTraits, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
 import { overall } from "./rating";
 import { autoSelect, repairSelection } from "./selection";
 import { clubOf, playerOf, seasonOver, table } from "./season";
@@ -29,6 +29,11 @@ const AI_LOAN_ABOVE = 21;
 const AI_LOAN_MAX_AGE = 22;
 
 type Rand = { next(): number };
+/** A club without an AI manager (the user's) trades by the book. */
+const NEUTRAL: ManagerTraits = { attack: 0.5, possession: 0.5, pressing: 0.5, pragmatism: 0.5, youth: 0.5, spending: 0.5, stubborn: 0.5, temper: 0.5 };
+const traitsOf = (c: Club): ManagerTraits => c.manager?.traits ?? NEUTRAL;
+/** Market policy flags read off the manager's traits. */
+const policy = (c: Club) => { const t = traitsOf(c); return { youth: t.youth > 0.6, spender: t.spending > 0.6, frugal: t.spending < 0.35, stubborn: t.stubborn > 0.6 }; };
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const ovr = (p: SquadPlayer): number => overall(p.attrs, p.role);
@@ -74,14 +79,25 @@ export function surplusPlayers(club: Club): SquadPlayer[] {
   return [...club.squad].filter(tradeable).sort((a, b) => playerValue(a) - playerValue(b)).slice(0, extra);
 }
 
-/** What a club wants for one of its players, or null if it will not sell. */
+/**
+ * What a club wants for one of its players, or null if it will not sell. The manager's policy colours the
+ * price: a youth man wants 1.6× for a prospect (≤ 21), a hard negotiator adds 10%, a frugal one lets
+ * surplus go at 90%.
+ */
 export function askingPrice(club: Club, p: SquadPlayer): number | null {
   if (club.squad.length <= MIN_SQUAD || !tradeable(p)) return null;
-  if (surplusPlayers(club).includes(p)) return playerValue(p);
-  const ranked = [...club.squad].sort((a, b) => ovr(b) - ovr(a));
-  const rank = ranked.indexOf(p);
-  const premium = rank < 3 ? 1.5 : rank < 8 ? 1.25 : 1.1;
-  return Math.round(playerValue(p) * premium);
+  const pol = policy(club);
+  const surplus = surplusPlayers(club).includes(p);
+  let price: number;
+  if (surplus) price = playerValue(p) * (pol.frugal ? 0.9 : 1);
+  else {
+    const ranked = [...club.squad].sort((a, b) => ovr(b) - ovr(a));
+    const rank = ranked.indexOf(p);
+    price = playerValue(p) * (rank < 3 ? 1.5 : rank < 8 ? 1.25 : 1.1);
+  }
+  if (pol.youth && p.age <= 21) price *= 1.6;
+  if (pol.stubborn) price *= 1.1;
+  return Math.round(price);
 }
 
 export interface TransferTarget {
@@ -272,8 +288,10 @@ export function bestOffer(s: GameState, playerId: string): { club: Club; fee: nu
   let best: { club: Club; fee: number } | null = null;
   for (const club of s.clubs) {
     if (club.id === s.userClub || club.squad.length >= MAX_SQUAD - 1) continue;
-    // Better players are wanted by everyone; a club pays more when the player would start for them.
-    const need = roleGap(club, p) > 0 ? 1.1 : 0.85;
+    // Better players are wanted by everyone; a club pays more when the player would start for them, a big spender more still.
+    const pol = policy(club);
+    if (pol.youth && p.age > 24 && roleGap(club, p) < STRONG_GAP) continue;
+    const need = (roleGap(club, p) > 0 ? (pol.spender ? 1.2 : 1.1) : 0.85) * (pol.frugal ? 0.9 : 1);
     const fee = Math.round(value * need);
     if (fee <= club.budget && (!best || fee > best.fee)) best = { club, fee };
   }
@@ -330,10 +348,14 @@ export function incomingOffers(s: GameState, rng: Rand): TransferOffer[] {
   for (const club of clubs) {
     if (made.length >= cap + 2) break;
     if (club.squad.length >= MAX_SQUAD - 1 || club.budget <= 0) continue;
+    const pol = policy(club);
+    // a frugal manager sits most windows out; a youth man only chases the young (or an outright star)
+    if (pol.frugal && rng.next() < 0.5) continue;
     const wants = me.squad
       .filter((p) => tradeable(p) && !s.offers.some((o) => o.from === club.id && o.playerId === p.id && (o.status === "open" || o.status === "countered")))
       .map((p) => ({ p, gap: roleGap(club, p), value: playerValue(p) }))
       .filter((x) => x.gap > 0.5 && x.value * 0.8 <= club.budget)
+      .filter((x) => !pol.youth || x.p.age <= 24 || x.gap >= STRONG_GAP)
       .sort((a, b) => ovr(b.p) - ovr(a.p));
     const strong = wants.filter((x) => x.gap >= STRONG_GAP);
     let pick: (typeof wants)[number] | undefined;
@@ -342,13 +364,13 @@ export function incomingOffers(s: GameState, rng: Rand): TransferOffer[] {
       strongBids++;
     } else {
       if (made.length - strongBids >= cap) continue;
-      if (rng.next() > (deadline ? 0.45 : 0.25)) continue;
+      if (rng.next() > (deadline ? 0.45 : 0.25) + (pol.spender && deadline ? 0.15 : 0)) continue;
       pick = wants[Math.floor(rng.next() * Math.min(3, wants.length))];
     }
     if (!pick) continue;
     const rich = clamp(club.budget / (3 * pick.value), 0, 1);
     const need = clamp(pick.gap / 3, 0, 1);
-    const fee = Math.max(1, Math.round(pick.value * (0.8 + 0.15 * rich + 0.15 * need)));
+    const fee = Math.max(1, Math.round(pick.value * (0.8 + 0.15 * rich + 0.15 * need) * (pol.spender ? 1.15 : 1)));
     if (fee > club.budget) continue;
     const offer: TransferOffer = { id: `o${s.season}-${s.round}-${club.id}-${pick.p.id}`, from: club.id, playerId: pick.p.id, fee, wageOffer: round1(wageFor(pick.p) * 1.1), expiresRound: s.round + OFFER_TTL, status: "open" };
     s.offers.push(offer);
@@ -414,7 +436,8 @@ export function respondToCounter(s: GameState, offerId: string, fee: number, rng
   if (fee <= o.fee) return acceptOffer(s, offerId) ? { accepted: false, text: "수락 처리에 실패했습니다" } : { accepted: true, text: `${buyer.shortName}이(가) ${fee}억에 동의했습니다.` };
   o.counterFee = fee;
   const value = playerValue(p);
-  const prob = clamp(1 - (fee - value * 1.15) / (value * 0.6), 0.05, 0.95) + (deadlineDay(s) ? 0.2 : 0);
+  // a hard-nosed buyer is 20 points less likely to meet the user's counter
+  const prob = clamp(1 - (fee - value * 1.15) / (value * 0.6), 0.05, 0.95) + (deadlineDay(s) ? 0.2 : 0) - (policy(buyer).stubborn ? 0.2 : 0);
   if (fee <= buyer.budget && buyer.squad.length < MAX_SQUAD && rng.next() < Math.min(0.95, prob)) {
     o.fee = fee;
     const err = acceptOffer(s, offerId);
@@ -596,12 +619,17 @@ export function aiTransfers(s: GameState, rng: Rand): void {
     const weakest = xi.slice(1).sort((a, b) => ovr(a) - ovr(b))[0];
     if (!weakest) continue;
     const need = ovr(weakest);
+    const pol = policy(club);
+    // how far above value a manager will go: a big spender to 2×, a frugal one barely past the tag
+    const maxRatio = pol.spender ? 2 : pol.frugal ? 1.25 : 1.6;
     const candidates = transferTargets(s)
-      .filter((t) => t.club.id !== club.id && t.player.role === weakest.role && t.price !== null && t.price <= club.budget)
+      .filter((t) => t.club.id !== club.id && t.player.role === weakest.role && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
+      .filter((t) => !pol.youth || t.player.age <= 24)
       .filter((t) => ovr(t.player) >= need + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
       .sort((a, b) => ovr(b.player) / b.price! - ovr(a.player) / a.price!);
     const pick = candidates[0];
-    if (!pick || rng.next() > (deadlineDay(s) ? 0.8 : 0.6) * (done ? 0.6 : 1)) continue;
+    const eagerness = pol.spender ? 1.2 : pol.frugal ? 0.5 : 1;
+    if (!pick || rng.next() > (deadlineDay(s) ? 0.8 : 0.6) * (done ? 0.6 : 1) * eagerness) continue;
     const from = pick.club;
     movePlayer(s, from, club, pick.player, pick.price!);
     s.aiDeals.push(`${key}:${club.id}`);
@@ -635,7 +663,9 @@ export function aiLoans(s: GameState, rng: Rand): void {
   for (const from of s.clubs) {
     if (from.id === s.userClub || from.squad.length <= AI_LOAN_ABOVE) continue;
     if (s.loans.some((l) => l.from === from.id)) continue;
-    if (rng.next() > 0.35) continue;
+    // youth men loan youngsters out for minutes, frugal ones to save wages
+    const pol = policy(from);
+    if (rng.next() > (pol.youth || pol.frugal ? 0.5 : 0.35)) continue;
     const spare = from.squad
       .filter((p) => tradeable(p) && p.age <= AI_LOAN_MAX_AGE && !isStarter(from, p) && p.injuryDays === 0)
       .sort((a, b) => ovr(b) - ovr(a))[0];

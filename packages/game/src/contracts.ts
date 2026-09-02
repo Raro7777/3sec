@@ -75,9 +75,12 @@ export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<n
 export function settleContracts(s: GameState, newSeason: number, rng: { next(): number }): void {
   for (const c of s.clubs) {
     if (c.id === s.userClub) continue;
+    // a youth-minded manager keeps his youngsters on long deals and lets veterans go unless they start
+    const youthMgr = (c.manager?.traits.youth ?? 0.5) > 0.6;
     for (const p of c.squad) {
       if (p.contractUntil >= newSeason) continue;
-      if (p.age <= 31 || rng.next() < 0.4) {
+      const keep = p.age <= 31 || (youthMgr ? c.selection.starters.includes(p.id) : rng.next() < 0.4);
+      if (keep) {
         const years = p.age <= 24 ? 3 : p.age <= 29 ? 2 : 1;
         p.contractUntil = newSeason - 1 + years;
         p.wage = renewalTerms(p, years).wage;

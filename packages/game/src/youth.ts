@@ -3,7 +3,7 @@ import type { Club, GameState, ScoutingTier, SquadPlayer, YouthProspect } from "
 import { overall } from "./rating";
 import { spendGrowth, weeklyRate } from "./training";
 import { wageFor } from "./contracts";
-import { MAX_SQUAD } from "./transfers";
+import { MAX_SQUAD, THIN_SQUAD } from "./transfers";
 import { randomName } from "./world";
 import { autoSelect, repairSelection } from "./selection";
 
@@ -14,6 +14,9 @@ export const MIN_PROMOTE_AGE = 16;
 export const LEAVE_AGE = 19;
 /** AI clubs promote their best prospect at rollover while their squad is below this. */
 const AI_PROMOTE_BELOW = 22;
+/** A youth-minded manager promotes any prospect this old with at least this ceiling. */
+export const EARLY_PROMOTE_AGE = 17;
+export const EARLY_PROMOTE_POTENTIAL = 13;
 
 export interface ScoutingTierDef {
   label: string;
@@ -195,12 +198,20 @@ export function youthRollover(s: GameState, rng: { next(): number }): void {
   void rng;
   for (const c of s.clubs) {
     if (c.id !== s.userClub) {
-      const best = [...c.youth.prospects].filter((p) => p.age >= MIN_PROMOTE_AGE).sort((a, b) => b.truePotential - a.truePotential)[0];
-      if (best && c.squad.length < AI_PROMOTE_BELOW && c.squad.length < MAX_SQUAD) {
-        c.youth.prospects = c.youth.prospects.filter((p) => p !== best);
-        c.squad.push(toPlayer(c, best, s.season));
-        c.selection = autoSelect(c, c.selection.formation);
+      // the manager's youth policy: a believer promotes real prospects early and fills to 22, a sceptic only when short-handed
+      const youth = c.manager?.traits.youth ?? 0.5;
+      const target = youth < 0.35 ? THIN_SQUAD : AI_PROMOTE_BELOW;
+      const ranked = [...c.youth.prospects].filter((p) => p.age >= MIN_PROMOTE_AGE).sort((a, b) => b.truePotential - a.truePotential);
+      const up: YouthProspect[] = [];
+      if (youth > 0.6) for (const p of ranked) if (p.age >= EARLY_PROMOTE_AGE && p.truePotential >= EARLY_PROMOTE_POTENTIAL && c.squad.length + up.length < AI_PROMOTE_BELOW) up.push(p);
+      const best = ranked.find((p) => !up.includes(p));
+      if (best && c.squad.length + up.length < target) up.push(best);
+      for (const p of up) {
+        if (c.squad.length >= MAX_SQUAD) break;
+        c.youth.prospects = c.youth.prospects.filter((q) => q !== p);
+        c.squad.push(toPlayer(c, p, s.season));
       }
+      if (up.length) c.selection = autoSelect(c, c.selection.formation);
     }
     for (const p of c.youth.prospects) p.age++;
     const leaving = c.youth.prospects.filter((p) => p.age >= LEAVE_AGE);

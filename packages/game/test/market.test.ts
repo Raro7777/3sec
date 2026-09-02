@@ -29,7 +29,8 @@ describe("incoming offers", () => {
     expect(o.status).toBe("open");
     const value = playerValue(star);
     expect(o.fee).toBeGreaterThanOrEqual(Math.round(value * 0.8) - 1);
-    expect(o.fee).toBeLessThanOrEqual(Math.round(value * 1.1) + 1);
+    // a big-spending manager (spending > 0.6) adds 15% on top of the 0.8–1.1 band
+    expect(o.fee).toBeLessThanOrEqual(Math.round(value * 1.1 * (buyer.manager!.traits.spending > 0.6 ? 1.15 : 1)) + 1);
     expect(o.expiresRound).toBe(s.round + 2);
     expect(s.news.some((n) => n.includes(star.name) && n.includes(`${o.fee}억`))).toBe(true);
     // still live one round later within the window, gone once it lapses

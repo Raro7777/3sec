@@ -1,5 +1,5 @@
 import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type TeamDef, type TeamId } from "@3sec/engine";
-import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
+import type { Club, Fixture, GameState, SeasonRecord, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
@@ -9,6 +9,8 @@ import { payWages, settleContracts, wageBill, weeklyRevenue } from "./contracts"
 import { youthIntake, youthRollover, youthWeek } from "./youth";
 import { cupDayDue, cupPrize, newCup } from "./cup";
 import { overall } from "./rating";
+import { REVIEW_FROM_ROUND, applyManagerMatchday, applyManagerPolicy, boardReview, clearUserManager, managerRollover } from "./managers";
+import { pendingCupTies } from "./cup";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -20,7 +22,8 @@ export const DEFAULT_MANAGER_NAME = "감독";
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [] };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [] };
+  clearUserManager(s);
   newCup(s);
   for (const c of clubs) resetSeasonCounters(c);
   youthIntake(s, new Rng(seed * 29 + 3));
@@ -56,11 +59,25 @@ export function fixtureSeed(s: GameState, f: Fixture): number {
   return (s.seed * 7919 + s.season * 104729 + f.id * 131 + 17) >>> 0;
 }
 
-/** Before a round: AI clubs re-pick their best XI; the user's selection is repaired if it became illegal. */
+/** The club each side meets on the coming matchday (league round, or the pending cup day). */
+function opponents(s: GameState): Map<number, number> {
+  const out = new Map<number, number>();
+  const pairs: { home: number; away: number }[] = s.pendingCupDay && !seasonOver(s) ? pendingCupTies(s) : currentFixtures(s);
+  for (const f of pairs) { out.set(f.home, f.away); out.set(f.away, f.home); }
+  return out;
+}
+
+/**
+ * Before a round: AI managers pick their formation, best XI and tactics for the opponent (a pragmatist
+ * sits deeper against a bigger side); the user's selection is repaired if it became illegal.
+ */
 export function prepareRound(s: GameState): void {
+  const opp = opponents(s);
   for (const c of s.clubs) {
-    c.selection = c.id === s.userClub ? repairSelection(c) : autoSelect(c, c.selection.formation);
-    if (c.id !== s.userClub) c.tactics = { ...c.tactics, formation: c.selection.formation, roles: autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) };
+    if (c.id === s.userClub) { c.selection = repairSelection(c); continue; }
+    if (c.manager) { applyManagerMatchday(c, opp.has(c.id) ? clubOf(s, opp.get(c.id)!) : null); continue; }
+    c.selection = autoSelect(c, c.selection.formation);
+    c.tactics = { ...c.tactics, formation: c.selection.formation, roles: autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) };
   }
 }
 
@@ -188,6 +205,8 @@ export function advanceRound(s: GameState): boolean {
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
   youthWeek(s);
   if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
+  // The boards judge their managers once the table has settled (the final table is judged at the rollover).
+  if (s.round >= REVIEW_FROM_ROUND && !seasonOver(s)) boardReview(s, new Rng(s.seed * 43 + s.season * 719 + s.round * 53));
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
   if (cupDayDue(s)) s.pendingCupDay = true;
@@ -200,8 +219,14 @@ export function startNextSeason(s: GameState): void {
   const rng = new Rng(s.seed * 13 + s.season * 977);
   const finalTable = table(s);
   const userRow = finalTable.findIndex((r) => r.club === s.userClub);
-  s.seasonHistory.push({ season: s.season, champion: finalTable[0]!.club, cupWinner: s.cup.holder ?? null, userPosition: userRow + 1, userPts: finalTable[userRow]!.pts });
-  for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1);
+  const record: SeasonRecord = { season: s.season, champion: finalTable[0]!.club, cupWinner: s.cup.holder ?? null, userPosition: userRow + 1, userPts: finalTable[userRow]!.pts };
+  const award = managerRollover(s, new Rng(s.seed * 43 + s.season * 719 + 999));
+  if (award) record.managerOfYear = award;
+  s.seasonHistory.push(record);
+  // Weekly income already covers running costs, so the rollover only pays out prize money.
+  for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1) - seasonBudget(c.reputation, null);
+  // With the new budgets known, every AI manager sets his training and academy for the coming season.
+  for (const c of s.clubs) if (c.id !== s.userClub) applyManagerPolicy(c);
   expireOffers(s, true);
   returnLoans(s);
   settleContracts(s, s.season + 1, rng);

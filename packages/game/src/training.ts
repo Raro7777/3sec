@@ -21,8 +21,8 @@ export const INTENSITY_LABEL: Record<TrainingIntensity, string> = { low: "가볍
 
 /** Weekly development rate in attribute points: youngsters grow, veterans decline. */
 export function weeklyRate(age: number): number {
-  if (age <= 18) return 0.28;
-  if (age <= 20) return 0.24;
+  if (age <= 18) return 0.24;
+  if (age <= 20) return 0.2;
   if (age <= 23) return 0.16;
   if (age <= 26) return 0.07;
   if (age <= 29) return 0.015;
@@ -33,7 +33,7 @@ export function weeklyRate(age: number): number {
 /** Growth a youngster banks for a match: ≥ 60 minutes earns 0.06 (0.09 up to age 20); nothing from 24 on. */
 export function playingTimeBonus(age: number, minutes: number): number {
   if (minutes < 60 || age > 23) return 0;
-  return age <= 20 ? 0.09 : 0.06;
+  return age <= 20 ? 0.07 : 0.05;
 }
 
 /** First-team training intensity multiplier on the development rate (injury and recovery pay for "high"). */

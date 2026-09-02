@@ -42,8 +42,8 @@ describe("training and development", () => {
   });
 
   it("development rates: playing time pays, benched youngsters slow down, intensity scales", () => {
-    expect(weeklyRate(18)).toBeCloseTo(0.28);
-    expect(weeklyRate(20)).toBeCloseTo(0.24);
+    expect(weeklyRate(18)).toBeCloseTo(0.24);
+    expect(weeklyRate(20)).toBeCloseTo(0.2);
     expect(weeklyRate(23)).toBeCloseTo(0.16);
     expect(weeklyRate(26)).toBeCloseTo(0.07);
     expect(weeklyRate(29)).toBeCloseTo(0.015);

@@ -12,6 +12,7 @@ import {
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
+  managerTags, managerOfYear, expectedPositions, type Manager,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 import { getSimPool } from "./sim/pool";
@@ -19,7 +20,7 @@ import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
-const APP_VERSION = "0.16";
+const APP_VERSION = "0.17";
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
 const CLUB_BLURBS: string[] = [
@@ -36,6 +37,27 @@ const CLUB_BLURBS: string[] = [
   "최약체, 잔류가 목표",
   "신흥 구단, 성장 가능성에 베팅",
 ];
+
+/**
+ * One-line Korean tip on how an AI manager's side will play against mine (the strongest trait speaks;
+ * a pragmatist facing a bigger club is expected to sit deep).
+ */
+export function managerPreview(m: Manager, myClub: Club, opp?: Club): string {
+  const t = m.traits;
+  if (t.pragmatism > 0.6 && opp && myClub.reputation - opp.reputation >= 1) return "우리를 강팀으로 보고 내려앉아 역습을 노릴 겁니다. 서두르지 말고 폭을 넓게 쓰세요.";
+  const cands: { w: number; tip: string }[] = [
+    { w: 0.5 - t.possession, tip: "롱볼과 역습을 즐기는 팀입니다. 라인을 너무 올리지 마세요." },
+    { w: t.possession - 0.5, tip: "점유율을 가져가려는 팀입니다. 중원을 두껍게 하고 빠른 역습을 노리세요." },
+    { w: t.attack - 0.5, tip: "공격적으로 나옵니다. 뒷공간이 열리니 역습과 빠른 공격수가 효과적입니다." },
+    { w: 0.5 - t.attack, tip: "내려앉아 수비하는 팀입니다. 폭을 넓히고 크로스와 슈팅을 늘려 인내심 있게 공략하세요." },
+    { w: t.pressing - 0.5, tip: "강하게 압박해 옵니다. 직접성을 높여 압박을 벗어나고 후반 체력 저하를 노리세요." },
+  ];
+  const best = cands.sort((a, b) => b.w - a.w)[0]!;
+  return best.w >= 0.15 ? best.tip : "균형 잡힌 팀입니다. 평소 전술로 맞서되 경기 흐름에 따라 조정하세요.";
+}
+
+/** Manager name + tags for an opponent line; the user's own club has none. */
+const managerLabel = (c: Club): string => c.manager ? `${c.manager.name} 감독${managerTags(c.manager).length ? ` <small>(${managerTags(c.manager).join(" · ")})</small>` : ""}` : "";
 
 /** 1..5 전력 stars derived from reputation (10 → 1, 14.5 → 5). */
 const clubStars = (rep: number): number => Math.max(1, Math.min(5, Math.round(1 + (rep - 10) / 4.5 * 4)));
@@ -216,6 +238,13 @@ export class Game {
       <li>90분 무승부면 <b>승부차기</b>로 가립니다. 컵 경기의 경고는 리그 누적에 들어가지 않지만 출장·득점·부상은 그대로 기록됩니다.</li>
       <li>상금: 8강 탈락 ${CUP_PRIZE.qfLoser}억 · 4강 탈락 ${CUP_PRIZE.sfLoser}억 · 준우승 ${CUP_PRIZE.runnerUp}억 · 우승 ${CUP_PRIZE.winner}억. 대진표는 <b>순위</b> 탭 아래에 있습니다.</li>
       <li>마지막 라운드가 끝나면 <b>시즌 결산</b> 화면에서 최종 순위·컵 결과·팀 기록·예산 변화를 돌아보고 다음 시즌을 시작합니다.</li></ul>`)}
+    ${sec("상대 감독", `<ul>
+      <li>AI 구단마다 성향이 다른 <b>감독</b>이 있습니다. 홈 화면의 다음 경기 카드에 상대 감독의 이름·성향 태그·대응 팁이, 순위표에 감독 이름이 표시됩니다.</li>
+      <li>성향 태그: <b>공격적/수비적</b>(멘탈리티·라인·템포), <b>점유 축구/롱볼</b>(직접성·역습), <b>강한 압박</b>, <b>실용주의/이상주의</b>, <b>유스 중시</b>, <b>큰손/짠물</b>, <b>협상 강경</b>, <b>다혈질</b>.</li>
+      <li><b>실용주의</b> 감독은 자기보다 강한 팀을 만나면 내려앉아 역습을 노리고, <b>이상주의</b> 감독은 누구를 만나도 자기 축구를 합니다. 공격적인 감독은 풀백을 윙백으로, 수비적인 감독은 앵커와 수비형 윙어를 씁니다.</li>
+      <li>이적 시장에서도 성향이 드러납니다. <b>유스 중시</b> 감독은 21세 이하 유망주를 1.6배 값이 아니면 팔지 않고 24세 이하만 영입하며, <b>큰손</b>은 시세보다 높은 제안을 하고, <b>짠물</b>은 잘 사지 않는 대신 잉여 자원을 싸게 넘기고, <b>협상 강경</b>은 역제안을 잘 받지 않습니다.</li>
+      <li>이사회는 8라운드부터 매주 <b>평판 순 기대 순위</b>와 실제 순위를 비교합니다. 기대보다 4계단 이상 아래에 6주 연속 머물면 감독이 경질될 수 있고, 시즌 종료 시에도 같은 기준으로 판단합니다. 경질된 감독은 다른 구단이 다시 데려가기도 합니다.</li>
+      <li>시즌 결산에서 기대 순위를 가장 크게 넘어선 감독이 <b>올해의 감독</b>이 됩니다. 당신도 후보입니다.</li></ul>`)}
     ${sec("팁", `<ul>
       <li>전력이 약하면 수비라인을 낮추고 직접성을 높여 역습을 노리세요. 강하면 높은 라인과 강한 프레싱이 유리합니다.</li>
       <li>60분 이후 컨디션이 40% 아래인 선수는 교체하세요. 피로는 다음 경기 시작 컨디션에도 남습니다.</li>
@@ -410,6 +439,7 @@ export class Game {
           <div class="vs"><span class="cupTag">${CUP_NAME}</span>${stage}<b>vs</b></div>
           <div class="team r">${away.name}<span class="dot" style="background:${away.color};margin:0 0 0 6px"></span><small>${tie.away === me.id ? "원정" : "상대"} · 최근 ${this.form(away.id)}</small></div>
         </div>`);
+        h.push(this.opponentHtml(clubOf(s, tie.home === me.id ? tie.away : tie.home)));
         const prob = selectionProblem(me);
         if (prob) h.push(`<div class="hint" style="color:var(--warn)">선발 문제: ${prob} — 스쿼드에서 조정하거나 자동으로 보정됩니다.</div>`);
         h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><button data-act="cupSim" title="이번 컵 라운드의 모든 경기를 즉시 시뮬레이션합니다">⏩ 자동 진행</button></div>
@@ -429,6 +459,7 @@ export class Game {
         <div class="vs">R${fx.round + 1}<b>vs</b></div>
         <div class="team r">${away.name}<span class="dot" style="background:${away.color};margin:0 0 0 6px"></span><small>${fx.away === me.id ? "원정" : `${oppPos}위`} · 최근 ${form(away)}</small></div>
       </div>`);
+      h.push(this.opponentHtml(clubOf(s, oppId)));
       const prob = selectionProblem(me);
       if (prob) h.push(`<div class="hint" style="color:var(--warn)">선발 문제: ${prob} — 스쿼드에서 조정하거나 자동으로 보정됩니다.</div>`);
       h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><span style="display:inline-flex;gap:4px;align-items:center"><button data-act="sim1" title="이번 라운드의 모든 경기를 즉시 시뮬레이션합니다">⏩ 1라운드</button><button data-act="sim3" title="3라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 3라운드</button><button data-act="sim5" title="5라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 5라운드</button></span></div>
@@ -443,6 +474,14 @@ export class Game {
     h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다. · 가난한자의 FM · 만든이 raro</span></div>`);
     this.el.home.innerHTML = h.join("");
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) => b.addEventListener("click", () => this.act(b.dataset.act!)));
+  }
+
+  /** The opposing manager on the next-fixture card: name, tags and a one-line tip. */
+  private opponentHtml(opp: Club): string {
+    const m = opp.manager;
+    if (!m) return "";
+    const since = m.since < this.state.season ? ` · ${this.state.season - m.since}시즌째` : " · 부임 첫 시즌";
+    return `<div class="hint">상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</div>`;
   }
 
   /** One-line cup status for the home card: next stage and the user's tie / 탈락 / 부전승. */
@@ -663,11 +702,13 @@ export class Game {
   private tableHtml(rows: ReturnType<typeof table>, compact = false): string {
     const s = this.state;
     const posOf = new Map(table(s).map((r, i) => [r.club, i + 1]));
-    return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th><th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th></tr></thead><tbody>${rows
+    return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th>${compact ? "" : '<th class="l">감독</th>'}<th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th></tr></thead><tbody>${rows
       .map((r) => {
         const c = clubOf(s, r.club);
         const pos = posOf.get(r.club)!;
-        return `<tr class="${r.club === s.userClub ? "me" : ""}"><td>${pos}</td><td class="l"><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
+        const mgr = c.id === s.userClub ? s.managerName : c.manager?.name ?? "—";
+        const mgrTitle = c.manager ? managerTags(c.manager).join(", ") : "";
+        return `<tr class="${r.club === s.userClub ? "me" : ""}"><td>${pos}</td><td class="l"><span class="dot" style="background:${c.color}"></span>${c.name}</td>${compact ? "" : `<td class="l" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
       })
       .join("")}</tbody></table>`;
   }
@@ -1040,7 +1081,9 @@ export class Game {
     const myLastTie = [...s.cup.ties].reverse().find((t) => t.score && (t.home === me.id || t.away === me.id));
     const cupText = cupSt === "holder" ? '<b style="color:var(--accent)">우승</b>' : myLastTie ? `${CUP_STAGE_LABEL[myLastTie.stage]} ${tieWinner(myLastTie) === me.id ? "진출" : "탈락"}` : "—";
     const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? "강등권 성적입니다. 전력 보강이 시급합니다." : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
-    const highlights = s.news.filter((x) => /우승|이적|퇴장|승부차기|영입|판매/.test(x)).slice(0, 8);
+    const highlights = s.news.filter((x) => /우승|이적|퇴장|승부차기|영입|판매|경질|부임/.test(x)).slice(0, 8);
+    const moy = managerOfYear(s);
+    const myExpected = expectedPositions(s).get(me.id)!;
     const stat = (label: string, value: string) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
     const h: string[] = [];
     h.push(`<div class="card review"><h3>시즌 ${s.season} 결산 <span class="mgr">감독 ${s.managerName}</span><span>${me.name}</span></h3>
@@ -1056,6 +1099,8 @@ export class Game {
         ${stat("팀 내 최다 득점", myTop && myTop.stats.goals > 0 ? `${myTop.name} ${myTop.stats.goals}골` : "—")}
         ${stat("팀 내 최다 출장", myApps && myApps.stats.apps > 0 ? `${myApps.name} ${myApps.stats.apps}경기` : "—")}
         ${stat("유스 승격", `${promoted}명`)}
+        ${stat("올해의 감독", moy ? `${moy.club === me.id ? '<span style="color:var(--accent)">' : ""}${moy.name}${moy.club === me.id ? "</span>" : ""} <small>${clubOf(s, moy.club).shortName} · 기대 ${moy.expected}위 → ${moy.position}위</small>` : "—")}
+        ${stat("이사회 기대치", `${myExpected}위 <small>→ ${pos}위 (${pos <= myExpected ? "달성" : "미달"})</small>`)}
       </div>
       <div class="actions" style="margin-top:8px"><button class="primary" data-act="nextSeason">다음 시즌 시작 →</button><button data-act="home">홈으로</button></div>
       <div class="hint">다음 시즌 시작 시 나이·성장·계약 만료·순위 상금이 정산되고 새 일정과 컵 대진이 만들어집니다.</div></div>`);
@@ -1099,8 +1144,8 @@ export class Game {
         ${stat("순위 상금 (다음 시즌 지급)", `+${money(fin.leaguePrize)}`)}
       </div>
       <div class="hint">순위 상금은 다음 시즌 시작 시 예산에 더해집니다. 이적료와 계약금은 시작 → 종료 차이에 이미 반영되어 있습니다.</div>
-      ${s.seasonHistory.length ? `<h3 style="margin-top:10px">역대 시즌</h3><table class="std"><thead><tr><th>시즌</th><th class="l">리그 우승</th><th class="l">${CUP_NAME}</th><th>내 순위</th><th>승점</th></tr></thead><tbody>${[...s.seasonHistory].reverse()
-        .map((r) => `<tr><td>S${r.season}</td><td class="l">${clubOf(s, r.champion).shortName}</td><td class="l">${r.cupWinner === null ? "—" : clubOf(s, r.cupWinner).shortName}</td><td>${r.userPosition}위</td><td>${r.userPts}</td></tr>`).join("")}</tbody></table>` : ""}</div>`);
+      ${s.seasonHistory.length ? `<h3 style="margin-top:10px">역대 시즌</h3><table class="std"><thead><tr><th>시즌</th><th class="l">리그 우승</th><th class="l">${CUP_NAME}</th><th>내 순위</th><th>승점</th><th class="l">올해의 감독</th></tr></thead><tbody>${[...s.seasonHistory].reverse()
+        .map((r) => `<tr><td>S${r.season}</td><td class="l">${clubOf(s, r.champion).shortName}</td><td class="l">${r.cupWinner === null ? "—" : clubOf(s, r.cupWinner).shortName}</td><td>${r.userPosition}위</td><td>${r.userPts}</td><td class="l">${r.managerOfYear ? `${r.managerOfYear.name} (${clubOf(s, r.managerOfYear.club).shortName})` : "—"}</td></tr>`).join("")}</tbody></table>` : ""}</div>`);
     h.push(`</div>`);
     h.push(this.cupHtml());
     this.el.review.innerHTML = h.join("");
