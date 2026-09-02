@@ -228,6 +228,8 @@ export interface CupTie {
   /** shoot-out result when the tie was level after 90 minutes */
   penalties?: [number, number];
   scorers: string[];
+  /** man of the match (see ratings.ts) */
+  motm?: { playerId: string; rating: number };
 }
 
 export interface Cup {

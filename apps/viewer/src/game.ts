@@ -1272,7 +1272,7 @@ export class Game {
     if (kind === "cup") {
       const ties = s.cup.ties.filter((t) => t.stage === cupStage);
       title = `${CUP_NAME} ${CUP_STAGE_LABEL[cupStage]} 결과`;
-      body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : "")).join("");
+      body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : "", t.motm)).join("");
       if (cupStage === 3 && s.cup.holder !== undefined) body += `<div class="hint" style="color:var(--accent);margin-top:6px">${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b></div>`;
       btn = "다음 라운드로 →";
     } else {

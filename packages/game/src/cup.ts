@@ -1,6 +1,7 @@
 import { Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
 import type { Cup, CupTie, Fixture, GameState } from "./types";
 import { applyStaffRecovery } from "./staff";
+import { boardCupWin } from "./board";
 import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver } from "./season";
 
 export const CUP_NAME = "3sec 컵";
@@ -130,10 +131,12 @@ export function recordCupResult(s: GameState, t: CupTie, m: Match): void {
   recordResult(s, f, m, { competition: "cup" });
   t.score = f.score;
   t.scorers = f.scorers;
+  t.motm = f.motm;
   const home = clubOf(s, t.home), away = clubOf(s, t.away);
   if (t.score![0] === t.score![1]) {
     t.penalties = penaltyShootout(s, t, m);
     const w = clubOf(s, tieWinner(t)!);
+    if (w.id === s.userClub && s.board) boardCupWin(s);
     s.news.unshift(`${CUP_NAME} ${CUP_STAGE_LABEL[t.stage]}: ${home.shortName} ${t.score![0]} - ${t.score![1]} ${away.shortName}, 승부차기 ${t.penalties[0]}-${t.penalties[1]}로 ${w.shortName} 진출.`);
   }
   const winner = clubOf(s, tieWinner(t)!);

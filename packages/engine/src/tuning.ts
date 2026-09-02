@@ -50,6 +50,8 @@ export interface Tuning {
   attrCompression: number;
   /** home advantage: mentality/pressing lift for the home side (crowd), 0 = none */
   homeBoost: number;
+  /** home advantage: attribute points (1..20 scale) added to every home player for the match, 0 = none */
+  homeEdge: number;
 }
 
 export const TUNING: Tuning = {
@@ -76,7 +78,8 @@ export const TUNING: Tuning = {
   panicClear: 0.7,
   shieldBase: 0.72,
   attrCompression: 0.35,
-  homeBoost: 0.05,
+  homeBoost: 0.03,
+  homeEdge: 0.6,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });

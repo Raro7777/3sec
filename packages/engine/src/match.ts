@@ -39,6 +39,8 @@ export interface MatchOptions {
   aiManaged?: TeamId[];
   /** starting fatigue (0..1) per player id, e.g. tired legs carried over from a congested schedule */
   initialFatigue?: Record<string, number>;
+  /** neutral venue: no home advantage for team 0 */
+  neutral?: boolean;
 }
 
 export const MAX_SUBS = 5;
@@ -180,7 +182,11 @@ export class Match {
 
     const players: PlayerState[] = [];
     for (const team of this.teams) {
-      for (const [i, def] of [...team.players, ...team.bench].entries()) {
+      for (const [i, def0] of [...team.players, ...team.bench].entries()) {
+        // Home advantage: the crowd lifts every home player a fraction of an attribute point for this match.
+        const def = team.id === 0 && TUNING.homeEdge > 0 && !opts.neutral
+          ? { ...def0, attrs: Object.fromEntries(Object.entries(def0.attrs).map(([k, v]) => [k, Math.min(20, v + TUNING.homeEdge)])) as unknown as typeof def0.attrs }
+          : def0;
         this.defs.set(def.id, def);
         this.teamOf.set(def.id, team.id);
         const onPitch = i < team.players.length;
@@ -230,7 +236,7 @@ export class Match {
     }
 
     // Home advantage: the crowd lifts the home side a touch (worth ~+0.15 goals per match).
-    if (TUNING.homeBoost > 0) {
+    if (TUNING.homeBoost > 0 && !opts.neutral) {
       const t = this.teams[0].tactics;
       this.teams[0].tactics = { ...t, mentality: Math.min(1, t.mentality + TUNING.homeBoost), pressing: Math.min(1, t.pressing + TUNING.homeBoost) };
     }

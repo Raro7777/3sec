@@ -65,6 +65,7 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   shieldBase: [0.3, 0.92],
   attrCompression: [0.5, 0.9],
   homeBoost: [0, 0.1],
+  homeEdge: [0, 1.5],
 };
 
 interface Metrics {

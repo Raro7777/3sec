@@ -47,9 +47,9 @@ export function formPoints(s: GameState, club: number, n = 5): number {
   return pts;
 }
 
-/** The confidence the current situation would settle at: 50 + (expectation − position) × 7 + (form − 7) × 1.5, clamped 0..100. */
+/** The confidence the current situation would settle at: 50 + (expectation − position) × 5 + (form − 7) × 1.5, clamped 0..100. */
 export const confidenceTarget = (expectation: number, position: number, form: number): number =>
-  clamp(50 + (expectation - position) * 7 + (form - 7) * 1.5, 0, 100);
+  clamp(50 + (expectation - position) * 5 + (form - 7) * 1.5, 0, 100);
 
 /** One step of the weekly drift: a quarter of the way to the target. */
 export const stepConfidence = (confidence: number, target: number): number => round1(clamp(confidence + (target - confidence) * CONFIDENCE_STEP, 0, 100));

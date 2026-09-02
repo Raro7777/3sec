@@ -76,6 +76,10 @@ export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<n
  * user's expired players become free agents too unless they were renewed — the squad never drops
  * below the minimum, though: the last few are renewed automatically at full price.
  */
+/** A club must keep at least this many goalkeepers under contract, or the season cannot be selected. */
+export const MIN_GK = 2;
+const staying = (c: Club, newSeason: number, leaving: (p: SquadPlayer) => boolean, role: string): number => c.squad.filter((p) => p.role === role && !leaving(p)).length;
+
 export function settleContracts(s: GameState, newSeason: number, rng: { next(): number }): void {
   for (const c of s.clubs) {
     if (c.id === s.userClub) continue;
@@ -83,7 +87,8 @@ export function settleContracts(s: GameState, newSeason: number, rng: { next(): 
     const youthMgr = (c.manager?.traits.youth ?? 0.5) > 0.6;
     for (const p of c.squad) {
       if (p.contractUntil >= newSeason) continue;
-      const keep = p.age <= 31 || (youthMgr ? c.selection.starters.includes(p.id) : rng.next() < 0.4);
+      const keep = p.age <= 31 || (youthMgr ? c.selection.starters.includes(p.id) : rng.next() < 0.4)
+        || (p.role === "GK" && staying(c, newSeason, (q) => q.contractUntil < newSeason || q.contractUntil === -1, "GK") < MIN_GK);
       if (keep) {
         const years = p.age <= 24 ? 3 : p.age <= 29 ? 2 : 1;
         p.contractUntil = newSeason - 1 + years;
@@ -103,12 +108,14 @@ export function settleContracts(s: GameState, newSeason: number, rng: { next(): 
   const me = clubOf(s, s.userClub);
   const leaving = me.squad.filter((p) => p.contractUntil < newSeason);
   for (const p of leaving) {
-    if (me.squad.length <= MIN_SQUAD) {
+    // never let the last goalkeepers walk: the board renews one for a year
+    const gkShort = p.role === "GK" && staying(me, newSeason, (q) => q.contractUntil < newSeason, "GK") < MIN_GK;
+    if (me.squad.length <= MIN_SQUAD || gkShort) {
       const t = renewalTerms(p, 1);
       me.budget = Math.round((me.budget - t.fee) * 10) / 10;
       p.wage = t.wage;
       p.contractUntil = newSeason;
-      s.news.unshift(`${me.shortName}: 최소 인원 유지를 위해 ${p.name} 1년 자동 재계약 (계약금 ${t.fee}억).`);
+      s.news.unshift(`${me.shortName}: ${gkShort ? "골키퍼 부족으로" : "최소 인원 유지를 위해"} ${p.name} 1년 자동 재계약 (계약금 ${t.fee}억).`);
       continue;
     }
     me.squad = me.squad.filter((q) => q !== p);

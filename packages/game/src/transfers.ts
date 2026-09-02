@@ -23,6 +23,8 @@ export const FREE_AGENT_FEE = 0.3;
 export const FREE_AGENT_WAGE = 1.2;
 /** Purchases an AI club may make in one window. */
 export const AI_DEALS_PER_WINDOW = 2;
+/** An AI club with more than this in the bank (억원) gets an extra deal per window and shops for any weak starter. */
+export const RICH_BUDGET = 60;
 /** Lines kept in the league-wide market log. */
 export const MARKET_LOG_MAX = 80;
 /** An AI club with more players than this may loan a surplus youngster out (one per season). */
@@ -623,21 +625,24 @@ export function aiTransfers(s: GameState, rng: Rand): void {
   s.aiDeals = s.aiDeals.filter((k) => k.startsWith(key + ":"));
   for (const club of s.clubs) {
     const done = s.aiDeals.filter((k) => k === `${key}:${club.id}`).length;
-    if (club.id === s.userClub || club.squad.length >= MAX_SQUAD - 1 || done >= AI_DEALS_PER_WINDOW) continue;
+    const rich = club.budget >= RICH_BUDGET;
+    if (club.id === s.userClub || club.squad.length >= MAX_SQUAD - 1 || done >= AI_DEALS_PER_WINDOW + (rich ? 1 : 0)) continue;
     const xi = club.selection.starters.map((id) => playerOf(club, id)).filter(Boolean);
-    const weakest = xi.slice(1).sort((a, b) => ovr(a) - ovr(b))[0];
-    if (!weakest) continue;
-    const need = ovr(weakest);
+    const weakOrder = xi.slice(1).sort((a, b) => ovr(a) - ovr(b));
+    // A club sitting on money upgrades any of its three weakest starters, not only the single weakest.
+    const weakSet = rich ? weakOrder.slice(0, 3) : weakOrder.slice(0, 1);
+    if (!weakSet.length) continue;
+    const needFor = new Map(weakSet.map((p) => [p.role, ovr(p)]));
     const pol = policy(club);
-    // how far above value a manager will go: a big spender to 2×, a frugal one barely past the tag
-    const maxRatio = pol.spender ? 2 : pol.frugal ? 1.25 : 1.6;
+    // how far above value a manager will go: a big spender to 2×, a frugal one barely past the tag; money burns a hole in the pocket
+    const maxRatio = (pol.spender ? 2 : pol.frugal ? 1.25 : 1.6) * (rich ? 1.25 : 1);
     const candidates = transferTargets(s)
-      .filter((t) => t.club.id !== club.id && t.player.role === weakest.role && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
+      .filter((t) => t.club.id !== club.id && needFor.has(t.player.role) && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
       .filter((t) => !pol.youth || t.player.age <= 24)
-      .filter((t) => ovr(t.player) >= need + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
+      .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
       .sort((a, b) => ovr(b.player) / b.price! - ovr(a.player) / a.price!);
     const pick = candidates[0];
-    const eagerness = pol.spender ? 1.2 : pol.frugal ? 0.5 : 1;
+    const eagerness = (pol.spender ? 1.2 : pol.frugal ? 0.5 : 1) * (rich ? 1.3 : 1);
     if (!pick || rng.next() > (deadlineDay(s) ? 0.8 : 0.6) * (done ? 0.6 : 1) * eagerness) continue;
     const from = pick.club;
     movePlayer(s, from, club, pick.player, pick.price!);

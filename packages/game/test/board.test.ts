@@ -27,10 +27,10 @@ function scripted(s: GameState, n: number, userWins: boolean): void {
 }
 
 describe("confidence dynamics", () => {
-  it("targets 50 at expectation with average form, ±7 per place and ±1.5 per form point, clamped", () => {
+  it("targets 50 at expectation with average form, ±5 per place and ±1.5 per form point, clamped", () => {
     expect(confidenceTarget(5, 5, 7)).toBe(50);
-    expect(confidenceTarget(5, 7, 7)).toBe(36);
-    expect(confidenceTarget(7, 5, 7)).toBe(64);
+    expect(confidenceTarget(5, 7, 7)).toBe(40);
+    expect(confidenceTarget(7, 5, 7)).toBe(60);
     expect(confidenceTarget(5, 5, 15)).toBe(62);
     expect(confidenceTarget(5, 5, 0)).toBe(39.5);
     expect(confidenceTarget(1, 12, 0)).toBe(0);
