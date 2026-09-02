@@ -1405,7 +1405,9 @@ export class Match {
     const b = s.ball;
     s.score[scoringTeam]++;
     s.stats[scoringTeam].goals++;
-    const scorer = b.lastTouch;
+    let scorer = b.lastTouch;
+    // A shot deflected in off a defender or fumbled in by the keeper belongs to the shooter.
+    if (scorer !== null && this.teamOf.get(scorer) === defendingTeam && this.shot && this.shot.team === scoringTeam) scorer = this.shot.shooterId;
     const ownGoal = scorer !== null && this.teamOf.get(scorer) === defendingTeam;
     if (ownGoal) {
       this.emit("OWN_GOAL", scoringTeam, scorer, `자책골! ${this.name(scorer!)} – ${this.scoreline()}`, b.pos);
