@@ -269,7 +269,7 @@ export class Game {
   // ------------------------------------------------------------ guide
   private renderGuide(): void {
     const sec = (title: string, body: string, open = false) => `<details ${open ? "open" : ""}><summary>${title}</summary><div class="guide">${body}</div></details>`;
-    this.el.guide.innerHTML = `<div class="card guide"><h3>게임 가이드 <span>가난한자의 FM · 만든이 raro</span></h3>
+    this.el.guide.innerHTML = `<div class="card guide"><h3>설명서 <span>가난한자의 FM · 만든이 raro</span></h3>
       <p>당신은 12개 구단 리그의 감독입니다. 한 시즌은 홈·원정 22라운드이고, 목표는 우승입니다. 스쿼드를 꾸리고 전술을 정한 뒤 경기를 지휘하고, 이적·훈련·계약으로 팀을 키워 갑니다. 진행은 이 기기에 자동 저장됩니다.</p>
       <div class="actions" style="margin-top:6px"><button class="primary" data-act="start">시작하기 →</button></div></div>
     ${sec("한 라운드의 흐름", `<ul>
@@ -405,7 +405,7 @@ export class Game {
     const slots = [1, 2, 3].map((n) => ({ n, info: this.slotInfo(n) }));
     this.el.settings.innerHTML = `<div class="card"><h3>설정 <span>가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
       <div class="hint">현재 게임: <b>${this.stateLabel()}</b> — 진행 상황은 매 조작마다 자동 저장됩니다. 아래 슬롯은 별도 백업이고, 파일로 내보내면 다른 기기로 옮길 수 있습니다.</div>
-      <div class="actions" style="margin-top:6px"><button data-set="guide">게임 가이드 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div>
+      <div class="actions" style="margin-top:6px"><button data-set="guide">📖 설명서 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div>
       <div class="actions" style="margin-top:4px;align-items:center"><span class="hint">글자 크기</span>${(["s", "m", "l"] as const).map((k) => `<button data-fs="${k}" class="${this.fontSize() === k ? "primary" : ""}">${k === "s" ? "작게" : k === "m" ? "보통" : "크게"}</button>`).join("")}</div></div>
     <div class="card"><h3>저장 슬롯</h3>${slots
       .map(({ n, info }) => `<div class="slot"><div><div>슬롯 ${n}</div><div class="meta">${info ? `${info.label}<br>${new Date(info.savedAt).toLocaleString("ko-KR")}` : "비어 있음"}</div></div>
