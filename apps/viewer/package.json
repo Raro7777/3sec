@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:worker": "node scripts/build-worker.mjs",
+    "check:worker": "node scripts/check-worker.mjs",
+    "dev": "node scripts/build-worker.mjs && vite --host",
+    "build": "node scripts/build-worker.mjs && tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "node scripts/build-worker.mjs && tsc -p tsconfig.json --noEmit",
     "preview": "vite preview",
-    "android:sync": "vite build && cap sync android",
-    "android:apk": "vite build && cap sync android && cd android && ./gradlew assembleDebug"
+    "android:sync": "node scripts/build-worker.mjs && vite build && cap sync android",
+    "android:apk": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@3sec/engine": "workspace:*",

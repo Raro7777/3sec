@@ -14,10 +14,12 @@ import {
   marketSummary, homeAwayRecord, financeSummary,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
+import { getSimPool } from "./sim/pool";
+import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
-const APP_VERSION = "0.15";
+const APP_VERSION = "0.16";
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
 const CLUB_BLURBS: string[] = [
@@ -1142,14 +1144,21 @@ export class Game {
     for (let k = 0; k < n; k++) {
       if (seasonOver(s)) break;
       prepareRound(s);
-      const live = this.buildLive();
-      const cup = this.liveKind === "cup";
+      const cup = s.pendingCupDay && !seasonOver(s);
+      this.liveKind = cup ? "cup" : "league";
       const label = cup ? `${CUP_NAME} ${CUP_STAGE_LABEL[s.cup.stage]} 시뮬레이션 중…` : n > 1 ? `라운드 ${s.round + 1} 시뮬레이션 중… (${k + 1}/${n})` : "라운드 시뮬레이션 중…";
-      await this.runChunked(() => {
-        for (let i = 0; i < 20 * 30; i++) for (const x of live) if (x.match.state.phase !== "FULL_TIME") x.match.step();
-        return live.every((x) => x.match.state.phase === "FULL_TIME");
-      }, label);
-      this.live = live;
+      // Headless rounds run on the worker pool (parallel on multi-core phones; falls back to in-thread).
+      const items = cup
+        ? pendingCupTies(s).map((tie) => ({ fixture: cupFixture(tie), tie, job: cupJob(s, tie) }))
+        : currentFixtures(s).filter((f) => !f.score).map((fixture) => ({ fixture, tie: undefined as CupTie | undefined, job: leagueJob(s, fixture) }));
+      this.setBusy(label, 0);
+      let results: Map<string, ReturnType<typeof asMatch> extends infer _M ? import("./sim/protocol").MatchResult : never>;
+      try {
+        results = await getSimPool().run(items.map((x) => x.job), (done, total) => this.setBusy(`${label} ${done}/${total}`, done / total));
+      } finally {
+        this.setBusy(null, 0);
+      }
+      this.live = items.map((x) => ({ fixture: x.fixture, tie: x.tie, match: asMatch(results.get(x.job.id)!) }));
       const last = k === n - 1 || seasonOver(s) || (!cup && s.round + 1 >= roundsPerSeason(s.clubs.length));
       if (last) {
         this.finishRound();
@@ -1197,6 +1206,14 @@ export class Game {
     this.renderAll();
     this.renderResults(round, kind, cupStage);
     this.show("results");
+  }
+
+  private setBusy(label: string | null, frac: number): void {
+    this.el.overlay.classList.toggle("show", label !== null);
+    if (label !== null) {
+      this.el.overlayText.textContent = label;
+      this.el.overlayBar.style.width = `${Math.round(frac * 100)}%`;
+    }
   }
 
   private runChunked(work: () => boolean, label: string): Promise<void> {
