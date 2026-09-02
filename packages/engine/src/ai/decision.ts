@@ -357,12 +357,13 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
 
   // Blocks: a defender standing in the first metres of the shot line gets in the way.
   if (!isPenalty) {
-    const end = add(p.pos, fromAngle(ang, 8));
+    const end = add(p.pos, fromAngle(ang, 10));
     for (const o of m.activePlayers(m.opp(p.team))) {
       if (m.isKeeper(o.id)) continue;
       const { d: od, t } = pointSegment(o.pos, p.pos, end);
-      if (t <= 0 || od > 1.6) continue;
-      const pBlock = (0.9 - od * 0.4) * (elev > 0.3 ? 0.4 : 1);
+      if (t <= 0 || od > 2.0) continue;
+      // closer bodies and lower shots get blocked more; a lunge covers ~2 m
+      const pBlock = (0.9 - od * 0.35) * (1 - t * 0.4) * (elev > 0.3 ? 0.4 : 1);
       if (m.rng.chance(pBlock)) {
         // which side of the shot line the blocker stands on decides the deflection side
         const rel = sub(o.pos, p.pos);
