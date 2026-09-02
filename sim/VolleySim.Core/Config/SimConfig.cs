@@ -123,6 +123,15 @@ namespace VolleySim.Config
             public double WeightSetterFront = 0.03;
             /// <summary>프리볼(상대가 넘겨준 쉬운 공) 리시브 A 확률. 나머지는 B.</summary>
             public double FreeBallPerfectProb = 0.80;
+
+            /// <summary>
+            /// [포지션 가치 보정 v0.2] 리베로 역할 게인. 리베로가 리시브할 때 실효 리시브 레이팅을
+            /// ref + Gain × (rating − ref) 로 늘려 리베로 개인의 편차가 판정에 더 크게 반영되게 한다(상하 대칭).
+            /// 1.0 = 보정 없음. 가챠 카드 상품성을 위한 의도적 보정(docs/match-sim.md 6.9 참조).
+            /// </summary>
+            public double LiberoRoleGain = 2.0;
+            /// <summary>리베로 역할 게인의 기준 레이팅(프로 주전급 리베로의 리시브 레이팅 ≈ 80). 이 값에서는 게인 효과 0.</summary>
+            public double LiberoRoleRefRating = 80.0;
         }
 
         public sealed class SetParams
@@ -151,8 +160,8 @@ namespace VolleySim.Config
             /// <summary>범실·블로킹이 아닐 때 동급(공격 vs 디그) 킬 기준 확률.</summary>
             public double KillBase = 0.41;
             public double KillK = 120.0;
-            /// <summary>디그 레이팅 = (1-Blend)*선택된 디거 + Blend*수비팀 비블로커 평균.</summary>
-            public double DigTeamBlend = 0.30;
+            /// <summary>디그 레이팅 = (1-Blend)*선택된 디거 + Blend*수비팀 비블로커 평균. (v0.2: 0.30→0.20, 선택된 디거의 개인 기량 비중↑)</summary>
+            public double DigTeamBlend = 0.20;
             /// <summary>킬 대결의 수비 레이팅 = (1-Share)*디그 + Share*블로커 평균 블로킹 레이팅(블록이 공격 코스를 좁힘).</summary>
             public double BlockShareInKill = 0.35;
             /// <summary>리시브 팀의 첫 공격(퍼스트볼)에 가산되는 킬 로짓(조직된 공격 vs 트랜지션).</summary>
@@ -177,7 +186,7 @@ namespace VolleySim.Config
             public double PoorSetErrorMult = 1.5;
 
             // 패스 품질에 따른 공격 옵션 가용성 배수
-            public double QuickAvailGoodPass = 0.6;   // Perfect=1, Good=0.6, Poor=0
+            public double QuickAvailGoodPass = 0.8;   // Perfect=1, Good=0.8, Poor=0 (v0.2: 0.6→0.8, B 패스에서도 속공이 자주 살아 있음)
             public double DelayedAvailGoodPass = 0.4; // Perfect=1, Good=0.4, Poor=0
             public double BackRowAvailPoorPass = 0.4; // Perfect/Good=1, Poor=0.4
             /// <summary>오픈 카테고리에서 전위 OP 가 선택될 상대 가중치(OH 대비).</summary>
@@ -191,6 +200,20 @@ namespace VolleySim.Config
             /// </summary>
             public double PredictabilityLogit = 0.4;
             public double PredictabilityFreeShare = 0.45;
+
+            /// <summary>
+            /// [포지션 가치 보정 v0.2] 속공 위협(디코이) 효과. 속공 옵션이 살아 있는 공격(패스 A/B, 전위 MB 존재, 속공 비중 > 0)에서
+            /// 윙/후위 공격을 할 때, 전위 MB(공격 레이팅 최고)의 공격 레이팅이 ErrorRefRating 보다 높을수록 상대 블로커가 속공을 의식해
+            /// 블로킹 로짓이 줄고 킬 로짓이 늘어난다: decoy = clamp((MbAttack − ErrorRefRating) / MbDecoyK, ±MbDecoyMaxLogit).
+            /// 실제 배구의 "좋은 미들이 윙을 살린다"를 모델링. MbDecoyK ≤ 0 이면 비활성.
+            /// </summary>
+            public double MbDecoyK = 100.0;
+            public double MbDecoyMaxLogit = 0.35;
+            /// <summary>디코이 로짓 중 블로킹 로짓에서 빼는 비율 / 킬 로짓에 더하는 비율.</summary>
+            public double MbDecoyBlockShare = 1.0;
+            public double MbDecoyKillShare = 0.5;
+            /// <summary>디코이가 100% 발휘되는 전술 속공 비중(QuickWeight/Σ). 그 미만이면 비례 축소 → 속공을 안 쓰는 팀은 위협이 없다.</summary>
+            public double MbDecoyFullQuickShare = 0.15;
         }
 
         public sealed class BlockParams
@@ -229,6 +252,12 @@ namespace VolleySim.Config
             public double JoinThirdPoorSet = 0.35;
             public double JoinSpeedRef = 65.0;
             public double JoinK = 60.0;
+
+            /// <summary>
+            /// [포지션 가치 보정 v0.2] 블로킹 강도 평균에서 MB 블로커의 가중치(다른 포지션 = 1.0).
+            /// 실제 배구에서 블록을 닫는 것은 미들블로커이므로 MB 의 블로킹 레이팅이 집단 블로킹 강도에 더 크게 반영된다.
+            /// </summary>
+            public double MbStrengthWeight = 1.8;
         }
 
         public sealed class DigParams
@@ -238,12 +267,19 @@ namespace VolleySim.Config
             public double GoodBase = 0.55;
             public double K = 120.0;
 
-            // 디거 선택 가중치
-            public double WeightLibero = 1.5;
+            // 디거 선택 가중치 (v0.2: 리베로 1.5→2.4, 실제 배구처럼 후위 디그의 약 40% 를 리베로가 담당)
+            public double WeightLibero = 2.4;
             public double WeightOh = 1.0;
             public double WeightOp = 0.8;
             public double WeightMb = 0.6;
             public double WeightSetter = 0.5;
+
+            /// <summary>
+            /// [포지션 가치 보정 v0.2] 리베로 역할 게인(디그·커버). 리베로가 디그/커버할 때 실효 디그 레이팅을
+            /// ref + Gain × (rating − ref) 로 늘린다. 1.0 = 보정 없음. Receive.LiberoRoleGain 과 같은 취지.
+            /// </summary>
+            public double LiberoRoleGain = 2.0;
+            public double LiberoRoleRefRating = 80.0;
         }
 
         public sealed class FatigueParams

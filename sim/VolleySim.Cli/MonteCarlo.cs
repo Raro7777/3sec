@@ -30,6 +30,8 @@ public sealed class Aggregate
     public readonly long[] RallyAttackHist = new long[6]; // 0(서브로 종료),1,2,3,4,5+
     public readonly Dictionary<string, int[]> KillsByPosition = new(); // pos → [attacks, kills]
     public readonly Dictionary<string, int[]> PointsByPosition = new(); // pos → [kills, blocks, aces]
+    /// <summary>포지션별 역할 분담: pos → [리시브 횟수, 디그 시도, 블로킹 득점 관여(주+보조), 블로킹 터치]</summary>
+    public readonly Dictionary<string, long[]> RolesByPosition = new();
     public long SetsDeuce; // 25점 초과로 끝난 세트 수
     public double ElapsedMs;
 
@@ -55,6 +57,14 @@ public sealed class Aggregate
     public double ClutchRalliesPerMatch => Matches > 0 ? Home.ClutchRallies / (double)Matches : 0;
     public double DeuceSetRate => TotalSets > 0 ? SetsDeuce / (double)TotalSets : 0;
     public double FreeBallsPerSet => TotalSets > 0 ? Both.FreeBalls / (double)TotalSets : 0;
+
+    /// <summary>포지션별 역할 비중(해당 포지션 합 / 전 포지션 합). role: 0=리시브, 1=디그 시도, 2=블로킹 득점 관여, 3=블로킹 터치.</summary>
+    public double RoleShare(string pos, int role)
+    {
+        long total = 0;
+        foreach (var kv in RolesByPosition) total += kv.Value[role];
+        return total > 0 && RolesByPosition.TryGetValue(pos, out var r) ? r[role] / (double)total : 0;
+    }
 
     public double AttackTypeShare(AttackType t) => Both.Attacks > 0 ? Both.AttacksByType[(int)t] / (double)Both.Attacks : 0;
     public double AttackTypeKillRate(AttackType t) => Both.AttacksByType[(int)t] > 0 ? Both.KillsByType[(int)t] / (double)Both.AttacksByType[(int)t] : 0;
@@ -87,6 +97,8 @@ public sealed class Aggregate
             arr[1] += b.Kills;
             if (!PointsByPosition.TryGetValue(b.PositionCode, out var pts)) PointsByPosition[b.PositionCode] = pts = new int[3];
             pts[0] += b.Kills; pts[1] += b.BlockKills; pts[2] += b.Aces;
+            if (!RolesByPosition.TryGetValue(b.PositionCode, out var roles)) RolesByPosition[b.PositionCode] = roles = new long[4];
+            roles[0] += b.Receptions; roles[1] += b.DigAttempts; roles[2] += b.BlockKills + b.BlockAssists; roles[3] += b.BlockTouches;
         }
         if (r.Log != null && r.Log.Enabled)
         {

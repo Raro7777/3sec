@@ -21,6 +21,7 @@ bool commentary = false;
 bool quick = false;
 double overall = RandomPlayerGenerator.DefaultOverall;
 int commentaryRallies = 12;
+var overrides = new List<string>();
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -37,9 +38,11 @@ for (int i = 0; i < args.Length; i++)
         case "--commentary": commentary = true; break;
         case "--commentary-rallies": commentaryRallies = int.Parse(Next(), CultureInfo.InvariantCulture); break;
         case "--quick": quick = true; break;
+        case "--set": overrides.Add(Next()); break;
         case "-h":
         case "--help":
-            Console.WriteLine("사용법: dotnet run --project sim/VolleySim.Cli -- [--matches N] [--seed S] [--players data/players.json --teams data/teams.json] [--out report.md] [--commentary] [--quick] [--overall 67]");
+            Console.WriteLine("사용법: dotnet run --project sim/VolleySim.Cli -- [--matches N] [--seed S] [--players data/players.json --teams data/teams.json] [--out report.md] [--commentary] [--quick] [--overall 67] [--set Section.Field=value ...]");
+            Console.WriteLine("  --set 은 SimConfig 상수를 재컴파일 없이 덮어쓴다(캘리브레이션용). 예: --set Receive.WeightLibero=2.2 --set StatSensitivity=0.9");
             return 0;
         default:
             Console.Error.WriteLine($"알 수 없는 인자: {a}");
@@ -48,6 +51,7 @@ for (int i = 0; i < args.Length; i++)
 }
 
 var config = SimConfig.CreateDefault();
+foreach (var ov in overrides) ApplyOverride(config, ov);
 
 // ---------------- 팀 소스 ----------------
 // 파일이 있으면 파일의 앞 두 팀을 홈/원정으로 사용, 없으면 시드 기반 랜덤 동급 팀(경기마다 새 로스터).
@@ -95,6 +99,7 @@ Line($"# 몬테카를로 밸런스 리포트 (자동 생성)");
 Line();
 Line($"- 실행: `--matches {matches} --seed {seed}`{(quick ? " --quick" : "")}");
 Line($"- 팀 소스: {source}");
+if (overrides.Count > 0) Line($"- 상수 오버라이드: {string.Join(", ", overrides)}");
 Line($"- 생성 시각: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
 Line();
 
@@ -175,6 +180,13 @@ foreach (var pos in new[] { "OH", "OP", "MB", "S", "L" })
     Line($"| {pos} | {P(share)} | {P(kr)} | {pp?[0] ?? 0} / {pp?[1] ?? 0} / {pp?[2] ?? 0} |");
 }
 Line();
+Line("포지션별 역할 분담(전 포지션 합 대비 비중):");
+Line();
+Line("| 포지션 | 리시브 | 디그 시도 | 블로킹 득점 관여(주+보조) | 블로킹 터치 |");
+Line("|---|---|---|---|---|");
+foreach (var pos in new[] { "OH", "OP", "MB", "S", "L" })
+    Line($"| {pos} | {P(baseline.RoleShare(pos, 0))} | {P(baseline.RoleShare(pos, 1))} | {P(baseline.RoleShare(pos, 2))} | {P(baseline.RoleShare(pos, 3))} |");
+Line();
 
 // 4. 스탯 민감도
 Line("## 4. 스탯 민감도 (홈 팀 전원 전 스탯 보정, 원정 동급)");
@@ -191,21 +203,27 @@ Line();
 // 5. 포지션별 민감도
 Line("## 5. 포지션별 민감도 (해당 포지션 선수만 전 스탯 +15)");
 Line();
-Line("| 대상 | 인원 | 홈 승률 | 승률 변화 | 1인당 변화 |");
-Line("|---|---|---|---|---|");
-void PosRow(string label, int count, Func<TeamState, TeamState> mod)
+Line("| 대상 | 인원 | 홈 승률 | 승률 변화 | 1인당 변화 | OH 1인 대비 |");
+Line("|---|---|---|---|---|---|");
+var perPerson = new Dictionary<string, double>();
+double PosRow(string label, int count, Func<TeamState, TeamState> mod)
 {
     var agg = MonteCarlo.Run(label, scen, seed, i => Setup(i, mod), config);
     double delta = agg.HomeWinRate - baseline.HomeWinRate;
-    Line($"| {label} | {count} | {P(agg.HomeWinRate)} | {P(delta, true)} | {P(delta / count, true)} |");
+    perPerson[label] = delta / count;
+    string ratio = perPerson.TryGetValue("OH 1명만 +15", out var oh) && oh > 0 ? $"{delta / count / oh * 100:0}%" : "-";
+    Line($"| {label} | {count} | {P(agg.HomeWinRate)} | {P(delta, true)} | {P(delta / count, true)} | {ratio} |");
+    return delta / count;
 }
+PosRow("OH 1명만 +15", 1, h => TeamMods.WithStarterSlot(h, 1, 15));
 PosRow("S만 +15", 1, h => TeamMods.WithStarterSlot(h, 0, 15));
 PosRow("OH 2명 +15", 2, h => TeamMods.WithStarterSlot(TeamMods.WithStarterSlot(h, 1, 15), 4, 15));
-PosRow("OH 1명만 +15", 1, h => TeamMods.WithStarterSlot(h, 1, 15));
 PosRow("OP만 +15", 1, h => TeamMods.WithStarterSlot(h, 3, 15));
 PosRow("MB 2명 +15", 2, h => TeamMods.WithStarterSlot(TeamMods.WithStarterSlot(h, 2, 15), 5, 15));
 PosRow("MB 1명만 +15", 1, h => TeamMods.WithStarterSlot(h, 2, 15));
 PosRow("L만 +15", 1, h => TeamMods.WithPosition(h, Position.L, 15));
+Line();
+Line("(OH 1인 대비 = 1인당 변화 / OH 1명만 +15 의 변화. 기획 목표: MB·L 각 80~85%)");
 Line();
 
 // 6. 개별 스탯 민감도 (전원 특정 스탯 +15)
@@ -315,6 +333,27 @@ return 0;
 
 // ---------------- 헬퍼 ----------------
 int MixSeedForSample() => MonteCarlo.MixSeed(seed, 0, 7);
+
+/// <summary>"Section.Field=value" 또는 "Field=value"(최상위) 형태로 SimConfig 의 public 필드를 덮어쓴다(리플렉션, 캘리브레이션 전용).</summary>
+static void ApplyOverride(SimConfig cfg, string spec)
+{
+    int eq = spec.IndexOf('=');
+    if (eq <= 0) throw new ArgumentException($"--set 형식 오류: {spec} (Section.Field=value)");
+    string path = spec[..eq];
+    string value = spec[(eq + 1)..];
+    object target = cfg;
+    string[] parts = path.Split('.');
+    for (int i = 0; i < parts.Length - 1; i++)
+    {
+        var f = target.GetType().GetField(parts[i]) ?? throw new ArgumentException($"--set: 알 수 없는 섹션 {parts[i]} ({spec})");
+        target = f.GetValue(target) ?? throw new ArgumentException($"--set: {parts[i]} 가 null 입니다");
+    }
+    var field = target.GetType().GetField(parts[^1]) ?? throw new ArgumentException($"--set: 알 수 없는 필드 {parts[^1]} ({spec})");
+    object parsed = field.FieldType == typeof(bool)
+        ? bool.Parse(value)
+        : Convert.ChangeType(value, field.FieldType, CultureInfo.InvariantCulture);
+    field.SetValue(target, parsed);
+}
 
 string P(double v, bool signed = false) => signed ? $"{v * 100:+0.0;-0.0;0.0}%p" : $"{v * 100:0.0}%";
 

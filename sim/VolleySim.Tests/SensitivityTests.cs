@@ -98,4 +98,25 @@ public class SensitivityTests
         Assert.True(hi.ClutchRallies > 1000);
         Assert.True(hiRate > loRate + 0.02, $"clutch win rate hi {hiRate:P1} vs lo {loRate:P1}");
     }
+
+    /// <summary>
+    /// [v0.2 포지션 가치 보정] MB 1명·L 1명의 가치(해당 선수만 전 스탯 +15 시 홈 승률 상승폭)가 OH 1명의 75~95% 안에 있어야 한다.
+    /// 기획 목표는 80~85%(가챠 카드 상품성: SSR 리베로·미들블로커가 손해가 아니어야 함). 완전 동등(100%)은 의도하지 않는다.
+    /// 승률 차이의 표준오차가 커서(2,000경기당 약 ±1%p) 시나리오당 5,000경기를 쓴다(약 10초). 시드 고정이라 결정적이다.
+    /// </summary>
+    [Fact]
+    public void PositionValue_MbAndLibero_Are75to95PercentOfOh()
+    {
+        const int n = 5000;
+        double baseRate = TestHelpers.WinRate(n, null);
+        // 표준 5-1 라인업 슬롯: 0=S, 1=OH1, 2=MB1, 3=OP, 4=OH2, 5=MB2 (Lineup.Standard51)
+        double oh = TestHelpers.WinRate(n, h => TestHelpers.AddAll(h, 15, p => p.Id == h.Lineup.StartingIds[1])) - baseRate;
+        double mb = TestHelpers.WinRate(n, h => TestHelpers.AddAll(h, 15, p => p.Id == h.Lineup.StartingIds[2])) - baseRate;
+        double lib = TestHelpers.WinRate(n, h => TestHelpers.AddAll(h, 15, p => p.Position == Position.L)) - baseRate;
+
+        Assert.True(oh > 0.08, $"OH +15 should be a clear star effect: {oh:+0.0%}");
+        double mbRatio = mb / oh, libRatio = lib / oh;
+        Assert.InRange(mbRatio, 0.75, 0.95);
+        Assert.InRange(libRatio, 0.75, 0.95);
+    }
 }

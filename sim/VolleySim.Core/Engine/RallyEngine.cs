@@ -31,6 +31,8 @@ namespace VolleySim.Engine
         private readonly List<AttackType> _candType = new List<AttackType>(16);
         private readonly List<Player> _blockers = new List<Player>(4);
         private readonly List<int> _blockerPos = new List<int>(4);
+        /// <summary>직전 공격 옵션 선택에서 속공이 실제 선택지였다면 그 MB(공격 레이팅 최고), 아니면 null. 디코이 효과용.</summary>
+        private Player _quickThreatMb;
 
         private enum SeqKind { PointAttacking, PointDefending, Continue, CoverContinue }
 
@@ -52,6 +54,9 @@ namespace VolleySim.Engine
 
         /// <summary>전역 민감도가 적용된 실효 k (k / StatSensitivity).</summary>
         private double K(double k) => k / _sens;
+
+        /// <summary>역할 게인: 기준 레이팅을 중심으로 편차를 gain 배 늘린다(gain 1 = 그대로). 포지션 가치 보정용.</summary>
+        private static double Stretch(double rating, double gain, double refRating) => refRating + gain * (rating - refRating);
 
         public RallyResult PlayRally(TeamMatchState serving, TeamMatchState receiving)
         {
@@ -96,6 +101,7 @@ namespace VolleySim.Engine
             int receiverPos;
             Player receiver = ChooseReceiver(receiving, aggression, clutch, out receiverPos);
             double recvRating = _ctx.Eff(Ratings.Receive(receiver, _cfg.Rating), receiver, receiving, clutch);
+            if (receiver.IsLibero) recvRating = Stretch(recvRating, _cfg.Receive.LiberoRoleGain, _cfg.Receive.LiberoRoleRefRating);
             double formationLogit = FormationLogit(receiving, receiver);
             double x = (recvRating - serveRating) / K(sp.ReceiveK) - sp.AggressionLogit * (aggression - 0.5) + formationLogit
                        + _ctx.SkillLogit(SkillTrigger.Receive, receiver, server, clutch);
@@ -221,6 +227,15 @@ namespace VolleySim.Engine
             }
             int attackPos = attacking.PositionOf(attacker);
 
+            // --- 속공 위협(디코이): 속공이 선택지였는데 윙/후위로 갔다면 전위 MB 의 위협이 블로커를 분산시킨다 ---
+            double decoyLogit = 0.0;
+            if (_quickThreatMb != null && type != AttackType.Quick && type != AttackType.Dump && ap.MbDecoyK > 0)
+            {
+                double mbAtk = _ctx.Eff(Ratings.Attack(_quickThreatMb, _cfg.Rating), _quickThreatMb, attacking, clutch);
+                decoyLogit = SimMath.Clamp((mbAtk - ap.ErrorRefRating) / K(ap.MbDecoyK), -ap.MbDecoyMaxLogit, ap.MbDecoyMaxLogit);
+                decoyLogit *= QuickShareFactor(attacking.Tactics, ap.MbDecoyFullQuickShare);
+            }
+
             // --- 세트 품질 ---
             double setRating = _ctx.Eff(Ratings.Set(setter, _cfg.Rating), setter, attacking, clutch);
             double chem = attacking.State.Chemistry.Get(setter.Id, attacker.Id);
@@ -270,6 +285,7 @@ namespace VolleySim.Engine
                 double blockStrength = BlockStrength(defending, clutch);
                 Player primary = _blockers[0];
                 double blockExtra = typeBlockLogit + setBlockLogit - homeLogit + predictLogit
+                                    - decoyLogit * ap.MbDecoyBlockShare
                                     + _ctx.SkillLogit(SkillTrigger.BlockKill, primary, attacker, clutch);
                 double pBlock = SimMath.Contest(bp.KillBase, blockStrength - atk, K(bp.K), blockExtra);
                 if (_rng.Chance(pBlock))
@@ -309,6 +325,7 @@ namespace VolleySim.Engine
                         int coverPos;
                         Player coverer = ChooseCoverer(attacking, attacker, out coverPos);
                         double coverDig = _ctx.Eff(Ratings.Dig(coverer, _cfg.Rating), coverer, attacking, clutch);
+                        if (coverer.IsLibero) coverDig = Stretch(coverDig, _cfg.Dig.LiberoRoleGain, _cfg.Dig.LiberoRoleRefRating);
                         double pCover = SimMath.Contest(bp.CoverBase, coverDig - _cfg.Attack.ErrorRefRating, K(_cfg.Dig.K));
                         var cb = _ctx.Box(coverer);
                         cb.DigAttempts++;
@@ -338,12 +355,14 @@ namespace VolleySim.Engine
             int diggerPos;
             Player digger = ChooseDigger(defending, out diggerPos);
             double digRating = _ctx.Eff(Ratings.Dig(digger, _cfg.Rating), digger, defending, clutch);
+            if (digger.IsLibero) digRating = Stretch(digRating, _cfg.Dig.LiberoRoleGain, _cfg.Dig.LiberoRoleRefRating);
             double teamDig = AverageNonBlockerDig(defending, clutch);
             double digBlend = (1.0 - ap.DigTeamBlend) * digRating + ap.DigTeamBlend * teamDig;
             double defense = _blockers.Count > 0
-                ? (1.0 - ap.BlockShareInKill) * digBlend + ap.BlockShareInKill * MeanBlockRating(defending, clutch)
+                ? (1.0 - ap.BlockShareInKill) * digBlend + ap.BlockShareInKill * WeightedBlockRating(defending, clutch)
                 : digBlend;
             double killExtra = typeKillLogit + setKillLogit - digBonus + homeLogit - predictLogit
+                               + decoyLogit * ap.MbDecoyKillShare
                                + (attackIndex == 0 ? ap.FirstBallKillLogit : ap.TransitionKillLogitPerAttack * attackIndex)
                                + _ctx.SkillLogit(SkillTrigger.AttackKill, attacker, digger, clutch)
                                - _ctx.SkillLogit(SkillTrigger.Dig, digger, attacker, clutch);
@@ -558,6 +577,7 @@ namespace VolleySim.Engine
             var t = team.Tactics;
             _cand.Clear();
             _candType.Clear();
+            _quickThreatMb = null;
 
             bool frontMbExists = false;
             for (int pos = 2; pos <= 4; pos++)
@@ -579,7 +599,13 @@ namespace VolleySim.Engine
                 if (p.Position == Position.MB)
                 {
                     double w = t.QuickWeight * quickAvail;
-                    if (w > 0) Add(p, AttackType.Quick, w);
+                    if (w > 0)
+                    {
+                        Add(p, AttackType.Quick, w);
+                        // 속공이 실제 선택지인 MB 중 공격 레이팅 최고 → 디코이 위협의 주체
+                        if (_quickThreatMb == null || Ratings.Attack(p, _cfg.Rating) > Ratings.Attack(_quickThreatMb, _cfg.Rating))
+                            _quickThreatMb = p;
+                    }
                 }
                 else
                 {
@@ -673,6 +699,19 @@ namespace VolleySim.Engine
             }
             double over = share - a.PredictabilityFreeShare;
             return over > 0 ? a.PredictabilityLogit * over : 0.0;
+        }
+
+        /// <summary>전술의 속공 비중(QuickWeight/Σ)이 fullShare 이상이면 1, 0 이면 0, 사이는 선형. 디코이 효과의 신뢰도.</summary>
+        private static double QuickShareFactor(Tactics t, double fullShare)
+        {
+            double q = t.QuickWeight < 0 ? 0 : t.QuickWeight;
+            double o = t.OpenWeight < 0 ? 0 : t.OpenWeight;
+            double b = t.BackRowWeight < 0 ? 0 : t.BackRowWeight;
+            double d = t.DelayedWeight < 0 ? 0 : t.DelayedWeight;
+            double sum = q + o + b + d;
+            if (sum <= 0 || fullShare <= 0) return 1.0;
+            double share = q / sum;
+            return share >= fullShare ? 1.0 : share / fullShare;
         }
 
         private void Add(Player p, AttackType type, double w)
@@ -773,27 +812,24 @@ namespace VolleySim.Engine
             _blockerPos.Add(pos);
         }
 
+        /// <summary>집단 블로킹 강도 = 블로커 실효 블로킹 레이팅의 가중 평균(MB 가중 MbStrengthWeight) + 블로커 수 보너스.</summary>
         private double BlockStrength(TeamMatchState defending, bool clutch)
         {
-            double sum = 0;
-            for (int i = 0; i < _blockers.Count; i++)
-            {
-                var p = _blockers[i];
-                sum += _ctx.Eff(Ratings.Block(p, _cfg.Rating), p, defending, clutch);
-            }
-            double mean = sum / _blockers.Count;
-            return mean + _cfg.Block.ExtraBlockerBonus * (_blockers.Count - 2);
+            return WeightedBlockRating(defending, clutch) + _cfg.Block.ExtraBlockerBonus * (_blockers.Count - 2);
         }
 
-        private double MeanBlockRating(TeamMatchState defending, bool clutch)
+        /// <summary>블로커들의 실효 블로킹 레이팅 가중 평균. MB 블로커는 MbStrengthWeight, 나머지는 1.0 (블로커 없으면 0).</summary>
+        private double WeightedBlockRating(TeamMatchState defending, bool clutch)
         {
-            double sum = 0;
+            double sum = 0, wsum = 0;
             for (int i = 0; i < _blockers.Count; i++)
             {
                 var p = _blockers[i];
-                sum += _ctx.Eff(Ratings.Block(p, _cfg.Rating), p, defending, clutch);
+                double w = p.Position == Position.MB ? _cfg.Block.MbStrengthWeight : 1.0;
+                sum += w * _ctx.Eff(Ratings.Block(p, _cfg.Rating), p, defending, clutch);
+                wsum += w;
             }
-            return _blockers.Count > 0 ? sum / _blockers.Count : 0.0;
+            return wsum > 0 ? sum / wsum : 0.0;
         }
 
         private double AverageNonBlockerDig(TeamMatchState defending, bool clutch)
