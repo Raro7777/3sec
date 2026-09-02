@@ -26,7 +26,7 @@ import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings" | "profile" | "sacked";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
-const APP_VERSION = "0.18";
+const APP_VERSION = "0.19";
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
 const CLUB_BLURBS: string[] = [

@@ -2,6 +2,17 @@ import { DT, PITCH, type Match, type MatchEvent, type PlayerState, type TeamId }
 import { drawPitch, type View } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
+import { Sfx } from "./sfx";
+import { CLIP_SECONDS, Recorder, type Clip, type Frame } from "./replay";
+
+/** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
+interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
+/** Slow-motion playback of a clip; `intro` is the freeze before the first frame. */
+interface Replay { clip: Clip; pos: number; started: number; auto: boolean }
+
+const REPLAY_RATE = 0.5;
+const REPLAY_INTRO_MS = 900;
+const REPLAY_ZOOM = 1.55;
 
 export interface SideMatch {
   label: string;
@@ -31,6 +42,18 @@ export class MatchScreen {
   private stadium: Stadium = DEFAULT_STADIUM;
   /** wall-clock time of the first play press this match (banner countdown starts then) */
   private bannerT0: number | null = null;
+  private readonly sfx = new Sfx();
+  private readonly recorder = new Recorder();
+  private clips: Clip[] = [];
+  /** event index → clip, for the ▶ buttons in the log */
+  private clipByEvent = new Map<number, Clip>();
+  private replay: Replay | null = null;
+  private fx: Fx[] = [];
+  private shakeT0 = -1e9;
+  private shakeAmp = 0;
+  private flashT0 = -1e9;
+  private fxEvents = 0;
+  private readonly btnSound = document.getElementById("btnSound") as HTMLButtonElement | null;
 
   private readonly canvas = document.getElementById("pitch") as HTMLCanvasElement;
   private readonly ctx = this.canvas.getContext("2d")!;
@@ -56,14 +79,25 @@ export class MatchScreen {
       this.selected = id;
       this.render();
     });
-    this.btnPlay.addEventListener("click", () => this.setPlaying(!this.playing));
+    this.btnPlay.addEventListener("click", () => { this.sfx.unlock(); if (this.replay) this.endReplay(); else this.setPlaying(!this.playing); });
+    if (this.btnSound) {
+      const paint = () => { this.btnSound!.textContent = this.sfx.enabled ? "🔊" : "🔇"; this.btnSound!.title = this.sfx.enabled ? "효과음 끄기" : "효과음 켜기"; };
+      paint();
+      this.btnSound.addEventListener("click", () => { this.sfx.setEnabled(!this.sfx.enabled); paint(); if (this.sfx.enabled) this.sfx.whistle(1, 0.2); });
+    }
+    this.logEl.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-clip]");
+      if (!b) return;
+      const clip = this.clips.find((c) => c.id === Number(b.dataset.clip));
+      if (clip) this.startReplay(clip, false);
+    });
     this.btnSkip.addEventListener("click", () => void this.skipToEnd());
     this.btnContinue.addEventListener("click", () => this.onFinish?.());
     this.speedSel.addEventListener("change", () => (this.speed = this.speedSel.value === "auto" ? "auto" : Number(this.speedSel.value)));
     this.debugChk.addEventListener("change", () => this.render());
     this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
     this.btnPanel.addEventListener("click", () => document.body.classList.toggle("panel-open"));
-    this.canvas.addEventListener("pointerdown", () => document.body.classList.remove("panel-open"));
+    this.canvas.addEventListener("pointerdown", () => { document.body.classList.remove("panel-open"); if (this.replay) this.endReplay(); });
     document.addEventListener("fullscreenchange", () => {
       if (!document.fullscreenElement && this.immersiveByUser) this.setImmersive(false, true);
     });
@@ -91,7 +125,15 @@ export class MatchScreen {
     this.playing = false;
     this.acc = 0;
     this.loggedEvents = 0;
+    this.fxEvents = 0;
     this.selected = null;
+    this.recorder.reset();
+    this.clips = [];
+    this.clipByEvent.clear();
+    this.replay = null;
+    this.fx = [];
+    this.shakeT0 = -1e9;
+    this.flashT0 = -1e9;
     this.logEl.innerHTML = "";
     this.btnContinue.style.display = "none";
     this.btnSkip.disabled = false;
@@ -131,6 +173,8 @@ export class MatchScreen {
 
   /** Called by the controller when leaving the match screen. */
   leave(): void {
+    this.replay = null;
+    this.fx = [];
     this.immersiveByUser = null;
     this.setImmersive(false, false);
   }
@@ -146,9 +190,9 @@ export class MatchScreen {
     this.btnPlay.textContent = v ? "❚❚ 일시정지" : "▶ 재생";
   }
 
-  private stepAll(n: number): void {
+  private stepAll(n: number, record = false): void {
     for (let i = 0; i < n; i++) {
-      if (this.match.state.phase !== "FULL_TIME") this.match.step();
+      if (this.match.state.phase !== "FULL_TIME") { this.match.step(); if (record) this.recorder.push(this.match.state); }
       for (const o of this.others) if (o.match.state.phase !== "FULL_TIME") o.match.step();
     }
   }
@@ -171,7 +215,14 @@ export class MatchScreen {
     if (!this.lastTs) this.lastTs = ts;
     const elapsed = Math.min(0.25, (ts - this.lastTs) / 1000);
     this.lastTs = ts;
-    if (this.playing) {
+    if (this.replay) {
+      const r = this.replay;
+      const age = ts - r.started;
+      if (age > REPLAY_INTRO_MS) {
+        r.pos += elapsed * 1000 / (1000 / 20) * REPLAY_RATE;
+        if (r.pos >= r.clip.frames.length + 8) this.endReplay();
+      }
+    } else if (this.playing) {
       // Dead-ball waits (free kicks, corners, celebrations, half time) are real-length in the
       // engine; at any fixed speed they run at least 4x faster so the game never drags.
       const dead = this.match.state.phase !== "PLAY";
@@ -179,14 +230,93 @@ export class MatchScreen {
       this.acc += elapsed * this.effSpeed;
       let steps = 0;
       while (this.acc >= DT && steps < 400) {
-        this.stepAll(1);
+        this.stepAll(1, true);
         this.acc -= DT;
         steps++;
+        if (this.replay) break; // a goal froze the action for its replay
       }
       if (this.match.state.phase === "FULL_TIME") this.setPlaying(false);
     }
+    this.processEvents();
     this.render();
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /** React to new events of the user's match: text bursts, shake, sounds and highlight clips. */
+  private processEvents(): void {
+    const s = this.match.state;
+    const fast = this.playing && this.effSpeed > 12;
+    while (this.fxEvents < s.events.length) {
+      const idx = this.fxEvents++;
+      const e = s.events[idx]!;
+      const secs = CLIP_SECONDS[e.type];
+      if (secs && !this.finished) {
+        const frames = this.recorder.cut(secs);
+        if (frames.length > 20) {
+          const clip: Clip = { id: this.clips.length + 1, type: e.type, minute: e.minute, team: e.team, text: e.text, frames };
+          this.clips.push(clip);
+          this.clipByEvent.set(idx, clip);
+          if ((e.type === "GOAL" || e.type === "OWN_GOAL") && this.playing && !this.replay) this.startReplay(clip, true);
+        }
+      }
+      const team = e.team === null ? null : this.match.teams[e.team];
+      const color = team?.color ?? "#ffd166";
+      const now = performance.now();
+      switch (e.type) {
+        case "GOAL":
+          this.burst("골!!!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
+          this.shake(now, 14); this.flashT0 = now; this.sfx.roar();
+          break;
+        case "OWN_GOAL":
+          this.burst("자책골…", e.text, "#ff6b6b", 2000, true);
+          this.shake(now, 8); this.sfx.boo();
+          break;
+        case "OFFSIDE":
+          this.burst("🚩 오프사이드!", team ? `${team.shortName} 공격 무산` : "", "#ff9f43", 1500, false);
+          this.sfx.whistle(2, 0.16, 0.08);
+          break;
+        case "RED_CARD":
+          this.burst("🟥 퇴장!", e.text, "#ff4d4f", 2000, true);
+          this.shake(now, 6); this.sfx.whistle(1, 0.7); this.sfx.boo();
+          break;
+        case "YELLOW_CARD":
+          this.burst("🟨 경고", e.text, "#ffd166", 1200, false);
+          if (!fast) this.sfx.whistle(1, 0.25);
+          break;
+        case "PENALTY":
+          this.burst("페널티킥!", e.text, "#ffd166", 1800, true);
+          this.shake(now, 5); this.sfx.whistle(1, 0.6);
+          break;
+        case "INJURY":
+          this.burst("🩹 부상", e.text, "#8ecae6", 1400, false);
+          break;
+        case "SAVE": if (!fast) this.sfx.ooh(); break;
+        case "SHOT": if (!fast && Math.random() < 0.5) this.sfx.ooh(); break;
+        case "KICK_OFF": if (!fast || s.clock < 1) this.sfx.whistle(1, 0.5); break;
+        case "HALF_TIME": this.sfx.whistle(2, 0.45); break;
+        case "FULL_TIME": this.sfx.whistle(3, 0.4); this.sfx.clap(); break;
+        case "SUBSTITUTION": if (!fast) this.sfx.clap(); break;
+        default: break;
+      }
+    }
+  }
+
+  private burst(text: string, sub: string, color: string, dur: number, big: boolean): void {
+    this.fx = this.fx.filter((f) => performance.now() - f.t0 < f.dur);
+    this.fx.push({ text, sub, color, t0: performance.now(), dur, big });
+  }
+
+  private shake(now: number, amp: number): void { this.shakeT0 = now; this.shakeAmp = amp; }
+
+  private startReplay(clip: Clip, auto: boolean): void {
+    this.replay = { clip, pos: 0, started: performance.now(), auto };
+    this.btnPlay.textContent = "⏭ 리플레이 건너뛰기";
+  }
+
+  private endReplay(): void {
+    this.replay = null;
+    this.acc = 0;
+    this.btnPlay.textContent = this.playing ? "❚❚ 일시정지" : "▶ 재생";
   }
 
   /**
@@ -220,6 +350,8 @@ export class MatchScreen {
     div.innerHTML = `<span style="opacity:.6">${String(e.minute).padStart(2, "0")}'</span> <span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
     if (e.type === "GOAL" || e.type === "OWN_GOAL") div.style.color = "#ffd166";
     if (e.type === "SUBSTITUTION" || e.type === "TACTICS") div.style.color = "#8ecae6";
+    const clip = this.clipByEvent.get(this.loggedEvents - 1);
+    if (clip) div.innerHTML += ` <button data-clip="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px;margin-left:4px" title="주요 장면 다시 보기">▶ 리플레이</button>`;
     this.logEl.appendChild(div);
     this.logEl.scrollTop = this.logEl.scrollHeight;
   }
@@ -314,10 +446,39 @@ export class MatchScreen {
     const s = match.state;
     this.syncBitmap();
     const v = this.view();
+    const now = performance.now();
     ctx.clearRect(0, 0, v.w, v.h);
+    ctx.save();
+    // the stadium shakes after a goal (decaying random offset)
+    const shakeAge = now - this.shakeT0;
+    if (shakeAge < 700) {
+      const k = this.shakeAmp * (1 - shakeAge / 700) ** 2;
+      ctx.translate((Math.random() * 2 - 1) * k, (Math.random() * 2 - 1) * k);
+    }
+    const rp = this.replay;
+    const frame: Frame | null = rp ? rp.clip.frames[Math.min(rp.clip.frames.length - 1, Math.floor(rp.pos))] ?? null : null;
+    if (rp && frame) {
+      // slow-motion zoom on the action: the camera eases toward the ball of the clip's last frame
+      const last = rp.clip.frames[rp.clip.frames.length - 1]!;
+      const age = now - rp.started;
+      const z = 1 + (REPLAY_ZOOM - 1) * Math.min(1, age / 1400);
+      const fx = Math.max(-PITCH.halfLength + 20, Math.min(PITCH.halfLength - 20, (frame.bx + last.bx) / 2));
+      const fy = Math.max(-PITCH.halfWidth + 14, Math.min(PITCH.halfWidth - 14, (frame.by + last.by) / 2));
+      ctx.translate(v.w / 2, v.h / 2);
+      ctx.scale(z, z);
+      ctx.translate(-(v.ox + fx * v.scale), -(v.oy + fy * v.scale));
+    }
     drawPitch(ctx, v, this.stadium);
     const toPx = (x: number, y: number): [number, number] => [v.ox + x * v.scale, v.oy + y * v.scale];
-    const debug = this.debugChk.checked;
+    const debug = this.debugChk.checked && !rp;
+    if (rp && frame) {
+      this.drawFrame(frame, v);
+      ctx.restore();
+      this.drawReplayHud(rp, v, now);
+      this.drawFx(v, now);
+      this.updateHud();
+      return;
+    }
 
     if (debug) {
       for (const team of [0, 1] as TeamId[]) {
@@ -401,7 +562,24 @@ export class MatchScreen {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    ctx.restore();
+    // goal flash
+    const flashAge = now - this.flashT0;
+    if (flashAge < 260) {
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - flashAge / 260)})`;
+      ctx.fillRect(0, 0, v.w, v.h);
+    }
+    this.drawFx(v, now);
+    const bannerAge = this.bannerT0 === null ? 0 : performance.now() - this.bannerT0;
+    if (!this.finished && bannerAge < BANNER_MS) this.drawStadiumBanner(v, bannerAge);
+    if (this.selected) this.drawPlayerCard(match.player(this.selected), v);
+    this.updateHud();
+  }
 
+  /** Scoreboard, clock, phase label, event log, stats and the manager panel. */
+  private updateHud(): void {
+    const match = this.match;
+    const s = match.state;
     const [home, away] = match.teams;
     this.scoreEl.innerHTML = `<span style="color:${home.color}">${home.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${away.color}">${away.shortName}</span>`;
     this.clockEl.textContent = this.fmtClock() + (this.playing && this.effSpeed !== this.speed ? `  ${this.effSpeed}x` : "");
@@ -413,10 +591,7 @@ export class MatchScreen {
       HALF_TIME: "하프타임",
       FULL_TIME: "경기 종료",
     };
-    this.phaseEl.textContent = phaseText[s.phase] ?? s.phase;
-    const bannerAge = this.bannerT0 === null ? 0 : performance.now() - this.bannerT0;
-    if (!this.finished && bannerAge < BANNER_MS) this.drawStadiumBanner(v, bannerAge);
-    if (this.selected) this.drawPlayerCard(match.player(this.selected), v);
+    this.phaseEl.textContent = this.replay ? "리플레이" : phaseText[s.phase] ?? s.phase;
     while (this.loggedEvents < s.events.length) this.appendLog(s.events[this.loggedEvents++]!);
     this.renderStats();
     this.panel.update();
@@ -431,6 +606,113 @@ export class MatchScreen {
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
       this.btnSkip.textContent = "⏩ 다른 구장 종료";
+    }
+  }
+
+  /** Replay scene: players and ball from a recorded frame. */
+  private drawFrame(f: Frame, v: View): void {
+    const ctx = this.ctx;
+    const match = this.match;
+    const r = Math.max(4, 1.1 * v.scale);
+    for (const p of f.players) {
+      const team = match.teams[p.team];
+      const def = match.def(p.id);
+      const px = v.ox + p.x * v.scale, py = v.oy + p.y * v.scale;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath(); ctx.ellipse(px + 1, py + 2, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = def.role === "GK" ? shade(team.color, -0.35) : team.color;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = f.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)"; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(p.f) * r * 1.3, py + Math.sin(p.f) * r * 1.3); ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = `${Math.max(8, v.scale * 0.9)}px ui-monospace, monospace`;
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText(String(def.number), px, py + r + 1);
+    }
+    const bx = v.ox + f.bx * v.scale, by = v.oy + f.by * v.scale;
+    const br = Math.max(2.5, 0.45 * v.scale) * (1 + f.bz * 0.12);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath(); ctx.ellipse(bx + 1, by + 1.5, br * 0.9, br * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(bx, by - f.bz * v.scale * 0.5, br, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  /** REPLAY badge, slow-motion note and the event caption. */
+  private drawReplayHud(rp: Replay, v: View, now: number): void {
+    const ctx = this.ctx;
+    const blink = Math.floor(now / 500) % 2 === 0;
+    ctx.save();
+    ctx.font = `700 ${Math.max(13, v.scale * 1.6)}px 'Barlow Condensed','IBM Plex Sans KR',sans-serif`;
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    const pad = 10;
+    const label = "● REPLAY";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(pad, pad, ctx.measureText(label).width + 16, Math.max(13, v.scale * 1.6) + 10);
+    ctx.fillStyle = blink ? "#ff4d4f" : "#ffffff";
+    ctx.fillText(label, pad + 8, pad + 5);
+    ctx.font = `${Math.max(11, v.scale * 1.1)}px 'IBM Plex Sans KR',sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText(`슬로 모션 ${REPLAY_RATE}x · 탭하여 건너뛰기`, v.w - pad, pad + 6);
+    // caption
+    const team = rp.clip.team === null ? "" : this.match.teams[rp.clip.team].shortName;
+    const cap = `${rp.clip.minute}' ${team} ${rp.clip.text}`;
+    ctx.font = `600 ${Math.max(12, v.scale * 1.3)}px 'IBM Plex Sans KR',sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    const w = ctx.measureText(cap).width + 24;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(v.w / 2 - w / 2, v.h - pad - Math.max(12, v.scale * 1.3) - 12, w, Math.max(12, v.scale * 1.3) + 12);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(cap, v.w / 2, v.h - pad - 6);
+    // letterbox bars for the broadcast feel
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    const bar = Math.min(28, v.h * 0.06);
+    ctx.fillRect(0, 0, v.w, bar); ctx.fillRect(0, v.h - bar, v.w, bar);
+    ctx.restore();
+  }
+
+  /** Text bursts: punch in, hold, fade. */
+  private drawFx(v: View, now: number): void {
+    const ctx = this.ctx;
+    this.fx = this.fx.filter((f) => now - f.t0 < f.dur);
+    let row = 0;
+    for (const f of this.fx) {
+      const age = now - f.t0;
+      const inK = Math.min(1, age / 260);
+      const scale = f.big ? 1 + (1 - inK) * (1 - inK) * 1.6 : 1 + (1 - inK) * 0.4;
+      const fade = age > f.dur - 320 ? (f.dur - age) / 320 : 1;
+      const size = f.big ? Math.max(30, v.scale * 6.5) : Math.max(16, v.scale * 2.4);
+      const cx = v.w / 2, cy = f.big ? v.h * 0.42 : v.h * 0.2 + row * (size * 1.8);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      if (f.big) {
+        // subtle wobble while the burst lands
+        ctx.rotate(Math.sin(age / 90) * (1 - inK) * 0.08);
+      }
+      ctx.font = `900 ${size}px 'Barlow Condensed','IBM Plex Sans KR',sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(3, size * 0.12);
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.strokeText(f.text, 0, 0);
+      ctx.fillStyle = f.color;
+      ctx.shadowColor = f.color; ctx.shadowBlur = f.big ? 24 : 8;
+      ctx.fillText(f.text, 0, 0);
+      ctx.shadowBlur = 0;
+      if (f.sub) {
+        const ss = Math.max(11, size * 0.32);
+        ctx.font = `600 ${ss}px 'IBM Plex Sans KR',sans-serif`;
+        ctx.lineWidth = Math.max(2, ss * 0.18);
+        ctx.strokeText(f.sub, 0, size * 0.72);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(f.sub, 0, size * 0.72);
+      }
+      ctx.restore();
+      if (!f.big) row++;
     }
   }
 

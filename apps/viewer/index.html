@@ -245,7 +245,11 @@
         #log { height:100px; }
         .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px 24px; }
         .row.wide .age, .row.wide .st { display:none; }
-        .row.tr { grid-template-columns: 22px 30px 1fr 36px 118px 24px; }
+        /* phones: the price/offer controls drop to a second line so the name keeps the full width */
+        .row.tr { grid-template-columns: 22px 30px minmax(0,1fr) 36px 24px; row-gap:3px; }
+        .row.tr > span:nth-last-child(2) { order:9; grid-column:1 / -1; display:flex; justify-content:flex-end; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
+        .row.tr > span:nth-last-child(2) button { width:auto; min-width:96px; padding:4px 10px; }
+        .row.tr > span:nth-last-child(2) input { max-width:96px; }
         .profile .pfName { font-size:22px; }
         .attrs { grid-template-columns:1fr; }
         .row.tr .age, .row.tr .val { display:none; }
@@ -302,6 +306,7 @@
           <button id="btnSkip" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
           <button id="btnContinue" class="primary" style="display:none">계속 →</button>
           <button id="btnFull" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
+          <button id="btnSound" title="효과음">🔊</button>
           <button id="btnPanel" style="display:none">☰ 전술·교체</button>
           <label><input id="debug" type="checkbox" /> 디버그</label>
         </div>
