@@ -54,6 +54,9 @@ export class MatchScreen {
   private flashT0 = -1e9;
   private fxEvents = 0;
   private readonly btnSound = document.getElementById("btnSound") as HTMLButtonElement | null;
+  private readonly btnReplay = document.getElementById("btnReplay") as HTMLButtonElement | null;
+  /** automatic slow-motion replay after a goal (clips are still recorded for the ▶ buttons when off) */
+  private autoReplay = (() => { try { return localStorage.getItem("3sec.replay") !== "0"; } catch { return true; } })();
 
   private readonly canvas = document.getElementById("pitch") as HTMLCanvasElement;
   private readonly ctx = this.canvas.getContext("2d")!;
@@ -85,6 +88,11 @@ export class MatchScreen {
       const paint = () => { this.btnSound!.textContent = this.sfx.enabled ? "🔊" : "🔇"; this.btnSound!.title = this.sfx.enabled ? "효과음 끄기" : "효과음 켜기"; };
       paint();
       this.btnSound.addEventListener("click", () => { this.sfx.setEnabled(!this.sfx.enabled); paint(); if (this.sfx.enabled) this.sfx.whistle(1, 0.2); });
+    }
+    if (this.btnReplay) {
+      const paint = () => { this.btnReplay!.textContent = this.autoReplay ? "🔁" : "⏹"; this.btnReplay!.title = this.autoReplay ? "골 자동 리플레이 켜짐 (누르면 끔)" : "골 자동 리플레이 꺼짐 (누르면 켬)"; this.btnReplay!.style.opacity = this.autoReplay ? "1" : ".55"; };
+      paint();
+      this.btnReplay.addEventListener("click", () => { this.autoReplay = !this.autoReplay; try { localStorage.setItem("3sec.replay", this.autoReplay ? "1" : "0"); } catch { /* ignore */ } paint(); });
     }
     this.logEl.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-clip]");
@@ -264,7 +272,7 @@ export class MatchScreen {
           const clip: Clip = { id: this.clips.length + 1, type: e.type, minute: e.minute, team: e.team, text: e.text, frames };
           this.clips.push(clip);
           this.clipByEvent.set(idx, clip);
-          if ((e.type === "GOAL" || e.type === "OWN_GOAL") && this.playing && !this.replay) this.startReplay(clip, true);
+          if ((e.type === "GOAL" || e.type === "OWN_GOAL") && this.playing && !this.replay && this.autoReplay) this.startReplay(clip, true);
         }
       }
       const team = e.team === null ? null : this.match.teams[e.team];
