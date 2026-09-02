@@ -300,6 +300,8 @@ export class Game {
     <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
     const q = (sel: string) => this.el.settings.querySelector<HTMLElement>(sel)!;
+    // The claude.ai artifact viewer blocks page-initiated downloads; there the share/copy paths remain.
+    if (location.hostname.endsWith("claude.ai")) q('[data-set="export"]').style.display = "none";
     q('[data-set="guide"]').addEventListener("click", () => this.show("guide"));
     q('[data-set="newGame"]').addEventListener("click", () => this.act("newGame"));
     for (const { n } of slots) {
