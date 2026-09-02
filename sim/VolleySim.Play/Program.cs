@@ -16,6 +16,8 @@ double opponentGrowth = 0.0;
 string policyName = "optimal";
 string? scriptPath = null, dataDir = null, savePath = null, clubName = null, loadPath = null;
 
+try
+{
 for (int i = 0; i < args.Length; i++)
 {
     string a = args[i];
@@ -48,8 +50,15 @@ for (int i = 0; i < args.Length; i++)
             Console.WriteLine("  --oracle-table [--n 2000]   문서 12절 정책표 재현(파이썬 오라클 대조)");
             Console.WriteLine("  --calibrate-eval [--n 200]  실제 시뮬 평가전 활약도 캘리브레이션 표");
             return 0;
-        default: Console.Error.WriteLine("알 수 없는 인자: " + a); return 2;
+        default: Console.Error.WriteLine("알 수 없는 인자: " + a + " (--help 로 사용법을 봅니다)"); return 2;
     }
+}
+}
+catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
+{
+    // 숫자 자리에 문자열이 오는 등 인자 오류는 스택트레이스 대신 한 줄로 알린다.
+    Console.Error.WriteLine("인자 오류: " + ex.Message + " (--help 로 사용법을 봅니다)");
+    return 2;
 }
 
 var stdout = Console.Out;
@@ -78,7 +87,14 @@ var game = new Game(state, players, teams, cfg, eval, savePath) { OpponentGrowth
 
 if (auto)
 {
-    AutoMode.RunAuto(ui, game, runs, TrainingPolicy.ByName(policyName), matchesPerClub, markdown: true);
+    TrainingPolicy policy;
+    try { policy = TrainingPolicy.ByName(policyName); }
+    catch (ArgumentException ex)
+    {
+        Console.Error.WriteLine(ex.Message + " — 사용 가능: " + string.Join(" / ", TrainingPolicy.Names));
+        return 2;
+    }
+    AutoMode.RunAuto(ui, game, runs, policy, matchesPerClub, markdown: true);
     return 0;
 }
 

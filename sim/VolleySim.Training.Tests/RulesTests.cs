@@ -164,6 +164,64 @@ public class RulesTests
         Assert.InRange(upDeep / (double)n, 0.67, 0.73);
     }
 
+    /// <summary>강도 곡선·부상 시작·휴식 깊이의 경계값(3.6·5.1·5.4절). 부등호 방향이 뒤집히면 여기서 잡힌다.</summary>
+    [Fact]
+    public void BoundaryValues_ZoneInjuryAndRestDepth()
+    {
+        // 콜드/적정 경계 30
+        Assert.Equal(FatigueZone.Cold, Cfg.ZoneOf(29.999));
+        Assert.Equal(FatigueZone.Normal, Cfg.ZoneOf(30));
+        Assert.Equal(0.85, Cfg.ZoneMult(29.999));
+        Assert.Equal(1.00, Cfg.ZoneMult(30));
+        // 적정/핫존 경계 45 — 핫존 진입선과 부상 배지 등장선이 일치해야 한다(5.4절)
+        Assert.Equal(FatigueZone.Normal, Cfg.ZoneOf(44.999));
+        Assert.Equal(FatigueZone.Hot, Cfg.ZoneOf(45));
+        Assert.False(Cfg.InHot(44.999));
+        Assert.True(Cfg.InHot(45));
+        Assert.Equal(0.0, Cfg.InjuryProbability(44.999, 1.3));
+        Assert.Equal(0.0, Cfg.InjuryProbability(45, 1.3));
+        Assert.True(Cfg.InjuryProbability(45.001, 1.3) > 0);
+        // 핫존/과열 경계 80
+        Assert.Equal(FatigueZone.Hot, Cfg.ZoneOf(79.999));
+        Assert.Equal(FatigueZone.Overheat, Cfg.ZoneOf(80));
+        Assert.True(Cfg.InHot(79.999));
+        Assert.False(Cfg.InHot(80));
+        Assert.Equal(1.50, Cfg.ZoneMult(79.999));
+        Assert.Equal(0.85, Cfg.ZoneMult(80));
+        // 깊은 휴식 경계 50(피로 ≥ 50 이면 깊은 휴식 70%)
+        var s = OracleFixtures.NewSession(OracleFixtures.SsrOh(), 1);
+        s.Trainee.Fatigue = 49.999;
+        Assert.False(s.IsDeepRest);
+        Assert.Equal(Cfg.RestCondUpShallow, s.RestCondUpProbability());
+        s.Trainee.Fatigue = 50;
+        Assert.True(s.IsDeepRest);
+        Assert.Equal(Cfg.RestCondUpDeep, s.RestCondUpProbability());
+        // 세션이 노출하는 배지도 같은 경계를 쓴다: 45 미만이면 전 훈련 0%, 45 초과면 전 훈련 > 0%
+        s.Trainee.Fatigue = 44.999;
+        for (int t = 0; t < 5; t++) Assert.Equal(0.0, s.InjuryProbability((TrainingAction)t));
+        s.Trainee.Fatigue = 45.001;
+        for (int t = 0; t < 5; t++) Assert.True(s.InjuryProbability((TrainingAction)t) > 0, $"훈련 {t} 배지 0");
+    }
+
+    /// <summary>WeightedPreview 는 훈련·특훈을 같은 눈금으로 비교해야 한다(포지션 스케일 비대칭 회귀).</summary>
+    [Fact]
+    public void WeightedPreview_UsesSameScaleForTrainingAndSpecial()
+    {
+        var s = OracleFixtures.NewSession(OracleFixtures.SsrL(), 1, det: true); // posScale 0.95 인 리베로
+        s.Trainee.Fatigue = 50; s.Trainee.Condition = Condition.Best;
+        var pw = Cfg.OvrWeights[(int)s.Trainee.Position];
+        double Manual(TrainingAction a)
+        {
+            var g = s.PreviewGains(a);
+            double sum = 0;
+            for (int i = 0; i < 10; i++) sum += pw[i] * g[i];
+            return sum;
+        }
+        for (int t = 0; t < 5; t++)
+            Assert.InRange(s.WeightedPreview((TrainingAction)t) - Manual((TrainingAction)t), -1e-9, 1e-9);
+        Assert.InRange(s.WeightedPreview(TrainingAction.Special) - Manual(TrainingAction.Special), -1e-9, 1e-9);
+    }
+
     [Fact]
     public void GradeCuts()
     {

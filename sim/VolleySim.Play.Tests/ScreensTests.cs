@@ -5,6 +5,13 @@ namespace VolleySim.Play.Tests;
 
 public class ScreensTests
 {
+    private static int Occurrences(string text, string needle)
+    {
+        int n = 0, i = 0;
+        while ((i = text.IndexOf(needle, i, StringComparison.Ordinal)) >= 0) { n++; i += needle.Length; }
+        return n;
+    }
+
     private static (Screens screens, StringWriter output) Run(Game g, params string[] script)
     {
         var sw = new StringWriter();
@@ -29,8 +36,11 @@ public class ScreensTests
         var (_, output) = Run(gb, "7", "1", "8", "새이름", "6", "0");
         var text = output.ToString();
         Assert.Contains("불러왔습니다: A구단", text);
-        Assert.Contains("새이름 감독실", text);
-        Assert.DoesNotContain("B구단 감독실\n" + "티켓 5", text.Replace("\r", "").Split("불러왔습니다")[1]);
+        // 불러오기 이후 화면은 새 상태(A구단 → 새이름)만 가리킨다
+        var afterLoad = text.Split("불러왔습니다")[1];
+        Assert.Contains("새이름 감독실", afterLoad);
+        Assert.DoesNotContain("B구단 감독실", afterLoad);
+        Assert.Contains("보유 카드 1장", afterLoad);   // A구단의 스카우트 1회가 반영된 헤더
 
         var reloaded = GameState.Load(a);
         Assert.Equal("새이름", reloaded.ClubName);
@@ -100,7 +110,11 @@ public class ScreensTests
         var ui = new Ui(sw, new ScriptInput(File.ReadAllLines(demo), sw));
         new Screens(ui, g, fullCommentary: false).MainLoop();
         var text = sw.ToString();
-        Assert.Contains("안녕히", text + "안녕히"); // MainLoop 는 0 에서 정상 반환
+        // 데모 시나리오: 스카우트 3회 → 육성 2회(수동→자동, 스킵) → 로스터·라인업 확인 → 경기 1회 → 저장 → 종료
+        Assert.Equal(3, Occurrences(text, "── 스카우트"));
+        Assert.Equal(2, Occurrences(text, "══════ 졸업 —"));
+        Assert.Contains("── 경기 — 상대 선택", text);
+        Assert.Contains("저장했습니다:", text);
         Assert.Equal(2, g.State.TrainingCount);
         Assert.Equal(1, g.State.Wins + g.State.Losses);
         Assert.True(File.Exists(Path.Combine(dir, "demo.json")));

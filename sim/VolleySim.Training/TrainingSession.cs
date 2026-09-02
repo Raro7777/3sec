@@ -242,6 +242,11 @@ namespace VolleySim.Training
             return outv;
         }
 
+        /// <summary>
+        /// 선택지 하나의 OVR 가중 기대 상승(ε=0). 훈련·특훈·휴식을 같은 눈금으로 비교하기 위한 값이므로
+        /// <see cref="TrainingConfig.PositionScale"/> 은 적용하지 않는다(훈련 경로 <see cref="WeightedPreviews"/> 와 동일 기준,
+        /// 정책의 EV 비교가 절대 손실 가중 <see cref="TrainingConfig.EvLossWeight"/> 와 같은 눈금을 쓰게 한다).
+        /// </summary>
         public double WeightedPreview(TrainingAction a)
         {
             if (Config.IsTraining(a)) return WeightedPreviews()[(int)a];
@@ -249,7 +254,7 @@ namespace VolleySim.Training
             var pw = Config.OvrWeights[(int)Trainee.Position];
             double s = 0;
             for (int i = 0; i < 10; i++) s += pw[i] * g[i];
-            return s * Config.PositionScale[(int)Trainee.Position];
+            return s;
         }
 
         /// <summary>가중 기대 상승 최대 훈련(부상 미감안).</summary>
