@@ -600,12 +600,12 @@ export class Match {
 
     // Realistic dead-ball durations: the ball is in play for roughly 55-60 of the 90 minutes.
     const timers: Record<RestartKind, number> = {
-      KICK_OFF: 8,
-      THROW_IN: 7,
-      GOAL_KICK: 16,
-      CORNER: 22,
-      FREE_KICK: 18,
-      PENALTY: 30,
+      KICK_OFF: 10,
+      THROW_IN: 10,
+      GOAL_KICK: 22,
+      CORNER: 30,
+      FREE_KICK: 25,
+      PENALTY: 40,
     };
 
     let taker: PlayerState;
@@ -1253,7 +1253,7 @@ export class Match {
     b.vel = { x: 0, y: 0 };
     b.vz = 0;
     s.phase = "GOAL_CELEBRATION";
-    s.phaseTimer = 40;
+    s.phaseTimer = 55;
     s.stoppages++;
     // The ball is dead: queued substitutions come on now.
     this.applyPendingSubs();

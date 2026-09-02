@@ -188,6 +188,7 @@ describe("statistics sanity (1 full match)", () => {
     expect(shots).toBeLessThan(100);
     expect(a.shotsOnTarget).toBeLessThanOrEqual(a.shots);
     expect(a.passesCompleted).toBeLessThanOrEqual(a.passes);
-    expect(a.possessionTicks + b.possessionTicks).toBeGreaterThan(20 * 60 * 60);
+    // ball in play ~55-60 of 90 minutes, as in real football
+    expect(a.possessionTicks + b.possessionTicks).toBeGreaterThan(20 * 60 * 50);
   });
 });

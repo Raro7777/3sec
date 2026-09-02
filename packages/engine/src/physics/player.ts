@@ -77,7 +77,7 @@ export function stepPlayer(p: PlayerState, attrs: Attributes, dt: number): void 
   // around 0.45 and a stamina-7 player near 0.85 (before half-time recovery).
   const effort = speed / vMax;
   const staminaFactor = 1.7 - a01(attrs.stamina);
-  p.fatigue += (0.00004 + 0.00027 * Math.pow(effort, 1.5)) * staminaFactor * dt;
+  p.fatigue += (0.00005 + 0.00033 * Math.pow(effort, 1.5)) * staminaFactor * dt;
   if (p.fatigue < 0) p.fatigue = 0;
   if (p.fatigue > 1) p.fatigue = 1;
 }

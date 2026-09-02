@@ -49,13 +49,13 @@ export interface Tuning {
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.318,
+  shotBase: 0.2,
   shotXgMult: 4.725,
   longRangeBase: 0.118,
-  shotAngSd: 0.5,
+  shotAngSd: 0.42,
   crossBase: -0.4,
-  passMarginWeight: 0.6,
-  carryBonus: 0.55,
+  passMarginWeight: 0.8,
+  carryBonus: 0.9,
   receiverBias: 1.2825,
   controlBase: 0.55,
   markGapNear: 1,
@@ -63,13 +63,13 @@ export const TUNING: Tuning = {
   markGapFar: 2.8,
   pressers: 2,
   engageRadius: 4.725,
-  tackleRate: 1.8,
-  foulBase: 0.06,
+  tackleRate: 1.4,
+  foulBase: 0.05,
   yellowBase: 0.12,
-  gkReach: 1.9,
+  gkReach: 2.2,
   offsideWobble: 5,
   reactionDelay: 0.35,
-  panicClear: 0.55,
+  panicClear: 0.7,
   shieldBase: 0.72,
 };
 
