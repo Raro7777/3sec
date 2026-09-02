@@ -1,0 +1,41 @@
+name: Android APK
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "apps/viewer/**"
+      - "packages/**"
+      - ".github/workflows/android.yml"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - name: Build web app and sync into the Android project
+        working-directory: apps/viewer
+        run: pnpm exec vite build && pnpm exec cap sync android
+      - name: Assemble debug APK
+        working-directory: apps/viewer/android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 3sec-fm-debug-apk
+          path: apps/viewer/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

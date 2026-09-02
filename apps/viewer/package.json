@@ -7,13 +7,18 @@
     "dev": "vite --host",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android:sync": "vite build && cap sync android",
+    "android:apk": "vite build && cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@3sec/engine": "workspace:*",
     "@3sec/game": "workspace:*"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "typescript": "^5.6.3",
     "vite": "^6.0.7"
   }

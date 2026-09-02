@@ -4,11 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>3sec Football Manager</title>
+    <meta name="theme-color" content="#121a21" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="3sec FM" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap" />
     <style>
       :root { color-scheme: dark; --bg:#0b1014; --panel:#121a21; --panel2:#0e151b; --line:#22303b; --text:#e7edf2; --muted:#93a4b3; --accent:#ffd166; --good:#5fd38a; --warn:#f4a259; --bad:#ef5b5b; }
       html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif; }
       * { box-sizing:border-box; }
+      button, .row, .tab { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
       #app { display:flex; flex-direction:column; height:100%; background:var(--bg); }
       #nav { display:flex; align-items:center; gap:4px; padding:6px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
       #nav .brand { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:18px; letter-spacing:.03em; margin-right:8px; color:var(--accent); }
@@ -102,6 +111,18 @@
       #overlay .prog i { display:block; height:100%; background:var(--accent); width:0; }
       @media (max-width: 860px) {
         .grid2 { grid-template-columns: 1fr; }
+        #app { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+        #nav { position:fixed; left:0; right:0; bottom:0; top:auto; z-index:10; border-top:1px solid var(--line); border-bottom:0; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); justify-content:space-around; background:#0f161cf2; backdrop-filter:blur(8px); }
+        #nav .brand, #nav .spacer { display:none; }
+        #nav .season { position:fixed; top:0; right:0; padding:6px 10px; background:transparent; z-index:11; }
+        #nav button.tab { flex:1; padding:9px 4px; font-size:14px; }
+        .page { padding:12px 10px; gap:10px; }
+        .fixture .team { font-size:18px; }
+        .row { padding:7px 6px; }
+        #topbar { padding:6px 10px; gap:8px; padding-top: calc(6px + env(safe-area-inset-top)); }
+        #topbar #score { order:0; } #topbar #clock { order:1; } #topbar #phase { order:2; flex-basis:100%; min-height:0; }
+        #stats { gap:10px; font-size:11px; }
+        #others { gap:10px; }
         #main { flex-direction:column; overflow-y:auto; }
         #stage { flex:none; height:52vw; max-height:60vh; }
         #panel { width:auto; border-left:0; border-top:1px solid var(--line); }
