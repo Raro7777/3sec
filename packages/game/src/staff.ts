@@ -1,4 +1,4 @@
-import { Rng } from "@3sec/engine";
+import { Rng, type Tactics } from "@3sec/engine";
 import type { Club, GameState, StaffMember, StaffRole } from "./types";
 import { randomName } from "./world";
 
@@ -18,6 +18,43 @@ import { randomName } from "./world";
  */
 
 export const STAFF_ROLES: StaffRole[] = ["assistant", "fitness", "youth", "gk", "scout", "physio"];
+
+/** A coach's footballing instincts (0..1 each), derived from the id so old saves need no migration. */
+export interface StaffStyle { attack: number; pressing: number; possession: number }
+export function staffStyle(m: Pick<StaffMember, "id">): StaffStyle {
+  let h = 2166136261;
+  for (const ch of m.id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const u = (k: number) => (((h >>> (k * 8)) & 255) / 255);
+  return { attack: u(0), pressing: u(1), possession: u(2) };
+}
+/** Short Korean tags for a coach's style ("공격적 · 강한 압박"); empty for a balanced coach. */
+export function staffStyleTags(m: Pick<StaffMember, "id">): string[] {
+  const st = staffStyle(m);
+  const tags: string[] = [];
+  if (st.attack > 0.68) tags.push("공격적"); else if (st.attack < 0.32) tags.push("수비적");
+  if (st.pressing > 0.68) tags.push("강한 압박"); else if (st.pressing < 0.32) tags.push("내려앉기");
+  if (st.possession > 0.68) tags.push("점유"); else if (st.possession < 0.32) tags.push("다이렉트");
+  return tags;
+}
+
+/**
+ * How the user's side plays when a round is simulated automatically: the manager's own tactics (the
+ * user's habits) nudged by the assistant coach's instincts, more so for a better-rated assistant.
+ */
+export function autoUserTactics(s: GameState): Tactics {
+  const me = s.clubs[s.userClub]!;
+  const t: Tactics = { ...me.tactics };
+  const a = staffOf(me).filter((m) => m.role === "assistant").sort((x, y) => y.rating - x.rating)[0];
+  if (!a) return t;
+  const st = staffStyle(a);
+  const k = 0.25 * (0.5 + a.rating / 20);
+  const c = (x: number) => Math.max(0, Math.min(1, x));
+  t.mentality = c(t.mentality + (st.attack - 0.5) * k);
+  t.pressing = c(t.pressing + (st.pressing - 0.5) * k);
+  t.directness = c(t.directness - (st.possession - 0.5) * k);
+  t.defensiveLine = c(t.defensiveLine + (st.pressing - 0.5) * k * 0.5);
+  return t;
+}
 export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
   assistant: "수석코치", fitness: "피지컬 코치", youth: "유스 코치", gk: "GK 코치", scout: "스카우트", physio: "의무 팀장",
 };

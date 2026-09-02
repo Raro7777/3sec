@@ -210,6 +210,8 @@ export class MatchScreen {
   private async skipToEnd(): Promise<void> {
     this.setPlaying(false);
     this.btnSkip.disabled = true;
+    // from here the assistant runs my bench and tactics, as in an auto round
+    this.match.enableAi(this.userTeam);
     await this.runChunked(() => {
       this.stepAll(20 * 30); // 30 match seconds per slice
       return this.allDone();

@@ -327,6 +327,13 @@ export class Match {
     return (this.state.half === 1 ? 0 : this.halfLength) + this.state.clock;
   }
 
+  /** Hand a side to the built-in AI manager from now on (the user skipping to the result, an auto round). */
+  enableAi(team: TeamId): void {
+    if (this.aiManaged.has(team)) return;
+    this.aiManaged.add(team);
+    this.aiBase[team] = { ...this.teams[team].tactics };
+  }
+
   emit(type: MatchEventType, team: TeamId | null, playerId: string | null, text: string, pos?: Vec2): void {
     const ev: MatchEvent = {
       t: this.matchSeconds(),

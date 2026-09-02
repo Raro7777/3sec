@@ -1,7 +1,7 @@
-import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type TeamDef, type TeamId } from "@3sec/engine";
+import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type Tactics, type TeamDef, type TeamId } from "@3sec/engine";
 import type { Club, Fixture, GameState, SeasonRecord, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
-import { injuryFactor, injuryDaysFactor, recoveryBonus, staffWageBill } from "./staff";
+import { autoUserTactics, injuryFactor, injuryDaysFactor, recoveryBonus, staffWageBill } from "./staff";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
 import { expireOffers, freeAgentRollover, incomingOffers, returnLoans, seasonBudget, transferWeek } from "./transfers";
@@ -87,7 +87,10 @@ export function prepareRound(s: GameState): void {
 
 const strip = (p: SquadPlayer): PlayerDef => ({ id: p.id, name: p.name, number: p.number, role: p.role, attrs: p.attrs });
 
-export function teamDef(c: Club, side: TeamId): TeamDef {
+/** Match options of the game layer: `autoUser` hands the user's side to the AI (tactics = autoUserTactics). */
+export type GameMatchOptions = MatchOptions & { autoUser?: boolean };
+
+export function teamDef(c: Club, side: TeamId, tactics: Tactics = c.tactics): TeamDef {
   return {
     id: side,
     name: c.name,
@@ -95,20 +98,22 @@ export function teamDef(c: Club, side: TeamId): TeamDef {
     color: c.color,
     players: c.selection.starters.map((id) => strip(playerOf(c, id))),
     bench: c.selection.bench.map((id) => strip(playerOf(c, id))),
-    tactics: normalizeTactics({ ...c.tactics, formation: c.selection.formation, roles: c.tactics.roles ?? autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) }),
+    tactics: normalizeTactics({ ...tactics, formation: c.selection.formation, roles: tactics.roles ?? autoRoles(c.selection.formation, c.selection.starters.map((id) => playerOf(c, id).attrs)) }),
   };
 }
 
 /** Build the engine match for a fixture. The user's side is human-managed, all others AI. */
-export function createMatch(s: GameState, f: Fixture, opts: MatchOptions = {}): Match {
+export function createMatch(s: GameState, f: Fixture, opts: GameMatchOptions = {}): Match {
   const home = clubOf(s, f.home);
   const away = clubOf(s, f.away);
   const initialFatigue: Record<string, number> = {};
   for (const c of [home, away]) for (const p of c.squad) initialFatigue[p.id] = Math.max(0, Math.min(0.6, (1 - p.condition) * 0.8));
+  const { autoUser, ...engineOpts } = opts;
   const aiManaged: TeamId[] = [];
-  if (f.home !== s.userClub) aiManaged.push(0);
-  if (f.away !== s.userClub) aiManaged.push(1);
-  return new Match(teamDef(home, 0), teamDef(away, 1), { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...opts });
+  if (f.home !== s.userClub || autoUser) aiManaged.push(0);
+  if (f.away !== s.userClub || autoUser) aiManaged.push(1);
+  const tac = (c: Club) => (autoUser && c.id === s.userClub ? autoUserTactics(s) : c.tactics);
+  return new Match(teamDef(home, 0, tac(home)), teamDef(away, 1, tac(away)), { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...engineOpts });
 }
 
 /** Write a finished match back into the season: score, scorers, player stats, cards, fatigue, injuries, bans. */
@@ -187,7 +192,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
 }
 
 /** Simulate every unplayed fixture of the current round headlessly (the user's too, if asked). */
-export function simulateRound(s: GameState, opts: MatchOptions = {}, includeUser = true): void {
+export function simulateRound(s: GameState, opts: GameMatchOptions = { autoUser: true }, includeUser = true): void {
   prepareRound(s);
   for (const f of currentFixtures(s)) {
     if (f.score) continue;

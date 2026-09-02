@@ -5,7 +5,7 @@ export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
   DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
-  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary,
+  prepareRound, teamDef, createMatch, type GameMatchOptions, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary,
   type RecordOptions, type HomeAwayRecord, type FinanceSummary,
 } from "./season";
 export {
@@ -44,5 +44,5 @@ export {
   STAFF_ROLES, STAFF_ROLE_LABEL, MAX_STAFF, MAX_PER_ROLE, STAFF_MARKET_MIN, STAFF_MARKET_MAX, STAFF_CONTRACT_YEARS, AI_RENEW_RATING, NATIONAL_SCOUT_RATING, STAFF_RETIRE_AGE, USER_ASSISTANT_RATING,
   staffWage, makeStaff, generateClubStaff, userStartingStaff, staffRating, staffBonus, youthNarrowFactor, recoveryBonus, injuryFactor, injuryDaysFactor, applyStaffRecovery, scoutCapped, scoutReport,
   staffWageBill, staffMarketKey, refreshStaffMarket, ensureStaffMarket, staffRoomProblem, staffSigningFee, hireStaff, staffSeverance, fireStaff, staffRenewalFee, renewStaff, expiringStaff,
-  aiHireStaff, staffWeek, staffRollover, migrateStaff, type ScoutReport,
+  aiHireStaff, staffWeek, staffRollover, migrateStaff, type ScoutReport, staffStyle, staffStyleTags, autoUserTactics, type StaffStyle,
 } from "./staff";

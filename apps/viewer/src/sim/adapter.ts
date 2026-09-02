@@ -6,7 +6,7 @@
  *   and `penaltyShootout` read: `state.{phase,score,events,players}`, `teams[side].shortName`, `def(id)`.
  */
 import type { Match, MatchOptions, PlayerDef, TeamId } from "@3sec/engine";
-import { clubOf, cupFixture, fixtureSeed, teamDef, type CupTie, type Fixture, type GameState } from "@3sec/game";
+import { autoUserTactics, clubOf, cupFixture, fixtureSeed, teamDef, type Club, type CupTie, type Fixture, type GameState } from "@3sec/game";
 import type { MatchResult, ResultPlayer, SimJob } from "./protocol";
 
 /** Mirrors `createMatch` in packages/game/src/season.ts: user's side human-managed, everyone else AI, tired legs carried over. */
@@ -15,10 +15,10 @@ export function leagueJob(s: GameState, f: Fixture, opts: MatchOptions = {}): Si
   const away = clubOf(s, f.away);
   const initialFatigue: Record<string, number> = {};
   for (const c of [home, away]) for (const p of c.squad) initialFatigue[p.id] = Math.max(0, Math.min(0.6, (1 - p.condition) * 0.8));
-  const aiManaged: TeamId[] = [];
-  if (f.home !== s.userClub) aiManaged.push(0);
-  if (f.away !== s.userClub) aiManaged.push(1);
-  return { id: jobId(f), home: teamDef(home, 0), away: teamDef(away, 1), opts: { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...opts } };
+  // Auto rounds: my side is run by the AI with my tactics nudged by the assistant coach (autoUserTactics).
+  const aiManaged: TeamId[] = [0, 1];
+  const tac = (c: Club) => (c.id === s.userClub ? autoUserTactics(s) : c.tactics);
+  return { id: jobId(f), home: teamDef(home, 0, tac(home)), away: teamDef(away, 1, tac(away)), opts: { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...opts } };
 }
 
 /** Mirrors `createCupMatch`: a cup tie viewed as a (negative-id) fixture. */

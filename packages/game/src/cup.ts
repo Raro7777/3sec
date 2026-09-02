@@ -2,7 +2,7 @@ import { Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
 import type { Cup, CupTie, Fixture, GameState } from "./types";
 import { applyStaffRecovery } from "./staff";
 import { boardCupWin } from "./board";
-import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver } from "./season";
+import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver, type GameMatchOptions } from "./season";
 
 export const CUP_NAME = "3sec 컵";
 /** Cup matchdays: before league round index r (0-based) when the season reaches it → stage index. */
@@ -86,7 +86,7 @@ export const cupDayDue = (s: GameState): boolean => !cupDone(s) && !seasonOver(s
 /** Fixture-shaped view of a tie so the engine glue (createMatch/recordResult) can be reused. Negative ids never clash with the league. */
 export const cupFixture = (t: CupTie): Fixture => ({ id: -(1000 * (t.stage + 1) + t.id), round: -1 - t.stage, home: t.home, away: t.away, score: null, scorers: [] });
 
-export function createCupMatch(s: GameState, t: CupTie, opts: MatchOptions = {}): Match {
+export function createCupMatch(s: GameState, t: CupTie, opts: GameMatchOptions = {}): Match {
   return createMatch(s, cupFixture(t), opts);
 }
 
@@ -167,7 +167,7 @@ function closeCupStage(s: GameState): void {
 }
 
 /** Simulate the open ties of the current cup stage headlessly (the user's too, if asked). */
-export function simulateCupDay(s: GameState, opts: MatchOptions = {}, includeUser = true): void {
+export function simulateCupDay(s: GameState, opts: GameMatchOptions = { autoUser: true }, includeUser = true): void {
   prepareRound(s);
   for (const t of pendingCupTies(s)) {
     if (!includeUser && (t.home === s.userClub || t.away === s.userClub)) continue;
