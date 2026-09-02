@@ -88,7 +88,7 @@ export function computePositioning(m: Match, _dt: number): void {
         const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
         const toGoal = norm(sub(ownGoal, ball.pos));
         const dGoal = dist(ball.pos, ownGoal);
-        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(carrier.vel, 0.25));
+        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(carrier.vel, 0.6));
         setTarget(p, jockey, 99, "press");
         continue;
       }
@@ -105,7 +105,7 @@ export function computePositioning(m: Match, _dt: number): void {
         const dir = m.dirOf(p.team);
         const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
         const toGoal = norm(sub(ownGoal, ball.pos));
-        const ahead = add(add(ball.pos, scale(toGoal, 0.9)), scale(carrier.vel, 0.25));
+        const ahead = add(add(ball.pos, scale(toGoal, 0.9)), scale(carrier.vel, 0.6));
         setTarget(p, ahead, 99, "engage");
         continue;
       }
@@ -127,7 +127,7 @@ export function computePositioning(m: Match, _dt: number): void {
       const toBall = norm(sub(ball.pos, opp.pos));
       if (opp.id === ball.owner) {
         // Jockeying the carrier: hold the line between ball and goal a metre off, retreating with them.
-        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(opp.vel, 0.2));
+        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(opp.vel, 0.6));
         setTarget(p, jockey, 99, "jockey");
         continue;
       }

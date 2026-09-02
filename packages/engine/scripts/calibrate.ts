@@ -122,7 +122,7 @@ async function evaluate(t: Tuning): Promise<{ loss: number; m: Metrics }> {
   let loss = 0;
   for (const t of TARGETS) {
     const a = Math.max(m[t.key]!, t.target * 0.02);
-    const e = Math.log(a / t.target);
+    const e = Math.max(-1.4, Math.min(1.4, Math.log(a / t.target))); // cap so one metric cannot dominate
     loss += t.weight * e * e;
   }
   return { loss, m };

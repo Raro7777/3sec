@@ -46,7 +46,7 @@ async function evaluate(t: Tuning): Promise<Record<string, number>> {
     passes: sum.passes! / N, passPct: sum.completed! / Math.max(1, sum.passes!), crosses: sum.crosses! / N, xg: sum.xg! / N, blocks: sum.blocks! / N,
   };
   let loss = 0;
-  for (const [k, target, w] of TARGETS) { const e = Math.log(Math.max(m[k]!, target * 0.02) / target); loss += w * e * e; }
+  for (const [k, target, w] of TARGETS) { const e = Math.max(-1.4, Math.min(1.4, Math.log(Math.max(m[k]!, target * 0.02) / target))); loss += w * e * e; }
   m.loss = loss;
   return m;
 }

@@ -160,7 +160,8 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       return 0.6;
     case "dribble": {
       const point = dribbleTarget(m, p);
-      setDribble(m, p, point, 99 * (0.72 + 0.28 * a01(attrs.dribbling)) );
+      // Running with the ball is slower than sprinting: 60-90% of top speed depending on dribbling.
+      setDribble(m, p, point, maxSpeed(attrs, p.fatigue) * (0.6 + 0.3 * a01(attrs.dribbling)));
       return 0.35 + 0.3 * (1 - tactics.directness);
     }
     case "hold":
