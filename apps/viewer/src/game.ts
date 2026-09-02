@@ -5,10 +5,11 @@ import {
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
   MAX_SQUAD, MIN_SQUAD, bestOffer, buyPlayer, playerValue, sellPlayer, transferTargets, windowOpen,
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
+  COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
-type ScreenName = "home" | "squad" | "table" | "transfers" | "results" | "match" | "guide";
+type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide";
 
 const SLIDERS: { key: keyof Omit<Tactics, "formation">; label: string; lo: string; hi: string }[] = [
   { key: "mentality", label: "멘탈리티", lo: "수비", hi: "공격" },
@@ -31,6 +32,7 @@ export class Game {
     squad: document.getElementById("squad")!,
     table: document.getElementById("tableView")!,
     transfers: document.getElementById("transfers")!,
+    youth: document.getElementById("youth")!,
     guide: document.getElementById("guide")!,
     results: document.getElementById("results")!,
     season: document.getElementById("seasonLabel")!,
@@ -96,6 +98,11 @@ export class Game {
       <li>훈련 <b>초점</b>은 어느 능력치가 먼저 오를지, <b>강도</b>는 성장 속도와 회복·부상 위험을 정합니다.</li>
       <li>어린 선수는 <b>잠재력</b>까지 성장하고, 30세부터 서서히, 33세부터 빠르게 쇠퇴합니다(피지컬부터).</li>
       <li>계약은 시즌 단위입니다. 만료 시즌인 선수는 <b>이적 탭 → 계약</b>에서 재계약하지 않으면 시즌이 끝날 때 떠납니다. 계약금은 가치의 5%×연수입니다.</li></ul>`)}
+    ${sec("유스 아카데미", `<ul>
+      <li><b>유스</b> 탭의 아카데미에는 시즌 시작과 11라운드 전에 15~18세 유망주가 들어옵니다. 인원은 스카우팅 등급이 정합니다: 없음 1명(평범), 지역 2명, 권역 3명, 전국 4명(잠재력 상한이 높음). 정원은 ${MAX_PROSPECTS}명이고 넘치면 가장 약한 유망주가 나갑니다.</li>
+      <li>유망주의 <b>잠재력</b>은 범위(예: 13~17)로만 보이고, 매주 스카우트가 좁혀 갑니다. 등급이 높을수록 빨리 좁혀지고 정기 <b>보고서</b>가 크게 좁힙니다. 하한이 15 이상이면 1군급 재목입니다.</li>
+      <li>스카우팅(주 0/0.2/0.5/1.0억)과 코칭(주 0/0.3/0.7억) 비용은 연봉과 함께 매주 예산에서 빠집니다. 코칭 등급이 높을수록 유망주가 빨리 성장합니다.</li>
+      <li><b>승격</b>은 ${MIN_PROMOTE_AGE}세부터 가능하며, 3시즌 계약에 연봉은 시세의 절반입니다. ${LEAVE_AGE}세가 되면 승격하지 않은 유망주는 자동으로 떠나므로 18세 유망주는 시즌이 끝나기 전에 결정하세요.</li></ul>`)}
     ${sec("팁", `<ul>
       <li>전력이 약하면 수비라인을 낮추고 직접성을 높여 역습을 노리세요. 강하면 높은 라인과 강한 프레싱이 유리합니다.</li>
       <li>60분 이후 컨디션이 40% 아래인 선수는 교체하세요. 피로는 다음 경기 시작 컨디션에도 남습니다.</li>
@@ -137,6 +144,7 @@ export class Game {
     this.renderSquad();
     this.renderTable();
     this.renderTransfers();
+    this.renderYouth();
   }
 
   private get me(): Club {
@@ -174,7 +182,8 @@ export class Game {
       </div>`);
       const prob = selectionProblem(me);
       if (prob) h.push(`<div class="hint" style="color:var(--warn)">선발 문제: ${prob} — 스쿼드에서 조정하거나 자동으로 보정됩니다.</div>`);
-      h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><button data-act="sim" title="이번 라운드의 모든 경기를 즉시 시뮬레이션합니다">라운드 자동 진행 ⏩</button></div>`);
+      h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><span style="display:inline-flex;gap:4px;align-items:center"><button data-act="sim1" title="이번 라운드의 모든 경기를 즉시 시뮬레이션합니다">⏩ 1라운드</button><button data-act="sim3" title="3라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 3라운드</button><button data-act="sim5" title="5라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 5라운드</button></span></div>
+      <div class="hint">자동 진행은 내 경기도 AI가 지휘합니다. 여러 라운드를 돌리면 매 라운드 사이에 회복·훈련·연봉이 정산되고 마지막 라운드 결과가 표시됩니다.</div>`);
     }
     h.push(`</div>`);
     h.push(`<div class="grid2">`);
@@ -203,7 +212,9 @@ export class Game {
     switch (a) {
       case "squad": this.show("squad"); break;
       case "play": this.startMatch(); break;
-      case "sim": void this.simRound(); break;
+      case "sim1": void this.simRounds(1); break;
+      case "sim3": void this.simRounds(3); break;
+      case "sim5": void this.simRounds(5); break;
       case "toMatch": this.show("match"); break;
       case "nextSeason": startNextSeason(this.state); this.save(); this.renderAll(); break;
       case "newGame":
@@ -422,6 +433,65 @@ export class Game {
     );
   }
 
+  // ------------------------------------------------------------ youth
+  private renderYouth(): void {
+    const s = this.state;
+    const me = this.me;
+    const y = me.youth;
+    const locked = !!this.live;
+    const tiers = Object.keys(SCOUTING) as ScoutingTier[];
+    const prospects = [...y.prospects].sort((a, b) => (b.potentialRange[0] + b.potentialRange[1]) - (a.potentialRange[0] + a.potentialRange[1]) || prospectOverall(b) - prospectOverall(a));
+    const h: string[] = [];
+    h.push(`<div class="card"><h3>유스 아카데미 <span>유망주 ${y.prospects.length}/${MAX_PROSPECTS} · 주 ${youthWeeklyCost(me)}억 · 예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD}</span></h3>
+      <div class="squad-tools">
+        <label>스카우팅 <select id="ytScouting">${tiers.map((k) => `<option value="${k}" ${k === y.scouting ? "selected" : ""}>${SCOUTING[k].label} · ${SCOUTING[k].intake}명 · 주 ${SCOUTING[k].cost}억</option>`).join("")}</select></label>
+        <label>코칭 <select id="ytCoaching">${[1, 2, 3].map((l) => `<option value="${l}" ${l === y.coaching ? "selected" : ""}>${COACHING[l]!.label} · 주 ${COACHING[l]!.cost}억</option>`).join("")}</select></label>
+      </div>
+      <div class="hint">유망주는 시즌 시작과 11라운드 전에 들어옵니다. 스카우팅 등급이 높을수록 인원이 많고 잠재력 상한이 높으며 <b>잠재력 범위</b>가 빨리 좁혀집니다. 코칭 등급은 성장 속도를 정합니다(×${(0.8 + 0.3 * y.coaching).toFixed(1)}). 비용은 연봉과 함께 매주 빠집니다.</div></div>`);
+    const header = `<div class="row yt" style="color:var(--muted);font-size:11px"><span>포지션</span><span>이름</span><span style="text-align:right">능력</span><span style="text-align:right">잠재력</span><span></span></div>`;
+    const row = (p: (typeof prospects)[number]) => {
+      const ovr = prospectOverall(p);
+      const [lo, hi] = p.potentialRange;
+      const width = hi - lo;
+      const known = width <= 0.5 ? "확정" : width <= 1.5 ? "거의 확정" : p.reportsSeen > 0 ? `보고서 ${p.reportsSeen}` : "미확인";
+      const potText = width <= 0.5 ? `${Math.round(p.truePotential)}` : `${Math.round(lo)}~${Math.round(hi)}`;
+      const urgent = p.age >= LEAVE_AGE - 1;
+      const note = urgent ? '<span style="color:var(--warn)">시즌 내 승격 필요</span>' : p.age < MIN_PROMOTE_AGE ? `${MIN_PROMOTE_AGE}세부터 승격` : known;
+      const canPromote = !locked && p.age >= MIN_PROMOTE_AGE && me.squad.length < MAX_SQUAD;
+      return `<div class="row yt">
+        <span class="role">${p.role}</span>
+        <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${p.age}세 · ${p.weeksInAcademy}주 · ${note}</span></span>
+        <span class="ovr" style="color:${ovr >= 12 ? "var(--good)" : ovr >= 9 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</span>
+        <span class="pot" title="스카우트 추정 잠재력 (${known})" style="color:${lo >= 15 ? "var(--good)" : "var(--muted)"}">${potText}</span>
+        <span class="acts"><button data-promote="${p.id}" ${canPromote ? "" : "disabled"} title="${MIN_PROMOTE_AGE}세 이상, 스쿼드 ${MAX_SQUAD}명 미만">승격</button><button class="danger" data-release="${p.id}" ${locked ? "disabled" : ""}>방출</button></span></div>`;
+    };
+    h.push(`<div class="card"><h3>유망주 <span>잠재력 하한 15 이상은 1군급</span></h3>${header}<div class="roster">${prospects.length ? prospects.map(row).join("") : '<div class="hint">아직 유망주가 없습니다. 다음 입단 시기에 들어옵니다.</div>'}</div>
+      <div class="hint">승격하면 3시즌 계약(연봉은 시세의 절반)으로 1군에 합류하고 잠재력이 확정됩니다. ${LEAVE_AGE}세가 되는 유망주는 승격하지 않으면 시즌이 끝날 때 떠납니다.${locked ? " 경기 중에는 변경할 수 없습니다." : ""}</div></div>`);
+    this.el.youth.innerHTML = h.join("");
+    (document.getElementById("ytScouting") as HTMLSelectElement).addEventListener("change", (e) => { y.scouting = (e.target as HTMLSelectElement).value as ScoutingTier; this.save(); this.renderYouth(); });
+    (document.getElementById("ytCoaching") as HTMLSelectElement).addEventListener("change", (e) => { y.coaching = Number((e.target as HTMLSelectElement).value); this.save(); this.renderYouth(); });
+    this.el.youth.querySelectorAll<HTMLButtonElement>("button[data-promote]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const p = y.prospects.find((q) => q.id === b.dataset.promote);
+        if (!p || !confirm(`${p.name}(${p.age}세 ${p.role})을(를) 1군으로 승격할까요? 3시즌 계약, 잠재력은 승격 후 확정됩니다.`)) return;
+        const err = promoteProspect(s, p.id);
+        if (err) alert(err);
+        this.save();
+        this.renderAll();
+      }),
+    );
+    this.el.youth.querySelectorAll<HTMLButtonElement>("button[data-release]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const p = y.prospects.find((q) => q.id === b.dataset.release);
+        if (!p || !confirm(`${p.name}을(를) 아카데미에서 방출할까요? 되돌릴 수 없습니다.`)) return;
+        const err = releaseProspect(s, p.id);
+        if (err) alert(err);
+        this.save();
+        this.renderAll();
+      }),
+    );
+  }
+
   // ------------------------------------------------------------ results
   private renderResults(round: number): void {
     const s = this.state;
@@ -460,26 +530,40 @@ export class Game {
     this.screen.start(user.match, side, others, () => this.finishRound());
   }
 
-  private async simRound(): Promise<void> {
+  /** Simulate n rounds back to back; rounds in between are settled silently, the last one is shown. */
+  private async simRounds(n: number): Promise<void> {
     const s = this.state;
-    prepareRound(s);
-    this.live = currentFixtures(s).map((fixture) => ({ fixture, match: createMatch(s, fixture) }));
-    const live = this.live;
-    await this.runChunked(() => {
-      for (let i = 0; i < 20 * 30; i++) for (const x of live) if (x.match.state.phase !== "FULL_TIME") x.match.step();
-      return live.every((x) => x.match.state.phase === "FULL_TIME");
-    }, "라운드 시뮬레이션 중…");
-    this.finishRound();
+    for (let k = 0; k < n; k++) {
+      if (seasonOver(s)) break;
+      prepareRound(s);
+      const live = currentFixtures(s).filter((f) => !f.score).map((fixture) => ({ fixture, match: createMatch(s, fixture) }));
+      const label = n > 1 ? `라운드 ${s.round + 1} 시뮬레이션 중… (${k + 1}/${n})` : "라운드 시뮬레이션 중…";
+      await this.runChunked(() => {
+        for (let i = 0; i < 20 * 30; i++) for (const x of live) if (x.match.state.phase !== "FULL_TIME") x.match.step();
+        return live.every((x) => x.match.state.phase === "FULL_TIME");
+      }, label);
+      this.live = live;
+      const last = k === n - 1 || seasonOver(s) || s.round + 1 >= roundsPerSeason(s.clubs.length);
+      if (last) {
+        this.finishRound();
+        return;
+      }
+      this.settleLive();
+      advanceRound(s);
+      prepareRound(s);
+      this.save();
+    }
+    this.renderAll();
+    this.show("home");
   }
 
-  private finishRound(): void {
+  /** Record every live match into the season state (shared by finishRound and multi-round sims). */
+  private settleLive(): void {
     const s = this.state;
     if (!this.live) return;
-    const round = s.round;
     for (const { fixture, match } of this.live) {
       if (fixture.score) continue;
       recordResult(s, fixture, match);
-      // Tactics changed from the touchline carry over to the next match.
       for (const side of [0, 1] as TeamId[]) {
         const club = clubOf(s, side === 0 ? fixture.home : fixture.away);
         if (club.id === s.userClub) {
@@ -490,6 +574,13 @@ export class Game {
       }
     }
     this.live = null;
+  }
+
+  private finishRound(): void {
+    const s = this.state;
+    if (!this.live) return;
+    const round = s.round;
+    this.settleLive();
     this.screen.leave();
     this.save();
     this.renderAll();

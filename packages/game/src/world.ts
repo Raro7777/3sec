@@ -8,6 +8,8 @@ import { wageFor } from "./contracts";
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
 const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
 
+export const randomName = (rng: Rng): string => `${rng.pick(FIRST)}${rng.pick(GIVEN)}`;
+
 /** Fictional clubs; reputation spreads the league from title favourites to relegation fodder. */
 export const CLUBS: { name: string; shortName: string; color: string; reputation: number; formation: FormationName }[] = [
   { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.5, formation: "4-3-3" },
@@ -44,7 +46,7 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
     const potential = Math.max(ovr, Math.min(20, Math.round((ovr + Math.max(0, 27 - age) * 0.55 + rng.gauss(0.5, 1)) * 10) / 10));
     squad.push({
       id: `${idPrefix}-${i + 1}`,
-      name: `${rng.pick(FIRST)}${rng.pick(GIVEN)}`,
+      name: randomName(rng),
       number,
       role,
       attrs,
@@ -77,6 +79,7 @@ export function buildClubs(seed: number): Club[] {
       tactics: { ...defaultTactics(c.formation), mentality: 0.45 + rng.range(0, 0.1), pressing: 0.4 + rng.range(0, 0.2), directness: 0.4 + rng.range(0, 0.2) },
       selection: { formation: c.formation, starters: [], bench: [] },
       training: { focus: "balanced", intensity: "normal" },
+      youth: { prospects: [], scouting: "local", coaching: 1, nextId: 1 },
     };
     for (const p of club.squad) p.wage = wageFor(p);
     club.selection = autoSelect(club, c.formation);

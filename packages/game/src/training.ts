@@ -1,4 +1,4 @@
-import type { Attributes } from "@3sec/engine";
+import type { Attributes, Role } from "@3sec/engine";
 import type { Club, SquadPlayer, TrainingFocus, TrainingIntensity } from "./types";
 import { overall } from "./rating";
 
@@ -31,6 +31,33 @@ export function weeklyRate(age: number): number {
 
 export interface Development { player: SquadPlayer; attr: Attr; delta: 1 | -1 }
 
+/** Anything that trains: a squad player or an academy prospect. */
+export interface Grower { role: Role; attrs: Attributes; growth: number }
+
+/**
+ * Spends whole points of accumulated growth on attributes (focus attributes are drawn three times as
+ * often); whole points of decline come off the physical attributes first. Shared by squad and academy.
+ */
+export function spendGrowth(p: Grower, focus: Attr[], rng: { next(): number }): { attr: Attr; delta: 1 | -1 }[] {
+  const out: { attr: Attr; delta: 1 | -1 }[] = [];
+  const pool = p.role === "GK" ? GK_ATTRS : OUTFIELD;
+  let guard = 0;
+  while (p.growth >= 1 && guard++ < 4) {
+    const weighted = [...pool, ...focus.filter((a) => pool.includes(a)), ...focus.filter((a) => pool.includes(a))];
+    const attr = weighted[Math.floor(rng.next() * weighted.length)]!;
+    if (p.attrs[attr] < 20) { p.attrs[attr]++; out.push({ attr, delta: 1 }); }
+    p.growth -= 1;
+  }
+  guard = 0;
+  while (p.growth <= -1 && guard++ < 4) {
+    const weighted = [...pool, ...PHYSICAL, ...PHYSICAL];
+    const attr = weighted[Math.floor(rng.next() * weighted.length)]!;
+    if (p.attrs[attr] > 1) { p.attrs[attr]--; out.push({ attr, delta: -1 }); }
+    p.growth += 1;
+  }
+  return out;
+}
+
 /**
  * One week of training for a club: every player's growth accumulator moves by the age rate
  * (scaled by intensity and capped by potential); whole points are spent on attributes, biased
@@ -49,21 +76,7 @@ export function trainWeek(club: Club, rng: { next(): number }): Development[] {
       else if (headroom < 1.5) rate *= 0.4;
     }
     p.growth += rate;
-    const pool = p.role === "GK" ? GK_ATTRS : OUTFIELD;
-    let guard = 0;
-    while (p.growth >= 1 && guard++ < 4) {
-      const weighted = [...pool, ...focus.filter((a) => pool.includes(a)), ...focus.filter((a) => pool.includes(a))];
-      const attr = weighted[Math.floor(rng.next() * weighted.length)]!;
-      if (p.attrs[attr] < 20) { p.attrs[attr]++; out.push({ player: p, attr, delta: 1 }); }
-      p.growth -= 1;
-    }
-    guard = 0;
-    while (p.growth <= -1 && guard++ < 4) {
-      const weighted = [...pool, ...PHYSICAL, ...PHYSICAL];
-      const attr = weighted[Math.floor(rng.next() * weighted.length)]!;
-      if (p.attrs[attr] > 1) { p.attrs[attr]--; out.push({ player: p, attr, delta: -1 }); }
-      p.growth += 1;
-    }
+    for (const ch of spendGrowth(p, focus, rng)) out.push({ player: p, ...ch });
   }
   return out;
 }

@@ -6,10 +6,13 @@ import { repairSelection, autoSelect } from "./selection";
 import { aiTransfers, seasonBudget } from "./transfers";
 import { trainWeek, ATTR_LABEL } from "./training";
 import { payWages, settleContracts } from "./contracts";
+import { youthIntake, youthRollover, youthWeek } from "./youth";
 
 export function newGame(seed: number, userClub = 0): GameState {
   const clubs = buildClubs(seed);
-  return { version: 1, seed, season: 1, round: 0, userClub, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. 당신은 ${clubs[userClub]!.name} 감독입니다.`] };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. 당신은 ${clubs[userClub]!.name} 감독입니다.`] };
+  youthIntake(s, new Rng(seed * 29 + 3));
+  return s;
 }
 
 export const clubOf = (s: GameState, id: number): Club => s.clubs[id]!;
@@ -136,7 +139,11 @@ export function advanceRound(s: GameState): boolean {
     if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
   payWages(s, roundsPerSeason(s.clubs.length));
-  if (s.round === 10) aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
+  youthWeek(s);
+  if (s.round === 10) {
+    aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
+    youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
+  }
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   return true;
 }
@@ -161,6 +168,8 @@ export function startNextSeason(s: GameState): void {
   s.round = 0;
   s.fixtures = buildFixtures(s.clubs.length);
   s.news.unshift(`시즌 ${s.season} 시작.`);
+  youthRollover(s, rng);
+  youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 3));
   aiTransfers(s, rng);
   prepareRound(s);
 }

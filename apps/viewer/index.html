@@ -73,6 +73,10 @@
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px; }
       .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px; }
       .row.tr button { white-space:nowrap; width:100%; }
+      .row.yt { grid-template-columns: 34px 1fr 40px 64px 150px; cursor:default; }
+      .row.yt .pot { font-family:"IBM Plex Mono", monospace; font-size:12px; text-align:right; color:var(--muted); }
+      .row.yt .acts { display:flex; gap:4px; justify-content:flex-end; }
+      .row.yt .acts button { padding:3px 8px; font-size:12px; white-space:nowrap; }
       .row:hover { background:#18232d; }
       .row.sel { border-color:var(--accent); background:#1d2733; }
       .row.off { opacity:.45; }
@@ -158,6 +162,7 @@
         .row.wide .age, .row.wide .st { display:none; }
         .row.tr { grid-template-columns: 22px 30px 1fr 36px 118px; }
         .row.tr .age, .row.tr .val { display:none; }
+        .row.yt { grid-template-columns: 30px 1fr 36px 52px 112px; }
       }
     </style>
   </head>
@@ -169,6 +174,7 @@
         <button class="tab" data-screen="squad">스쿼드</button>
         <button class="tab" data-screen="table">순위</button>
         <button class="tab" data-screen="transfers">이적</button>
+        <button class="tab" data-screen="youth">유스</button>
         <button class="tab" data-screen="match" id="tabMatch" disabled>경기</button>
         <button class="tab" data-screen="guide" title="게임 가이드">?</button>
         <span class="spacer"></span>
@@ -179,6 +185,7 @@
       <section class="screen" id="screen-squad"><div class="page" id="squad"></div></section>
       <section class="screen" id="screen-table"><div class="page" id="tableView"></div></section>
       <section class="screen" id="screen-transfers"><div class="page" id="transfers"></div></section>
+      <section class="screen" id="screen-youth"><div class="page" id="youth"></div></section>
       <section class="screen" id="screen-guide"><div class="page" id="guide"></div></section>
       <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
 

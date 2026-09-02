@@ -1,4 +1,4 @@
-import type { FormationName, PlayerDef, Tactics } from "@3sec/engine";
+import type { Attributes, FormationName, PlayerDef, Role, Tactics } from "@3sec/engine";
 
 /** A squad member: the engine's player definition plus career/season state. */
 export interface SquadPlayer extends PlayerDef {
@@ -30,6 +30,37 @@ export interface Selection {
   bench: string[];
 }
 
+export type ScoutingTier = "none" | "local" | "regional" | "national";
+
+/** A youth-academy prospect: not yet a squad member, potential only partly known. */
+export interface YouthProspect {
+  id: string;
+  name: string;
+  /** 15..18; leaves automatically once 19 without promotion */
+  age: number;
+  role: Role;
+  attrs: Attributes;
+  /** what the scouts believe: the true potential lies inside, the range narrows with reports */
+  potentialRange: [number, number];
+  /** hidden ceiling (1..20) – becomes the player's potential on promotion */
+  truePotential: number;
+  /** scouting reports delivered so far (0..3) */
+  reportsSeen: number;
+  /** fractional development accumulated by academy training */
+  growth: number;
+  joinedRound: number;
+  weeksInAcademy: number;
+}
+
+export interface Youth {
+  prospects: YouthProspect[];
+  scouting: ScoutingTier;
+  /** 1..3 – academy coaching level */
+  coaching: number;
+  /** running counter behind prospect ids (unique for the life of the save) */
+  nextId: number;
+}
+
 export type TrainingFocus = "balanced" | "attacking" | "defending" | "technical" | "physical" | "tactical";
 export type TrainingIntensity = "low" | "normal" | "high";
 
@@ -46,6 +77,7 @@ export interface Club {
   tactics: Tactics;
   selection: Selection;
   training: { focus: TrainingFocus; intensity: TrainingIntensity };
+  youth: Youth;
 }
 
 export interface Fixture {
