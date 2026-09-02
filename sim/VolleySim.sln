@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Training.Tests", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Play", "VolleySim.Play\VolleySim.Play.csproj", "{F5CCB6F2-F354-4390-A7D6-BC7ED892D586}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Play.Tests", "VolleySim.Play.Tests\VolleySim.Play.Tests.csproj", "{23299D70-6906-4D0F-A490-361BAFD58A91}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,5 +50,9 @@ Global
 		{F5CCB6F2-F354-4390-A7D6-BC7ED892D586}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F5CCB6F2-F354-4390-A7D6-BC7ED892D586}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F5CCB6F2-F354-4390-A7D6-BC7ED892D586}.Release|Any CPU.Build.0 = Release|Any CPU
+		{23299D70-6906-4D0F-A490-361BAFD58A91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{23299D70-6906-4D0F-A490-361BAFD58A91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{23299D70-6906-4D0F-A490-361BAFD58A91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{23299D70-6906-4D0F-A490-361BAFD58A91}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

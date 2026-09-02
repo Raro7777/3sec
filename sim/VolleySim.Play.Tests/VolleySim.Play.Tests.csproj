@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 코어 루프 프로토타입(VolleySim.Play)의 회귀 테스트: 저장/불러오기 라운드트립 결정성, 재화 규칙, 화면 상태 전환. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>VolleySim.Play.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VolleySim.Core\VolleySim.Core.csproj" />
+    <ProjectReference Include="..\VolleySim.Training\VolleySim.Training.csproj" />
+    <ProjectReference Include="..\VolleySim.Play\VolleySim.Play.csproj" />
+  </ItemGroup>
+
+</Project>

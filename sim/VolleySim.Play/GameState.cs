@@ -54,6 +54,8 @@ public sealed class GameState
         }
     }
 
+    /// <summary>대표 인스턴스(파생 뷰). 저장 대상이 아니므로 직렬화에서 제외한다(이전에는 Instances 와 중복 기록됐다).</summary>
+    [JsonIgnore]
     public IEnumerable<PlayerInstance> Representatives => Instances.Where(i => i.IsRepresentative);
     public PlayerInstance? Representative(string cardId) => Instances.FirstOrDefault(i => i.IsRepresentative && i.CardId == cardId);
 

@@ -68,7 +68,11 @@ IEvaluationMatchProvider eval = useStub ? new StubEvaluationProvider() : new Sim
 
 GameState state;
 if (loadPath != null && File.Exists(loadPath)) { state = GameState.Load(loadPath); savePath ??= loadPath; }
-else state = GameState.NewGame(seed, clubName, unlimited: auto);
+else
+{
+    if (loadPath != null) Console.Error.WriteLine($"세이브 파일이 없어 새 게임을 시작합니다: {loadPath}");
+    state = GameState.NewGame(seed, clubName, unlimited: auto);
+}
 savePath ??= Path.Combine(Path.GetDirectoryName(dataDir) ?? ".", "saves", auto ? $"auto-{seed}.json" : $"club-{seed}.json");
 var game = new Game(state, players, teams, cfg, eval, savePath) { OpponentGrowth = opponentGrowth };
 

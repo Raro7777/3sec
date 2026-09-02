@@ -17,10 +17,11 @@ public sealed class Screens
 
     public void MainLoop()
     {
-        var st = _g.State;
         _ui.Line("블룸 리그 연맹은 신생 구단의 창단을 승인했다. 여섯 구단의 공개 스카우트 명단에서 원석을 찾아 키우고, 챔피언십에 도달하라.");
         while (true)
         {
+            // 불러오기(7)가 _g 를 교체하므로 상태는 매 반복마다 다시 잡는다(이전에는 루프 밖에서 한 번만 잡아 로드 후 헤더·구단명 변경·기록이 옛 상태를 가리켰다).
+            var st = _g.State;
             _ui.Header($"{st.ClubName} 감독실");
             _ui.Line($"티켓 {(st.UnlimitedTickets ? "∞" : st.Tickets.ToString())} · 조각 {st.Fragments}/{GameState.FragmentsPerTicket} · 보유 카드 {st.OwnedCards.Count}장 · 로스터 {st.Representatives.Count()}명(보관 {st.Instances.Count(i => !i.IsRepresentative)}) · 육성 {st.TrainingCount}회 · 전적 {st.Wins}승 {st.Losses}패 · 라인업 OVR {_g.LineupOvr():0.0} (연습생 {_g.FillersInLineup()}명)");
             _ui.Line("1) 스카우트  2) 육성  3) 로스터  4) 라인업  5) 경기  6) 저장  7) 불러오기  8) 구단명 변경  9) 기록  0) 종료");
@@ -258,7 +259,7 @@ public sealed class Screens
         try
         {
             var st = GameState.Load(files[pick - 1]);
-            _g = new Game(st, _g.Pool, _g.Clubs, _g.Config, _g.Evaluation, files[pick - 1]);
+            _g = new Game(st, _g.Pool, _g.Clubs, _g.Config, _g.Evaluation, files[pick - 1]) { OpponentGrowth = _g.OpponentGrowth };
             _ui.Line($"불러왔습니다: {st.ClubName} (육성 {st.TrainingCount}회, {st.Wins}승 {st.Losses}패)");
         }
         catch (Exception ex) { _ui.Line("불러오기 실패: " + ex.Message); }

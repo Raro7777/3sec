@@ -115,8 +115,7 @@ public sealed class Game
                     msg = "보관함에 보관";
                     break;
                 default:
-                    State.Fragments += 1;
-                    msg = "방출 (스카우트 조각 +1)";
+                    msg = "방출 (스카우트 조각 +1)" + (AddFragment() ? " → 조각 3개로 티켓 +1" : "");
                     break;
             }
         }
@@ -141,8 +140,18 @@ public sealed class Game
     public void ReleaseInstance(PlayerInstance inst)
     {
         State.Instances.Remove(inst);
-        State.Fragments += 1;
+        AddFragment();
         if (State.LineupStarters != null && !LineupValid()) { State.LineupStarters = null; State.LineupLibero = null; }
+    }
+
+    /// <summary>조각 +1. 3개가 모이면 티켓 1로 바꾼다(경기 패배·방출 공통). 변환됐으면 true.</summary>
+    private bool AddFragment()
+    {
+        State.Fragments++;
+        if (State.Fragments < GameState.FragmentsPerTicket) return false;
+        State.Fragments -= GameState.FragmentsPerTicket;
+        State.Tickets++;
+        return true;
     }
 
     // ---------------- 라인업 ----------------
@@ -277,14 +286,9 @@ public sealed class Game
         {
             State.Losses++;
             State.LossesByClub[club.Id] = State.LossesByClub.GetValueOrDefault(club.Id) + 1;
-            State.Fragments++;
-            reward = $"참가 보상: 스카우트 조각 +1 ({State.Fragments % GameState.FragmentsPerTicket}/{GameState.FragmentsPerTicket})";
-            if (State.Fragments >= GameState.FragmentsPerTicket)
-            {
-                State.Fragments -= GameState.FragmentsPerTicket;
-                State.Tickets++;
-                reward += " → 조각 3개로 티켓 +1";
-            }
+            bool converted = AddFragment();
+            reward = $"참가 보상: 스카우트 조각 +1 ({State.Fragments}/{GameState.FragmentsPerTicket})";
+            if (converted) reward += " → 조각 3개로 티켓 +1";
         }
         State.History.Add($"경기 vs {club.Name}: {(won ? "승" : "패")} {r.HomeSets}-{r.AwaySets} ({r.SetScoreLine()})");
         return reward;

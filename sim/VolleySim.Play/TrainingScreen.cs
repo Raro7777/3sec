@@ -50,7 +50,8 @@ public sealed class TrainingScreen
         string zone = $"{TrainingText.ZoneName(s.Zone)} ×{s.ZoneMult:0.00}";
         string badge = s.Zone == FatigueZone.Hot ? " 🔥" : s.Zone == FatigueZone.Overheat ? " ⚠과열" : "";
         _ui.Line();
-        _ui.Line($"┌ T{s.Turn}/{cfg.Turns}{(cfg.IsEvalTurn(s.Turn) ? $" [평가전 {cfg.EvalRound(s.Turn) + 1}차 · 강도 {cfg.EvalStrength[cfg.EvalRound(s.Turn)]}]" : "")}  피로 {t.Fatigue:0} [{zone}{badge}]  컨디션 {TrainingText.ConditionName(t.Condition)} {TrainingText.ConditionArrow(t.Condition)}  콤보 ×{t.Combo}(+{Math.Min(cfg.ComboCap, cfg.ComboStep * t.Combo) * 100:0}%)  힌트 {t.Hints}{(t.HasInjuryHistory ? "  🩹부상이력(×2)" : "")}");
+        // 피로는 스태미나 계수 때문에 소수가 되므로 반올림하지 않는다(44.9 를 "45 [적정]" 으로 보이면 구간 경계 45 와 모순).
+        _ui.Line($"┌ T{s.Turn}/{cfg.Turns}{(cfg.IsEvalTurn(s.Turn) ? $" [평가전 {cfg.EvalRound(s.Turn) + 1}차 · 강도 {cfg.EvalStrength[cfg.EvalRound(s.Turn)]}]" : "")}  피로 {t.Fatigue:0.#} [{zone}{badge}]  컨디션 {TrainingText.ConditionName(t.Condition)} {TrainingText.ConditionArrow(t.Condition)}  콤보 ×{t.Combo}(+{Math.Min(cfg.ComboCap, cfg.ComboStep * t.Combo) * 100:0}%)  힌트 {t.Hints}{(t.HasInjuryHistory ? "  🩹부상이력(×2)" : "")}");
         var parts = new List<string>();
         for (int i = 0; i < 10; i++)
         {
