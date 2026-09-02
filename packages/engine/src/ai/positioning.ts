@@ -430,22 +430,32 @@ function restartPositioning(m: Match, p: PlayerState): void {
     }
     case "CORNER": {
       const goalX = r.pos.x; // corner is at the goal line of the defending side
+      const gs = Math.sign(goalX);
+      const idx = Math.max(0, m.slotIndex(p.id));
+      const role = m.def(p.id).role;
       if (attackers) {
-        const role = m.def(p.id).role;
+        // Six attackers crowd the box (near post, penalty spot, far post, edge), full-backs hold.
         if (isForward(role) || isMidfielder(role)) {
-          const idx = Math.max(0, m.slotIndex(p.id));
-          const spreadY = ((idx % 5) - 2) * 3.5;
-          target = { x: goalX - Math.sign(goalX) * (6 + (idx % 3) * 3), y: spreadY };
+          const k = idx % 6;
+          const spots = [
+            { x: 6, y: -6 }, { x: 10, y: -2 }, { x: 10, y: 4 }, { x: 7, y: 8 }, { x: 15, y: 0 }, { x: 19, y: -4 },
+          ];
+          const sp = spots[k]!;
+          target = { x: goalX - gs * sp.x, y: sp.y * Math.sign(r.pos.y || 1) };
         } else {
-          target = { x: goalX - Math.sign(goalX) * 30, y: home.y * 0.6 };
+          target = { x: goalX - gs * 32, y: home.y * 0.5 };
         }
       } else {
-        const idx = Math.max(0, m.slotIndex(p.id));
-        const role = m.def(p.id).role;
+        // Eight defenders in and around the six-yard box (one on the near post), two forwards stay up.
         if (isDefender(role) || isMidfielder(role)) {
-          target = { x: goalX - Math.sign(goalX) * (4 + (idx % 3) * 2.5), y: ((idx % 5) - 2) * 3 };
+          const k = idx % 8;
+          const spots = [
+            { x: 1, y: -3.4 }, { x: 4, y: -5 }, { x: 5, y: -1.5 }, { x: 5, y: 2 }, { x: 6, y: 5 }, { x: 9, y: -3 }, { x: 9, y: 3 }, { x: 12, y: 0 },
+          ];
+          const sp = spots[k]!;
+          target = { x: goalX - gs * sp.x, y: sp.y * Math.sign(r.pos.y || 1) };
         } else {
-          target = { x: goalX - Math.sign(goalX) * 28, y: 0 };
+          target = { x: goalX - gs * 30, y: (idx % 2 ? 1 : -1) * 6 };
         }
       }
       break;
@@ -470,10 +480,14 @@ function restartPositioning(m: Match, p: PlayerState): void {
     case "FREE_KICK":
     case "THROW_IN":
     default: {
-      // Shape around the ball, attackers a little further forward.
+      // Shape around the ball, compact: most of both teams gather within ~30 m of a dead ball.
       const ballX = r.pos.x * dir;
-      const shiftX = ballX * 0.45 + (attackers ? 8 : -6);
-      target = { x: (home.x * dir + shiftX) * dir, y: home.y + r.pos.y * 0.3 };
+      const shiftX = ballX * 0.6 + (attackers ? 6 : -5);
+      target = { x: (home.x * dir + shiftX) * dir, y: home.y * 0.6 + r.pos.y * 0.5 };
+      const role = m.def(p.id).role;
+      const holdsBack = isDefender(role) && (m.slotIndex(p.id) === 2 || m.slotIndex(p.id) === 3);
+      const dBall = dist(target, r.pos);
+      if (!holdsBack && dBall > 30) target = add(r.pos, scale(norm(sub(target, r.pos)), 30));
       break;
     }
   }
