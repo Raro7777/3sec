@@ -113,7 +113,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       }
     }
     if (cross) {
-      const crossScore = TUNING.crossBase + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0);
+      const crossScore = TUNING.crossBase + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0) + (tactics.width - 0.5) * 0.6;
       options.push({ kind: "cross", score: crossScore + m.rng.gauss(0, noise), target: cross });
     }
   }
@@ -140,7 +140,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   // Weaker passers under pressure play safe and clear; better ones trust their feet.
   if (p.pos.x * dir < -25 && pressure < 4) {
     const safety = 0.2 * (1 - a01(attrs.passing)) + 0.1 * (1 - a01(attrs.composure));
-    options.push({ kind: "clear", score: 0.5 + (pressure < 2 ? 0.5 : 0) + safety + m.rng.gauss(0, noise) });
+    options.push({ kind: "clear", score: 0.5 + (pressure < 2 ? 0.5 : 0) + safety + Math.max(0, 0.5 - tactics.mentality) * 0.5 + m.rng.gauss(0, noise) });
   }
 
   // ---- Hold (only when nothing else appeals and not under pressure)
@@ -259,8 +259,11 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     else score += (Math.min(margin, 1.5) - 0.6) * (TUNING.passMarginWeight - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
     // Directness and mentality both reward vertical passes; a defensive mentality prefers safety.
-    score += progress * (0.008 + 0.014 * tactics.directness) * (0.6 + 0.8 * tactics.mentality); // 20 m ≈ 0.3
-    score -= d > 22 ? (d - 22) * (0.035 - 0.015 * tactics.directness) : 0; // long balls are risky
+    // Counter-attack: in the seconds after winning the ball, vertical passes into space are gold.
+    const transition = m.inTransition(team);
+    const effDirect = Math.min(1, tactics.directness + Math.max(0, 0.5 - tactics.mentality) * 0.6 + (transition ? 0.15 : 0));
+    score += progress * (0.010 + 0.010 * effDirect) * (0.7 + 0.6 * tactics.mentality) * (transition ? 1.15 : 1); // 20 m ≈ 0.3
+    score -= d > 22 ? (d - 22) * (0.035 - 0.015 * effDirect) : 0; // long balls are risky
     score -= lofted ? 0.3 * (1 - a01(attrs.technique)) + 0.25 : 0;
     score -= offsidePenalty;
     if (isGkTarget) score -= pressure < 3 ? 0.1 : 0.9;
@@ -273,7 +276,7 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     // Receiver in a scoring position is attractive; a team-mate already sprinting in behind doubly so
     const rxg = m.xgAt(lead, team);
     score += rxg * 2.5;
-    if (q.intent === "run" && progress > 5) score += 0.35;
+    if (q.intent === "run" && progress > 5) score += transition ? 0.45 : 0.35;
 
     if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted, margin, lane, d };
   }

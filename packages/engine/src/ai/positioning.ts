@@ -285,8 +285,11 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // but forwards hold a higher position to offer an outlet.
   // Out of possession the midfield screens just in front of the back line (compact block of
   // ~25-30 m between defence and forwards), instead of floating 15-20 m ahead of it.
+  // An attacking mentality commits the full-backs/centre-backs further forward in possession
+  // (and leaves the team open on the counter); a defensive one keeps them home.
+  const mentPull = (tactics.mentality - 0.5) * 0.5; // -0.25 .. +0.25
   const pullX = inPoss
-    ? isDefender(role) ? 0.1 : isMidfielder(role) ? 0.4 : 0.55
+    ? isDefender(role) ? Math.max(0, 0.1 + mentPull) : isMidfielder(role) ? 0.4 + mentPull * 0.6 : 0.55
     : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 : 0.15;
   const pullY = isDefender(role) ? 0.15 : isMidfielder(role) ? 0.3 : 0.2;
 
@@ -318,9 +321,11 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const phase = ((s.tick / 20 + m.def(p.id).number * 1.3) % cycle) / cycle;
     const carrierBehind = ball.owner !== null && ball.owner !== p.id && ballX < x - 3 && dist(ball.pos, p.pos) < 35;
     const carrierFree = ball.owner !== null && m.pressureAt(ball.pos, team) > 2.5;
-    if (carrierBehind && carrierFree && phase < 0.5) {
+    // On a transition (ball just won) forwards break immediately, whatever the cycle says.
+    const transition = m.inTransition(team);
+    if (carrierBehind && carrierFree && (transition || phase < 0.5)) {
       // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
-      const early = (1 - ant) * TUNING.offsideWobble * 0.9; // 0 .. ~4.5 m
+      const early = (1 - ant) * TUNING.offsideWobble * 0.7; // 0 .. ~3.5 m
       x = line + 0.5 + early;
       runFlag = true;
     } else if (x > line - 0.8) {

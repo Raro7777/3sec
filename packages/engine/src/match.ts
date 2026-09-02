@@ -76,6 +76,14 @@ export class Match {
   intendedReceiver: string | null = null;
   /** tick of the last pass/clearance kick (defenders react with a delay) */
   lastKickTick = -1000;
+  /** tick at which possession last changed hands (transition / counter-attack window) */
+  lastTurnoverTick = -1000;
+  private lastPossTeam: TeamId | null = null;
+  /** true for a few seconds after winning the ball: the moment to break quickly */
+  inTransition(team: TeamId): boolean {
+    return this.lastPossTeam === team && this.state.tick - this.lastTurnoverTick < 20 * 4;
+  }
+
   /** a pass whose outcome is not yet settled (completed when a team-mate gains possession, failed on opponent touch/dead ball) */
   passInFlight: { team: TeamId; fromId: string } | null = null;
 
@@ -674,9 +682,15 @@ export class Match {
 
     this.advanceClock();
 
-    // Possession stats
+    // Possession stats + turnover bookkeeping
     const pt = this.possessionTeam();
-    if (pt !== null) s.stats[pt].possessionTicks++;
+    if (pt !== null) {
+      s.stats[pt].possessionTicks++;
+      if (pt !== this.lastPossTeam) {
+        this.lastPossTeam = pt;
+        this.lastTurnoverTick = s.tick;
+      }
+    }
 
     computePositioning(this, DT);
 
@@ -1038,7 +1052,8 @@ export class Match {
       if (d > 1.2) continue;
       const attrs = this.def(p.id).attrs;
       // Attempt rate ~1.5/s when in range.
-      if (!this.rng.chance(TUNING.tackleRate * DT)) continue;
+      // Aggressive pressing means more (and rasher) challenges.
+      if (!this.rng.chance(TUNING.tackleRate * (0.75 + 0.5 * this.teams[p.team].tactics.pressing) * DT)) continue;
 
       const isGk = this.isKeeper(p.id);
       const tackleSkill = isGk ? a01(attrs.handling) * 0.8 : a01(attrs.tackling);
