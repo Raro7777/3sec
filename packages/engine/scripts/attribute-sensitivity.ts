@@ -45,9 +45,10 @@ if (process.argv.includes("--cell")) {
   process.stdout.write(JSON.stringify(cell(attr, Number(process.argv[i + 2]), Number(process.argv[i + 3]))));
 } else {
   const n = Number(process.argv[2] ?? 10);
+  const only = process.argv[3] ? process.argv[3].split(",") : null;
   const self = fileURLToPath(import.meta.url);
   const jobs: { label: string; attr: string; delta: number }[] = [{ label: "neutral", attr: "null", delta: 0 }];
-  for (const a of attrs) jobs.push({ label: `${a} -5`, attr: a, delta: -5 }, { label: `${a} +5`, attr: a, delta: 5 });
+  for (const a of attrs.filter((x) => !only || only.includes(x))) jobs.push({ label: `${a} -5`, attr: a, delta: -5 }, { label: `${a} +5`, attr: a, delta: 5 });
   const run = (j: typeof jobs[number]) => new Promise<Row>((res, rej) => {
     const c = spawn(process.execPath, ["--import", "tsx", self, "--cell", j.attr, String(j.delta), String(n)], { stdio: ["ignore", "pipe", "inherit"] });
     let out = ""; c.stdout.on("data", (d) => (out += d)); c.on("exit", (code) => (code === 0 ? res(JSON.parse(out.trim())) : rej(new Error(`exit ${code}`))));

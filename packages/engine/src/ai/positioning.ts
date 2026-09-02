@@ -3,7 +3,7 @@ import { TUNING } from "../tuning";
 import type { PlayerState, TeamId } from "../types";
 import { PITCH, clampToPitch, inPenaltyArea } from "../pitch";
 import { isDefender, isForward, isMidfielder } from "../formation";
-import { maxAccel, maxSpeed } from "../physics/player";
+import { a01, maxAccel, maxSpeed } from "../physics/player";
 import { add, dist, lerp, norm, scale, sub, type Vec2 } from "../math/vec";
 
 /**
@@ -121,7 +121,9 @@ export function computePositioning(m: Match, _dt: number): void {
       const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
       const dGoal = dist(opp.pos, ownGoal);
       // Tight near goal, looser upfield (a marker 3-4 m off still shadows the lane but leaves time on the ball).
-      const gap = dGoal < 20 ? TUNING.markGapNear : dGoal < 35 ? TUNING.markGapMid : TUNING.markGapFar;
+      const baseGap = dGoal < 20 ? TUNING.markGapNear : dGoal < 35 ? TUNING.markGapMid : TUNING.markGapFar;
+      // Good markers/positioners hold the right distance; poor ones drift off their man.
+      const gap = baseGap * (1.3 - 0.6 * (a01(m.def(p.id).attrs.marking) * 0.5 + a01(m.def(p.id).attrs.positioning) * 0.5));
       const toGoal = norm(sub(ownGoal, opp.pos));
       // Also lean toward the ball so the pass lane is shadowed.
       const toBall = norm(sub(ball.pos, opp.pos));
@@ -131,7 +133,11 @@ export function computePositioning(m: Match, _dt: number): void {
         setTarget(p, jockey, 99, "jockey");
         continue;
       }
-      const markPos = add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4)));
+      // A poor marker keeps losing their man by a couple of metres (ball-watching, late reactions).
+      const mk = a01(m.def(p.id).attrs.marking);
+      const mph = s.tick * 0.006 + m.def(p.id).number * 1.7;
+      const slack = (1 - mk) * 3.5;
+      const markPos = add(add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4))), { x: Math.sin(mph) * slack, y: Math.cos(mph * 0.8) * slack });
       const d = dist(p.pos, markPos);
       // Track the runner: never slower than the marked player.
       const oppSpeed = Math.hypot(opp.vel.x, opp.vel.y);
@@ -337,7 +343,11 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // Never stand behind own goal line or in front of the opposite one.
   x = Math.max(-PITCH.halfLength + 2, Math.min(PITCH.halfLength - 1, x));
 
-  let target: Vec2 = { x: x * dir, y };
+  // Positioning attribute: poor positional sense = the spot is a few metres off and drifts.
+  const posSkill = a01(m.def(p.id).attrs.positioning);
+  const drift = (1 - posSkill) * 5; // 0 .. ~3.5 m for the weakest
+  const ph = s.tick * 0.004 + m.def(p.id).number;
+  let target: Vec2 = { x: x * dir + Math.sin(ph) * drift, y: y + Math.cos(ph * 0.7) * drift };
 
   // Avoid bunching with teammates
   for (const q of m.activePlayers(team)) {

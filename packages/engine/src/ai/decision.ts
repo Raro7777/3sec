@@ -25,7 +25,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const isGk = m.isKeeper(p.id);
   const tactics = m.teams[team].tactics;
   const dGoal = dist(p.pos, goal);
-  const noise = 0.18 * (1.2 - a01(attrs.decisions));
+  const noise = 0.25 * (1.2 - a01(attrs.decisions));
 
   interface Option {
     kind: "shoot" | "pass" | "cross" | "dribble" | "clear" | "hold";
@@ -71,7 +71,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     const blockers = countBlockers(m, p, goal);
     // Long-range appetite: space on the edge of the box tempts a strike from distance.
     const longRange = !inBox && dGoal < 28 && pressure > 2.5 && blockers === 0
-      ? TUNING.longRangeBase + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) - (dGoal - 16) * 0.02
+      ? TUNING.longRangeBase + 0.4 * a01(attrs.technique) + 0.2 * a01(attrs.finishing) + 0.2 * (0.55 - a01(attrs.decisions)) - (dGoal - 16) * 0.02
       : 0;
     // A first-time finish under pressure is the hardest skill in the game: most players take a
     // touch first (during which the defender arrives), only the composed strike immediately.
@@ -210,7 +210,7 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     const d = dist(p.pos, lead);
     if (d < 2.5) continue;
     if (!opts.longAllowed && d > 30) continue;
-    const maxRange = 25 + 30 * vision;
+    const maxRange = 18 + 30 * vision; // a poor reader of the game only sees the nearby options
     if (d > maxRange) continue;
 
     // Lane safety: for every opponent, can they reach the pass line before the ball does?
@@ -238,7 +238,9 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
       const mg = oppT - ballT;
       if (mg < margin) margin = mg;
     }
-    const receiverSpace = m.pressureAt(lead, team);
+    // Vision: a poor reader of the game misjudges how safe a lane is (and over/under-rates space).
+    margin += m.rng.gauss(0, 0.5 * (1 - vision));
+    const receiverSpace = m.pressureAt(lead, team) * (1 + m.rng.gauss(0, 0.3 * (1 - vision)));
     const progress = (lead.x - p.pos.x) * dir;
     // Offside awareness with perception latency: the passer judges the runner's position a
     // fraction of a second late, so a well-timed run can look onside. Clearly offside
@@ -277,8 +279,8 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     if (pressure < 2.5) score += 0.25;
     // Receiver in a scoring position is attractive; a team-mate already sprinting in behind doubly so
     const rxg = m.xgAt(lead, team);
-    score += rxg * 2.5;
-    if (q.intent === "run" && progress > 5) score += transition ? 0.45 : 0.35;
+    score += rxg * 2.5 * (0.5 + vision); // seeing the team-mate in the scoring position
+    if (q.intent === "run" && progress > 5) score += (transition ? 0.45 : 0.35) * (0.5 + vision); // spotting the runner is vision
 
     if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted, margin, lane, d };
   }
@@ -295,9 +297,18 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   // Execution error: angle & speed, worse under pressure and for weak passers.
   // Crosses into a crowded box are the least precise delivery in the game (~20-25% find a team-mate).
   const skill = a01(attrs.passing) * 0.7 + a01(attrs.technique) * 0.3;
-  const pressureFactor = 1 + Math.max(0, 3 - pressure) * 0.35;
-  const angSd = (0.14 - 0.11 * skill) * pressureFactor * (isCross ? 2.2 : lofted ? 1.4 : 1);
-  const spdSd = (0.16 - 0.1 * skill) * pressureFactor * (isCross ? 1.8 : 1);
+  const pressureFactor = 1 + Math.max(0, 3 - pressure) * 0.35 * (1.55 - a01(attrs.composure));
+  // A weak passer (skill ~0.35) sprays it ~3x wider than an elite one (~0.8).
+  let angSd = (0.26 - 0.3 * skill) * pressureFactor * (isCross ? 2.2 : lofted ? 1.4 : 1);
+  let spdSd = (0.26 - 0.26 * skill) * pressureFactor * (isCross ? 1.8 : 1);
+  // Mishit: every so often a pass is simply struck badly (under-hit into a defender's path,
+  // over-hit through to the keeper, or sliced). Elite passers almost never do this; weak ones
+  // do it several times a match, which is where most of the real pass% gap between players lives.
+  const mishitP = Math.max(0.008, 0.20 - 0.3 * skill) * (0.6 + 0.4 * pressureFactor) * (0.8 + d / 40);
+  if (m.rng.next() < mishitP) {
+    angSd += 0.35;
+    spdSd += 0.4;
+  }
 
   const baseAng = angleOf(sub(aim, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
@@ -342,16 +353,17 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   // Aim inside a post, error grows with distance, pressure and low finishing.
   const skill = a01(attrs.finishing) * 0.6 + a01(attrs.composure) * 0.25 + a01(attrs.technique) * 0.15;
   const side = m.rng.chance(0.5) ? 1 : -1;
-  const aimY = side * (PITCH.goalHalfWidth - 0.6 - m.rng.range(0, 1.6));
+  // Good finishers pick the corner; weaker ones play safe toward the middle of the goal (where the keeper is).
+  const aimY = side * (PITCH.goalHalfWidth - 0.35 - m.rng.range(0, 0.6 + 1.8 * (1 - skill)));
   // Pressure and a hurried first-time strike degrade the finish far more than distance does.
   // A calm, settled finish with nobody near is the most precise strike in the game.
   const calm = pressure > 4 && p.possessionTime > 1 && !isPenalty ? 0.6 : 1;
-  const pressureFactor = (1 + Math.max(0, 2.5 - pressure) * 0.8) * (p.possessionTime < 0.5 ? 1.6 : 1) * calm;
+  const pressureFactor = (1 + Math.max(0, 2.5 - pressure) * 0.8 * (1.55 - a01(attrs.composure))) * (p.possessionTime < 0.5 ? 1.6 : 1) * calm;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
   // Long-range strikes are markedly less precise (body shape, ball movement, power over placement).
   const rangeFactor = 1 + Math.max(0, d - 16) * 0.04;
-  const angSd = (TUNING.shotAngSd - 0.16 * skill) * pressureFactor * rangeFactor * (isPenalty ? 0.22 : 1);
+  const angSd = (TUNING.shotAngSd + 0.08 - 0.45 * skill) * pressureFactor * rangeFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
 
