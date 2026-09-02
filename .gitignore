@@ -14,6 +14,8 @@ public/uploads/*
 .prettiercache
 .vercel
 .turbo
+__pycache__/
+*.pyc
 
 # Claude Code agent worktrees (temporary isolated checkouts)
 .claude/worktrees/
