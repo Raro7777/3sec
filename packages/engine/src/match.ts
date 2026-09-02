@@ -1089,10 +1089,11 @@ export class Match {
     const b = this.state.ball;
     const speed = Math.hypot(b.vel.x, b.vel.y);
     const shotAng = Math.atan2(b.vel.y, b.vel.x);
-    // Roughly half of blocks ricochet back toward the shooter, the rest deflect onward (often behind for a corner).
-    const back = this.rng.chance(0.5);
-    const ang = back ? shotAng + Math.PI + this.rng.range(-1.2, 1.2) : shotAng + this.rng.range(-1.1, 1.1);
-    kickBall(b, fromAngle(ang, speed * (back ? this.rng.range(0.15, 0.4) : this.rng.range(0.3, 0.7))), this.rng.range(0, 3));
+    // About a third of blocks ricochet back toward the shooter; the rest deflect onward at an
+    // angle – frequently behind for a corner.
+    const back = this.rng.chance(0.35);
+    const ang = back ? shotAng + Math.PI + this.rng.range(-1.2, 1.2) : shotAng + (this.rng.chance(0.5) ? 1 : -1) * this.rng.range(0.4, 1.3);
+    kickBall(b, fromAngle(ang, speed * (back ? this.rng.range(0.15, 0.4) : this.rng.range(0.35, 0.8))), this.rng.range(0, 3));
     b.pos = { x: blocker.pos.x, y: blocker.pos.y };
     blocker.kickCooldown = 0.4;
     this.touch(blocker);
@@ -1164,7 +1165,7 @@ export class Match {
     } else {
       // Parry: mostly pushed wide/behind (corner) or back into play, away from the goal.
       const outDir = -this.dirOf(shot.team);
-      const wide = this.rng.chance(0.55);
+      const wide = this.rng.chance(0.7);
       const ang = wide
         ? Math.atan2((yCross >= 0 ? 1 : -1) * this.rng.range(0.8, 1.5), outDir * this.rng.range(-0.7, 0.3))
         : Math.atan2(this.rng.range(-1, 1), outDir);
