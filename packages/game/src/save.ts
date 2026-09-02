@@ -19,6 +19,11 @@ import { newCup } from "./cup";
 import { migrateStaff } from "./staff";
 import { newBoard } from "./board";
 import { migrateFans } from "./fans";
+import { migrateAchievements } from "./achievements";
+import { migrateCareer } from "./career";
+import { migrateMorale } from "./morale";
+import { migrateStory } from "./story";
+import { markDerbies } from "./lore";
 
 export const SAVE_KEY = "3sec.save.v1";
 
@@ -94,6 +99,13 @@ export function deserialize(json: string | null | undefined): GameState | null {
     if (typeof s.board.warnings !== "number") s.board.warnings = 0;
     if (typeof s.board.lastReview !== "number") s.board.lastReview = -1;
     if (typeof s.board.lowWeeks !== "number") s.board.lowWeeks = 0;
+    // Saves from before the achievements and the manager career: empty counters, reputation from the club.
+    migrateAchievements(s);
+    migrateCareer(s);
+    // Saves from before personalities / morale, the story layer and derby flags (morale.ts, story.ts, lore.ts).
+    migrateMorale(s);
+    migrateStory(s);
+    markDerbies(s.fixtures);
     return s;
   } catch {
     return null;

@@ -7,6 +7,8 @@ import { MAX_SQUAD, THIN_SQUAD } from "./transfers";
 import { randomName } from "./world";
 import { autoSelect, repairSelection } from "./selection";
 import { NATIONAL_SCOUT_RATING, STAFF_ROLE_LABEL, scoutCapped, staffBonus, youthNarrowFactor } from "./staff";
+import { recordPromotion } from "./achievements";
+import { ensurePersonality } from "./morale";
 
 /** Academy size cap; the weakest prospect makes room for a new one. */
 export const MAX_PROSPECTS = 8;
@@ -172,7 +174,25 @@ function toPlayer(club: Club, p: YouthProspect, season: number): SquadPlayer {
     stats: { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 },
   };
   player.wage = Math.max(0.3, round1(wageFor(player) * 0.5));
+  ensurePersonality(player);
   return player;
+}
+
+/**
+ * A prospect a scout tipped off (story.ts 유망주 발굴): a regular intake prospect whose ceiling is lifted to at least
+ * overall + 5 + `bonus`, with a range the scouts already trust. Joins the academy at once (the caller checks room and pays).
+ */
+export function scoutedProspect(s: GameState, club: Club, seedKey: string, bonus = 2): YouthProspect {
+  let h = 7;
+  for (const ch of seedKey) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+  const rng = new Rng((s.seed * 47 + h) >>> 0);
+  const p = makeProspect(rng, club, s, club.youth.nextId++);
+  const ovr = prospectOverall(p);
+  p.truePotential = round1(clamp(Math.max(p.truePotential, ovr + 5 + bonus), ovr, 20));
+  p.potentialRange = [round1(clamp(p.truePotential - 1.5, ovr, p.truePotential)), round1(clamp(p.truePotential + 1.5, p.truePotential, 20))];
+  p.reportsSeen = 1;
+  club.youth.prospects.push(p);
+  return p;
 }
 
 /** The user promotes a prospect (16+) into the first team on a cheap three-season deal. Returns an error or null. */
@@ -183,6 +203,8 @@ export function promoteProspect(s: GameState, prospectId: string): string | null
   if (p.age < MIN_PROMOTE_AGE) return `${MIN_PROMOTE_AGE}세부터 승격할 수 있습니다`;
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;
   const player = toPlayer(me, p, s.season);
+  player.youthProduct = true;
+  recordPromotion(s);
   me.youth.prospects = me.youth.prospects.filter((q) => q !== p);
   me.squad.push(player);
   me.selection = repairSelection(me);

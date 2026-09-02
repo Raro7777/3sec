@@ -52,6 +52,88 @@ export interface SquadPlayer extends PlayerDef {
   refusedSeason?: number;
   /** minutes played since the last training week (playing time feeds development; reset by trainWeek) */
   lastMinutes?: number;
+  /** came up through the user's academy (promoteProspect); missing = false */
+  youthProduct?: boolean;
+  /** character traits 0..1 (morale.ts; derived from the id when missing) */
+  personality?: Personality;
+  /** 0..100, starts at MORALE_START (morale.ts) */
+  morale?: number;
+  /** asked to leave after weeks of low morale (AI clubs bid more readily; cleared once content again) */
+  transferRequest?: boolean;
+  /** consecutive weekly updates under the complaint line (morale.ts) */
+  lowMoraleWeeks?: number;
+  /** skips the coming training week's growth (a complaint, morale.ts) */
+  trainingRefused?: boolean;
+  /** the club the player last spent a loan at (story.ts: scoring against the old club) */
+  lastLoanClub?: number;
+  /** season of the last national-team call-up (story.ts) */
+  capSeason?: number;
+}
+
+/** Character traits, each 0..1 (0.5 = unremarkable). See morale.ts. */
+export interface Personality {
+  /** wants to play and win now; suffers on the bench, asks away when unhappy */
+  ambition: number;
+  /** stays put, cares about the club; softens contract worries */
+  loyalty: number;
+  /** hot-headed: costs composure on the pitch */
+  temperament: number;
+  /** trains hard whatever the mood; dampens morale swings */
+  professionalism: number;
+}
+
+export type InterviewAnswerKind = "praise" | "criticize" | "neutral";
+
+/** One answer of a post-match interview and its effects (press.ts). */
+export interface InterviewOption {
+  label: string;
+  kind: InterviewAnswerKind;
+  /** morale change for every player of the user's squad */
+  squad: number;
+  /** morale change for the named player (if any) */
+  player: number;
+  /** board confidence change */
+  board: number;
+  /** fan mood change */
+  fans: number;
+  /** the quote that goes out */
+  reply: string;
+}
+
+/** The pending post-match interview of the user (press.ts). */
+export interface Interview {
+  id: string;
+  context: string;
+  question: string;
+  options: InterviewOption[];
+  /** the player the question is about */
+  playerId?: string;
+  cup: boolean;
+  opponent: number;
+  round: number;
+}
+
+export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut";
+
+export interface StoryChoice { label: string; hint: string }
+
+/** A story event for the user (story.ts): pending in `GameState.events`, resolved in `eventLog`. */
+export interface StoryEvent {
+  id: string;
+  template: StoryTemplateId;
+  season: number;
+  round: number;
+  title: string;
+  text: string;
+  choices: StoryChoice[];
+  playerId?: string;
+  playerId2?: string;
+  staffId?: string;
+  /** money or target figure the template quotes */
+  amount?: number;
+  /** settles itself with the last choice once s.round reaches this */
+  expiresRound: number;
+  resolved?: { choice: number; outcome: string; round: number; auto?: true };
 }
 
 export type OfferStatus = "open" | "accepted" | "rejected" | "expired" | "countered";
@@ -192,6 +274,10 @@ export interface Club {
   staff: StaffMember[];
   /** the AI head coach; null for the user's club */
   manager: Manager | null;
+  /** the captain's player id (morale.ts; AI clubs pick the most experienced, the user picks his own) */
+  captain?: string;
+  /** dressing-room mood 0..100 derived from the squad's morale and the captain (morale.ts lockerRoom) */
+  lockerRoom?: number;
   /** consecutive board reviews the club sat well below its expected position (sacking follows) */
   pressure: number;
   /** budget when the season began (the review screen shows the change since) */
@@ -242,6 +328,8 @@ export interface Fixture {
   motm?: { playerId: string; rating: number };
   /** home crowd (fans.ts; set when the result is recorded) */
   attendance?: number;
+  /** a rivalry match (lore.ts; set by buildFixtures / prepareRound) */
+  derby?: boolean;
 }
 
 /** One knockout tie of the 3sec 컵. Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
@@ -304,6 +392,10 @@ export interface SeasonRecord {
   userPts: number;
   /** 올해의 감독: the manager who beat his club's expectation by the most */
   managerOfYear?: ManagerOfYear;
+  /** the club the user managed when the season closed (achievements.ts; older records: the current club) */
+  userClub?: number;
+  /** the league's top scorer that season (achievements.ts) */
+  topScorer?: { name: string; club: number; goals: number };
 }
 
 /** Why and when the user's board pulled the trigger (the viewer shows the sacked screen while this is set). */
@@ -314,7 +406,7 @@ export interface SackRecord {
   position: number;
   expected: number;
   pts: number;
-  reason: "warnings" | "rollover";
+  reason: "warnings" | "rollover" | "declined";
 }
 
 /** The user's board: how much it trusts the manager (0..100) and the warnings it has issued this season. */
@@ -331,6 +423,50 @@ export interface Board {
 
 /** Winner of the season's manager award (the user may win it too). */
 export interface ManagerOfYear { name: string; club: number; position: number; expected: number }
+
+/** The user's career counters behind the achievements (achievements.ts). */
+export interface Records {
+  /** matches won (league + cup) */
+  wins: number;
+  /** current run without defeat (league + cup) */
+  unbeaten: number;
+  bestUnbeaten: number;
+  /** current run of clean sheets */
+  cleanSheets: number;
+  bestCleanSheets: number;
+  /** wins after trailing */
+  comebacks: number;
+  /** wins by three or more goals */
+  bigWins: number;
+  /** cup ties won on penalties (counted at the rollover) */
+  shootoutWins: number;
+  /** prospects the user promoted */
+  promotedYouth: number;
+  /** finished seasons in a dugout */
+  seasonsInCharge: number;
+  /** biggest home crowd of the career */
+  recordAttendance: number;
+  /** the biggest margin of victory */
+  biggestWin?: { season: number; opponent: number; score: [number, number]; home: boolean; cup: boolean };
+}
+
+/** An achievement the user has unlocked. */
+export interface EarnedAchievement { id: string; season: number; round: number }
+
+/** The manager's contract with the current club (career.ts). */
+export interface ManagerContract { until: number; wage: number }
+
+/** A pending contract negotiation with the user's board (career.ts). */
+export interface ContractTalk {
+  season: number;
+  years: number;
+  wage: number;
+  /** the one counter-offer has been made */
+  countered: boolean;
+}
+
+/** An unsolicited approach from another club during the season (career.ts). */
+export interface JobOffer { club: number; wage: number; years: number; expires: number }
 
 export interface GameState {
   version: 1;
@@ -373,4 +509,28 @@ export interface GameState {
   staffMarketKey?: string;
   /** the season staffRollover last ran for (staff.ts; makes the rollover idempotent) */
   staffSeason?: number;
+  /** the user's unanswered post-match interview (press.ts) */
+  pendingInterview?: Interview;
+  /** pending story events for the user (story.ts) */
+  events?: StoryEvent[];
+  /** resolved story events, newest first, EVENT_LOG_MAX kept (story.ts) */
+  eventLog?: StoryEvent[];
+  /** one-shot narrative news already shown (story.ts) */
+  storyFlags?: string[];
+  /** career counters behind the achievements (achievements.ts) */
+  records?: Records;
+  /** unlocked achievements, oldest first (achievements.ts) */
+  achievements?: EarnedAchievement[];
+  /** achievement ids unlocked since the viewer last showed them (the viewer clears the list) */
+  freshAchievements?: string[];
+  /** the user's lowest budget this season, sampled weekly (achievements.ts) */
+  seasonMinBudget?: number;
+  /** the manager's reputation 1..20 (career.ts) */
+  managerRep?: number;
+  /** the manager's contract with the current club (career.ts) */
+  managerContract?: ManagerContract;
+  /** contract negotiation waiting for the user's answer (career.ts) */
+  contractTalk?: ContractTalk;
+  /** at most one unsolicited job offer at a time (career.ts) */
+  jobOffersPending?: JobOffer[];
 }

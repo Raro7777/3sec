@@ -15,6 +15,12 @@ import { pendingCupTies } from "./cup";
 import { appendCareer, applyRatings, emptyStats } from "./ratings";
 import { BOARD_FROM_ROUND, boardCupWin, boardRollover, boardWeek, newBoard } from "./board";
 import { fanHomeEdge, fansRollover, fansWeek, recordAttendance } from "./fans";
+import { derbyPreview, derbyResult } from "./lore";
+import { matchAttrs, migrateMorale, moraleRollover, moraleWeek } from "./morale";
+import { pressConference, skipInterview } from "./press";
+import { storyMatch, storyRollover, storyWeek } from "./story";
+import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
+import { careerInit, careerRollover, careerWeek } from "./career";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -30,6 +36,12 @@ export function newGame(seed: number, userClub = 0, managerName: string = DEFAUL
   clearUserManager(s);
   newCup(s);
   for (const c of clubs) resetSeasonCounters(c);
+  // Personalities, captains and the locker room (morale.ts); empty story queues (story.ts).
+  migrateMorale(s);
+  s.events = [];
+  s.eventLog = [];
+  migrateAchievements(s);
+  careerInit(s);
   youthIntake(s, new Rng(seed * 29 + 3));
   incomingOffers(s, new Rng(seed * 37 + 5));
   return s;
@@ -79,6 +91,8 @@ function opponents(s: GameState): Map<number, number> {
  */
 export function prepareRound(s: GameState): void {
   const opp = opponents(s);
+  // Derby flags for older saves and the "더비 데이" news for the user's rivalry match (lore.ts).
+  if (!s.pendingCupDay && !seasonOver(s)) derbyPreview(s, currentFixtures(s));
   for (const c of s.clubs) {
     if (c.id === s.userClub) { c.selection = repairSelection(c); continue; }
     if (c.manager) { applyManagerMatchday(c, opp.has(c.id) ? clubOf(s, opp.get(c.id)!) : null); continue; }
@@ -87,7 +101,8 @@ export function prepareRound(s: GameState): void {
   }
 }
 
-const strip = (p: SquadPlayer): PlayerDef => ({ id: p.id, name: p.name, number: p.number, role: p.role, attrs: p.attrs });
+/** The engine's view of a player: morale nudges every attribute a little, a hot temperament costs composure (morale.ts). */
+const strip = (p: SquadPlayer): PlayerDef => ({ id: p.id, name: p.name, number: p.number, role: p.role, attrs: matchAttrs(p) });
 
 /** Match options of the game layer: `autoUser` hands the user's side to the AI (tactics = autoUserTactics). */
 export type GameMatchOptions = MatchOptions & { autoUser?: boolean };
@@ -193,6 +208,12 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
     if ((f.home === s.userClub && hg > ag) || (f.away === s.userClub && ag > hg)) boardCupWin(s);
   }
   s.news.unshift(`${cup ? "3sec 컵: " : ""}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
+  // Rivalry headlines and swings (lore.ts), debut / first-goal / loan-return news (story.ts), the user's interview (press.ts).
+  derbyResult(s, f, cup);
+  storyMatch(s, f, m, cup);
+  pressConference(s, f, m, cup);
+  // The user's career counters and achievements (achievements.ts; a no-op for other clubs' matches).
+  achievementsAfterMatch(s, f, m, cup);
   if (s.news.length > 60) s.news.length = 60;
 }
 
@@ -213,6 +234,9 @@ export function advanceRound(s: GameState): boolean {
   if (currentFixtures(s).some((f) => !f.score)) return false;
   s.round++;
   const rng = new Rng(s.seed * 19 + s.season * 503 + s.round * 7);
+  // An interview left unanswered goes out with the neutral line (press.ts); morale moves before training reads the week's minutes (morale.ts).
+  skipInterview(s);
+  moraleWeek(s);
   for (const c of s.clubs) {
     const recover = c.training.intensity === "high" ? 0.5 : c.training.intensity === "low" ? 0.7 : 0.6;
     for (const p of c.squad) {
@@ -228,11 +252,16 @@ export function advanceRound(s: GameState): boolean {
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
   youthWeek(s);
   if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
+  // Story events and narrative news for the user (story.ts).
+  storyWeek(s, new Rng(s.seed * 61 + s.season * 877 + s.round * 23));
   // The boards judge their managers once the table has settled (the final table is judged at the rollover).
   if (s.round >= REVIEW_FROM_ROUND && !seasonOver(s)) boardReview(s, new Rng(s.seed * 43 + s.season * 719 + s.round * 53));
   // The user's own board: confidence drifts weekly, warnings and the sack follow.
   if (s.round >= BOARD_FROM_ROUND) boardWeek(s);
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
+  // Achievements (lowest budget, weekly checks) and the manager's career (job offers, the season-end contract talk).
+  achievementsWeek(s);
+  careerWeek(s);
   // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
   if (cupDayDue(s)) s.pendingCupDay = true;
   return true;
@@ -254,6 +283,9 @@ export function startNextSeason(s: GameState): void {
   // The user's board judges the season; every player's season goes on the CV before the counters reset.
   boardRollover(s);
   appendCareer(s);
+  // Season achievements and the manager's reputation / contract (achievements.ts, career.ts) — before the counters reset.
+  achievementsSeasonEnd(s);
+  careerRollover(s);
   // Weekly income already covers running costs, so the rollover only pays out prize money.
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1) - seasonBudget(c.reputation, null);
   // Money that just sits in the bank goes into the club instead: the board reinvests most of any surplus above
@@ -287,6 +319,10 @@ export function startNextSeason(s: GameState): void {
   s.season++;
   s.round = 0;
   s.fixtures = buildFixtures(s.clubs.length);
+  // Morale softens and requests lapse (morale.ts); pending interviews and events settle (press.ts, story.ts).
+  moraleRollover(s);
+  skipInterview(s);
+  storyRollover(s);
   s.news.unshift(`시즌 ${s.season} 시작.`);
   newCup(s);
   s.pendingCupDay = false;

@@ -3,6 +3,7 @@ import type { Board, Club, GameState, SackRecord } from "./types";
 import { clubOf, seasonOver, table } from "./season";
 import { roundsPerSeason } from "./fixtures";
 import { MAX_FREE_MANAGERS, applyManagerPolicy, clearUserManager, expectedPositions, generateManager } from "./managers";
+import { careerOnNewJob } from "./career";
 
 /** Weekly reviews start once this many rounds are played. */
 export const BOARD_FROM_ROUND = 5;
@@ -128,8 +129,8 @@ export function jobOffers(s: GameState, n = JOB_OFFERS): Club[] {
  * Take a job at another club after the sack: the old club gets an AI manager (the pool first), the new club's
  * manager joins the pool, the user moves over with a fresh board. Bids for the old club's players lapse.
  */
-export function acceptJob(s: GameState, clubId: number): string | null {
-  if (!s.board.sacked) return "경질 상태가 아닙니다.";
+export function acceptJob(s: GameState, clubId: number, force = false): string | null {
+  if (!s.board.sacked && !force) return "경질 상태가 아닙니다.";
   if (clubId === s.userClub) return "지금 구단입니다.";
   const target = s.clubs[clubId];
   if (!target) return "없는 구단입니다.";
@@ -150,6 +151,7 @@ export function acceptJob(s: GameState, clubId: number): string | null {
   clearUserManager(s);
   s.offers = [];
   s.board = newBoard(NEW_JOB_CONFIDENCE);
+  careerOnNewJob(s, target);
   s.news.unshift(`${target.shortName}: ${s.managerName} 감독 부임${oldName ? ` (${oldName} 감독 퇴진)` : ""}. ${old.shortName}은(는) ${oldManager.name} 감독을 선임했습니다.`);
   return null;
 }

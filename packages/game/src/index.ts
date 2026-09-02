@@ -52,3 +52,26 @@ export {
   clubCapacity, fanBase, newFans, moodBand, moodLabel, ticketPrice, gateReceipts, fanHomeEdge, avgHomeAttendance, adjustMood, crowdInterest, expectedAttendance,
   recordAttendance, fansWeek, fansCupResult, isStar, fansTransfer, fansRollover, migrateFans, type MoodBand,
 } from "./fans";
+export {
+  ACHIEVEMENTS, TIER_LABEL, achievementById, newRecords, migrateAchievements, records, hasAchievement, evaluateAchievements, achievementsAfterMatch, achievementsWeek,
+  recordPromotion, achievementsSeasonEnd, takeFreshAchievements, seasonTransferIncome, seasonCleanSheets, seasonShootoutWins, hallOfFame, careerGoals, careerRating,
+  type AchievementTier, type AchievementDef, type AchievementContext, type HallOfFame,
+} from "./achievements";
+export {
+  REP_MIN_START, REP_MIN, REP_MAX, REP_SACKED, OFFER_FROM_ROUND, OFFER_UNTIL_ROUNDS_LEFT, OFFER_TTL as JOB_OFFER_TTL, OFFER_CHANCE, OFFER_PRESSURE, COUNTER_CAP,
+  startingRep, offerWage, offerYears, repStars, repLabel, managerRep, careerInit, migrateCareer, careerOnNewJob, careerRollover, contractExpiring, openContractTalk,
+  acceptContract, counterChance, counterContract, declineContract, careerJobOffers, acceptCareerJob, pendingJobOffer, approachCandidates, careerWeek, acceptJobOffer, declineJobOffer,
+  type RepChange, type CounterResult,
+} from "./career";
+export { CLUB_LORE, DERBY_CONFIDENCE, clubLore, rivalOf, isDerby, derbyName, markDerbies, derbyFor, derbyPreview, derbyResult, type ClubLore, type DerbyInfo } from "./lore";
+export {
+  MORALE_START, MORALE_COMPLAINT_BELOW, MORALE_COMPLAINT_WEEKS, MORALE_CONTENT_AT, MORALE, MATCH_ATTR_SWING,
+  personalityFromId, ensurePersonality, personalityOf, moraleOf, personalityTags, moraleLabel, moraleBand, adjustMorale, adjustSquadMorale,
+  leadership, pickCaptain, captainOf, ensureCaptain, setCaptain, lockerRoom, moraleTrainingFactor, matchAttrs, moraleOfferRefused, moraleWeek, moraleRollover, migrateMorale,
+} from "./morale";
+export { interviewContext, pressConference, answerInterview, skipInterview, type InterviewContext } from "./press";
+export {
+  STORY_CHANCE, STORY_TTL, EVENT_LOG_MAX, CAP_RATING, CAP_MAX_AGE, CAP_MORALE, WONDERKID_AT, SCOUT_TIP_COST, AWAY_BUS_COST, PHYSIO_COST, STORY_TEMPLATES,
+  pendingEvents, storyWeek, resolveEvent, storyMatch, storyRollover, migrateStory,
+} from "./story";
+export { scoutedProspect } from "./youth";
