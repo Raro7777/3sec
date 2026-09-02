@@ -1,4 +1,4 @@
-import type { Attributes, FormationName, PlayerRoleId, Role, Tactics } from "../types";
+import type { Attributes, FormationName, InstructionId, PlayerRoleId, Role, Tactics } from "../types";
 import { FORMATIONS } from "../formation";
 
 /**
@@ -117,6 +117,29 @@ export function autoRoles(formation: FormationName, attrsBySlot: (Attributes | u
       case "ST": return a.strength >= 15 && a.finishing < 15 ? "TM" : a.pace + a.acceleration >= 30 ? "AF" : a.finishing >= 15 ? "PCH" : a.vision >= 13 ? "F9" : "AF";
     }
   });
+}
+
+export const INSTRUCTION_LABEL: Record<InstructionId, string> = {
+  shootMore: "슛 자주", holdPosition: "위치 고수", getForward: "적극 전진", stayWider: "넓게 서기", cutInside: "안으로 파고들기",
+  pressMore: "강하게 압박", pressLess: "압박 자제", riskyPasses: "모험적 패스", safePasses: "안전한 패스", dribbleMore: "드리블 자주",
+};
+export const INSTRUCTION_IDS = Object.keys(INSTRUCTION_LABEL) as InstructionId[];
+
+/** Individual instructions modify the role's effective definition. */
+export function applyInstructions(def: RoleDef, instr?: Partial<Record<InstructionId, boolean>>): RoleDef {
+  if (!instr) return def;
+  const d = { ...def };
+  if (instr.shootMore) d.shoot += 0.3;
+  if (instr.holdPosition) { d.hold = 1; d.runs = Math.min(d.runs, 0.3); }
+  if (instr.getForward) { d.hold = Math.min(d.hold, 0.2); d.runs *= 1.5; }
+  if (instr.stayWider) d.dy += 0.12;
+  if (instr.cutInside) d.dy -= 0.3;
+  if (instr.pressMore) d.press *= 1.4;
+  if (instr.pressLess) d.press *= 0.6;
+  if (instr.riskyPasses) d.risk += 0.3;
+  if (instr.safePasses) d.risk -= 0.3;
+  if (instr.dribbleMore) d.dribble += 0.25;
+  return d;
 }
 
 /** Team-instruction presets (formation and roles untouched). */

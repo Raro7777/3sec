@@ -1,7 +1,7 @@
 import { Rng } from "./rng";
 import { TUNING } from "./tuning";
 import { normalizeTactics } from "./teams";
-import { ROLES, type RoleDef } from "./ai/roles";
+import { ROLES, applyInstructions, type RoleDef } from "./ai/roles";
 
 const TACTIC_LABEL: Partial<Record<keyof Tactics, string>> = { mentality: "멘탈리티", defensiveLine: "수비라인", pressing: "프레싱", directness: "직접성", width: "폭", tempo: "템포", counter: "역습", engageLine: "압박선", offsideTrap: "오프사이드 트랩", formation: "포메이션" };
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
@@ -12,6 +12,7 @@ import { add, dist, fromAngle, len, norm, pointSegment, scale, sub, type Vec2 } 
 import { computePositioning } from "./ai/positioning";
 import { decideOnBall, executeRestart } from "./ai/decision";
 import type {
+  Attributes,
   AttackDir,
   BallState,
   MatchEvent,
@@ -675,15 +676,23 @@ export class Match {
     };
 
     let taker: PlayerState;
-    const candidates = this.activePlayers(team).filter((p) => !this.isKeeper(p.id));
+    const candidates = this.activePlayers(team).filter((p) => !this.isKeeper(p.id) && !p.injured);
+    if (candidates.length === 0) candidates.push(...this.activePlayers(team).filter((p) => !this.isKeeper(p.id)));
+    const sp = this.teams[team].tactics.setPieces ?? {};
+    const configured = (id?: string) => (id ? candidates.find((p) => p.id === id) ?? null : null);
+    const byAttr = (f: (a: Attributes) => number) => candidates.reduce((best, p) => (f(this.def(p.id).attrs) > f(this.def(best.id).attrs) ? p : best));
     if (kind === "GOAL_KICK") {
       taker = this.keeper(team);
     } else if (kind === "PENALTY") {
-      taker = candidates.reduce((best, p) =>
-        this.def(p.id).attrs.finishing > this.def(best.id).attrs.finishing ? p : best,
-      );
+      taker = configured(sp.penaltyTaker) ?? byAttr((a) => a.finishing * 0.7 + a.composure * 0.3);
     } else if (kind === "KICK_OFF") {
       taker = candidates.reduce((best, p) => (dist(p.pos, pos) < dist(best.pos, pos) ? p : best));
+    } else if (kind === "CORNER") {
+      taker = configured(sp.cornerTaker) ?? byAttr((a) => a.technique * 0.6 + a.passing * 0.4);
+    } else if (kind === "FREE_KICK") {
+      const goal = goalCenter(this.dirOf(team));
+      const dangerous = dist(pos, goal) < 35;
+      taker = dangerous ? configured(sp.freeKickTaker) ?? byAttr((a) => a.technique * 0.5 + a.finishing * 0.3 + a.composure * 0.2) : candidates.reduce((best, p) => (dist(p.pos, pos) < dist(best.pos, pos) ? p : best));
     } else {
       taker = candidates.reduce((best, p) => (dist(p.pos, pos) < dist(best.pos, pos) ? p : best));
     }
@@ -1053,9 +1062,10 @@ export class Match {
   roleOf(id: string): RoleDef {
     const team = this.teamOf.get(id)!;
     const slot = this.slotIndex(id);
-    const roles = this.teams[team].tactics.roles;
-    const rid = slot >= 0 ? roles?.[slot] : undefined;
-    return ROLES[rid ?? (this.isKeeper(id) ? "GK" : "CB")] ?? ROLES.CB;
+    const t = this.teams[team].tactics;
+    const rid = slot >= 0 ? t.roles?.[slot] : undefined;
+    const base = ROLES[rid ?? (this.isKeeper(id) ? "GK" : "CB")] ?? ROLES.CB;
+    return applyInstructions(base, slot >= 0 ? t.instructions?.[slot] : undefined);
   }
 
   /**

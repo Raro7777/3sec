@@ -48,7 +48,9 @@ export function defaultTactics(formation: FormationName = "4-3-3"): Tactics {
 /** Fill in fields older saves lack and make the roles array legal for the formation. */
 export function normalizeTactics(t: Partial<Tactics> & { formation: FormationName }): Tactics {
   const d = defaultTactics(t.formation);
-  const out: Tactics = { ...d, ...t, roles: normalizeRoles(t.formation, t.roles) };
+  const n = FORMATIONS[t.formation].length;
+  const instructions = Array.from({ length: n }, (_, i) => ({ ...(t.instructions?.[i] ?? {}) }));
+  const out: Tactics = { ...d, ...t, roles: normalizeRoles(t.formation, t.roles), instructions, setPieces: { cornerTarget: "center", ...(t.setPieces ?? {}) } };
   for (const k of ["mentality", "defensiveLine", "pressing", "directness", "width", "tempo", "counter", "engageLine"] as const) {
     const v = out[k];
     out[k] = typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d[k];

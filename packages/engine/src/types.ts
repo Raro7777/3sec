@@ -62,6 +62,21 @@ export interface Tactics {
   offsideTrap: boolean;
   /** player role per formation slot (slot 0 = GK); missing/invalid entries fall back to defaults */
   roles?: PlayerRoleId[];
+  /** per-slot individual instructions layered on top of the role */
+  instructions?: Partial<Record<InstructionId, boolean>>[];
+  /** set-piece takers (player ids; fall back to the best available) and corner delivery */
+  setPieces?: SetPieces;
+}
+
+export type InstructionId = "shootMore" | "holdPosition" | "getForward" | "stayWider" | "cutInside" | "pressMore" | "pressLess" | "riskyPasses" | "safePasses" | "dribbleMore";
+
+export type CornerTarget = "near" | "far" | "center" | "short";
+
+export interface SetPieces {
+  cornerTaker?: string;
+  freeKickTaker?: string;
+  penaltyTaker?: string;
+  cornerTarget?: CornerTarget;
 }
 
 export type PlayerRoleId =

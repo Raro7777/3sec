@@ -274,7 +274,11 @@ function runTarget(m: Match, p: PlayerState, dir: 1 | -1): Vec2 {
     if (d < nd) { nd = d; nearest = o; }
   }
   const away = nearest && nd < 8 ? Math.sign(p.pos.y - nearest.pos.y) || 1 : 0;
-  return { x: p.pos.x + dir * 14, y: p.pos.y + away * 4 };
+  // Stay onside: the run bends along the line until the ball is played.
+  const line = m.offsideLine(p.team) * dir; // pitch x of the line
+  let x = p.pos.x + dir * 14;
+  if ((x - line) * dir > -0.6 && m.state.ball.owner !== null) x = line - dir * 0.6;
+  return { x, y: p.pos.y + away * 4 };
 }
 
 /** Support angle for a team-mate of the carrier: open, lane clear, a little ahead if possible. */
@@ -441,10 +445,10 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const carrierFree = ball.owner !== null && m.pressureAt(ball.pos, team) > 2.5;
     // On a transition (ball just won) forwards break immediately, whatever the cycle says.
     const transition = m.inTransition(team);
-    if (carrierBehind && carrierFree && (transition || phase < Math.min(0.85, 0.4 * rd.runs))) {
-      // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
+    if (carrierBehind && carrierFree && (transition || phase < Math.min(0.6, 0.4 * rd.runs))) {
+      // burst: start level with the line; only poor anticipation strays beyond it early
       const early = (1 - ant) * TUNING.offsideWobble * 0.35; // 0 .. ~1.8 m
-      x = line + 0.5 + early;
+      x = line - 0.4 + early;
       runFlag = true;
     } else if (x > line - 0.8) {
       x = line - 0.8;

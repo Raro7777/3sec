@@ -53,10 +53,10 @@ export interface Tuning {
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.42,
+  shotBase: 0.48,
   shotXgMult: 3.0713,
   longRangeBase: 0.168,
-  shotAngSd: 0.44,
+  shotAngSd: 0.4,
   crossBase: -0.3,
   passMarginWeight: 0.8,
   carryBonus: 0.9,
@@ -70,7 +70,7 @@ export const TUNING: Tuning = {
   tackleRate: 1.7,
   foulBase: 0.05,
   yellowBase: 0.13,
-  gkReach: 3.05,
+  gkReach: 3.3,
   offsideWobble: 4,
   reactionDelay: 0.45,
   panicClear: 0.7,

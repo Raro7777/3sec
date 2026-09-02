@@ -6,6 +6,6 @@ export { FORMATIONS, slotToPitch, roleDistance } from "./formation";
 export { BALL, stepBall, kickBall, passSpeedFor, rollSpeedAfter, rollTimeFor, rollDistance } from "./physics/ball";
 export { maxSpeed, maxAccel, stepPlayer, timeToReach } from "./physics/player";
 export { generateTeam, generateAttributes, defaultTactics, normalizeTactics } from "./teams";
-export { ROLES, ROLE_IDS, rolesForSlot, defaultRole, defaultRoles, normalizeRoles, autoRoles, TACTIC_PRESETS, type RoleDef } from "./ai/roles";
+export { ROLES, ROLE_IDS, rolesForSlot, defaultRole, defaultRoles, normalizeRoles, autoRoles, TACTIC_PRESETS, INSTRUCTION_LABEL, INSTRUCTION_IDS, applyInstructions, type RoleDef } from "./ai/roles";
 export { Match, TICK_HZ, DT, MAX_SUBS, type MatchOptions } from "./match";
 export { TUNING, DEFAULT_TUNING, setTuning, resetTuning, type Tuning } from "./tuning";

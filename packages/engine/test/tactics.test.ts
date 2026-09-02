@@ -45,15 +45,15 @@ describe("player roles", () => {
   });
 
   it("inside forwards shoot more and cross less than wingers; wing-backs cross more than defensive full-backs", () => {
-    const seeds = [1, 2, 3, 4, 5, 6];
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const base = defaultRoles("4-3-3");
     const ifRoles = base.map((r, i) => (i === 8 || i === 10 ? "IF" : r)) as PlayerRoleId[];
     const wRoles = base.map((r, i) => (i === 8 || i === 10 ? "W" : r)) as PlayerRoleId[];
     const wb = base.map((r, i) => (i === 1 || i === 4 ? "WB" : r)) as PlayerRoleId[];
     const dfb = base.map((r, i) => (i === 1 || i === 4 ? "DFB" : r)) as PlayerRoleId[];
-    const a = play(seeds, { roles: ifRoles }, { roles: wRoles });
+    const a = play(seeds, { roles: ifRoles }, { roles: wRoles }, 30);
     expect(a.crosses[0]).toBeLessThan(a.crosses[1]);
-    const b = play(seeds, { roles: wb }, { roles: dfb });
+    const b = play(seeds, { roles: wb }, { roles: dfb }, 30);
     expect(b.crosses[0]).toBeGreaterThan(b.crosses[1]);
   });
 });
@@ -84,5 +84,44 @@ describe("team instructions", () => {
     while (victim.onPitch && t++ < 20 * 240) m.step();
     expect(victim.onPitch).toBe(false);
     expect(m.state.events.some((e) => e.type === "INJURY" && e.playerId === victim.id)).toBe(true);
+  });
+});
+
+describe("set pieces and individual instructions", () => {
+  it("uses the configured corner and penalty takers when they are on the pitch", () => {
+    const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11 });
+    const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 22 });
+    const corner = h.players[2]!.id, pen = h.players[3]!.id;
+    h.tactics = normalizeTactics({ ...h.tactics, setPieces: { cornerTaker: corner, penaltyTaker: pen, cornerTarget: "near" } });
+    const m = new Match(h, a, { seed: 9, aiManaged: [] });
+    let n = 0;
+    while (m.state.phase !== "PLAY" && n++ < 2000) m.step();
+    m.setupRestart("CORNER", 0, { x: 52.2 * m.dirOf(0), y: 33.7 });
+    expect(m.state.restart?.takerId).toBe(corner);
+    m.setupRestart("PENALTY", 0, { x: 41.5 * m.dirOf(0), y: 0 });
+    expect(m.state.restart?.takerId).toBe(pen);
+    // an injured configured taker is skipped
+    m.player(pen).injured = true;
+    m.setupRestart("PENALTY", 0, { x: 41.5 * m.dirOf(0), y: 0 });
+    expect(m.state.restart?.takerId).not.toBe(pen);
+  });
+
+  it("'shoot more' on the striker raises the striker's share of shots", () => {
+    const seeds = [21, 22, 23, 24, 25, 26];
+    let more = 0, base = 0;
+    for (const seed of seeds) {
+      for (const flag of [true, false]) {
+        const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11 });
+        const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 22 });
+        const instructions = Array.from({ length: 11 }, (_, i) => (i === 9 && flag ? { shootMore: true } : {}));
+        h.tactics = normalizeTactics({ ...h.tactics, instructions });
+        const m = new Match(h, a, { seed, halfLength: 15 * 60, aiManaged: [] });
+        m.runToEnd();
+        const st = h.players[9]!.id;
+        const shots = m.state.events.filter((e) => e.type === "SHOT" && e.playerId === st).length;
+        if (flag) more += shots; else base += shots;
+      }
+    }
+    expect(more).toBeGreaterThan(base);
   });
 });

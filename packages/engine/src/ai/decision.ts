@@ -551,9 +551,20 @@ export function executeRestart(m: Match, r: Restart, taker: PlayerState): void {
       return;
     }
     case "CORNER": {
-      // Cross toward the penalty spot area (no offside from a corner).
-      const box = { x: (PITCH.halfLength - 9) * dir, y: m.rng.range(-5, 5) };
-      const candidates = m.activePlayers(taker.team).filter((q) => q.id !== taker.id && dist(q.pos, box) < 12);
+      // Delivery by instruction: near post, far post, the penalty-spot area, or short (no offside from a corner).
+      const side = Math.sign(r.pos.y) || 1;
+      const kind = m.teams[taker.team].tactics.setPieces?.cornerTarget ?? "center";
+      if (kind === "short") {
+        const mate = nearestTeammate(m, taker);
+        if (mate) executePass(m, taker, mate, false, true);
+        return;
+      }
+      const box = kind === "near"
+        ? { x: (PITCH.halfLength - 5.5) * dir, y: side * 4 }
+        : kind === "far"
+          ? { x: (PITCH.halfLength - 6) * dir, y: -side * 4 }
+          : { x: (PITCH.halfLength - 9) * dir, y: m.rng.range(-5, 5) };
+      const candidates = m.activePlayers(taker.team).filter((q) => q.id !== taker.id && dist(q.pos, box) < (kind === "center" ? 12 : 8));
       const target = candidates.length
         ? candidates.reduce((b, q) => (dist(q.pos, box) < dist(b.pos, box) ? q : b))
         : nearestTeammate(m, taker);
