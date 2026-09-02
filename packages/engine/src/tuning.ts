@@ -65,7 +65,7 @@ export const TUNING: Tuning = {
   engageRadius: 4.725,
   tackleRate: 1.4,
   foulBase: 0.05,
-  yellowBase: 0.12,
+  yellowBase: 0.16,
   gkReach: 2.2,
   offsideWobble: 5,
   reactionDelay: 0.35,
