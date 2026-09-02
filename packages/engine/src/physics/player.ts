@@ -1,8 +1,13 @@
 import type { Attributes, PlayerState } from "../types";
 import { angleOf, dist, len, norm, scale, sub, type Vec2 } from "../math/vec";
 
-/** Map a 1..20 attribute to [0,1]. */
-export const a01 = (x: number): number => Math.min(20, Math.max(1, x)) / 20;
+/**
+ * Map a 1..20 attribute to [0,1], compressed around the midpoint. Attribute differences
+ * compound across dozens of duels per match; without compression a 5-point quality gap
+ * produced 48 shots to 2. With it, strong vs weak looks like ~25 to 6, as in real football.
+ */
+export const ATTR_COMPRESSION = 0.7;
+export const a01 = (x: number): number => 0.5 + (Math.min(20, Math.max(1, x)) / 20 - 0.5) * ATTR_COMPRESSION;
 
 /**
  * Top speed in m/s: 1 => 7.0, 20 => 9.6 (elite sprinter ~ 9.5–10 m/s).
