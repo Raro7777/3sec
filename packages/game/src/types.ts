@@ -29,6 +29,8 @@ export interface Club {
   color: string;
   /** 1..20 – squad quality the club was built around */
   reputation: number;
+  /** transfer budget in 억원 */
+  budget: number;
   squad: SquadPlayer[];
   tactics: Tactics;
   selection: Selection;

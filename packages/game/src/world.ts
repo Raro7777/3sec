@@ -1,6 +1,7 @@
 import { Rng, defaultTactics, generateAttributes, type FormationName, type Role } from "@3sec/engine";
 import type { Club, SquadPlayer } from "./types";
 import { autoSelect } from "./selection";
+import { seasonBudget } from "./transfers";
 
 const FIRST = ["Kim", "Lee", "Park", "Choi", "Jung", "Kang", "Cho", "Yoon", "Jang", "Lim", "Han", "Oh", "Seo", "Shin", "Kwon", "Hwang", "Ahn", "Song", "Ryu", "Hong", "Moon", "Yang", "Bae", "Baek", "Nam"];
 const GIVEN = ["Minjun", "Seojun", "Doyun", "Yejun", "Siwoo", "Hajun", "Jiho", "Juwon", "Jihoon", "Junseo", "Hyunwoo", "Woojin", "Sunwoo", "Eunwoo", "Jaeyoon", "Taeyang", "Yujun", "Seungmin", "Dohyun", "Geonwoo", "Minseok", "Jinwoo", "Sangho", "Youngjin", "Kyungmin"];
@@ -61,6 +62,7 @@ export function buildClubs(seed: number): Club[] {
       shortName: c.shortName,
       color: c.color,
       reputation: c.reputation,
+      budget: seasonBudget(c.reputation, null),
       squad: buildSquad(rng, c.shortName, c.reputation),
       tactics: { ...defaultTactics(c.formation), mentality: 0.45 + rng.range(0, 0.1), pressing: 0.4 + rng.range(0, 0.2), directness: 0.4 + rng.range(0, 0.2) },
       selection: { formation: c.formation, starters: [], bench: [] },

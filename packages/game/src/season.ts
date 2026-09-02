@@ -3,6 +3,7 @@ import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
+import { aiTransfers, seasonBudget } from "./transfers";
 
 export function newGame(seed: number, userClub = 0): GameState {
   const clubs = buildClubs(seed);
@@ -125,6 +126,7 @@ export function advanceRound(s: GameState): boolean {
     p.condition = Math.min(1, p.condition + 0.6);
     p.injuryDays = Math.max(0, p.injuryDays - 7);
   }
+  if (s.round === 10) aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
   if (seasonOver(s)) s.news.unshift(`Season ${s.season} is over. Champions: ${clubOf(s, table(s)[0]!.club).name}.`);
   return true;
 }
@@ -133,6 +135,8 @@ export function advanceRound(s: GameState): boolean {
 export function startNextSeason(s: GameState): void {
   if (!seasonOver(s)) throw new Error("season still running");
   const rng = new Rng(s.seed * 13 + s.season * 977);
+  const finalTable = table(s);
+  for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1);
   for (const c of s.clubs) for (const p of c.squad) {
     p.age++;
     const drift = p.age <= 23 ? 0.9 : p.age <= 29 ? 0.2 : p.age <= 32 ? -0.3 : -0.9;
@@ -149,6 +153,7 @@ export function startNextSeason(s: GameState): void {
   s.round = 0;
   s.fixtures = buildFixtures(s.clubs.length);
   s.news.unshift(`Season ${s.season} begins.`);
+  aiTransfers(s, rng);
   prepareRound(s);
 }
 

@@ -11,6 +11,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
   try {
     const s = JSON.parse(json) as GameState;
     if (s.version !== 1 || !Array.isArray(s.clubs) || !Array.isArray(s.fixtures)) return null;
+    for (const c of s.clubs) if (typeof c.budget !== "number") c.budget = Math.round(20 + (c.reputation - 10) * 12);
     return s;
   } catch {
     return null;

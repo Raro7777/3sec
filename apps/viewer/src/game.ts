@@ -3,10 +3,11 @@ import {
   SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
   overall, playerOf, prepareRound, recordResult, roundsPerSeason, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
+  MAX_SQUAD, MIN_SQUAD, bestOffer, buyPlayer, playerValue, sellPlayer, transferTargets, windowOpen,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
-type ScreenName = "home" | "squad" | "table" | "results" | "match";
+type ScreenName = "home" | "squad" | "table" | "transfers" | "results" | "match";
 
 const SLIDERS: { key: keyof Omit<Tactics, "formation">; label: string; lo: string; hi: string }[] = [
   { key: "mentality", label: "멘탈리티", lo: "수비", hi: "공격" },
@@ -28,6 +29,7 @@ export class Game {
     home: document.getElementById("home")!,
     squad: document.getElementById("squad")!,
     table: document.getElementById("tableView")!,
+    transfers: document.getElementById("transfers")!,
     results: document.getElementById("results")!,
     season: document.getElementById("seasonLabel")!,
     tabMatch: document.getElementById("tabMatch") as HTMLButtonElement,
@@ -78,6 +80,7 @@ export class Game {
     this.renderHome();
     this.renderSquad();
     this.renderTable();
+    this.renderTransfers();
   }
 
   private get me(): Club {
@@ -93,7 +96,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3>${me.name} <span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`}</span></h3>`);
+    h.push(`<div class="card"><h3>${me.name} <span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     if (this.live) {
       h.push(`<div class="hint">경기가 진행 중입니다.</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button></div>`);
     } else if (over) {
@@ -260,6 +263,69 @@ export class Game {
       <div class="card"><h3>득점 순위</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th></tr></thead><tbody>${scorers
         .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`)
         .join("")}</tbody></table>` : `<div class="hint">아직 득점이 없습니다.</div>`}</div>`;
+  }
+
+  // ------------------------------------------------------------ transfers
+  private transferRole = "ALL";
+  private renderTransfers(): void {
+    const s = this.state;
+    const me = this.me;
+    const open = windowOpen(s);
+    const locked = !!this.live;
+    const roles = ["ALL", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
+    const targets = transferTargets(s).filter((t) => this.transferRole === "ALL" || t.player.role === this.transferRole).slice(0, 60);
+    const fmtRow = (p: SquadPlayer, clubName: string, right: string) => `<div class="row wide" style="cursor:default">
+        <span class="num">${p.number}</span><span class="role">${p.role}</span>
+        <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
+        <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
+        <span style="text-align:right">${right}</span></div>`;
+    const h: string[] = [];
+    h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD}</span></h3>
+      <div class="hint">${open ? '<b style="color:var(--good)">열림</b> — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.' : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
+      ${locked ? " · 경기 중에는 거래할 수 없습니다." : ""}</div>
+      <div class="squad-tools"><label>포지션 <select id="trRole">${roles.map((r) => `<option ${r === this.transferRole ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈). 스쿼드가 16명 이하인 구단은 팔지 않습니다.</span></div></div>`);
+    h.push(`<div class="grid2">`);
+    h.push(`<div class="card"><h3>영입 대상 <span>능력순 상위 ${targets.length}</span></h3><div class="roster">${targets
+      .map((t) => fmtRow(t.player, t.club.shortName, t.price === null ? '<span class="hint">비매</span>' : `<button data-buy="${t.club.id}:${t.player.id}" ${open && !locked && me.budget >= t.price && me.squad.length < MAX_SQUAD ? "" : "disabled"} style="padding:3px 8px;font-size:12px">${t.price}억 영입</button>`))
+      .join("")}</div></div>`);
+    h.push(`<div class="card"><h3>내 선수 판매 <span>최소 ${MIN_SQUAD}명 유지</span></h3><div class="roster">${[...me.squad]
+      .sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role))
+      .map((p) => {
+        const offer = open ? bestOffer(s, p.id) : null;
+        return fmtRow(p, "", offer ? `<button data-sell="${p.id}" ${!locked && me.squad.length > MIN_SQUAD ? "" : "disabled"} style="padding:3px 8px;font-size:12px">${offer.fee}억 → ${offer.club.shortName}</button>` : '<span class="hint">제안 없음</span>');
+      })
+      .join("")}</div></div>`);
+    h.push(`</div>`);
+    this.el.transfers.innerHTML = h.join("");
+    (document.getElementById("trRole") as HTMLSelectElement).addEventListener("change", (e) => {
+      this.transferRole = (e.target as HTMLSelectElement).value;
+      this.renderTransfers();
+    });
+    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-buy]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const [club, id] = b.dataset.buy!.split(":");
+        const t = transferTargets(s).find((x) => x.player.id === id)!;
+        if (!confirm(`${t.player.name} (${t.club.shortName})을(를) ${t.price}억에 영입할까요?`)) return;
+        const err = buyPlayer(s, Number(club), id!);
+        if (err) alert(err);
+        this.save();
+        this.renderAll();
+      }),
+    );
+    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-sell]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const id = b.dataset.sell!;
+        const p = playerOf(me, id);
+        const offer = bestOffer(s, id);
+        if (!offer || !confirm(`${p.name}을(를) ${offer.club.name}에 ${offer.fee}억에 판매할까요?`)) return;
+        const err = sellPlayer(s, id);
+        if (err) alert(err);
+        this.save();
+        this.renderAll();
+      }),
+    );
   }
 
   // ------------------------------------------------------------ results

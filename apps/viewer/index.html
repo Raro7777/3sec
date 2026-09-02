@@ -114,12 +114,14 @@
         #app { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
         #nav { position:fixed; left:0; right:0; bottom:0; top:auto; z-index:10; border-top:1px solid var(--line); border-bottom:0; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); justify-content:space-around; background:#0f161cf2; backdrop-filter:blur(8px); }
         #nav .brand, #nav .spacer { display:none; }
-        #nav .season { position:fixed; top:0; right:0; padding:6px 10px; background:transparent; z-index:11; }
+        #nav .season { display:none; }
         #nav button.tab { flex:1; padding:9px 4px; font-size:14px; }
         .page { padding:12px 10px; gap:10px; }
         .fixture .team { font-size:18px; }
         .row { padding:7px 6px; }
         #topbar { padding:6px 10px; gap:8px; padding-top: calc(6px + env(safe-area-inset-top)); }
+        #topbar label { font-size:12px; }
+        #intro { font-size:11px !important; padding:6px 10px !important; }
         #topbar #score { order:0; } #topbar #clock { order:1; } #topbar #phase { order:2; flex-basis:100%; min-height:0; }
         #stats { gap:10px; font-size:11px; }
         #others { gap:10px; }
@@ -140,6 +142,7 @@
         <button class="tab" data-screen="home">홈</button>
         <button class="tab" data-screen="squad">스쿼드</button>
         <button class="tab" data-screen="table">순위</button>
+        <button class="tab" data-screen="transfers">이적</button>
         <button class="tab" data-screen="match" id="tabMatch" disabled>경기</button>
         <span class="spacer"></span>
         <span class="season" id="seasonLabel"></span>
@@ -148,6 +151,7 @@
       <section class="screen" id="screen-home"><div class="page" id="home"></div></section>
       <section class="screen" id="screen-squad"><div class="page" id="squad"></div></section>
       <section class="screen" id="screen-table"><div class="page" id="tableView"></div></section>
+      <section class="screen" id="screen-transfers"><div class="page" id="transfers"></div></section>
       <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
 
       <section class="screen" id="screen-match">
