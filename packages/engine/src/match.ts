@@ -88,6 +88,8 @@ export class Match {
   private aiBucket: Partial<Record<TeamId, string>> = {};
   /** tick of the last pass/clearance kick (defenders react with a delay) */
   lastKickTick = -1000;
+  /** tick of the touch before the current one (assist window) */
+  lastAssistWindowTick = -1000;
   /** tick at which possession last changed hands (transition / counter-attack window) */
   lastTurnoverTick = -1000;
   private lastPossTeam: TeamId | null = null;
@@ -1092,7 +1094,7 @@ export class Match {
   /** Register a touch for attribution (throw-ins, own goals, offside reset). */
   touch(p: PlayerState): void {
     const b = this.state.ball;
-    if (b.lastTouch !== p.id) b.prevTouch = b.lastTouch;
+    if (b.lastTouch !== p.id) { b.prevTouch = b.lastTouch; this.lastAssistWindowTick = this.state.tick; }
     b.lastTouch = p.id;
     b.lastTouchTeam = p.team;
     // An opponent touching the ball resets the offside snapshot (deliberate play simplification).
@@ -1409,6 +1411,11 @@ export class Match {
       this.emit("OWN_GOAL", scoringTeam, scorer, `자책골! ${this.name(scorer!)} – ${this.scoreline()}`, b.pos);
     } else {
       this.emit("GOAL", scoringTeam, scorer, `골! ${scorer ? this.name(scorer) : ""} – ${this.scoreline()}`, b.pos);
+      // Assist: the last team-mate to touch the ball before the scorer, within the same attack.
+      const helper = b.prevTouch;
+      if (scorer && helper && helper !== scorer && this.teamOf.get(helper) === scoringTeam && this.state.tick - this.lastAssistWindowTick < 20 * 10) {
+        this.emit("ASSIST", scoringTeam, helper, `도움: ${this.name(helper)}`, b.pos);
+      }
     }
     this.lastGoalTeam = scoringTeam;
     this.shot = null;

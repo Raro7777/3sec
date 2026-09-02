@@ -194,7 +194,8 @@ export type MatchEventType =
   | "TACKLE"
   | "SUBSTITUTION"
   | "TACTICS"
-  | "INJURY";
+  | "INJURY"
+  | "ASSIST";
 
 export interface MatchEvent {
   t: number; // match seconds
