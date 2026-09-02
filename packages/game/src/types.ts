@@ -296,6 +296,30 @@ export interface Club {
   capacity: number;
   /** the supporters: mood and attendance counters (fans.ts) */
   fans: Fans;
+  /** the club's original name, set on the first rename (the viewer looks up stadium art, kits and rivalries by it) */
+  baseName?: string;
+  /** custom home kit (customize.ts); `primary` is kept equal to `color` */
+  kit?: ClubKit;
+  /** custom stadium name (customize.ts); the viewer's banner prefers it */
+  stadiumName?: string;
+  /** seats the ground had before any expansion (stadium.ts; the expansion ceiling is a share of it) */
+  baseCapacity?: number;
+  /** seats bought this season, added to `capacity` at the next season rollover (stadium.ts) */
+  pendingSeats?: number;
+  /** season of the last expansion (one per season) */
+  expansionSeason?: number;
+}
+
+/** Shirt patterns the viewer can paint (apps/viewer/src/kits.ts). */
+export type KitPatternName = "solid" | "stripes" | "hoops" | "sash" | "halves";
+
+/** A shirt: dominant colour, trim colour and pattern. */
+export interface KitSpec { primary: string; secondary: string; pattern: KitPatternName }
+
+/** A club's custom kits: the home shirt plus the alternate worn when the home shirt clashes. */
+export interface ClubKit extends KitSpec {
+  /** alternate kit: white or dark with the club colour as a sash, or a shirt of the user's own */
+  away?: "white" | "dark" | KitSpec;
 }
 
 /** A club's supporters (fans.ts). */

@@ -1209,7 +1209,7 @@ export class Match {
     // Cards: promising attack / from behind increases card chance (simplified).
     const distToGoal = dist(spot, goalCenter(attackDir));
     // Referees are noticeably more lenient with a player already booked (second yellow ≈ rare).
-    const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.25 : 1);
+    const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.2 : 1);
     const text = `파울: ${this.name(offender.id)} → ${this.name(victim.id)}`;
     this.emit("FOUL", offender.team, offender.id, text, spot);
     if (this.rng.chance(pYellow)) {
@@ -1222,7 +1222,7 @@ export class Match {
         s.stats[offender.team].yellows++;
         this.emit("YELLOW_CARD", offender.team, offender.id, `경고: ${this.name(offender.id)}`);
       }
-    } else if (this.rng.chance(0.002)) {
+    } else if (this.rng.chance(0.0015)) {
       offender.sentOff = true;
       s.stats[offender.team].reds++;
       this.emit("RED_CARD", offender.team, offender.id, `다이렉트 퇴장 – ${this.name(offender.id)}`);
@@ -1523,5 +1523,47 @@ export class Match {
   runToEnd(maxTicks = 200_000): void {
     let n = 0;
     while (this.state.phase !== "FULL_TIME" && n++ < maxTicks) this.step();
+  }
+
+  /**
+   * Run headlessly until the running clock reaches `seconds` of match time (first half = 0..halfLength,
+   * second half = halfLength..2*halfLength; e.g. 60' = 60*60 with the default half). Deterministic: the same
+   * seed and target give the same state. Returns true once the target (or full time) is reached; with
+   * `maxTicks` the work can be sliced over several calls (false = call again).
+   */
+  fastForward(seconds: number, maxTicks = Infinity): boolean {
+    const s = this.state;
+    const targetHalf: 1 | 2 = seconds >= this.halfLength ? 2 : 1;
+    const targetClock = seconds - (targetHalf === 2 ? this.halfLength : 0);
+    const reached = () => s.phase === "FULL_TIME" || s.half > targetHalf || (s.half === targetHalf && s.clock >= targetClock);
+    let n = 0;
+    while (!reached() && n++ < maxTicks) this.step();
+    return reached();
+  }
+
+  /**
+   * Force the scoreline (scenario setups: "0-2 down at 60'"). The score and the goal tallies in `stats` are
+   * overwritten so the HUD stays consistent; no goal events are emitted and nothing else changes.
+   */
+  setScore(home: number, away: number): void {
+    const s = this.state;
+    s.score = [Math.max(0, Math.floor(home)), Math.max(0, Math.floor(away))];
+    s.stats[0].goals = s.score[0];
+    s.stats[1].goals = s.score[1];
+  }
+
+  /**
+   * Send a player off outside of play (scenario setups: "a man down from 55'"). Same bookkeeping as a red
+   * card for a foul: the player leaves the pitch for good, the red is counted and a RED_CARD event is emitted.
+   * Returns an error message when the player is not on the pitch.
+   */
+  sendOff(playerId: string, reason = "퇴장"): string | null {
+    const p = this.byId.get(playerId);
+    if (!p || !p.onPitch || p.sentOff) return "player is not on the pitch";
+    p.sentOff = true;
+    this.state.stats[p.team].reds++;
+    this.emit("RED_CARD", p.team, p.id, `${reason} – ${this.name(p.id)}`);
+    this.refreshActive();
+    return null;
   }
 }

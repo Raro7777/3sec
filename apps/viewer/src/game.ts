@@ -19,6 +19,7 @@ import {
   MAX_STAFF, STAFF_ROLE_LABEL, ensureStaffMarket, expiringStaff, fireStaff, hireStaff, renewStaff, staffRenewalFee, staffRoomProblem, staffSeverance, staffSigningFee, staffWageBill, staffStyleTags, type StaffMember,
   avgHomeAttendance, clubCapacity, moodBand, moodLabel,
   expectedAttendance, fixtureSeed, penaltyShootoutDetail, type ShootoutDetail,
+  EXPANSION_STEP, KIT_PATTERNS, KIT_PATTERN_LABEL, CLUB_NAME_MAX, SHORT_NAME_MAX, STADIUM_NAME_MAX, expandStadium, expansionAdvice, renameClub, renameStadium, resetClubKit, setClubKit, type ClubKit, type KitPatternName,
 } from "@3sec/game";
 import {
   ACHIEVEMENTS, TIER_LABEL, achievementById, hallOfFame, takeFreshAchievements, type AchievementTier,
@@ -27,9 +28,11 @@ import {
 import {
   clubLore, derbyFor, answerInterview, resolveEvent, pendingEvents, setCaptain, moraleOf, moraleLabel, moraleBand, personalityTags, captainOf, type InterviewOption,
 } from "@3sec/game";
-import { isDerby, stadiumFor } from "./stadiums";
+import { stadiumFor } from "./stadiums";
+import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
 import { canvasBlob, downloadsBlocked, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
+import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
 import { MatchScreen } from "./match-screen";
 import { getSimPool } from "./sim/pool";
@@ -37,7 +40,7 @@ import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings" | "profile" | "sacked";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
-const APP_VERSION = "0.19";
+const APP_VERSION = "0.20";
 
 /**
  * Formation diagram as inline SVG, attack pointing up. With a club and starters it labels each slot with the
@@ -65,6 +68,26 @@ export function formationSvg(f: FormationName, club: Club | null, starters: stri
     ? `<rect x="36" y="2" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><rect x="36" y="124" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><circle cx="60" cy="70" r="10" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>`
     : `<line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".6"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" width="${width}" height="${Math.round(width * H / W)}" role="img" aria-label="${f}"><rect x="0" y="0" width="${W}" height="${H}" rx="4" fill="#2f7a3e"/><rect x="2" y="2" width="${W - 4}" height="${H - 4}" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>${lines}${dots}</svg>`;
+}
+
+/** Rough category of a news line, for the home-screen filter chips. */
+export function newsKind(n: string): "market" | "fans" | "board" | "squad" | "comp" | "other" {
+  if (/이적|영입|판매|자유계약|임대|계약|제안|호가|은퇴/.test(n)) return "market";
+  if (/팬|관중|매진|시위|응원/.test(n)) return "fans";
+  if (/이사회|경질|신뢰|감독직|연봉 협상|재계약 협상/.test(n)) return "board";
+  if (/부상|퇴장|경고|출장 정지|사기|불만|주장|국가대표|데뷔|유스|유망주|승격|훈련/.test(n)) return "squad";
+  if (/우승|컵|더비|라이벌|결승|승부차기|업적|올해의 감독|시즌/.test(n)) return "comp";
+  return "other";
+}
+export function newsIcon(n: string): string {
+  const k = newsKind(n);
+  if (/업적/.test(n)) return "🏅";
+  if (/우승/.test(n)) return "🏆";
+  if (/더비|라이벌/.test(n)) return "⚔️";
+  if (/부상/.test(n)) return "🩹";
+  if (/퇴장|출장 정지/.test(n)) return "🟥";
+  if (/유스|유망주|승격|데뷔/.test(n)) return "🌱";
+  return k === "market" ? "🔁" : k === "fans" ? "📣" : k === "board" ? "🏛️" : k === "squad" ? "👤" : k === "comp" ? "🎽" : "📰";
 }
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
@@ -141,6 +164,8 @@ export class Game {
   private live: { fixture: Fixture; match: Match; tie?: CupTie }[] | null = null;
   /** what the live matches belong to (decides how they are settled and shown) */
   private liveKind: "league" | "cup" = "league";
+  /** the running 도전 모드 match (outside the season: never settled, never saved) */
+  private challenge: { scen: ChallengeScenario; match: Match; side: TeamId } | null = null;
   private selA: string | null = null;
   private current: ScreenName = "home";
   private pickedClub: number | null = null;
@@ -192,6 +217,7 @@ export class Game {
     });
     this.cta.addEventListener("click", () => this.ctaAction());
     this.applyFontSize(this.fontSize());
+    (window as unknown as { __fm?: Game }).__fm = this; // test hook (Playwright drives the UI through it)
     this.renderGuide();
     if (!saved) {
       this.startOnboarding();
@@ -379,7 +405,7 @@ export class Game {
   private renderAll(): void {
     const s = this.state;
     this.el.season.textContent = `${s.managerName} 감독 · 시즌 ${s.season} · ${s.pendingCupDay && !seasonOver(s) ? `컵 ${CUP_STAGE_LABEL[s.cup.stage] ?? ""}` : `${Math.min(s.round + 1, roundsPerSeason(s.clubs.length))}/${roundsPerSeason(s.clubs.length)}R`}`;
-    this.el.tabMatch.disabled = !this.live;
+    this.el.tabMatch.disabled = !this.live && !this.challenge;
     this.renderHome();
     this.renderSquad();
     this.renderTable();
@@ -429,14 +455,18 @@ export class Game {
       <div class="hint" style="margin-top:6px">붙여넣기로 불러오기: 저장 텍스트를 아래에 붙여 넣고 버튼을 누르세요.</div>
       <textarea id="setImportText" placeholder='{"version":1, ...}'></textarea>
       <div class="actions"><button data-set="importText">텍스트에서 불러오기</button></div></div>
+    <div class="card"><h3>구단 꾸미기 <span>${s.clubs[s.userClub]?.name ?? ""}</span></h3><div class="actions"><button data-set="customize">🎨 유니폼 · 구단명 · 홈구장</button></div><div class="hint">유니폼 색과 패턴, 구단명, 구장 이름을 바꾸고 예산으로 좌석을 늘립니다. 홈 화면의 구단명을 눌러도 열립니다.</div></div>
     <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
+    this.el.settings.insertAdjacentHTML("beforeend", this.challengeCardHtml(true));
+    this.wireChallenge(this.el.settings);
     const q = (sel: string) => this.el.settings.querySelector<HTMLElement>(sel)!;
     // The claude.ai artifact viewer blocks page-initiated downloads; there the share/copy paths remain.
     if (location.hostname.endsWith("claude.ai")) q('[data-set="export"]').style.display = "none";
     q('[data-set="guide"]').addEventListener("click", () => this.show("guide"));
     this.el.settings.querySelectorAll<HTMLButtonElement>("button[data-fs]").forEach((b) => b.addEventListener("click", () => { this.applyFontSize(b.dataset.fs as "s" | "m" | "l"); this.renderSettings(); }));
     q('[data-set="newGame"]').addEventListener("click", () => this.act("newGame"));
+    q('[data-set="customize"]').addEventListener("click", () => this.openCustomizeSheet());
     for (const { n } of slots) {
       this.el.settings.querySelector(`[data-slot-save="${n}"]`)!.addEventListener("click", () => {
         const existing = this.slotInfo(n);
@@ -518,7 +548,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3>${me.name} <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     h.push(this.todoHtml());
     h.push(this.careerStripHtml());
     // the pending interview (press.ts) and the story events with their choices (story.ts)
@@ -531,8 +561,8 @@ export class Game {
     h.push(this.fansHtml());
     if (s.board.sacked) {
       h.push(`<div class="hint" style="color:var(--bad)"><b>경질되었습니다.</b> ${me.name} 이사회가 계약을 해지했습니다. 다른 구단의 제안을 받거나 새 게임을 시작하세요.</div><div class="actions"><button class="primary" data-act="sacked">거취 정하기 →</button></div>`);
-    } else if (this.live) {
-      h.push(`<div class="hint">경기가 진행 중입니다.</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button></div>`);
+    } else if (this.live || this.challenge) {
+      h.push(`<div class="hint">${this.challenge ? `도전 「${this.challenge.scen.title}」 경기가 진행 중입니다.` : "경기가 진행 중입니다."}</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button>${this.challenge ? `<button class="danger" data-act="chalAbandon">도전 포기</button>` : ""}</div>`);
     } else if (over) {
       const champ = clubOf(s, rows[0]!.club);
       h.push(`<div class="hint">시즌 ${s.season} 최종 순위 ${pos}위. 우승: <b style="color:var(--accent)">${champ.name}</b>${s.cup.holder !== undefined ? ` · ${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b>` : ""}</div>`);
@@ -577,13 +607,19 @@ export class Game {
     }
     if (!over) h.push(`<div class="cupLine">${this.cupLineHtml()}</div>`);
     h.push(`</div>`);
+    h.push(this.challengeCardHtml(false));
     h.push(`<div class="grid2">`);
-    h.push(`<div class="card"><h3>소식</h3><div class="news">${s.news.slice(0, 5).map((n) => `<div>${n}</div>`).join("") || "<div>아직 소식이 없습니다.</div>"}</div>${s.news.length > 5 ? `<details><summary class="hint" style="cursor:pointer">지난 소식 ${Math.min(25, s.news.length - 5)}건 더 보기</summary><div class="news" style="margin-top:4px">${s.news.slice(5, 30).map((n) => `<div>${n}</div>`).join("")}</div></details>` : ""}</div>`);
+    const newsLine = (n: string) => `<div data-kind="${newsKind(n)}"><span class="nIcon">${newsIcon(n)}</span>${n}</div>`;
+    h.push(`<div class="card"><h3>소식 <span class="chips newsFilter">${([["all", "전체"], ["market", "이적"], ["fans", "팬"], ["board", "이사회"], ["squad", "선수"], ["comp", "대회"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.newsFilter === k ? "on" : ""}" data-news="${k}">${l}</button>`).join("")}</span></h3>
+      <div class="news">${s.news.slice(0, 6).map(newsLine).join("") || "<div>아직 소식이 없습니다.</div>"}</div>${s.news.length > 6 ? `<details><summary class="hint" style="cursor:pointer">지난 소식 ${Math.min(34, s.news.length - 6)}건 더 보기</summary><div class="news" style="margin-top:4px">${s.news.slice(6, 40).map(newsLine).join("")}</div></details>` : ""}</div>`);
     h.push(`<div class="card"><h3>순위 <span>상위 6</span></h3>${this.tableHtml(rows.slice(0, 6), true)}</div>`);
     h.push(`</div>`);
     h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다. · 가난한자의 FM · 만든이 raro</span></div>`);
     this.el.home.innerHTML = h.join("");
     this.wireClubTaps(this.el.home);
+    this.el.home.querySelectorAll<HTMLButtonElement>("button[data-news]").forEach((b) => b.addEventListener("click", () => { this.newsFilter = b.dataset.news!; this.applyNewsFilter(); }));
+    this.applyNewsFilter();
+    this.el.home.querySelector("[data-customize]")?.addEventListener("click", () => this.openCustomizeSheet());
     this.wireStory(this.el.home);
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-go]").forEach((b) => b.addEventListener("click", () => {
       if (b.dataset.career) { this.openCareerSheet(); return; }
@@ -592,6 +628,7 @@ export class Game {
       this.show(b.dataset.go as ScreenName);
     }));
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) => b.addEventListener("click", () => this.act(b.dataset.act!)));
+    this.wireChallenge(this.el.home);
     this.queueAchievementToast();
   }
 
@@ -615,7 +652,7 @@ export class Game {
       this.save();
       const total = this.state.achievements?.length ?? 0;
       this.openSheet(`<div class="pc"><h3 style="margin:0">🏅 업적 달성 <span style="color:var(--muted);font-weight:400;font-size:12px">${total} / ${ACHIEVEMENTS.length}</span></h3>
-        ${ids.map((id) => achievementById(id)).filter((a) => !!a).map((a) => `<div class="stat" style="border:1px solid ${Game.TIER_COLOR[a!.tier]};border-radius:8px;padding:8px 10px;background:var(--panel2)"><b>${this.tierBadge(a!.tier)} ${a!.title}</b><small class="hint">${a!.desc}</small></div>`).join("")}
+        ${ids.map((id) => achievementById(id)).filter((a) => !!a).map((a) => `<div class="stat" style="border:1px solid ${Game.TIER_COLOR[a!.tier]};border-radius:8px;padding:8px 10px;background:var(--panel2);display:flex;flex-direction:column;gap:3px"><b>${this.tierBadge(a!.tier)} ${a!.title}</b><small class="hint">${a!.desc}</small></div>`).join("")}
         <div class="hint">순위 화면의 명예의 전당 탭에서 전체 업적과 기록을 볼 수 있습니다.</div>
         <div class="pcActions"><button class="primary" data-sheet="close">닫기</button></div></div>`);
     }, 60);
@@ -943,7 +980,13 @@ export class Game {
   }
 
   private act(a: string): void {
+    // A 도전 모드 match is running: nothing that would advance or settle the season is allowed until it is over.
+    if (this.challenge && ["play", "sim1", "sim3", "sim5", "cupSim", "nextSeason", "nextRound"].includes(a)) {
+      alert(`도전 「${this.challenge.scen.title}」 경기가 진행 중입니다. 먼저 끝내거나 포기하세요.`);
+      return;
+    }
     switch (a) {
+      case "chalAbandon": this.abandonChallenge(); break;
       case "squad": this.show("squad"); break;
       case "play": this.startMatch(); break;
       case "sim1": void this.simRounds(1); break;
@@ -1046,7 +1089,8 @@ export class Game {
     this.cta.hidden = hide;
     if (hide) return;
     let label: string, act: string;
-    if (this.live) { label = "경기로 돌아가기 ▶"; act = "toMatch"; }
+    if (this.challenge) { label = `도전 「${this.challenge.scen.title}」 경기로 ▶`; act = "toMatch"; }
+    else if (this.live) { label = "경기로 돌아가기 ▶"; act = "toMatch"; }
     else if (s.board.sacked) { label = "이사회 통보 확인"; act = "sacked"; }
     else if (cur === "results") { label = seasonOver(s) ? "시즌 결산 보기 →" : "다음 라운드 →"; act = "nextRound"; }
     else if (seasonOver(s)) { label = cur === "review" ? "다음 시즌 시작 →" : "시즌 결산 보기 →"; act = cur === "review" ? "nextSeason" : "review"; }
@@ -1096,6 +1140,7 @@ export class Game {
       return;
     }
     if (kind === "club") { this.openClubSheet(club, ds.cmp === "1"); return; }
+    if (kind === "custom") { this.customizeAct(ds.act ?? ""); return; }
     if (kind === "captain") {
       const err = setCaptain(this.state, id);
       if (err) { alert(err); return; }
@@ -1118,6 +1163,162 @@ export class Game {
       const id = Number(el.dataset.club ?? el.dataset.clubcard);
       if (Number.isFinite(id)) this.openClubSheet(id, false);
     }));
+  }
+
+  // ------------------------------------------------------------ 구단 꾸미기 (kit, names, stadium)
+
+  /** The club as the match screen wants it: engine team fields plus custom kit, original name, ground and seats. */
+  private clubLook(c: Club): { name: string; color: string; baseName?: string; kit?: ClubKit; stadiumName?: string; capacity: number } {
+    return { name: c.name, color: c.color, baseName: c.baseName, kit: c.kit, stadiumName: c.stadiumName, capacity: clubCapacity(c) };
+  }
+
+  /** Paint a kit disc with a shirt number into a square canvas (css size = canvas attribute size). */
+  private static paintKitPreview(canvas: HTMLCanvasElement, kit: Kit, num = ""): void {
+    const size = Number(canvas.dataset.size ?? canvas.width);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(size * dpr); canvas.height = Math.round(size * dpr);
+    canvas.style.width = `${size}px`; canvas.style.height = `${size}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    const r = size / 2 - 2;
+    paintKit(ctx, kit, size / 2, size / 2, r);
+    if (num) {
+      ctx.fillStyle = kitTextColor(kit);
+      ctx.font = `700 ${Math.round(r * 0.95)}px 'Barlow Condensed', system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(num, size / 2, size / 2 + 1);
+    }
+  }
+
+  /** The kit the sheet's inputs currently describe (home + away choice). */
+  private customKitFromSheet(): ClubKit {
+    const q = <T extends HTMLElement>(sel: string) => this.sheetBody.querySelector<T>(sel)!;
+    const pattern = (this.sheetBody.querySelector<HTMLElement>(".kitTile.on")?.dataset.pattern ?? "solid") as KitPatternName;
+    const kit: ClubKit = { primary: q<HTMLInputElement>("#kitPrimary").value, secondary: q<HTMLInputElement>("#kitSecondary").value, pattern };
+    const away = q<HTMLSelectElement>("#kitAway").value;
+    if (away === "white" || away === "dark") kit.away = away;
+    else if (away === "custom") kit.away = { primary: q<HTMLInputElement>("#awayPrimary").value, secondary: q<HTMLInputElement>("#awaySecondary").value, pattern: q<HTMLSelectElement>("#awayPattern").value as KitPatternName };
+    return kit;
+  }
+
+  /** Repaint the previews and pattern tiles from the inputs. */
+  private refreshKitPreview(): void {
+    const kit = this.customKitFromSheet();
+    const home: Kit = { primary: kit.primary, secondary: kit.secondary, pattern: kit.pattern };
+    const away = alternateKit(kit.primary, home, kit.away);
+    const num = String(this.me.squad.find((p) => this.me.selection.starters.includes(p.id))?.number ?? 10);
+    for (const c of this.sheetBody.querySelectorAll<HTMLCanvasElement>("canvas[data-kit]")) {
+      const which = c.dataset.kit;
+      if (which === "home") Game.paintKitPreview(c, home, num);
+      else if (which === "away") Game.paintKitPreview(c, away, num);
+      else Game.paintKitPreview(c, { ...home, pattern: which as KitPatternName });
+    }
+    this.sheetBody.querySelector<HTMLElement>("#awayCustom")!.hidden = kit.away === undefined || typeof kit.away === "string";
+    this.sheetBody.querySelector<HTMLElement>("#kitDot")!.style.background = kit.primary;
+  }
+
+  private refreshExpansion(): void {
+    const slider = this.sheetBody.querySelector<HTMLInputElement>("#expSeats");
+    const out = this.sheetBody.querySelector<HTMLElement>("#expInfo");
+    const btn = this.sheetBody.querySelector<HTMLButtonElement>('[data-act="expand"]');
+    if (!slider || !out || !btn) return;
+    const seats = Number(slider.value);
+    const a = expansionAdvice(this.state, seats);
+    const payback = a.paybackSeasons === Infinity ? "회수 불가 (매진이 없으면 새 좌석은 비어 있습니다)" : `약 ${a.paybackSeasons}시즌 만에 회수`;
+    out.innerHTML = `<b>+${seats.toLocaleString("ko-KR")}석</b> → ${(a.capacity + a.pendingSeats + seats).toLocaleString("ko-KR")}석 · 비용 <b>${a.cost}억</b> · 예상 추가 입장 수입 <b>${a.extraGate}억/시즌</b><br><small>${payback}</small>${a.problem ? `<br><small style="color:var(--warn)">${a.problem}</small>` : ""}`;
+    btn.disabled = !!a.problem;
+  }
+
+  private openCustomizeSheet(notice?: string): void {
+    const s = this.state;
+    const me = this.me;
+    const kit = kitForClub(me);
+    const awayChoice = me.kit?.away === undefined ? "auto" : typeof me.kit.away === "string" ? me.kit.away : "custom";
+    const awayCustom = typeof me.kit?.away === "object" ? me.kit.away : alternateKit(me.color, kit);
+    const ground = stadiumFor(me.baseName ?? me.name);
+    const a = expansionAdvice(s, EXPANSION_STEP);
+    const occ = a.homeMatches ? `${Math.round(a.occupancy * 100)}%` : "—";
+    const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const patSel = (id: string, cur: KitPatternName) => `<select id="${id}">${KIT_PATTERNS.map((p) => `<option value="${p}" ${p === cur ? "selected" : ""}>${KIT_PATTERN_LABEL[p]}</option>`).join("")}</select>`;
+    this.openSheet(`<div class="pc custom">
+      <h3 style="margin:0"><span class="dot" id="kitDot" style="background:${me.color};width:14px;height:14px"></span>구단 꾸미기 <span style="color:var(--muted);font-weight:400;font-size:12px">${me.name}</span></h3>
+      ${notice ? `<div class="hint custNotice" style="color:var(--good)">✓ ${notice}</div>` : ""}
+
+      <div class="custSec"><div class="custTitle">유니폼</div>
+        <div class="kitRow">
+          <div class="kitPrev"><canvas data-kit="home" data-size="64" width="64" height="64"></canvas><small>홈</small></div>
+          <div class="kitPrev"><canvas data-kit="away" data-size="64" width="64" height="64"></canvas><small>원정</small></div>
+          <div class="kitInputs">
+            <label>주 색상 <input type="color" id="kitPrimary" value="${kit.primary}"></label>
+            <label>보조 색상 <input type="color" id="kitSecondary" value="${kit.secondary}"></label>
+          </div>
+        </div>
+        <div class="kitTiles">${KIT_PATTERNS.map((p) => `<button type="button" class="kitTile ${p === kit.pattern ? "on" : ""}" data-pattern="${p}"><canvas data-kit="${p}" data-size="40" width="40" height="40"></canvas><small>${KIT_PATTERN_LABEL[p]}</small></button>`).join("")}</div>
+        <div class="kitInputs" style="margin-top:6px"><label>원정 유니폼 <select id="kitAway">
+          <option value="auto" ${awayChoice === "auto" ? "selected" : ""}>자동 (홈과 겹치지 않게)</option>
+          <option value="white" ${awayChoice === "white" ? "selected" : ""}>흰색 + 사선 띠</option>
+          <option value="dark" ${awayChoice === "dark" ? "selected" : ""}>어두운색 + 사선 띠</option>
+          <option value="custom" ${awayChoice === "custom" ? "selected" : ""}>직접 정하기</option></select></label></div>
+        <div class="kitInputs" id="awayCustom" hidden><label>원정 주 색상 <input type="color" id="awayPrimary" value="${awayCustom.primary}"></label><label>보조 <input type="color" id="awaySecondary" value="${awayCustom.secondary}"></label><label>패턴 ${patSel("awayPattern", awayCustom.pattern)}</label></div>
+        <div class="hint">주 색상은 순위표와 카드의 구단 색으로도 쓰입니다. 바뀐 유니폼은 다음 경기부터 입습니다. 원정 유니폼은 홈 팀과 색이 겹칠 때만 입습니다.</div>
+        <div class="pcActions"><button class="primary" data-sheet="custom" data-act="saveKit">유니폼 저장</button><button data-sheet="custom" data-act="resetKit" ${me.kit ? "" : "disabled"}>기본 유니폼으로</button></div>
+      </div>
+
+      <div class="custSec"><div class="custTitle">구단명</div>
+        <div class="kitInputs"><label style="flex:2">구단명 <input type="text" id="custName" maxlength="${CLUB_NAME_MAX}" value="${esc(me.name)}"></label><label>약칭 <input type="text" id="custShort" maxlength="${SHORT_NAME_MAX}" value="${esc(me.shortName)}" style="width:4em"></label></div>
+        <div class="hint">구단명 ${CLUB_NAME_MAX}자, 약칭 2~${SHORT_NAME_MAX}자.${me.baseName ? ` 원래 이름: ${me.baseName}` : ""}</div>
+        <div class="pcActions"><button class="primary" data-sheet="custom" data-act="saveName">이름 저장</button>${me.baseName ? `<button data-sheet="custom" data-act="resetName">원래 이름으로</button>` : ""}</div>
+      </div>
+
+      <div class="custSec"><div class="custTitle">홈구장</div>
+        <div class="kitInputs"><label style="flex:1">구장 이름 <input type="text" id="custStadium" maxlength="${STADIUM_NAME_MAX}" value="${esc(me.stadiumName ?? "")}" placeholder="${esc(ground.name)}"></label><button data-sheet="custom" data-act="saveStadium" style="flex:0 0 auto">이름 저장</button></div>
+        <div class="pcStats wrap"><div>좌석<b>${a.capacity.toLocaleString("ko-KR")}석</b><small>${a.pendingSeats ? `다음 시즌 +${a.pendingSeats.toLocaleString("ko-KR")}` : `원래 ${a.baseCapacity.toLocaleString("ko-KR")}석`}</small></div><div>객석 점유<b>${occ}</b><small>홈 ${a.homeMatches}경기</small></div><div>매진<b>${a.sellouts}회</b><small>이번 시즌</small></div><div>입장 수입<b>${(me.seasonGate ?? 0).toFixed(1)}억</b><small>이번 시즌</small></div></div>
+        ${a.maxSeats > 0 ? `<div class="kitInputs"><label style="flex:1">확장 규모 <input type="range" id="expSeats" min="${EXPANSION_STEP}" max="${a.maxSeats}" step="${EXPANSION_STEP}" value="${EXPANSION_STEP}"></label></div>
+        <div class="hint" id="expInfo"></div>
+        <div class="hint">좌석당 비용은 구단 평판에 따라 오릅니다 (1,000석당 ${a.costPer1000}억). 원래 좌석의 50%까지, 시즌마다 한 번 확장할 수 있고 공사는 다음 시즌 개막에 끝납니다. 관중은 좌석을 넘지 못하므로 매진이 잦을 때만 확장이 남습니다.</div>
+        <div class="pcActions"><button class="primary" data-sheet="custom" data-act="expand">🏗 구장 확장</button></div>` : `<div class="hint">이 구장은 더 이상 확장할 수 없습니다 (원래 좌석의 50%까지).</div>`}
+      </div>
+      <div class="pcActions"><button data-sheet="close">닫기</button></div>
+    </div>`);
+    const body = this.sheetBody;
+    body.querySelectorAll<HTMLButtonElement>(".kitTile").forEach((b) => b.addEventListener("click", () => {
+      body.querySelectorAll(".kitTile").forEach((x) => x.classList.remove("on"));
+      b.classList.add("on");
+      this.refreshKitPreview();
+    }));
+    for (const id of ["#kitPrimary", "#kitSecondary", "#kitAway", "#awayPrimary", "#awaySecondary", "#awayPattern"]) {
+      body.querySelector(id)?.addEventListener("input", () => this.refreshKitPreview());
+      body.querySelector(id)?.addEventListener("change", () => this.refreshKitPreview());
+    }
+    body.querySelector("#expSeats")?.addEventListener("input", () => this.refreshExpansion());
+    this.refreshKitPreview();
+    this.refreshExpansion();
+  }
+
+  private customizeAct(act: string): void {
+    const s = this.state;
+    const body = this.sheetBody;
+    const val = (sel: string) => body.querySelector<HTMLInputElement>(sel)?.value ?? "";
+    const done = (msg?: string) => { this.save(); this.renderAll(); this.openCustomizeSheet(msg); };
+    switch (act) {
+      case "saveKit": { const err = setClubKit(s, this.customKitFromSheet()); if (err) { alert(err); return; } done("유니폼을 저장했습니다. 다음 경기부터 입습니다."); return; }
+      case "resetKit": { resetClubKit(s, CLUBS[this.me.id]?.color); done("기본 유니폼으로 되돌렸습니다."); return; }
+      case "saveName": { const err = renameClub(s, val("#custName"), val("#custShort")); if (err) { alert(err); return; } done("구단명을 저장했습니다."); return; }
+      case "resetName": { const me = this.me; if (me.baseName) { const err = renameClub(s, me.baseName, CLUBS[me.id]?.shortName ?? me.shortName); if (err) { alert(err); return; } me.baseName = undefined; } done("원래 이름으로 되돌렸습니다."); return; }
+      case "saveStadium": { const err = renameStadium(s, val("#custStadium")); if (err) { alert(err); return; } done("구장 이름을 저장했습니다."); return; }
+      case "expand": {
+        const seats = Number(val("#expSeats"));
+        const a = expansionAdvice(s, seats);
+        if (a.problem) { alert(a.problem); return; }
+        if (!confirm(`홈구장을 ${seats.toLocaleString("ko-KR")}석 늘리는 데 ${a.cost}억을 쓸까요? 공사는 다음 시즌 개막에 끝나 ${(a.capacity + a.pendingSeats + seats).toLocaleString("ko-KR")}석이 됩니다.`)) return;
+        const err = expandStadium(s, seats);
+        if (err) { alert(err); return; }
+        done("확장 공사를 계약했습니다. 다음 시즌부터 적용됩니다.");
+        return;
+      }
+    }
   }
 
   // ---- player card
@@ -1248,8 +1449,8 @@ export class Game {
       const mine = f.home === me ? f.score[0] - f.score[1] : f.score[1] - f.score[0];
       if (mine > 0) w++; else if (mine < 0) l++; else d++;
     }
-    const st = stadiumFor(c.name);
-    return { pos: idx + 1, pts: row.pts, played: row.played, gd: row.gf - row.ga, form: this.form(c.id), rep: c.reputation, mgr: c.id === me ? s.managerName : c.manager?.name ?? "—", tags: c.manager ? managerTags(c.manager) : [], stadium: st.name, capacity: st.capacity, budget: c.budget, wages: wageBill(c), size: c.squad.length, avgAge, xiAvg, best, scorer, h2h: `${w}승 ${d}무 ${l}패`, expected: expectedPositions(s).get(c.id) ?? 0, mood: c.fans?.mood ?? 0, avgAtt: c.fans ? avgHomeAttendance(c) : 0, bestAtt: c.fans?.bestAttendance ?? 0, gate: c.seasonGate ?? 0 };
+    const st = stadiumFor(c.baseName ?? c.name);
+    return { pos: idx + 1, pts: row.pts, played: row.played, gd: row.gf - row.ga, form: this.form(c.id), rep: c.reputation, mgr: c.id === me ? s.managerName : c.manager?.name ?? "—", tags: c.manager ? managerTags(c.manager) : [], stadium: c.stadiumName ?? st.name, capacity: clubCapacity(c), budget: c.budget, wages: wageBill(c), size: c.squad.length, avgAge, xiAvg, best, scorer, h2h: `${w}승 ${d}무 ${l}패`, expected: expectedPositions(s).get(c.id) ?? 0, mood: c.fans?.mood ?? 0, avgAtt: c.fans ? avgHomeAttendance(c) : 0, bestAtt: c.fans?.bestAttendance ?? 0, gate: c.seasonGate ?? 0 };
   }
 
   private openClubSheet(clubId: number, compare: boolean): void {
@@ -1412,7 +1613,7 @@ export class Game {
     hSel.push(`<div class="card"><h3>선발 XI <span>${sel.formation}</span></h3>${header}<div class="roster">${sel.starters.map((id, i) => row(playerOf(me, id), slots[i]?.role ?? null, i)).join("")}</div></div>`);
     const reserves = me.squad.filter((p) => !sel.starters.includes(p.id) && !sel.bench.includes(p.id));
     hSel.push(`<div class="card"><h3>벤치 <span>${sel.bench.length}/7</span></h3>${header}<div class="roster">${sel.bench.map((id) => row(playerOf(me, id), null)).join("")}</div>
-      <h3 style="margin-top:8px">예비 <span>${reserves.length}</span></h3><div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></div>`);
+      <details ${this.selA && reserves.some((p) => p.id === this.selA) ? "open" : ""}><summary style="margin-top:8px;cursor:pointer;color:var(--muted);font-size:13px">예비 ${reserves.length}명 ${reserves.some((p) => p.injuryDays > 0 || p.ban > 0) ? `· <span style="color:var(--warn)">결장 ${reserves.filter((p) => p.injuryDays > 0 || p.ban > 0).length}</span>` : ""} (펼치기)</summary><div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></details></div>`);
     hSel.push(`</div>`);
     const tr = me.training;
     hTrain.push(`<div class="card"><h3>훈련 <span>매주 적용</span></h3>
@@ -1653,6 +1854,22 @@ export class Game {
     return `<div class="card"><h3>${CUP_NAME} 대진 <span>단판 토너먼트${holder}</span></h3><div class="bracket">${stages}</div></div>`;
   }
 
+  /** Cup goals this season, parsed from the ties' scorer lines ("12' 이름 (클럽)"). */
+  private cupRecordsHtml(): string {
+    const s = this.state;
+    const counts = new Map<string, { n: number; club: string }>();
+    for (const t of s.cup.ties) for (const line of t.scorers) {
+      const m = /'\s*(.+?)(?:\s*\(OG\))?\s*\((.+?)\)\s*$/.exec(line);
+      if (!m || /\(OG\)/.test(line)) continue;
+      const key = `${m[1]}|${m[2]}`;
+      const e = counts.get(key) ?? { n: 0, club: m[2]! };
+      e.n++; counts.set(key, e);
+    }
+    const rows = [...counts.entries()].map(([k, v]) => ({ name: k.split("|")[0]!, club: v.club, n: v.n })).sort((a, b) => b.n - a.n).slice(0, 8);
+    const played = s.cup.ties.filter((t) => t.score).length;
+    return `<div class="card"><h3>${CUP_NAME} 기록 <span>${played}경기</span></h3>${rows.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>골</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${r.name}</td><td class="l">${r.club}</td><td>${r.n}</td></tr>`).join("")}</tbody></table>` : `<div class="hint">아직 ${CUP_NAME} 득점이 없습니다.</div>`}${s.cup.holder !== undefined ? `<div class="hint">우승: <b>${clubOf(s, s.cup.holder).name}</b></div>` : ""}</div>`;
+  }
+
   private renderTable(): void {
     const s = this.state;
     const scorers = topScorers(s, 10);
@@ -1675,7 +1892,7 @@ export class Game {
       { id: "standings", label: "순위", html: standings },
       { id: "sched", label: "일정", html: sched },
       { id: "cup", label: CUP_NAME, html: this.cupHtml() },
-      { id: "records", label: "기록", html: records },
+      { id: "records", label: "기록", html: records + this.cupRecordsHtml() },
       { id: "hof", label: "명예의 전당", html: this.hallOfFameHtml() },
     ]);
     this.wireSubTabs(this.el.table);
@@ -1683,6 +1900,13 @@ export class Game {
   }
 
   // ------------------------------------------------------------ transfers
+  private newsFilter = "all";
+  /** Hide news lines outside the chosen kind (client-side, keeps the render cheap). */
+  private applyNewsFilter(): void {
+    this.el.home.querySelectorAll<HTMLButtonElement>("button[data-news]").forEach((b) => b.classList.toggle("on", b.dataset.news === this.newsFilter));
+    this.el.home.querySelectorAll<HTMLElement>(".news [data-kind]").forEach((d) => { d.hidden = this.newsFilter !== "all" && d.dataset.kind !== this.newsFilter; });
+  }
+
   private transferRole = "전체";
   private transferSort = "ovr";
   private transferLimit = 25;
@@ -2194,17 +2418,19 @@ export class Game {
     // atmosphere: today's crowd (same seeded draw recordAttendance will make), derby flag, and the season context for the live table
     const home = clubOf(s, mine.home), away = clubOf(s, mine.away);
     const attendance = expectedAttendance(s, home, away, this.liveKind === "cup", new Rng((fixtureSeed(s, mine) ^ 0x2545f491) >>> 0));
-    const derby = isDerby(home.name, away.name);
+    const derby = !!derbyFor(s, mine);
     this.screen.start(user.match, side, others, () => this.finishRound(), {
       crowd: { attendance, capacity: clubCapacity(home), derby },
       derby,
       live: this.liveKind === "league" ? { state: s, fixture: mine } : undefined,
+      clubs: [this.clubLook(home), this.clubLook(away)],
     });
   }
 
   /** Simulate n rounds back to back; rounds in between are settled silently, the last one is shown. */
   private async simRounds(n: number): Promise<void> {
     const s = this.state;
+    if (this.challenge) return;
     for (let k = 0; k < n; k++) {
       if (seasonOver(s)) break;
       prepareRound(s);
@@ -2321,7 +2547,7 @@ export class Game {
 
   private finishRound(): void {
     const s = this.state;
-    if (!this.live) return;
+    if (!this.live || this.challenge) return;
     const round = s.round;
     const kind = this.liveKind;
     const cupStage = s.cup.stage;
@@ -2345,10 +2571,11 @@ export class Game {
    * Shoot-out sheet: kicks are revealed one per tap (⚽ / ❌ per team), with whistle and crowd sounds,
    * then the result; `done` runs when the sheet is closed. Sounds use the match screen's Sfx.
    */
-  private showShootout(m: Match, d: ShootoutDetail, done: () => void): void {
+  private showShootout(m: Match, d: ShootoutDetail, done: () => void, note?: (won: boolean) => string): void {
     const s = this.state;
     const [home, away] = m.teams;
     const userSide: TeamId = clubOf(s, s.userClub).name === home.name ? 0 : 1;
+    const outcome = note ?? ((won: boolean) => (won ? " · 다음 라운드 진출!" : " · 우리 팀 탈락…"));
     const per = (team: TeamId) => d.kicks.filter((k) => k.team === team);
     const slots = Math.max(5, per(0).length, per(1).length);
     let shown = 0;
@@ -2374,7 +2601,7 @@ export class Game {
       const over = shown >= d.kicks.length;
       const winner = over ? (d.score[0] > d.score[1] ? 0 : 1) : null;
       const lastLine = last ? `<div class="soLast">${m.teams[last.team].shortName} <b>${last.name}</b> — ${last.scored ? '<span style="color:var(--good)">골! ⚽</span>' : '<span style="color:var(--bad)">실축 ❌</span>'}</div>` : `<div class="soLast hint">${home.shortName}부터 5명씩 찹니다. 동점이면 서든데스.</div>`;
-      const result = over ? `<div class="soResult" style="color:${m.teams[winner!].color}">${m.teams[winner!].shortName} 승부차기 ${d.score[0]}-${d.score[1]} 승리${winner === userSide ? " · 다음 라운드 진출!" : " · 우리 팀 탈락…"}</div>` : "";
+      const result = over ? `<div class="soResult" style="color:${m.teams[winner!].color}">${m.teams[winner!].shortName} 승부차기 ${d.score[0]}-${d.score[1]} 승리${outcome(winner === userSide)}</div>` : "";
       this.openSheet(`<div class="card shootout"><h3>승부차기 <span>${home.shortName} ${m.state.score[0]} - ${m.state.score[1]} ${away.shortName} · 90분 동점</span></h3>
         ${row(0)}${row(1)}${lastLine}${result}
         <div class="actions" style="margin-top:8px">${over
@@ -2436,6 +2663,111 @@ export class Game {
         button: "🏆 트로피 들어올리기",
       });
     }
+  }
+
+  // ------------------------------------------------------------ 도전 모드 (scenario matches outside the season)
+  /** The scenario list: a collapsed card on the home screen, an open one in the settings. */
+  private challengeCardHtml(open: boolean): string {
+    const rec = loadChallengeRecords();
+    const done = CHALLENGES.filter((c) => (rec[c.id]?.wins ?? 0) > 0).length;
+    const active = this.challenge;
+    const rows = CHALLENGES.map((c) => {
+      const r = rec[c.id];
+      const best = r ? `${r.best ?? "—"} · ${r.tries}회 도전 · 성공 ${r.wins}` : "아직 도전 전";
+      return `<div class="chalRow"><div class="chalInfo"><div><b>${c.icon} ${c.title}</b> <span class="chalStars">${chalStars(c.stars)}</span>${r && r.wins > 0 ? ' <span class="chalDone">✓</span>' : ""}</div>
+        <div class="hint">${c.desc} <b>${c.goal}.</b></div><div class="hint chalBest">${best}</div></div>
+        <button class="${active ? "" : "primary"}" data-chal="${c.id}" ${active ? "disabled" : ""}>도전</button></div>`;
+    }).join("");
+    return `<div class="card chal"><h3>도전 모드 <span>약 3분 · 시즌 기록과 무관 · 성공 ${done}/${CHALLENGES.length}</span></h3>
+      <details ${open ? "open" : ""}><summary class="hint" style="cursor:pointer">시나리오 ${CHALLENGES.length}개 — 내 스쿼드로 특정 상황에 뛰어듭니다. 결과는 시즌에 남지 않습니다.</summary>
+      <div class="chalList">${rows}</div>
+      ${open ? `<div class="actions" style="margin-top:6px"><button class="danger" data-chal-clear="1">도전 기록 초기화</button></div>` : ""}</details></div>`;
+  }
+
+  private wireChallenge(root: HTMLElement): void {
+    root.querySelectorAll<HTMLButtonElement>("button[data-chal]").forEach((b) => b.addEventListener("click", () => void this.startChallenge(b.dataset.chal!)));
+    root.querySelector<HTMLButtonElement>("button[data-chal-clear]")?.addEventListener("click", () => {
+      if (!confirm("도전 모드 기록을 모두 지울까요?")) return;
+      clearChallengeRecords();
+      this.renderHome();
+      this.renderSettings();
+    });
+  }
+
+  /** Build the scenario match, fast-forward to its starting minute (chunked, with the overlay) and hand it to the match screen. */
+  private async startChallenge(id: string): Promise<void> {
+    const scen = challengeById(id);
+    if (!scen || this.challenge) return;
+    if (this.live) { alert("리그 경기가 진행 중입니다. 먼저 그 경기를 끝내세요."); return; }
+    const s = this.state;
+    const built = buildChallenge(s, scen);
+    const { match, side } = built;
+    const me = this.me;
+    const mm = Math.floor(scen.startAt / 60);
+    if (scen.kind === "shootout") {
+      await this.runChunked(() => match.fastForward(Infinity, 20 * 60), "90분을 시뮬레이션하는 중… 0:0");
+      applyScenario(match, scen, side);
+      const day = Math.floor(Date.now() / 86400000);
+      const tie: CupTie = { id: day % 997, stage: 3, home: me.id, away: -1, score: null, scorers: [] };
+      const detail = penaltyShootoutDetail(s, tie, match);
+      const { ok, mine, theirs } = challengeOutcome(match, scen, side, detail.score);
+      this.showShootout(match, detail, () => void this.finishChallenge(scen, ok, mine, theirs, " (승부차기)"), (won) => (won ? " · 도전 성공!" : " · 도전 실패…"));
+      return;
+    }
+    if (scen.startAt > 0) {
+      // Forced stoppage time must be in place before the clock reaches the whistle, or the engine ends the half first.
+      const pre = scen.addedTime ? scen.startAt - 2 : scen.startAt;
+      await this.runChunked(() => match.fastForward(pre, 20 * 60), `${scen.title}: ${mm}분 상황을 만드는 중…`);
+      if (scen.addedTime) { match.state.addedTime = scen.addedTime; match.fastForward(scen.startAt); }
+    }
+    applyScenario(match, scen, side);
+    this.challenge = { scen, match, side };
+    this.renderAll();
+    this.show("match");
+    const homeClub = side === 0 ? me : null;
+    const capacity = homeClub ? clubCapacity(homeClub) : 30000;
+    this.screen.start(match, side, [], () => {
+      const { ok, mine, theirs } = challengeOutcome(match, scen, side);
+      void this.finishChallenge(scen, ok, mine, theirs);
+    }, {
+      crowd: { attendance: Math.round(capacity * (scen.derby ? 0.98 : 0.8)), capacity, derby: !!scen.derby },
+      derby: !!scen.derby,
+    });
+  }
+
+  /** Verdict, local record, then home. Nothing of the season is touched: no settleLive, no save. */
+  private async finishChallenge(scen: ChallengeScenario, ok: boolean, mine: number, theirs: number, note = ""): Promise<void> {
+    const rec = recordChallenge(scen.id, ok, mine, theirs, note);
+    this.challenge = null;
+    if (this.current === "match") this.screen.leave();
+    this.renderAll();
+    this.show("home");
+    if (ok) {
+      await celebrate({
+        kind: "clinch",
+        title: "도전 성공!",
+        subtitle: `${scen.icon} ${scen.title} ${chalStars(scen.stars)}`,
+        color: "#7ad0ff",
+        lines: [`결과 ${mine}-${theirs}${note} — ${scen.goal}.`, `이 시나리오 ${rec.tries}회 도전, ${rec.wins}회 성공.`, "도전 모드 결과는 시즌 기록에 들어가지 않습니다."],
+        button: "🎉 좋았어",
+      });
+      this.renderHome();
+      return;
+    }
+    this.openSheet(`<div class="card"><h3>도전 실패 <span>${scen.icon} ${scen.title} ${chalStars(scen.stars)}</span></h3>
+      <div style="font-size:26px;font-weight:700;text-align:center;margin:4px 0">${mine} - ${theirs}${note}</div>
+      <div class="hint">조건: <b>${scen.goal}</b>. 이 시나리오 ${rec.tries}회 도전, ${rec.wins}회 성공${rec.best ? ` · 최고 ${rec.best}` : ""}. 같은 날에는 같은 상황이 다시 펼쳐지니 전술을 바꿔 보세요.</div>
+      <div class="actions" style="margin-top:8px"><button class="primary" data-chal-retry="${scen.id}">다시 도전 ↻</button><button data-sheet="close">닫기</button></div></div>`);
+    this.sheetBody.querySelector<HTMLButtonElement>("button[data-chal-retry]")?.addEventListener("click", () => { this.closeSheet(); void this.startChallenge(scen.id); });
+  }
+
+  private abandonChallenge(): void {
+    if (!this.challenge) return;
+    if (!confirm(`도전 「${this.challenge.scen.title}」을(를) 포기할까요? 기록에는 남지 않습니다.`)) return;
+    this.challenge = null;
+    if (this.current === "match") this.screen.leave();
+    this.renderAll();
+    this.show("home");
   }
 
   private setBusy(label: string | null, frac: number): void {

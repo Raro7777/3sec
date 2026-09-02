@@ -23,6 +23,8 @@ export interface Stadium {
   accent: string;
   /** 0..1 crowd intensity: drives the edge vignette */
   atmosphere: number;
+  /** seats now over the seats the ground was drawn for (>1 after an expansion: deeper stands) */
+  grown?: number;
 }
 
 export const DEFAULT_STADIUM: Stadium = {
@@ -103,5 +105,5 @@ export function isDerby(homeClub: string, awayClub: string): boolean {
 
 /** Cache key that changes whenever the static painting would differ. */
 export function stadiumKey(s: Stadium, w: number, h: number, dpr: number): string {
-  return `${s.name}|${s.club}|${w}|${h}|${dpr}`;
+  return `${s.name}|${s.club}|${s.shortName}|${s.capacity}|${s.grown ?? 1}|${w}|${h}|${dpr}`;
 }

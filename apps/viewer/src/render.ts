@@ -110,10 +110,13 @@ export function paintStadium(ctx: CanvasRenderingContext2D, v: View, stadium: St
       ctx.stroke();
     }
   } else {
-    // faint stand rows: a few lighter bands toward the edge give the surround some depth
+    // faint stand rows: a few lighter bands toward the edge give the surround some depth;
+    // an expanded ground (stadium.grown > 1) gets more, wider-spaced rows
+    const grown = Math.min(1.5, Math.max(1, stadium.grown ?? 1));
+    const rows = grown >= 1.2 ? 4 : 3;
     ctx.fillStyle = "rgba(255,255,255,0.05)";
-    for (let i = 0; i < 3; i++) {
-      const m = APRON + 1.2 + i * 0.9;
+    for (let i = 0; i < rows; i++) {
+      const m = APRON + 1.2 + i * 0.9 * grown;
       ctx.fillRect(X(-hl - m), Y(-hw - m), (PITCH.length + 2 * m) * scale, Math.max(1, 0.35 * scale));
       ctx.fillRect(X(-hl - m), Y(hw + m), (PITCH.length + 2 * m) * scale, Math.max(1, 0.35 * scale));
     }

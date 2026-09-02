@@ -41,6 +41,17 @@ const KITS = new Map<string, Kit>([
   K("창원 세일즈", "#a7c957", "#1b4332", "solid"),
 ]);
 
+/**
+ * What a kit is resolved from: the engine's team def (name + colour) or a game club, which may carry a custom
+ * kit (`kit`, packages/game customize.ts) and its original name (`baseName`, for renamed clubs).
+ */
+export interface KitSource {
+  name: string;
+  color: string;
+  baseName?: string;
+  kit?: { primary: string; secondary: string; pattern: KitPattern; away?: "white" | "dark" | Kit };
+}
+
 /** Home kit of a club; unknown clubs (engine test teams) get a plain kit in their colour. */
 export function kitFor(clubName: string, color: string): Kit {
   const k = KITS.get(clubName);
@@ -49,9 +60,16 @@ export function kitFor(clubName: string, color: string): Kit {
   return { primary: color, secondary: shade(color, -0.35), pattern: "solid" };
 }
 
+/** Home kit of a club or team: the custom kit when it has one, else the default by (original) name. */
+export function kitForClub(c: KitSource): Kit {
+  if (c.kit) return { primary: c.kit.primary, secondary: c.kit.secondary, pattern: c.kit.pattern };
+  return kitFor(c.baseName ?? c.name, c.color);
+}
+
 /** Alternate (away) kit: white or dark with the club colour as a sash, whichever reads against the home kit. */
-export function alternateKit(color: string, homeKit: Kit): Kit {
-  const dark = luminance(homeKit.primary) > 0.45 || (homeKit.pattern !== "solid" && luminance(homeKit.secondary) > 0.7 && luminance(homeKit.primary) > 0.3);
+export function alternateKit(color: string, homeKit: Kit, choice?: "white" | "dark" | Kit): Kit {
+  if (choice && typeof choice === "object") return choice;
+  const dark = choice ? choice === "dark" : luminance(homeKit.primary) > 0.45 || (homeKit.pattern !== "solid" && luminance(homeKit.secondary) > 0.7 && luminance(homeKit.primary) > 0.3);
   return dark ? { primary: "#1d2230", secondary: color, pattern: "sash" } : { primary: "#f3f4f6", secondary: color, pattern: "sash" };
 }
 
@@ -85,11 +103,11 @@ export function keeperColor(kits: Kit[], avoid: string[] = []): string {
 }
 
 /** Kits for a fixture: home kit, away kit (alternate when clashing) and two keeper colours. */
-export function resolveKits(home: { name: string; color: string }, away: { name: string; color: string }): MatchKits {
-  const h = kitFor(home.name, home.color);
-  let a = kitFor(away.name, away.color);
+export function resolveKits(home: KitSource, away: KitSource): MatchKits {
+  const h = kitForClub(home);
+  let a = kitForClub(away);
   let awayAlternate = false;
-  if (kitsClash(h, a)) { a = alternateKit(away.color, h); awayAlternate = true; }
+  if (kitsClash(h, a)) { a = alternateKit(away.color, h, away.kit?.away); awayAlternate = true; }
   const gkH = keeperColor([h, a]);
   const gkA = keeperColor([h, a], [gkH]);
   return { outfield: [h, a], gk: [gkH, gkA], awayAlternate };

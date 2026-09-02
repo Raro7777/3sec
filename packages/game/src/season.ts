@@ -19,6 +19,7 @@ import { derbyPreview, derbyResult } from "./lore";
 import { matchAttrs, migrateMorale, moraleRollover, moraleWeek } from "./morale";
 import { pressConference, skipInterview } from "./press";
 import { storyMatch, storyRollover, storyWeek } from "./story";
+import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
 import { careerInit, careerRollover, careerWeek } from "./career";
 
@@ -324,6 +325,8 @@ export function startNextSeason(s: GameState): void {
   skipInterview(s);
   storyRollover(s);
   s.news.unshift(`시즌 ${s.season} 시작.`);
+  // Stadium expansions bought last season open with the new one (stadium.ts).
+  for (const c of s.clubs) applyExpansion(s, c);
   newCup(s);
   s.pendingCupDay = false;
   youthRollover(s, rng);

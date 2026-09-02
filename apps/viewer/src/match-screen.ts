@@ -4,7 +4,7 @@ import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
 import { Sfx } from "./sfx";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
-import { drawKitDisc, kitTextColor, resolveKits, type Kit, type MatchKits } from "./kits";
+import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
 import { roundsPerSeason, table, type Fixture, type GameState } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, shareFile } from "./share";
@@ -44,6 +44,14 @@ export interface MatchExtra {
   derby?: boolean;
   /** season context for the live "가상 순위" line (league matchdays only) */
   live?: { state: GameState; fixture: Fixture };
+  /** the two clubs as the game knows them (custom kits, renamed clubs/grounds, expanded seats); teams[] otherwise */
+  clubs?: [ClubLook, ClubLook];
+}
+
+/** What the viewer needs of a club beyond the engine's team def. */
+export interface ClubLook extends KitSource {
+  stadiumName?: string;
+  capacity?: number;
 }
 
 /** how often the live table is recomputed (ms) */
@@ -216,8 +224,13 @@ export class MatchScreen {
   start(match: Match, userTeam: TeamId, others: SideMatch[], onFinish: () => void, extra: MatchExtra = {}): void {
     this.match = match;
     this.extra = extra;
-    this.stadium = stadiumFor(match.teams[0].name);
-    this.kits = resolveKits(match.teams[0], match.teams[1]);
+    const [home, away]: [ClubLook, ClubLook] = extra.clubs ?? [match.teams[0], match.teams[1]];
+    const ground = stadiumFor(home.baseName ?? home.name);
+    // a renamed club, a renamed ground or expanded seats: the boards, banner and stands follow the game state
+    this.stadium = extra.clubs
+      ? { ...ground, shortName: match.teams[0].shortName || ground.shortName, name: home.stadiumName || ground.name, capacity: home.capacity || ground.capacity, grown: home.capacity ? home.capacity / ground.capacity : 1 }
+      : ground;
+    this.kits = resolveKits(home, away);
     this.cam = { x: 0, y: 0, zoom: 1 };
     this.goalCam = null;
     this.pendingReplay = null;
@@ -921,7 +934,8 @@ export class MatchScreen {
       const [hc, ac] = match.teams;
       const mine = this.userTeam === 0 ? s.score[0] - s.score[1] : s.score[1] - s.score[0];
       document.getElementById("ftScore")!.innerHTML = `<span style="color:${hc.color}">${hc.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${ac.color}">${ac.shortName}</span>`;
-      document.getElementById("ftNote")!.textContent = mine > 0 ? "승리! 라운드 결과와 순위를 확인하세요." : mine < 0 ? "패배… 결과 화면에서 다른 경기장 결과도 확인하세요." : "무승부. 결과 화면으로 이동합니다.";
+      const season = !!this.extra.live || this.others.length > 0;
+      document.getElementById("ftNote")!.textContent = !season ? (mine > 0 ? "승리! 결과를 확인하세요." : mine < 0 ? "패배… 결과를 확인하세요." : "무승부. 결과를 확인하세요.") : mine > 0 ? "승리! 라운드 결과와 순위를 확인하세요." : mine < 0 ? "패배… 결과 화면에서 다른 경기장 결과도 확인하세요." : "무승부. 결과 화면으로 이동합니다.";
       this.ftOverlay.hidden = false;
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.

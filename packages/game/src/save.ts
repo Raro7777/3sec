@@ -50,7 +50,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
       if (typeof c.budget !== "number") c.budget = Math.round(20 + (c.reputation - 10) * 12);
       // Older saves carry English club names; the roster of clubs is fixed by id, so refresh the labels.
       const def = CLUBS[c.id];
-      if (def) { c.name = def.name; c.shortName = def.shortName; }
+      if (def && !c.baseName) { c.name = def.name; c.shortName = def.shortName; }
       if (!c.training) c.training = { focus: "balanced", intensity: "normal" };
       if (typeof c.seasonStartBudget !== "number") c.seasonStartBudget = c.budget;
       // Saves from before the season review's counters.

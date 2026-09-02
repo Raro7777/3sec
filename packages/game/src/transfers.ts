@@ -519,7 +519,10 @@ export function signFreeAgent(s: GameState, playerId: string): string | null {
 
 /** Rollover for the unsigned: a year older, veterans lose a step, two seasons idle → gone. */
 export function freeAgentRollover(s: GameState, newSeason: number, rng: Rand): void {
-  s.freeAgents = s.freeAgents.filter((p) => (p.freeSince ?? newSeason) > newSeason - 2);
+  // veterans nobody signed hang up their boots; everyone else gets at most two seasons on the market
+  const retiring = s.freeAgents.filter((p) => p.age >= 33 || (p.age >= 31 && (p.freeSince ?? newSeason) < newSeason));
+  for (const p of retiring) s.news.unshift(`${p.name}(${p.age}세) 은퇴 – 자유계약 시장에서 새 팀을 찾지 못했습니다.`);
+  s.freeAgents = s.freeAgents.filter((p) => !retiring.includes(p) && (p.freeSince ?? newSeason) > newSeason - 2);
   for (const p of s.freeAgents) {
     p.age++;
     const rate = weeklyRate(p.age);
