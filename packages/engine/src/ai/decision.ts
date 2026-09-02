@@ -359,7 +359,10 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
       if (t <= 0 || od > 1.6) continue;
       const pBlock = (0.9 - od * 0.4) * (elev > 0.3 ? 0.4 : 1);
       if (m.rng.chance(pBlock)) {
-        m.blockShot(o);
+        // which side of the shot line the blocker stands on decides the deflection side
+        const rel = sub(o.pos, p.pos);
+        const side = rel.x * Math.sin(ang) - rel.y * Math.cos(ang) > 0 ? -1 : 1;
+        m.blockShot(o, od, side);
         break;
       }
     }

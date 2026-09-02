@@ -1085,21 +1085,36 @@ export class Match {
   }
 
   /** A defender blocks the shot: the ball ricochets off them. */
-  blockShot(blocker: PlayerState): void {
+  /**
+   * A defender blocks the shot. Where the ball strikes the body decides the ricochet:
+   * a central hit (offset < 0.4 m) comes straight back, a hit on the flank deflects onward to
+   * that side, a glancing touch barely changes the ball's path – which is how most corners and
+   * deflected goals happen.
+   */
+  blockShot(blocker: PlayerState, offset = 0.5, side = 1): void {
     const b = this.state.ball;
     const speed = Math.hypot(b.vel.x, b.vel.y);
     const shotAng = Math.atan2(b.vel.y, b.vel.x);
-    // About a third of blocks ricochet back toward the shooter; the rest deflect onward at an
-    // angle – frequently behind for a corner.
-    const back = this.rng.chance(0.35);
-    const ang = back ? shotAng + Math.PI + this.rng.range(-1.2, 1.2) : shotAng + (this.rng.chance(0.5) ? 1 : -1) * this.rng.range(0.4, 1.3);
-    kickBall(b, fromAngle(ang, speed * (back ? this.rng.range(0.15, 0.4) : this.rng.range(0.35, 0.8))), this.rng.range(0, 3));
+    let ang: number;
+    let keep: number;
+    if (offset < 0.4) {
+      ang = shotAng + Math.PI + this.rng.range(-1.0, 1.0);
+      keep = this.rng.range(0.15, 0.4);
+    } else if (offset < 1.0) {
+      ang = shotAng + side * this.rng.range(0.5, 1.4);
+      keep = this.rng.range(0.35, 0.7);
+    } else {
+      ang = shotAng + side * this.rng.range(0.1, 0.5);
+      keep = this.rng.range(0.6, 0.9);
+    }
+    kickBall(b, fromAngle(ang, speed * keep), this.rng.range(0, 3));
     b.pos = { x: blocker.pos.x, y: blocker.pos.y };
     blocker.kickCooldown = 0.4;
     this.touch(blocker);
     this.emit("BLOCK", blocker.team, blocker.id, `Blocked by ${this.name(blocker.id)}`);
     this.shot = null;
   }
+
 
   private checkSave(): void {
     const s = this.state;
