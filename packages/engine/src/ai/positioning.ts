@@ -314,7 +314,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const phase = ((s.tick / 20 + m.def(p.id).number * 1.3) % cycle) / cycle;
     const carrierBehind = ball.owner !== null && ball.owner !== p.id && ballX < x - 3 && dist(ball.pos, p.pos) < 35;
     const carrierFree = ball.owner !== null && m.pressureAt(ball.pos, team) > 2.5;
-    if (carrierBehind && carrierFree && phase < 0.32) {
+    if (carrierBehind && carrierFree && phase < 0.4) {
       // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
       const early = (1 - ant) * TUNING.offsideWobble * 0.9; // 0 .. ~4.5 m
       x = line + 0.5 + early;

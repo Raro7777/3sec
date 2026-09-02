@@ -356,8 +356,8 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
     for (const o of m.activePlayers(m.opp(p.team))) {
       if (m.isKeeper(o.id)) continue;
       const { d: od, t } = pointSegment(o.pos, p.pos, end);
-      if (t <= 0 || od > 1.3) continue;
-      const pBlock = (0.85 - od * 0.4) * (elev > 0.3 ? 0.4 : 1);
+      if (t <= 0 || od > 1.6) continue;
+      const pBlock = (0.9 - od * 0.4) * (elev > 0.3 ? 0.4 : 1);
       if (m.rng.chance(pBlock)) {
         m.blockShot(o);
         break;
