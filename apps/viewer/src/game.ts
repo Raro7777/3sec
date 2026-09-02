@@ -35,40 +35,13 @@ import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
 import { MatchScreen } from "./match-screen";
+import { formationSvg } from "./formation-svg";
 import { getSimPool } from "./sim/pool";
 import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings" | "profile" | "sacked";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
-const APP_VERSION = "0.20";
-
-/**
- * Formation diagram as inline SVG, attack pointing up. With a club and starters it labels each slot with the
- * player's number and name; without, it is a small silhouette for the picker.
- */
-export function formationSvg(f: FormationName, club: Club | null, starters: string[], width: number, selectedId: string | null = null): string {
-  const W = 120, H = 146;
-  const slots = FORMATIONS[f];
-  const big = width >= 120;
-  const dots = slots.map((s, i) => {
-    const cx = 60 + s.y * 49;
-    const cy = 131 - ((s.x + 1) / 2) * 123;
-    const p = club && starters[i] ? club.squad.find((q) => q.id === starters[i]) : undefined;
-    const r = big ? 5.6 : 4.2;
-    const fill = s.role === "GK" ? "#e8b84a" : i === 0 ? "#e8b84a" : "#f2c14e";
-    const label = big && p ? `<text x="${cx}" y="${cy + 0.8}" text-anchor="middle" dominant-baseline="middle" font-size="5.4" font-weight="700" fill="#1a1400" font-family="IBM Plex Mono, monospace">${p.number}</text>
-      <text x="${cx}" y="${cy + r + 4.8}" text-anchor="middle" font-size="4.7" fill="#e7edf2" font-family="IBM Plex Sans KR, sans-serif" stroke="#1f4d2a" stroke-width="0.9" paint-order="stroke">${p.name}</text>
-      <text x="${cx}" y="${cy + r + 8.6}" text-anchor="middle" font-size="3.4" fill="#cfe3d5" font-family="IBM Plex Mono, monospace">${s.role}</text>` : "";
-    const sel = big && p && selectedId === p.id;
-    return big && p
-      ? `<g data-pid="${p.id}" style="cursor:pointer"><circle cx="${cx}" cy="${cy}" r="${r + 4}" fill="transparent"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${sel ? "#fff" : "#1a1400"}" stroke-width="${sel ? 1.8 : 1}"/>${label}</g>`
-      : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#1a1400" stroke-width="${big ? 1 : 0.6}"/>${label}`;
-  }).join("");
-  const lines = big
-    ? `<rect x="36" y="2" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><rect x="36" y="124" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><circle cx="60" cy="70" r="10" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>`
-    : `<line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".6"/>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="${width}" height="${Math.round(width * H / W)}" role="img" aria-label="${f}"><rect x="0" y="0" width="${W}" height="${H}" rx="4" fill="#2f7a3e"/><rect x="2" y="2" width="${W - 4}" height="${H - 4}" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>${lines}${dots}</svg>`;
-}
+const APP_VERSION = "0.21";
 
 /** Rough category of a news line, for the home-screen filter chips. */
 export function newsKind(n: string): "market" | "fans" | "board" | "squad" | "comp" | "other" {
@@ -2424,6 +2397,7 @@ export class Game {
       derby,
       live: this.liveKind === "league" ? { state: s, fixture: mine } : undefined,
       clubs: [this.clubLook(home), this.clubLook(away)],
+      ages: Object.fromEntries([...home.squad, ...away.squad].map((p) => [p.id, p.age])),
     });
   }
 

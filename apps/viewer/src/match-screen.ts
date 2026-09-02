@@ -46,6 +46,8 @@ export interface MatchExtra {
   live?: { state: GameState; fixture: Fixture };
   /** the two clubs as the game knows them (custom kits, renamed clubs/grounds, expanded seats); teams[] otherwise */
   clubs?: [ClubLook, ClubLook];
+  /** player id → age, for the substitution picker */
+  ages?: Record<string, number>;
 }
 
 /** What the viewer needs of a club beyond the engine's team def. */
@@ -64,9 +66,29 @@ const GIF_W = 320;
 const GIF_MAX_FRAMES = 40;
 /** auto-speed easing time constants (s): slowing down is quick, speeding up gentle */
 const AUTO_TAU_DOWN = 0.35;
-const AUTO_TAU_UP = 1.2;
+const AUTO_TAU_UP = 0.8;
 /** "just happened" hold after a shot / save / block / corner / penalty / red card (ms) */
-const DANGER_HOLD_MS = 1500;
+const DANGER_HOLD_MS = 1100;
+/**
+ * 자동 pacing tiers (sim seconds per real second). Tuned so a full match lands at ~5 real minutes:
+ * open play runs from PLAY_FAST (nothing on) down to PLAY_SLOW (box entries, shots, penalties);
+ * dead balls far from goal fly at DEAD_FAST, a corner / penalty / close free kick is set up at
+ * SETPIECE; a goal celebration holds CELEB_SLOW for CELEB_MS and then DEAD_FAST.
+ */
+const PLAY_FAST = 26;
+const PLAY_MID = 9;
+const PLAY_SLOW = 2.5;
+const PLAY_SLOW_TIGHT = 2;
+const DEAD_FAST = 48;
+const SETPIECE = 5;
+const CELEB_SLOW = 3;
+const CELEB_MS = 1500;
+/** ceilings late in a tight game, and in stoppage time with the user level or behind */
+const CAP_LATE_TIGHT = 12;
+const CAP_STOPPAGE = 8;
+/** the bottom ticker rotates the other grounds' scores this often (ms) */
+const TICKER_MS = 3500;
+const TICKER_PER = 2;
 
 /**
  * The live match: canvas, clock, stats, event log, manager panel. The other fixtures of the round
@@ -149,6 +171,15 @@ export class MatchScreen {
   private readonly btnPanel = document.getElementById("btnPanel") as HTMLButtonElement;
   /** user explicitly toggled immersive mode (otherwise it follows phone orientation) */
   private immersiveByUser: boolean | null = null;
+  private readonly btnLog = document.getElementById("btnLog") as HTMLButtonElement | null;
+  private readonly btnPanelClose = document.getElementById("btnPanelClose") as HTMLButtonElement | null;
+  private readonly panelBack = document.getElementById("panelBack");
+  /** immersive: show the running commentary strip over the pitch */
+  private showLog = (() => { try { return localStorage.getItem("3sec.log") === "1"; } catch { return false; } })();
+  /** the drawer paused the match; resume when it closes */
+  private resumeOnClose = false;
+  /** last visible event of the user's match, for the bottom ticker */
+  private lastEventHtml = "";
   private readonly speedSel = document.getElementById("speed") as HTMLSelectElement;
   private readonly debugChk = document.getElementById("debug") as HTMLInputElement;
   private readonly panel: ManagerPanel;
@@ -192,9 +223,27 @@ export class MatchScreen {
     this.speedSel.addEventListener("change", () => (this.speed = this.speedSel.value === "auto" ? "auto" : Number(this.speedSel.value)));
     this.debugChk.addEventListener("change", () => this.render());
     this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
-    this.btnPanel.addEventListener("click", () => document.body.classList.toggle("panel-open"));
+    this.btnPanel.addEventListener("click", () => this.togglePanel());
+    this.btnPanelClose?.addEventListener("click", () => this.closePanel());
+    this.panelBack?.addEventListener("click", () => this.closePanel());
+    if (this.btnLog) {
+      const paint = () => { document.body.classList.toggle("log-open", this.showLog); this.btnLog!.title = this.showLog ? "중계 자막 숨기기" : "중계 자막 보기"; this.btnLog!.style.opacity = this.showLog ? "1" : ".7"; };
+      paint();
+      this.btnLog.addEventListener("click", () => { this.showLog = !this.showLog; try { localStorage.setItem("3sec.log", this.showLog ? "1" : "0"); } catch { /* ignore */ } paint(); if (this.showLog) this.logEl.scrollTop = this.logEl.scrollHeight; });
+    }
+    // immersive: a swipe in from the right edge opens the drawer
+    document.getElementById("main")!.addEventListener("pointerdown", (e) => {
+      if (!document.body.classList.contains("immersive") || document.body.classList.contains("panel-open")) return;
+      if (e.clientX < window.innerWidth - 28) return;
+      const x0 = e.clientX;
+      const onMove = (ev: PointerEvent) => { if (x0 - ev.clientX > 24) { cleanup(); this.openPanel(); } };
+      const cleanup = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", cleanup); window.removeEventListener("pointercancel", cleanup); };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", cleanup);
+      window.addEventListener("pointercancel", cleanup);
+    });
     this.canvas.addEventListener("pointerdown", (e) => {
-      document.body.classList.remove("panel-open");
+      if (document.body.classList.contains("panel-open")) { this.closePanel(); return; }
       if (!this.replay) return;
       // the "GIF 공유" pill inside the replay HUD: share the clip instead of ending the replay
       const b = this.hudGifBtn;
@@ -270,7 +319,11 @@ export class MatchScreen {
     this.btnSkip.disabled = false;
     this.btnPlay.disabled = false;
     this.setPlaying(false);
-    this.panel.attach(match, userTeam);
+    this.lastEventHtml = "";
+    this.resumeOnClose = false;
+    document.body.classList.remove("panel-open");
+    const myKit = this.kits.outfield[userTeam];
+    this.panel.attach(match, userTeam, extra.ages ?? {}, { color: myKit.primary, text: kitTextColor(myKit) });
     this.immersiveByUser = null;
     requestAnimationFrame(() => { this.autoImmersive(); this.resize(); });
     if (!this.rafStarted) {
@@ -288,11 +341,55 @@ export class MatchScreen {
     if (want !== document.body.classList.contains("immersive")) this.setImmersive(want, false);
   }
 
+  /** Immersive drawer: opening pauses the match, closing resumes it if it was playing. */
+  private openPanel(): void {
+    if (!document.body.classList.contains("immersive")) return;
+    if (document.body.classList.contains("panel-open")) return;
+    document.body.classList.add("panel-open");
+    this.resumeOnClose = this.playing && !this.finished;
+    if (this.playing) this.setPlaying(false);
+    this.panel.update(true);
+  }
+
+  private closePanel(resume = true): void {
+    if (!document.body.classList.contains("panel-open")) return;
+    document.body.classList.remove("panel-open");
+    this.panel.clearSelection();
+    this.selected = null;
+    if (resume && this.resumeOnClose && !this.finished) this.setPlaying(true);
+    this.resumeOnClose = false;
+  }
+
+  private togglePanel(): void {
+    if (document.body.classList.contains("panel-open")) this.closePanel(); else this.openPanel();
+  }
+
+  /** Icon-only control labels in the immersive column; full labels otherwise. */
+  private syncLabels(): void {
+    const imm = document.body.classList.contains("immersive");
+    this.btnFull.textContent = imm ? "⛶" : "⛶ 크게";
+    this.btnFull.title = imm ? "전체 화면 닫기" : "경기장을 화면에 꽉 채웁니다 (가로 모드 권장)";
+    this.btnSkip.textContent = imm ? "⏩" : this.btnSkip.textContent?.startsWith("⏩ 다른") ? "⏩ 다른 구장 종료" : "⏩ 결과로";
+    this.btnPanel.textContent = imm ? "☰" : "☰ 전술·교체";
+    this.btnPanel.title = "전술·교체 (오른쪽 가장자리에서 밀어도 열립니다)";
+    this.btnContinue.textContent = imm ? "→" : "계속 →";
+    this.paintPlay();
+  }
+
+  private paintPlay(): void {
+    const imm = document.body.classList.contains("immersive");
+    if (this.replay) this.btnPlay.textContent = imm ? "⏭" : "⏭ 리플레이 건너뛰기";
+    else this.btnPlay.textContent = this.playing ? (imm ? "❚❚" : "❚❚ 일시정지") : (imm ? "▶" : "▶ 재생");
+    this.btnPlay.title = this.replay ? "리플레이 건너뛰기" : this.playing ? "일시정지" : "재생";
+  }
+
   private setImmersive(on: boolean, byUser: boolean): void {
+    if (!on) this.closePanel(false);
     document.body.classList.toggle("immersive", on);
-    if (!on) document.body.classList.remove("panel-open");
     if (byUser) this.immersiveByUser = on ? true : null;
-    this.btnFull.textContent = on ? "⛶ 닫기" : "⛶ 크게";
+    this.panel.orient = on ? "right" : "up";
+    this.syncLabels();
+    this.panel.update(true);
     if (byUser && on) {
       document.documentElement.requestFullscreen?.().catch(() => undefined);
       (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.("landscape").catch(() => undefined);
@@ -330,7 +427,7 @@ export class MatchScreen {
     if (this.finished) v = false;
     this.playing = v;
     if (v && this.bannerT0 === null) this.bannerT0 = performance.now();
-    this.btnPlay.textContent = v ? "❚❚ 일시정지" : "▶ 재생";
+    this.paintPlay();
   }
 
   private stepAll(n: number, record = false): void {
@@ -513,21 +610,21 @@ export class MatchScreen {
 
   private startReplay(clip: Clip, auto: boolean): void {
     this.replay = { clip, pos: 0, started: performance.now(), auto };
-    this.btnPlay.textContent = "⏭ 리플레이 건너뛰기";
+    this.paintPlay();
   }
 
   private endReplay(): void {
     this.replay = null;
     this.acc = 0;
-    this.btnPlay.textContent = this.playing ? "❚❚ 일시정지" : "▶ 재생";
+    this.paintPlay();
   }
 
   /**
    * Tension-aware pacing target for the 자동 mode (eased in frame()): a 0..1 "danger" score from
-   * the live state picks a speed between 20x (nothing on) and 2x (box entries, shots, penalties);
-   * dead balls run at 40x far from goal and 4x when a corner / free kick / penalty is being set up;
-   * a goal celebration holds 3x for its first two seconds and then 40x. Late in a tight game the
-   * ceiling drops. A 90-minute match still takes roughly 8-11 real minutes.
+   * the live state picks a speed between PLAY_FAST (nothing on) and PLAY_SLOW (box entries, shots,
+   * penalties); dead balls run at DEAD_FAST far from goal and SETPIECE when a corner / free kick /
+   * penalty is being set up; a goal celebration holds CELEB_SLOW for CELEB_MS and then DEAD_FAST.
+   * Late in a tight game the ceiling drops. A 90-minute match takes about 5 real minutes.
    */
   private autoSpeed(now: number): number {
     const m = this.match, s = m.state;
@@ -536,24 +633,23 @@ export class MatchScreen {
     const inStoppage = s.half === 2 && s.clock > m.halfLength;
     const lateTight = s.half === 2 && (s.clock > m.halfLength - 10 * 60) && margin <= 1;
     const userBehindOrLevel = s.score[u] - s.score[1 - u]! <= 0 && margin <= 1;
-    let cap = 40;
-    if (lateTight) cap = 10;
-    if (inStoppage && userBehindOrLevel) cap = 6;
-    if (s.phase === "GOAL_CELEBRATION") return Math.min(cap, now - this.celebT0 < 2000 ? 3 : 40);
+    let cap = DEAD_FAST;
+    if (lateTight) cap = CAP_LATE_TIGHT;
+    if (inStoppage && userBehindOrLevel) cap = CAP_STOPPAGE;
+    if (s.phase === "GOAL_CELEBRATION") return Math.min(cap, now - this.celebT0 < CELEB_MS ? CELEB_SLOW : DEAD_FAST);
     if (s.phase !== "PLAY") {
       const r = s.restart;
       if (r && r.kind !== "KICK_OFF") {
         const dist = Math.hypot(PITCH.halfLength * m.dirOf(r.team) - r.pos.x, r.pos.y);
         const near = r.kind === "CORNER" || r.kind === "PENALTY" || (r.kind === "FREE_KICK" && dist < 30);
-        if (near) return Math.min(cap, 4);
+        if (near) return Math.min(cap, SETPIECE);
       }
-      return Math.min(cap, 40);
+      return Math.min(cap, DEAD_FAST);
     }
     const d = this.danger(now);
-    // 0 → 18x, 0.5 → 7x, 1 → 2x (piecewise linear), and 1.5x at the top when the game is on a knife edge
-    // (measured: a full match lands at roughly 8-9 real minutes with these tiers)
-    const high = lateTight ? 1.5 : 2;
-    const v = d < 0.5 ? 18 - (18 - 7) * (d / 0.5) : 7 - (7 - high) * ((d - 0.5) / 0.5);
+    // piecewise linear: 0 → PLAY_FAST, 0.5 → PLAY_MID, 1 → PLAY_SLOW (tighter at the top on a knife edge)
+    const high = lateTight ? PLAY_SLOW_TIGHT : PLAY_SLOW;
+    const v = d < 0.5 ? PLAY_FAST - (PLAY_FAST - PLAY_MID) * (d / 0.5) : PLAY_MID - (PLAY_MID - high) * ((d - 0.5) / 0.5);
     return Math.min(cap, v);
   }
 
@@ -607,6 +703,7 @@ export class MatchScreen {
     div.innerHTML = `<span style="opacity:.6">${String(e.minute).padStart(2, "0")}'</span> <span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
     if (e.type === "GOAL" || e.type === "OWN_GOAL") div.style.color = "#ffd166";
     if (e.type === "SUBSTITUTION" || e.type === "TACTICS") div.style.color = "#8ecae6";
+    this.lastEventHtml = `<i>${e.minute}'</i><span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
     const clip = this.clipByEvent.get(this.loggedEvents - 1);
     if (clip) div.innerHTML += ` <button data-clip="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px;margin-left:4px" title="주요 장면 다시 보기">▶ 리플레이</button> <button data-gif="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px" title="이 장면을 GIF로 저장/공유">GIF 공유</button>`;
     this.logEl.appendChild(div);
@@ -627,13 +724,25 @@ export class MatchScreen {
       row("오프사이드", a.offsides, b.offsides),
       row("경고/퇴장", `${a.yellows}/${a.reds}`, `${b.yellows}/${b.reds}`),
     ].join("");
-    this.othersEl.innerHTML = this.liveLine() + this.others
-      .map((o) => {
-        const s = o.match.state;
-        const done = s.phase === "FULL_TIME" ? " ✓" : "";
-        return `<span>${o.match.teams[0].shortName} <b style="color:var(--text)">${s.score[0]}-${s.score[1]}</b> ${o.match.teams[1].shortName}${done}</span>`;
-      })
-      .join("");
+    const line = (o: SideMatch) => {
+      const s = o.match.state;
+      const done = s.phase === "FULL_TIME" ? " ✓" : "";
+      return `<span>${o.match.teams[0].shortName} <b style="color:var(--text)">${s.score[0]}-${s.score[1]}</b> ${o.match.teams[1].shortName}${done}</span>`;
+    };
+    const live = this.liveLine();
+    if (!document.body.classList.contains("immersive")) {
+      this.othersEl.innerHTML = live + this.others.map(line).join("");
+      return;
+    }
+    // immersive ticker: last event on the left, the other grounds rotating in pairs on the right
+    const n = this.others.length;
+    let og = "";
+    if (n > 0) {
+      const pages = Math.ceil(n / TICKER_PER);
+      const page = Math.floor(performance.now() / TICKER_MS) % pages;
+      og = `<span class="og">${this.others.slice(page * TICKER_PER, page * TICKER_PER + TICKER_PER).map(line).join("")}${pages > 1 ? `<span style="opacity:.5">${page + 1}/${pages}</span>` : ""}</span>`;
+    }
+    this.othersEl.innerHTML = `<span class="tick">${this.lastEventHtml || `<i>${this.fmtClock().slice(0, 5)}</i>${this.match.teams[0].name} vs ${this.match.teams[1].name}`}</span>${live}${og}`;
   }
 
   /**
@@ -701,20 +810,10 @@ export class MatchScreen {
 
   private resize(): void {
     const stage = document.getElementById("stage")!;
-    const ratio0 = (PITCH.length + 8) / (PITCH.width + 8);
-    // Immersive landscape: when the pitch at full height leaves room on the right, dock the manager panel there.
-    const body = document.body;
-    if (body.classList.contains("immersive")) {
-      const main = document.getElementById("main")!;
-      const pitchW = (main.clientHeight - 16) * ratio0;
-      const leftover = main.clientWidth - pitchW - 16;
-      const dock = leftover >= 230;
-      body.classList.toggle("dock", dock);
-      if (dock) body.style.setProperty("--dockw", `${Math.round(Math.min(460, leftover))}px`);
-      if (dock) body.classList.remove("panel-open");
-    } else body.classList.remove("dock");
-    const maxW = Math.max(200, stage.clientWidth - 16);
-    const maxH = Math.max(140, stage.clientHeight - 16);
+    // immersive: the pitch takes the whole stage (the manager panel is a drawer over it)
+    const pad = document.body.classList.contains("immersive") ? 0 : 16;
+    const maxW = Math.max(200, stage.clientWidth - pad);
+    const maxH = Math.max(140, stage.clientHeight - pad);
     const ratio = (PITCH.length + 8) / (PITCH.width + 8);
     let w = maxW;
     let h = w / ratio;
@@ -929,7 +1028,7 @@ export class MatchScreen {
       this.btnPlay.disabled = true;
       this.btnSkip.disabled = true;
       this.btnContinue.style.display = "";
-      document.body.classList.remove("panel-open");
+      this.closePanel(false);
       document.body.classList.add("finished");
       const [hc, ac] = match.teams;
       const mine = this.userTeam === 0 ? s.score[0] - s.score[1] : s.score[1] - s.score[0];
@@ -939,7 +1038,8 @@ export class MatchScreen {
       this.ftOverlay.hidden = false;
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
-      this.btnSkip.textContent = "⏩ 다른 구장 종료";
+      this.btnSkip.textContent = document.body.classList.contains("immersive") ? "⏩" : "⏩ 다른 구장 종료";
+      this.btnSkip.title = "다른 구장 종료";
     }
   }
 

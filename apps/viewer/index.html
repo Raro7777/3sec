@@ -215,15 +215,51 @@
       #ftOverlay #btnContinue2 { margin-top:8px; font-size:16px; padding:10px 22px; }
       .finished #btnPlay, .finished #btnSkip, .finished #speed { display:none !important; }
       canvas { max-width:100%; max-height:100%; touch-action:none; border-radius:4px; }
-      #panel { width:320px; flex:none; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:10px 12px 16px; display:flex; flex-direction:column; gap:14px; font-size:13px; }
+      #panel { width:340px; flex:none; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:10px 12px 16px; display:flex; flex-direction:column; gap:10px; font-size:13px; }
       #panel h3 { margin:0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:16px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:baseline; }
       #panel h3 span { font-family:"IBM Plex Mono", monospace; font-size:12px; text-transform:none; letter-spacing:0; }
+      #panelHead { display:flex; align-items:center; gap:10px; }
+      #panelHead h3 { flex:1; gap:8px; justify-content:flex-start; }
+      #panelHead #subsUsed { font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--muted); white-space:nowrap; }
+      #btnPanelClose { display:none; padding:2px 8px; font-size:14px; }
+      #panelBack { display:none; }
+      /* formation diagram + substitution picker */
+      #fmTop { display:grid; grid-template-columns:1fr; gap:10px; }
+      #fmDiag { width:100%; max-width:300px; margin:0 auto; }
+      #fmDiag svg { width:100%; height:auto; display:block; border-radius:8px; }
+      #fmSide { display:flex; flex-direction:column; gap:6px; min-width:0; }
+      #subPick { display:flex; flex-direction:column; gap:4px; }
+      #subPick .spHead { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; }
+      #subPick .spHead b { color:var(--bad); }
+      #subPick .spHead button { padding:2px 8px; font-size:12px; }
+      #subPick .spOut { display:grid; grid-template-columns:28px 1fr; gap:6px; align-items:center; padding:5px 8px; border:1px solid var(--bad); border-radius:8px; background:rgba(239,91,91,.08); font-size:12px; }
+      .cand { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:4px 8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); cursor:pointer; text-align:left; color:var(--text); font-family:inherit; }
+      .cand:hover { border-color:var(--accent); background:#18232d; }
+      .cand .num { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:12px; }
+      .cand .who { display:flex; align-items:baseline; gap:6px; min-width:0; flex-wrap:wrap; }
+      .cand .who b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+      .cand .who b { font-size:13px; }
+      .cand .who small { color:var(--muted); font-size:11px; }
+      .cand .ovr { text-align:right; font-family:"IBM Plex Mono", monospace; font-size:14px; font-weight:600; }
+      .cand .ovr small { font-size:11px; font-weight:400; margin-left:3px; }
+      .cand .kv { grid-column:2 / 4; display:flex; flex-wrap:wrap; gap:3px 10px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .cand .kv span b { color:var(--text); font-weight:600; font-family:"IBM Plex Mono", monospace; }
+      .cand em { font-style:normal; font-family:"IBM Plex Mono", monospace; font-size:11px; font-weight:600; margin-left:4px; }
+      .cand em.up { color:var(--good); } .cand em.dn { color:var(--bad); }
+      .cand em.up::before { content:"▲"; font-size:8px; margin-right:1px; } .cand em.dn::before { content:"▼"; font-size:8px; margin-right:1px; }
+      .cand.far { opacity:.7; }
+      #panel details.sec { border:1px solid var(--line); border-radius:8px; background:var(--panel2); padding:0 10px 8px; }
+      #panel details.sec > summary { cursor:pointer; padding:8px 0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:15px; letter-spacing:.04em; color:var(--muted); list-style:none; display:flex; align-items:center; gap:6px; }
+      #panel details.sec > summary::before { content:"▸"; font-size:12px; transition:transform .15s; }
+      #panel details.sec[open] > summary::before { transform:rotate(90deg); }
+      #panel details.sec > summary::-webkit-details-marker { display:none; }
       .subbox { border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; }
       .subbox .line { display:flex; justify-content:space-between; align-items:center; gap:8px; }
       .subbox .pend { color:var(--muted); font-size:12px; display:flex; justify-content:space-between; align-items:center; }
       .subbox .pend button { padding:2px 8px; font-size:12px; }
       #btnSub { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:600; width:100%; }
       #subMsg { font-size:12px; color:var(--warn); min-height:14px; }
+      #scoreboard { display:contents; }
       #log { height:120px; overflow-y:auto; font-size:12px; padding:6px 14px; background:var(--panel2); border-top:1px solid var(--line); font-family:"IBM Plex Mono", ui-monospace, monospace; }
       #log div { opacity:.9; line-height:1.55; }
       /* ---- sub-tabs, bottom sheet, progress button */
@@ -300,33 +336,50 @@
       #cta[hidden], .immersive #cta, body.onboarding #cta { display:none !important; }
       #app { padding-bottom:72px; }
       table.std tr[data-club]:active td { background:#1a2530; }
-      /* immersive match view: pitch fills the screen, manager panel becomes a drawer */
+      /* immersive match view: the pitch fills the screen; the manager panel is a slide-out drawer on the right */
       .immersive #intro, .immersive #nav, .immersive #stats { display:none !important; }
-      /* the running commentary stays visible as a translucent strip over the bottom-left of the pitch */
-      .immersive #log { position:absolute; left:calc(8px + env(safe-area-inset-left)); bottom:32px; z-index:2; width:min(48vw, 440px); height:auto; max-height:84px; overflow:hidden; background:rgba(11,16,20,.55); backdrop-filter:blur(4px); border:0; border-radius:8px; padding:4px 8px; font-size:12px; line-height:1.35; pointer-events:none; display:flex; flex-direction:column; justify-content:flex-end; }
-      .immersive.dock #log { width:min(40vw, 400px); }
       .immersive #app { padding-bottom:0 !important; }
       .immersive #screen-match { position:fixed; inset:0; z-index:15; background:#000; }
-      .immersive #topbar { position:absolute; top:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.72); backdrop-filter:blur(6px); padding:4px 10px; padding-left:calc(10px + env(safe-area-inset-left)); gap:8px; flex-wrap:nowrap; overflow-x:auto; border-bottom:0; }
-      .immersive #topbar #phase { flex-basis:auto; }
-      .immersive #topbar label { white-space:nowrap; }
-      .immersive #topbar button, .immersive #topbar select { white-space:nowrap; padding:4px 8px; font-size:13px; }
+      .immersive #screen-match.active { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) auto; grid-template-areas:"main bar" "ticker ticker"; overflow:hidden; }
+      /* right-hand control column (icons only; scrolls if the phone is short) */
+      .immersive #topbar { grid-area:bar; display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:4px 3px; padding-right:calc(3px + env(safe-area-inset-right)); background:rgba(11,16,20,.85); border-bottom:0; border-left:1px solid var(--line); overflow-y:auto; overflow-x:hidden; flex-wrap:nowrap; width:auto; min-width:46px; scrollbar-width:none; }
+      .immersive #topbar::-webkit-scrollbar { display:none; }
       .immersive #topbar > * { flex:none; }
+      .immersive #topbar button, .immersive #topbar select { width:40px; min-height:34px; height:34px; padding:0; font-size:15px; line-height:1; white-space:nowrap; overflow:hidden; text-align:center; text-align-last:center; border-radius:8px; }
+      .immersive #topbar label { flex-direction:column; gap:0; font-size:0; }
+      .immersive #topbar label #speed { font-size:11px; padding:0 2px; appearance:none; -webkit-appearance:none; }
       .immersive #topbar label.dbg { display:none; }
-      .immersive #topbar #score { min-width:0; font-size:20px; white-space:nowrap; }
-      .immersive #topbar #clock { min-width:0; white-space:nowrap; }
-      .immersive #main { flex-direction:row !important; overflow:hidden !important; height:100%; }
-      .immersive #stage { flex:1 !important; height:100% !important; max-height:none !important; padding:0 !important; }
-      .immersive #panel { position:absolute; top:0; right:0; bottom:0; width:min(340px, 88vw); transform:translateX(100%); transition:transform .2s ease; z-index:3; border-left:1px solid var(--line); border-top:0; padding-top:44px; padding-right:calc(12px + env(safe-area-inset-right)); box-shadow:-8px 0 24px rgba(0,0,0,.5); }
+      .immersive #btnPanel, .immersive #btnLog { display:inline-block !important; }
+      .immersive #btnPanel { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:700; }
+      .immersive.log-open #btnLog { border-color:var(--accent); color:var(--accent); }
+      /* compact score + clock pill, top-left, the only HUD over the pitch */
+      .immersive #scoreboard { display:flex; position:absolute; top:calc(6px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); z-index:3; align-items:center; gap:8px; padding:3px 12px 3px 10px; border-radius:999px; background:rgba(11,16,20,.78); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.08); pointer-events:none; }
+      .immersive #scoreboard #score { min-width:0; font-size:19px; white-space:nowrap; line-height:1.2; }
+      .immersive #scoreboard #clock { min-width:0; font-size:13px; white-space:nowrap; }
+      .immersive #scoreboard #phase { min-width:0; flex-basis:auto; font-size:11px; white-space:nowrap; }
+      .immersive #scoreboard #phase:empty { display:none; }
+      .immersive #main { grid-area:main; position:relative; flex-direction:row !important; overflow:hidden !important; min-height:0; }
+      .immersive #stage { flex:1 !important; height:100% !important; max-height:none !important; padding:0 !important; padding-left:env(safe-area-inset-left) !important; }
+      /* the running commentary: hidden by default, a translucent strip over the bottom-left of the pitch when toggled on */
+      .immersive #log { display:none; position:absolute; left:calc(8px + env(safe-area-inset-left)); bottom:calc(28px + env(safe-area-inset-bottom)); z-index:2; width:min(52vw, 460px); height:auto; max-height:96px; overflow-y:auto; background:rgba(11,16,20,.62); backdrop-filter:blur(4px); border:0; border-radius:8px; padding:4px 8px; font-size:12px; line-height:1.35; }
+      .immersive.log-open #log { display:block; }
+      /* one-line ticker under the pitch: last event + the other grounds (rotating) + 동시 중계 */
+      .immersive #others { grid-area:ticker; display:flex; flex-wrap:nowrap; align-items:center; gap:12px; padding:2px 10px calc(2px + env(safe-area-inset-bottom)); padding-left:calc(10px + env(safe-area-inset-left)); background:rgba(11,16,20,.92); border-top:1px solid var(--line); font-size:12px; line-height:18px; overflow:hidden; white-space:nowrap; justify-content:flex-start; }
+      .immersive #others .tick { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--text); font-family:"IBM Plex Sans KR", sans-serif; }
+      .immersive #others .tick i { font-style:normal; color:var(--muted); margin-right:6px; }
+      .immersive #others .og { flex:none; display:flex; gap:12px; color:var(--muted); }
+      .immersive #others .og b { color:var(--text); }
+      .immersive #others .liveTable { flex:none; flex-basis:auto; max-width:38vw; overflow:hidden; text-overflow:ellipsis; }
+      /* drawer */
+      .immersive #panelBack { display:block; position:absolute; inset:0; z-index:3; background:rgba(0,0,0,.45); opacity:0; pointer-events:none; transition:opacity .2s ease; }
+      .immersive.panel-open #panelBack { opacity:1; pointer-events:auto; }
+      .immersive #panel { position:absolute; top:0; right:0; bottom:0; width:min(92vw, 560px); transform:translateX(102%); transition:transform .22s ease; z-index:4; border-left:1px solid var(--line); border-top:0; padding:8px 12px 14px; padding-top:calc(8px + env(safe-area-inset-top)); box-shadow:-8px 0 24px rgba(0,0,0,.5); background:rgba(18,26,33,.97); }
       .immersive.panel-open #panel { transform:none; }
-      .immersive #others { position:absolute; bottom:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.6); border-top:0; padding:3px 10px calc(3px + env(safe-area-inset-bottom)); justify-content:center; }
-      .immersive #btnPanel { display:inline-block !important; }
-      /* landscape with spare width: pitch on the left, manager panel docked on the right */
-      .immersive.dock #stage { justify-content:flex-start; padding-left:calc(env(safe-area-inset-left)) !important; }
-      .immersive.dock #panel { position:relative; transform:none; width:var(--dockw, 320px); flex:none; height:auto; border-left:1px solid var(--line); padding-top:52px; padding-bottom:28px; }
-      .immersive.dock #btnPanel { display:none !important; }
-      .immersive.dock #topbar { right:var(--dockw, 320px); }
-      .immersive.dock #others { left:0; right:var(--dockw, 320px); }
+      .immersive #btnPanelClose { display:inline-block; }
+      .immersive #fmTop { grid-template-columns:minmax(0, 44%) minmax(0, 1fr); align-items:start; }
+      .immersive #fmDiag { max-width:none; margin:0; }
+      .immersive #ftOverlay { z-index:5; }
+      @media (prefers-reduced-motion: reduce) { .immersive #panel, .immersive #panelBack { transition:none; } }
       #overlay { position:fixed; inset:0; background:rgba(5,8,11,0.82); display:none; align-items:center; justify-content:center; z-index:20; flex-direction:column; gap:10px; }
       #overlay.show { display:flex; }
       #overlay .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; min-width:260px; text-align:center; }
@@ -411,12 +464,10 @@
 
       <section class="screen" id="screen-match">
         <div id="topbar">
-          <div id="score">—</div>
-          <div id="clock">00:00</div>
-          <div id="phase"></div>
+          <div id="scoreboard"><div id="score">—</div><div id="clock">00:00</div><div id="phase"></div></div>
           <button id="btnPlay" class="primary">▶ 재생</button>
           <label>속도
-            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 8~11분)">
+            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 5분)">
               <option value="auto" selected>자동</option>
               <option value="1">1x</option>
               <option value="2">2x</option>
@@ -432,6 +483,7 @@
           <button id="btnSound" title="효과음">🔊</button>
           <button id="btnReplay" title="골 자동 리플레이">🔁</button>
           <button id="btnTags" title="선수 이름표 표시">🏷</button>
+          <button id="btnLog" style="display:none" title="중계 자막 표시">💬</button>
           <button id="btnPanel" style="display:none">☰ 전술·교체</button>
           <label class="dbg"><input id="debug" type="checkbox" /> 디버그</label>
         </div>
@@ -440,31 +492,40 @@
           <div id="stage"><canvas id="pitch"></canvas>
             <div id="ftOverlay" hidden><div class="ftCard"><div class="ftTitle">경기 종료</div><div id="ftScore"></div><div id="ftNote" class="hint"></div><button id="btnContinue2" class="primary">다음으로 →</button></div></div>
           </div>
+          <div id="panelBack"></div>
           <aside id="panel">
-            <section>
-              <h3>전술 <span id="teamName"></span></h3>
+            <div id="panelHead"><h3>전술·교체 <span id="teamName"></span></h3><span id="subsUsed"></span><button id="btnPanelClose" title="닫기">✕</button></div>
+            <div id="fmTop">
+              <div id="fmDiag"></div>
+              <div id="fmSide">
+                <div id="subPick" hidden></div>
+                <div id="pending"></div>
+                <div id="subMsg"></div>
+                <div class="hint" id="fmHint">그림의 선수를 탭하면 교체 후보가 나옵니다. 교체는 실제 규칙대로 다음 경기 중단(아웃/파울/골) 때 이루어집니다.</div>
+              </div>
+            </div>
+            <details class="sec" open>
+              <summary>전술</summary>
               <div class="tactic"><span class="lbl">포메이션</span>
                 <select id="formation" style="grid-column: 2 / 4">
                   <option>4-3-3</option><option>4-4-2</option><option>4-2-3-1</option><option>3-5-2</option>
                 </select>
               </div>
               <div id="sliders"></div>
-            </section>
-            <section>
-              <h3>선발 <span id="subsUsed"></span></h3>
+            </details>
+            <details class="sec">
+              <summary>선발 · 역할 지정</summary>
               <div id="lineup" class="roster"></div>
-            </section>
-            <section>
-              <h3>벤치</h3>
+            </details>
+            <details class="sec">
+              <summary>벤치 · 수동 교체</summary>
               <div id="bench" class="roster"></div>
-            </section>
-            <section class="subbox">
-              <div class="line"><span id="subPlan" class="hint">나갈 선수(선발)와 들어올 선수(벤치)를 차례로 선택하세요.</span></div>
-              <button id="btnSub" disabled>교체 예약</button>
-              <div id="subMsg"></div>
-              <div id="pending"></div>
-              <div class="hint">교체는 실제 규칙대로 다음 경기 중단(아웃/파울/골) 때 이루어집니다. 다른 경기장의 라운드 경기도 동시에 진행됩니다.</div>
-            </section>
+              <div class="subbox">
+                <div class="line"><span id="subPlan" class="hint">나갈 선수(선발)와 들어올 선수(벤치)를 차례로 선택하세요.</span></div>
+                <button id="btnSub" disabled>교체 예약</button>
+                <div class="hint">다른 경기장의 라운드 경기도 동시에 진행됩니다.</div>
+              </div>
+            </details>
           </aside>
         </div>
         <div id="others"></div>
