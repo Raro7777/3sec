@@ -76,6 +76,9 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     // A first-time finish under pressure is the hardest skill in the game: most players take a
     // touch first (during which the defender arrives), only the composed strike immediately.
     const firstTime = p.possessionTime < 0.5 && pressure < 2.5 ? -0.9 * (1.1 - a01(attrs.composure)) : 0;
+    // Clean through on goal from distance: carry it closer instead of snatching at it.
+    const cleanThrough = dGoal > 15 && blockers === 0 && spaceAhead(m, p, norm(sub(goal, p.pos)), true) > 12;
+    const throughPenalty = cleanThrough ? -0.7 - Math.min(0.5, (dGoal - 15) * 0.05) : 0;
     const shotScore =
       TUNING.shotBase +
       (tactics.mentality - 0.5) * 0.4 +
@@ -84,6 +87,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       (pressure < 1.5 ? -0.3 : 0) -
       blockers * 0.6 +
       firstTime +
+      throughPenalty +
       longRange;
     options.push({ kind: "shoot", score: shotScore + m.rng.gauss(0, noise) });
   }
@@ -127,7 +131,8 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     0.3 * a01(attrs.dribbling) +
     (pressure < 1.8 ? -0.4 : pressure < 3 ? -0.15 : 0) +
     (p.pos.x * dir < -20 ? -0.25 : 0) + // don't dribble out of defence
-    (dGoal < 25 ? 0.1 : 0) -
+    (dGoal < 25 ? 0.1 : 0) +
+    (dGoal > 15 && dGoal < 35 && spaceAhead(m, p, fwd, true) > 12 ? 0.5 : 0) - // through on goal: drive at the keeper
     Math.min(0.5, Math.max(0, p.possessionTime - 1.6) * 0.15); // don't dribble forever
   options.push({ kind: "dribble", score: dribbleScore + m.rng.gauss(0, noise) });
 
@@ -333,11 +338,14 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   const skill = a01(attrs.finishing) * 0.6 + a01(attrs.composure) * 0.25 + a01(attrs.technique) * 0.15;
   const side = m.rng.chance(0.5) ? 1 : -1;
   const aimY = side * (PITCH.goalHalfWidth - 0.6 - m.rng.range(0, 1.6));
-  const pressureFactor = 1 + Math.max(0, 2.5 - pressure) * 0.4;
+  // Pressure and a hurried first-time strike degrade the finish far more than distance does.
+  // A calm, settled finish with nobody near is the most precise strike in the game.
+  const calm = pressure > 4 && p.possessionTime > 1 && !isPenalty ? 0.6 : 1;
+  const pressureFactor = (1 + Math.max(0, 2.5 - pressure) * 0.8) * (p.possessionTime < 0.5 ? 1.6 : 1) * calm;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
   // Long-range strikes are markedly less precise (body shape, ball movement, power over placement).
-  const rangeFactor = 1 + Math.max(0, d - 16) * 0.03;
+  const rangeFactor = 1 + Math.max(0, d - 16) * 0.04;
   const angSd = (TUNING.shotAngSd - 0.16 * skill) * pressureFactor * rangeFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
@@ -457,13 +465,15 @@ function dribbleTarget(m: Match, p: PlayerState): Vec2 {
       bestDir = cand;
     }
   }
-  return add(p.pos, scale(bestDir, 6));
+  // Aim well ahead so the arrive-braking never kicks in mid-dribble (carriers keep their pace).
+  return add(p.pos, scale(bestDir, 10));
 }
 
 /** Free space along a direction: distance to the nearest opponent within a forward cone. */
-function spaceAhead(m: Match, p: PlayerState, fwd: Vec2): number {
+function spaceAhead(m: Match, p: PlayerState, fwd: Vec2, outfieldOnly = false): number {
   let best = 20;
   for (const o of m.activePlayers(m.opp(p.team))) {
+    if (outfieldOnly && m.isKeeper(o.id)) continue;
     const rel = sub(o.pos, p.pos);
     const d = len(rel);
     if (d < 1e-6 || d > 20) continue;

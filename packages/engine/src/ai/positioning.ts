@@ -376,7 +376,13 @@ function keeperPositioning(m: Match, gk: PlayerState): void {
   // Default: on the bisector between ball and goal centre, a few metres off the line.
   const toBall = sub(ball.pos, goal);
   const d = Math.max(1, dist(ball.pos, goal));
-  const off = ownerTeam === m.opp(gk.team) ? Math.min(4.5, 1 + d * 0.06) : Math.min(8, 2 + d * 0.1);
+  let off = ownerTeam === m.opp(gk.team) ? Math.min(4.5, 1 + d * 0.06) : Math.min(8, 2 + d * 0.1);
+  // One-on-one: no team-mate between the carrier and goal => come out to narrow the angle.
+  if (ownerTeam === m.opp(gk.team) && d < 32) {
+    const carrier = m.player(ball.owner!);
+    const coverers = m.activePlayers(gk.team).filter((q) => q.id !== gk.id && (q.pos.x - carrier.pos.x) * dir < -0.5 && dist(q.pos, carrier.pos) < 8).length;
+    if (coverers === 0) off = Math.max(off, Math.min(11, d * 0.45));
+  }
   const base = add(goal, scale(norm(toBall), off));
   const y = Math.max(-PITCH.goalHalfWidth - 1, Math.min(PITCH.goalHalfWidth + 1, base.y));
   const x = goal.x + dir * Math.max(0.6, Math.abs(base.x - goal.x));

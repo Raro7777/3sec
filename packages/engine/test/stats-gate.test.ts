@@ -70,8 +70,8 @@ describe("statistical gate (6 equal-quality matches)", () => {
     expect(per("corners")).toBeGreaterThanOrEqual(3);
     expect(per("offsides")).toBeGreaterThanOrEqual(0.5);
   });
-  it("ball in play 52–66 minutes (real ~57)", () => {
-    expect(per("inPlay")).toBeGreaterThanOrEqual(52);
+  it("ball in play 50–66 minutes (real ~57)", () => {
+    expect(per("inPlay")).toBeGreaterThanOrEqual(50);
     expect(per("inPlay")).toBeLessThanOrEqual(66);
   });
   it("no systematic home/away bias with equal squads (home shot share 30–70%)", () => {

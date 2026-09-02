@@ -108,23 +108,28 @@ describe("live tactics", () => {
   });
 
   it("an attacking mentality moves the block higher up the pitch", () => {
+    // 3 seeds x 12 minutes each: a single short sample is dominated by where the ball happens to be.
     const avgX = (mentality: number): number => {
-      const m = mk(3);
-      m.setTactics(0, { mentality });
-      m.setTactics(1, { mentality: 0.5 });
-      let sum = 0;
-      let n = 0;
-      let ticks = 0;
-      while (ticks++ < 20 * 60 * 6) {
-        m.step();
-        if (m.state.phase !== "PLAY") continue;
-        for (const p of m.activePlayers(0)) {
-          if (m.isKeeper(p.id)) continue;
-          sum += p.pos.x * m.dirOf(0);
-          n++;
+      let total = 0;
+      for (let k = 0; k < 3; k++) {
+        const m = mk(3 + k);
+        m.setTactics(0, { mentality });
+        m.setTactics(1, { mentality: 0.5 });
+        let sum = 0;
+        let n = 0;
+        let ticks = 0;
+        while (ticks++ < 20 * 60 * 12) {
+          m.step();
+          if (m.state.phase !== "PLAY") continue;
+          for (const p of m.activePlayers(0)) {
+            if (m.isKeeper(p.id)) continue;
+            sum += p.pos.x * m.dirOf(0);
+            n++;
+          }
         }
+        total += sum / n;
       }
-      return sum / n;
+      return total / 3;
     };
     expect(avgX(0.9)).toBeGreaterThan(avgX(0.1) + 2);
   });

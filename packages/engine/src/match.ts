@@ -839,6 +839,31 @@ export class Match {
     const prevTeam = b.lastTouchTeam;
     const prevToucher = b.lastTouch;
 
+    // A keeper off the line meeting a shot: it is a save attempt, not a free catch. Roll on the
+    // ball's lateral offset from the keeper's body.
+    if (isGk && this.shot && this.shot.team !== best.team && ballSpeed > 10 && !this.shot.saveAttempted) {
+      this.shot.saveAttempted = true;
+      const gAttrs = this.def(best.id).attrs;
+      const reach = TUNING.gkReach + 1.0 * a01(gAttrs.reflexes);
+      const rel = Math.min(1.2, bestD / reach);
+      const pSave = Math.max(0.05, Math.min(0.95, 0.8 - 0.5 * rel * rel - Math.max(0, ballSpeed - 22) * 0.015 + 0.2 * (a01(gAttrs.reflexes) - 0.5)));
+      if (!this.shot.onTargetCounted) {
+        this.shot.onTargetCounted = true;
+        s.stats[this.shot.team].shotsOnTarget++;
+      }
+      if (!this.rng.chance(pSave)) {
+        best.kickCooldown = 0.3; // beaten: the ball goes past
+        return;
+      }
+      s.stats[best.team].saves++;
+      this.emit("SAVE", best.team, best.id, `Save by ${this.name(best.id)}`);
+      this.shot = null;
+      b.pos = { ...best.pos };
+      this.gainPossession(best);
+      this.intendedReceiver = null;
+      return;
+    }
+
     if (this.rng.chance(Math.max(0.1, control))) {
       // Keeper gathering an on-target shot counts as a save.
       if (isGk && this.shot && this.shot.team !== best.team && this.shot.onTargetCounted) {
@@ -1174,7 +1199,10 @@ export class Match {
     const base = 0.95 - 0.5 * rel * rel - Math.max(0, speed - 24) * 0.015;
     const cornerHigh = zCross > 1.7 ? -0.1 : 0;
     const closeRange = distToBall < 6 ? -0.12 : 0; // less reaction time
-    const pSave = Math.max(0.03, Math.min(0.97, base + 0.25 * (a01(attrs.reflexes) - 0.5) + cornerHigh + closeRange));
+    // A keeper who has come off the line leaves more goal to aim at either side.
+    const gkOff = Math.abs(Math.abs(gk.pos.x) - PITCH.halfLength);
+    const offLine = -Math.min(0.3, Math.max(0, gkOff - 2) * 0.05);
+    const pSave = Math.max(0.03, Math.min(0.97, base + 0.25 * (a01(attrs.reflexes) - 0.5) + cornerHigh + closeRange + offLine));
     const saved = this.rng.chance(pSave);
     this.debug.onSave?.({ lateral, reach, pSave, speed, saved, distToBall });
     if (!saved) return;
