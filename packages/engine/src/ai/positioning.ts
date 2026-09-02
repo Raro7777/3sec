@@ -306,8 +306,9 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const lineX = Math.min(x, ballX - 8);
     x = Math.max(lineX, Math.min(ballX - 3, -PITCH.halfLength + 12 + 8 * tactics.defensiveLine));
   }
-  // Defending forwards do not drop below the halfway line minus a bit.
-  if (!inPoss && isForward(role)) x = Math.max(x, -12);
+  // Defending forwards stay on the shoulder of the opponent's back line (ready to break),
+  // and never drop below the halfway line minus a bit.
+  if (!inPoss && isForward(role)) x = Math.max(x, -12, Math.min(m.offsideLine(team) - 3.5, 30));
 
   // Attackers in possession: hold the line of the second-last defender. Timing is imperfect:
   // players with poor anticipation drift offside now and then.
@@ -325,7 +326,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const transition = m.inTransition(team);
     if (carrierBehind && carrierFree && (transition || phase < 0.5)) {
       // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
-      const early = (1 - ant) * TUNING.offsideWobble * 0.7; // 0 .. ~3.5 m
+      const early = (1 - ant) * TUNING.offsideWobble * 0.5; // 0 .. ~2.5 m
       x = line + 0.5 + early;
       runFlag = true;
     } else if (x > line - 0.8) {

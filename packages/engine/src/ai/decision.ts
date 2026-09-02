@@ -123,7 +123,9 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const space = spaceAhead(m, p, fwd);
   // Carry: with time and space a player brings the ball forward for a moment before releasing it
   // (keeps the pass rate realistic: ~1 pass every 5-6 s of possession).
-  const carry = pressure > 4 && p.possessionTime < 1.6 ? TUNING.carryBonus : pressure > 2.5 && p.possessionTime < 0.9 ? TUNING.carryBonus * 0.55 : 0;
+  // Patient (low-directness) teams carry the ball forward instead of forcing passes.
+  const carryBase = TUNING.carryBonus * (1.25 - 0.5 * tactics.directness);
+  const carry = pressure > 4 && p.possessionTime < 1.6 ? carryBase : pressure > 2.5 && p.possessionTime < 0.9 ? carryBase * 0.55 : 0;
   const dribbleScore =
     0.35 +
     carry +
@@ -416,10 +418,18 @@ function executeClear(m: Match, p: PlayerState): void {
     theta = (10 + 25 * m.rng.next()) * (Math.PI / 180);
     v = 10 + 8 * m.rng.next();
   } else {
-    // Hoof it upfield toward the nearer touchline side, high and long.
-    ang = angleOf({ x: dir, y: sideY * 0.5 }) + m.rng.gauss(0, 0.15);
+    // Long clearance: if a forward is up the pitch, drop it into the space ahead of them (the
+    // outlet for a counter); otherwise hoof it toward the nearer touchline side.
+    let outlet: PlayerState | null = null;
+    for (const q of m.activePlayers(p.team)) {
+      if (q.id === p.id || m.isKeeper(q.id)) continue;
+      if ((q.pos.x - p.pos.x) * dir > 25 && (!outlet || q.pos.x * dir > outlet.pos.x * dir)) outlet = q;
+    }
+    const aimPt = outlet ? { x: outlet.pos.x + dir * 8, y: outlet.pos.y * 0.8 } : { x: p.pos.x + dir * 40, y: sideY * 20 };
+    ang = angleOf(sub(aimPt, p.pos)) + m.rng.gauss(0, outlet ? 0.12 : 0.15);
     theta = (30 + 10 * m.rng.next()) * (Math.PI / 180);
-    v = 22 + 6 * m.rng.next();
+    const dAim = dist(aimPt, p.pos);
+    v = Math.min(30, loftedSpeedFor(Math.min(dAim, 60), theta)) * (1 + m.rng.gauss(0, 0.08));
   }
   m.touch(p);
   m.recordPass(p, false);

@@ -49,7 +49,7 @@ export interface Tuning {
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.25,
+  shotBase: 0.18,
   shotXgMult: 4.725,
   longRangeBase: 0.35,
   shotAngSd: 0.33,
