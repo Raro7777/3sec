@@ -846,7 +846,7 @@ export class Match {
       const gAttrs = this.def(best.id).attrs;
       const reach = TUNING.gkReach + 1.0 * a01(gAttrs.reflexes);
       const rel = Math.min(1.2, bestD / reach);
-      const pSave = Math.max(0.05, Math.min(0.95, 0.8 - 0.5 * rel * rel - Math.max(0, ballSpeed - 22) * 0.015 + 0.2 * (a01(gAttrs.reflexes) - 0.5)));
+      const pSave = Math.max(0.05, Math.min(0.95, 0.74 - 0.5 * rel * rel - Math.max(0, ballSpeed - 22) * 0.015 + 0.2 * (a01(gAttrs.reflexes) - 0.5)));
       if (!this.shot.onTargetCounted) {
         this.shot.onTargetCounted = true;
         s.stats[this.shot.team].shotsOnTarget++;

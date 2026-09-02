@@ -52,7 +52,7 @@ export const TUNING: Tuning = {
   shotBase: 0.25,
   shotXgMult: 4.725,
   longRangeBase: 0.35,
-  shotAngSd: 0.28,
+  shotAngSd: 0.3,
   crossBase: -0.3,
   passMarginWeight: 0.8,
   carryBonus: 0.9,
