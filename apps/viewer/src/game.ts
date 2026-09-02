@@ -1,11 +1,12 @@
-import { FORMATIONS, INSTRUCTION_IDS, INSTRUCTION_LABEL, ROLES, TACTIC_PRESETS, autoRoles, normalizeTactics, rolesForSlot, type CornerTarget, type FormationName, type InstructionId, type Match, type PlayerRoleId, type Tactics, type TeamId } from "@3sec/engine";
+import { FORMATIONS, INSTRUCTION_IDS, INSTRUCTION_LABEL, ROLES, Rng, TACTIC_PRESETS, autoRoles, normalizeTactics, rolesForSlot, type CornerTarget, type FormationName, type InstructionId, type Match, type PlayerRoleId, type Tactics, type TeamId } from "@3sec/engine";
 
 type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 import {
   CLUBS, SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
   overall, playerOf, prepareRound, recordResult, roundsPerSeason, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
-  MAX_SQUAD, MIN_SQUAD, bestOffer, buyPlayer, playerValue, sellPlayer, transferTargets, windowOpen,
+  MAX_SQUAD, MIN_SQUAD, bestOffer, playerValue, sellPlayer, transferTargets, windowOpen, deadlineDay, makeBid, openOffers, acceptOffer, rejectOffer, respondToCounter,
+  freeAgentTerms, signFreeAgent, loanableOut, loanDestination, loanOut, loanTargets, loanIn, type BidResult,
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
@@ -162,7 +163,7 @@ export class Game {
   // ------------------------------------------------------------ guide
   private renderGuide(): void {
     const sec = (title: string, body: string, open = false) => `<details ${open ? "open" : ""}><summary>${title}</summary><div class="guide">${body}</div></details>`;
-    this.el.guide.innerHTML = `<div class="card guide"><h3>게임 가이드</h3>
+    this.el.guide.innerHTML = `<div class="card guide"><h3>게임 가이드 <span>가난한자의 FM · 만든이 raro</span></h3>
       <p>당신은 12개 구단 리그의 감독입니다. 한 시즌은 홈·원정 22라운드이고, 목표는 우승입니다. 스쿼드를 꾸리고 전술을 정한 뒤 경기를 지휘하고, 이적·훈련·계약으로 팀을 키워 갑니다. 진행은 이 기기에 자동 저장됩니다.</p>
       <div class="actions" style="margin-top:6px"><button class="primary" data-act="start">시작하기 →</button></div></div>
     ${sec("한 라운드의 흐름", `<ul>
@@ -269,6 +270,8 @@ export class Game {
     h.push(`<div class="card"><h3>${me.name} <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     const expiring = expiringContracts(s);
     if (expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
+    const offerCount = openOffers(s).length;
+    if (offerCount) h.push(`<div class="hint" style="color:var(--accent)">받은 이적 제안 ${offerCount}건 — 이적 탭에서 수락·거절·역제안할 수 있습니다 (2라운드 후 만료).</div>`);
     if (me.budget < 0) h.push(`<div class="hint" style="color:var(--bad)">예산이 적자입니다. 연봉이 매주 빠져나가니 선수를 팔거나 다음 시즌 상금을 기다려야 합니다.</div>`);
     if (this.live) {
       h.push(`<div class="hint">경기가 진행 중입니다.</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button></div>`);
@@ -316,7 +319,7 @@ export class Game {
     h.push(`<div class="card"><h3>소식</h3><div class="news">${s.news.slice(0, 10).map((n) => `<div>${n}</div>`).join("") || "<div>아직 소식이 없습니다.</div>"}</div></div>`);
     h.push(`<div class="card"><h3>순위 <span>상위 6</span></h3>${this.tableHtml(rows.slice(0, 6), true)}</div>`);
     h.push(`</div>`);
-    h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다.</span></div>`);
+    h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다. · 가난한자의 FM · 만든이 raro</span></div>`);
     this.el.home.innerHTML = h.join("");
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) => b.addEventListener("click", () => this.act(b.dataset.act!)));
   }
@@ -395,7 +398,7 @@ export class Game {
         ? `<select class="rolesel" data-slot="${slotIdx}" style="grid-column:2 / -1;padding:1px 4px;font-size:11px;margin-top:2px">${rolesForSlot(slotRole as SquadPlayer["role"]).map((r) => `<option value="${r}" ${r === rolesNow[slotIdx] ? "selected" : ""}>${ROLES[r].name}</option>`).join("")}</select>`
         : slotIdx >= 0 ? `<span style="grid-column:2 / -1;font-size:11px;color:var(--muted)">${ROLES[rolesNow[slotIdx]!].name}</span>` : "";
       const cond = p.condition;
-      const status = p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : p.contractUntil <= this.state.season ? "계약 만료 예정" : p.age <= 23 && p.potential - ovr >= 1.5 ? `잠재 ${p.potential.toFixed(0)}` : "";
+      const status = p.onLoan ? "임대 중" : p.loanFrom !== undefined ? `임대 (${clubOf(this.state, p.loanFrom).shortName})` : p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : p.contractUntil <= this.state.season ? "계약 만료 예정" : p.age <= 23 && p.potential - ovr >= 1.5 ? `잠재 ${p.potential.toFixed(0)}` : "";
       const roleText = slotRole && slotRole !== p.role ? `${slotRole}<span style="opacity:.5">(${p.role})</span>` : p.role;
       return `<div class="row wide ${this.selA === p.id ? "sel" : ""} ${isAvailable(p) ? "" : "off"}" data-id="${p.id}">
         <span class="num">${p.number}</span><span class="role">${roleText}</span>
@@ -603,13 +606,35 @@ export class Game {
 
   // ------------------------------------------------------------ transfers
   private transferRole = "전체";
+  /** the one follow-up bid the selling club allows after a counter */
+  private pendingBid: { clubId: number; playerId: string; counter: number } | null = null;
+
+  /** Deterministic dice for a negotiation: same state and figure → same answer (no reroll by reloading). */
+  private marketRng(key: string, fee: number): Rng {
+    let h = 0;
+    for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const s = this.state;
+    return new Rng((s.seed * 53 + s.season * 977 + s.round * 31 + h + Math.round(fee) * 7) >>> 0);
+  }
+
+  private askFee(label: string, initial: number): number | null {
+    const raw = prompt(label, String(initial));
+    if (raw === null) return null;
+    const fee = Math.round(Number(raw.replace(/[^\d.]/g, "")));
+    if (!(fee > 0)) { alert("금액을 숫자로 입력하세요 (억원)."); return null; }
+    return fee;
+  }
+
   private renderTransfers(): void {
     const s = this.state;
     const me = this.me;
     const open = windowOpen(s);
     const locked = !!this.live;
+    const can = open && !locked;
     const roles = ["전체", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
     const targets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).slice(0, 60);
+    if (this.pendingBid && !clubOf(s, this.pendingBid.clubId).squad.some((p) => p.id === this.pendingBid!.playerId)) this.pendingBid = null;
+    const btn = 'style="padding:3px 8px;font-size:12px"';
     const fmtRow = (p: SquadPlayer, clubName: string, right: string) => `<div class="row tr" style="cursor:default">
         <span class="num">${p.number}</span><span class="role">${p.role}</span>
         <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
@@ -618,76 +643,169 @@ export class Game {
         <span style="text-align:right">${right}</span></div>`;
     const h: string[] = [];
     h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD}</span></h3>
-      <div class="hint">${open ? '<b style="color:var(--good)">열림</b> — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.' : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
+      <div class="hint">${open ? `<b style="color:var(--good)">열림</b>${deadlineDay(s) ? ' · <b style="color:var(--accent)">마감일</b> — 구단들이 평소보다 쉽게 응합니다' : ""} — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.` : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
       ${locked ? " · 경기 중에는 거래할 수 없습니다." : ""}</div>
       <div class="squad-tools"><label>포지션 <select id="trRole">${roles.map((r) => `<option ${r === this.transferRole ? "selected" : ""}>${r}</option>`).join("")}</select></label>
-      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈). 스쿼드가 16명 이하인 구단은 팔지 않습니다.</span></div></div>`);
+      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span></div></div>`);
+    // ---- incoming offers
+    const offers = openOffers(s);
+    if (offers.length || open) {
+      h.push(`<div class="card"><h3>받은 제안 <span>${offers.length}건${offers.length ? " · 2라운드 후 만료" : ""}</span></h3>`);
+      if (!offers.length) h.push(`<div class="hint">아직 제안이 없습니다. 창구가 열린 동안 매주 AI 구단이 필요한 포지션의 내 선수에게 제안을 보냅니다.</div>`);
+      for (const o of offers) {
+        const p = playerOf(me, o.playerId);
+        const from = clubOf(s, o.from);
+        const value = playerValue(p);
+        const ratio = Math.round((o.fee / value) * 100);
+        const weeks = Math.max(0, o.expiresRound - s.round);
+        const canSell = can && me.squad.filter((q) => !q.onLoan && q.loanFrom === undefined).length > MIN_SQUAD;
+        h.push(`<div class="offer">
+          <div class="of-main"><b>${p.name}</b> <span class="role">${p.role} · ${overall(p.attrs, p.role).toFixed(1)} · ${p.age}세</span>
+            <div class="hint">${from.name} → <b style="color:${ratio >= 100 ? "var(--good)" : ratio >= 90 ? "var(--text)" : "var(--warn)"}">${o.fee}억</b> (가치 ${value}억의 ${ratio}%) · ${weeks <= 0 ? "이번 주 만료" : `${weeks}주 후 만료`}${o.status === "countered" ? ` · <span style="color:var(--warn)">역제안 ${o.counterFee}억 거절됨 — 원안 유효, 재역제안 시 철회</span>` : ""}</div></div>
+          <div class="of-acts"><button class="primary" data-accept="${o.id}" ${canSell ? "" : "disabled"} ${btn}>수락</button>${o.status === "open" ? `<button data-counter="${o.id}" ${canSell ? "" : "disabled"} ${btn}>역제안</button>` : ""}<button class="danger" data-reject="${o.id}" ${locked ? "disabled" : ""} ${btn}>거절</button></div>
+        </div>`);
+      }
+      h.push(`</div>`);
+    }
     h.push(`<div class="grid2">`);
     h.push(`<div class="card"><h3>영입 대상 <span>능력순 상위 ${targets.length}</span></h3><div class="roster">${targets
-      .map((t) => fmtRow(t.player, t.club.shortName, t.price === null ? '<span class="hint">비매</span>' : `<button data-buy="${t.club.id}:${t.player.id}" ${open && !locked && me.budget >= t.price && me.squad.length < MAX_SQUAD ? "" : "disabled"} style="padding:3px 8px;font-size:12px">${t.price}억 영입</button>`))
+      .map((t) => {
+        if (t.price === null) return fmtRow(t.player, t.club.shortName, '<span class="hint">비매</span>');
+        if (t.player.refusedSeason === s.season) return fmtRow(t.player, t.club.shortName, '<span class="hint" style="color:var(--warn)">이적 거부</span>');
+        const pb = this.pendingBid && this.pendingBid.playerId === t.player.id ? this.pendingBid : null;
+        const ok = can && me.squad.length < MAX_SQUAD && me.budget >= Math.min(t.price, pb?.counter ?? t.price) * 0.5;
+        return fmtRow(t.player, t.club.shortName, pb
+          ? `<button class="primary" data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="역제안 ${pb.counter}억 — 마지막 제시">재입찰 ${pb.counter}억</button>`
+          : `<button data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn}>호가 ${t.price}억</button>`);
+      })
       .join("")}</div></div>`);
-    h.push(`<div class="card"><h3>내 선수 판매 <span>최소 ${MIN_SQUAD}명 유지</span></h3><div class="roster">${[...me.squad]
+    h.push(`<div class="card"><h3>내 선수 판매 <span>최소 ${MIN_SQUAD}명 유지</span></h3><div class="hint">즉시 판매가는 지금 가장 높은 값을 부르는 구단 기준입니다. 더 받고 싶다면 받은 제안을 기다리거나 역제안하세요.</div><div class="roster">${[...me.squad]
       .sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role))
       .map((p) => {
+        if (p.loanFrom !== undefined) return fmtRow(p, `임대 (${clubOf(s, p.loanFrom).shortName})`, '<span class="hint">임대 선수</span>');
+        if (p.onLoan) return fmtRow(p, "", '<span class="hint">임대 중</span>');
         const offer = open ? bestOffer(s, p.id) : null;
-        return fmtRow(p, "", offer ? `<button data-sell="${p.id}" ${!locked && me.squad.length > MIN_SQUAD ? "" : "disabled"} style="padding:3px 8px;font-size:12px">${offer.fee}억 → ${offer.club.shortName}</button>` : '<span class="hint">제안 없음</span>');
+        return fmtRow(p, "", offer ? `<button data-sell="${p.id}" ${!locked && me.squad.length > MIN_SQUAD ? "" : "disabled"} ${btn}>${offer.fee}억 → ${offer.club.shortName}</button>` : '<span class="hint">제안 없음</span>');
       })
       .join("")}</div></div>`);
     h.push(`</div>`);
-    const contracts = [...me.squad].sort((a, b) => a.contractUntil - b.contractUntil || b.wage - a.wage);
+    // ---- free agents & loans
+    h.push(`<div class="grid2">`);
+    const fas = [...s.freeAgents].sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role));
+    h.push(`<div class="card"><h3>자유계약 선수 <span>${fas.length}명 · 계약금 가치의 30%</span></h3>
+      <div class="hint">계약이 끝나고 풀린 선수들입니다. 이적료 없이 계약금(가치 30%)과 시세보다 20% 높은 연봉으로 데려옵니다. 2시즌 동안 팀을 못 찾으면 사라집니다.</div>
+      <div class="roster">${fas.length ? fas.map((p) => { const t = freeAgentTerms(p); return fmtRow(p, `연봉 ${t.wage}억`, `<button data-sign="${p.id}" ${can && me.squad.length < MAX_SQUAD && me.budget >= t.fee ? "" : "disabled"} ${btn} title="계약금 ${t.fee}억 · 연봉 ${t.wage}억 · ${t.years}년">계약금 ${t.fee}억</button>`); }).join("") : '<div class="hint">지금은 자유계약 선수가 없습니다.</div>'}</div></div>`);
+    const outs = loanableOut(s);
+    const onLoan = me.squad.filter((p) => p.onLoan);
+    const ins = loanTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).slice(0, 15);
+    const myLoanIns = s.loans.filter((l) => l.to === me.id).length;
+    const canLoanOut = can && me.squad.filter((p) => !p.onLoan && p.loanFrom === undefined).length - 1 >= MIN_SQUAD;
+    h.push(`<div class="card"><h3>임대 <span>시즌 종료 시 복귀</span></h3>
+      <div class="hint"><b>임대 보내기</b>: 23세 이하이거나 비주전인 선수를 필요한 구단에 보냅니다. 연봉 50%를 상대가 부담하고 어린 선수는 조금 더 빨리 성장합니다. <b>임대 영입</b>: 다른 구단의 비주전을 이적료 없이 데려오되 연봉은 전액 부담합니다 (시즌당 2명).</div>
+      ${onLoan.length ? `<div class="roster">${onLoan.map((p) => { const l = s.loans.find((x) => x.playerId === p.id); return fmtRow(p, l ? `→ ${clubOf(s, l.to).shortName}` : "", '<span class="hint">임대 중 · 시즌 후 복귀</span>'); }).join("")}</div>` : ""}
+      <h3 style="margin-top:6px">보낼 수 있는 선수 <span>${outs.length}명</span></h3>
+      <div class="roster">${outs.length ? outs.map((p) => { const d = loanDestination(s, p); return fmtRow(p, "", d ? `<button data-loanout="${p.id}" ${canLoanOut ? "" : "disabled"} ${btn} title="${d.name}이(가) 받습니다">임대 → ${d.shortName}</button>` : '<span class="hint">원하는 구단 없음</span>'); }).join("") : '<div class="hint">임대 보낼 만한 선수가 없습니다.</div>'}</div>
+      <h3 style="margin-top:6px">임대 영입 가능 <span>비주전 상위 ${ins.length} · ${myLoanIns}/2</span></h3>
+      <div class="roster">${ins.map((t) => fmtRow(t.player, t.club.shortName, `<button data-loanin="${t.club.id}:${t.player.id}" ${can && me.squad.length < MAX_SQUAD && myLoanIns < 2 ? "" : "disabled"} ${btn} title="연봉 ${t.player.wage}억 전액 부담">임대 영입</button>`)).join("")}</div></div>`);
+    h.push(`</div>`);
+    const contracts = [...me.squad].filter((p) => p.loanFrom === undefined).sort((a, b) => a.contractUntil - b.contractUntil || b.wage - a.wage);
     h.push(`<div class="card"><h3>계약 <span>연봉 총액 ${wageBill(me)}억/시즌</span></h3>
-      <div class="hint">계약은 시즌 단위입니다. 만료 시즌(이번 시즌이면 <b style="color:var(--warn)">만료 예정</b>)인 선수는 시즌이 끝나면 떠나므로 미리 재계약하세요. 계약금은 선수 가치의 5%×연수입니다.</div>
+      <div class="hint">계약은 시즌 단위입니다. 만료 시즌(이번 시즌이면 <b style="color:var(--warn)">만료 예정</b>)인 선수는 시즌이 끝나면 자유계약으로 풀리므로 미리 재계약하세요. 계약금은 선수 가치의 5%×연수입니다.</div>
       <div class="roster">${contracts
         .map((p) => {
           const exp = p.contractUntil <= s.season;
           const t1 = renewalTerms(p, 1), t3 = renewalTerms(p, 3);
           return `<div class="row tr" style="cursor:default"><span class="num">${p.number}</span><span class="role">${p.role}</span>
-            <span class="name">${p.name} <span style="opacity:.55;font-size:11px">연봉 ${p.wage}억</span></span>
+            <span class="name">${p.name} <span style="opacity:.55;font-size:11px">연봉 ${p.wage}억${p.onLoan ? " · 임대 중" : ""}</span></span>
             <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
             <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;color:${exp ? "var(--warn)" : "var(--muted)"}">~S${p.contractUntil}</span>
             <span style="text-align:right;display:flex;gap:4px;justify-content:flex-end">${[1, 3].map((y) => `<button data-renew="${p.id}:${y}" ${locked || me.budget < (y === 1 ? t1.fee : t3.fee) ? "disabled" : ""} title="계약금 ${y === 1 ? t1.fee : t3.fee}억 · 연봉 ${y === 1 ? t1.wage : t3.wage}억" style="padding:3px 6px;font-size:11px">+${y}년 ${y === 1 ? t1.fee : t3.fee}억</button>`).join("")}</span></div>`;
         })
         .join("")}</div></div>`);
     this.el.transfers.innerHTML = h.join("");
-    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-renew]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const [id, y] = b.dataset.renew!.split(":");
-        const p = playerOf(me, id!);
-        const t = renewalTerms(p, Number(y));
-        if (!confirm(`${p.name}과(와) ${y}년 재계약할까요? 계약금 ${t.fee}억, 연봉 ${t.wage}억/시즌`)) return;
-        const err = renewContract(s, id!, Number(y) as 1 | 2 | 3);
-        if (err) alert(err);
-        this.save();
-        this.renderAll();
-      }),
-    );
+    const done = (): void => { this.save(); this.renderAll(); };
+    const on = (sel: string, fn: (b: HTMLButtonElement) => void): void => { this.el.transfers.querySelectorAll<HTMLButtonElement>(sel).forEach((b) => b.addEventListener("click", () => fn(b))); };
+    on("button[data-renew]", (b) => {
+      const [id, y] = b.dataset.renew!.split(":");
+      const p = playerOf(me, id!);
+      const t = renewalTerms(p, Number(y));
+      if (!confirm(`${p.name}과(와) ${y}년 재계약할까요? 계약금 ${t.fee}억, 연봉 ${t.wage}억/시즌`)) return;
+      const err = renewContract(s, id!, Number(y) as 1 | 2 | 3);
+      if (err) alert(err);
+      done();
+    });
     (document.getElementById("trRole") as HTMLSelectElement).addEventListener("change", (e) => {
       this.transferRole = (e.target as HTMLSelectElement).value;
       this.renderTransfers();
     });
-    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-buy]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const [club, id] = b.dataset.buy!.split(":");
-        const t = transferTargets(s).find((x) => x.player.id === id)!;
-        if (!confirm(`${t.player.name} (${t.club.shortName})을(를) ${t.price}억에 영입할까요?`)) return;
-        const err = buyPlayer(s, Number(club), id!);
-        if (err) alert(err);
-        this.save();
-        this.renderAll();
-      }),
-    );
-    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-sell]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const id = b.dataset.sell!;
-        const p = playerOf(me, id);
-        const offer = bestOffer(s, id);
-        if (!offer || !confirm(`${p.name}을(를) ${offer.club.name}에 ${offer.fee}억에 판매할까요?`)) return;
-        const err = sellPlayer(s, id);
-        if (err) alert(err);
-        this.save();
-        this.renderAll();
-      }),
-    );
+    on("button[data-bid]", (b) => {
+      const [club, id] = b.dataset.bid!.split(":");
+      const clubId = Number(club);
+      const t = transferTargets(s).find((x) => x.player.id === id && x.club.id === clubId);
+      if (!t || t.price === null) return;
+      const pb = this.pendingBid && this.pendingBid.playerId === id ? this.pendingBid : null;
+      const fee = this.askFee(pb ? `${t.player.name} (${t.club.shortName}) — ${t.club.shortName}의 역제안은 ${pb.counter}억입니다. 마지막 제시액(억)을 입력하세요. 그 아래면 협상이 결렬됩니다.` : `${t.player.name} (${t.club.shortName}) 영입 제시액(억)을 입력하세요. 호가 ${t.price}억 · 가치 ${t.value}억 · 예산 ${me.budget}억`, pb ? pb.counter : t.price);
+      if (fee === null) return;
+      const r: BidResult = makeBid(s, clubId, id!, fee, this.marketRng(`bid:${id}`, fee), pb ? { counter: pb.counter } : undefined);
+      this.pendingBid = r.status === "countered" ? { clubId, playerId: id!, counter: r.counter! } : null;
+      alert(r.text);
+      done();
+    });
+    on("button[data-sell]", (b) => {
+      const id = b.dataset.sell!;
+      const p = playerOf(me, id);
+      const offer = bestOffer(s, id);
+      if (!offer || !confirm(`${p.name}을(를) ${offer.club.name}에 ${offer.fee}억에 판매할까요?`)) return;
+      const err = sellPlayer(s, id);
+      if (err) alert(err);
+      done();
+    });
+    on("button[data-accept]", (b) => {
+      const o = openOffers(s).find((x) => x.id === b.dataset.accept);
+      if (!o) return;
+      const p = playerOf(me, o.playerId);
+      if (!confirm(`${p.name}을(를) ${clubOf(s, o.from).name}에 ${o.fee}억에 보낼까요?`)) return;
+      const err = acceptOffer(s, o.id);
+      if (err) alert(err);
+      done();
+    });
+    on("button[data-reject]", (b) => { rejectOffer(s, b.dataset.reject!); done(); });
+    on("button[data-counter]", (b) => {
+      const o = openOffers(s).find((x) => x.id === b.dataset.counter);
+      if (!o) return;
+      const p = playerOf(me, o.playerId);
+      const value = playerValue(p);
+      const fee = this.askFee(`${clubOf(s, o.from).name}의 ${p.name} 제안 ${o.fee}억 (가치 ${value}억). 역제안 금액(억)을 입력하세요. 가치의 115%까지는 대체로 받아들이고, 그 위로는 확률이 빠르게 떨어집니다. 역제안은 한 번만 할 수 있습니다.`, Math.round(value * 1.15));
+      if (fee === null) return;
+      const r = respondToCounter(s, o.id, fee, this.marketRng(`counter:${o.id}`, fee));
+      alert(r.text);
+      done();
+    });
+    on("button[data-sign]", (b) => {
+      const p = s.freeAgents.find((x) => x.id === b.dataset.sign);
+      if (!p) return;
+      const t = freeAgentTerms(p);
+      if (!confirm(`자유계약 ${p.name}과(와) ${t.years}년 계약할까요? 계약금 ${t.fee}억, 연봉 ${t.wage}억/시즌`)) return;
+      const err = signFreeAgent(s, p.id);
+      if (err) alert(err);
+      done();
+    });
+    on("button[data-loanout]", (b) => {
+      const p = playerOf(me, b.dataset.loanout!);
+      const d = loanDestination(s, p);
+      if (!d || !confirm(`${p.name}을(를) ${d.name}에 시즌 종료까지 임대 보낼까요? 연봉의 50%를 ${d.shortName}이(가) 부담하고 선발에서 빠집니다.`)) return;
+      const err = loanOut(s, p.id);
+      if (err) alert(err);
+      done();
+    });
+    on("button[data-loanin]", (b) => {
+      const [club, id] = b.dataset.loanin!.split(":");
+      const t = loanTargets(s).find((x) => x.player.id === id);
+      if (!t || !confirm(`${t.player.name} (${t.club.shortName})을(를) 시즌 종료까지 임대 영입할까요? 이적료 없음, 연봉 ${t.player.wage}억 전액 부담, 시즌 후 복귀합니다.`)) return;
+      const err = loanIn(s, Number(club), id!);
+      if (err) alert(err);
+      done();
+    });
   }
 
   // ------------------------------------------------------------ youth

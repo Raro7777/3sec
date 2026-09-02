@@ -3,7 +3,7 @@ import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
-import { aiTransfers, seasonBudget } from "./transfers";
+import { expireOffers, freeAgentRollover, incomingOffers, returnLoans, seasonBudget, transferWeek } from "./transfers";
 import { trainWeek, ATTR_LABEL } from "./training";
 import { payWages, settleContracts } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
@@ -19,10 +19,11 @@ export const DEFAULT_MANAGER_NAME = "감독";
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [] };
   newCup(s);
   for (const c of clubs) c.seasonStartBudget = c.budget;
   youthIntake(s, new Rng(seed * 29 + 3));
+  incomingOffers(s, new Rng(seed * 37 + 5));
   return s;
 }
 
@@ -159,11 +160,9 @@ export function advanceRound(s: GameState): boolean {
     if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
   payWages(s, roundsPerSeason(s.clubs.length));
+  transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
   youthWeek(s);
-  if (s.round === 10) {
-    aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
-    youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
-  }
+  if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
   if (cupDayDue(s)) s.pendingCupDay = true;
@@ -176,10 +175,14 @@ export function startNextSeason(s: GameState): void {
   const rng = new Rng(s.seed * 13 + s.season * 977);
   const finalTable = table(s);
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1);
+  expireOffers(s, true);
+  returnLoans(s);
   settleContracts(s, s.season + 1, rng);
+  freeAgentRollover(s, s.season + 1, rng);
   for (const c of s.clubs) for (const p of c.squad) {
     p.age++;
     if (p.age >= 28) p.potential = Math.min(p.potential, Math.max(1, Math.round(p.potential * 10) / 10));
+    p.refusedSeason = undefined;
     p.seasonYellows = 0;
     p.ban = 0;
     p.injuryDays = 0;
@@ -194,7 +197,7 @@ export function startNextSeason(s: GameState): void {
   s.pendingCupDay = false;
   youthRollover(s, rng);
   youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 3));
-  aiTransfers(s, rng);
+  transferWeek(s, rng);
   for (const c of s.clubs) c.seasonStartBudget = c.budget;
   prepareRound(s);
 }

@@ -20,6 +20,39 @@ export interface SquadPlayer extends PlayerDef {
   /** last season the contract covers (expires after that season) */
   contractUntil: number;
   stats: { apps: number; goals: number; minutes: number; yellows: number; reds: number };
+  /** away on loan at another club: stays in this squad but is unavailable and costs half a wage */
+  onLoan?: boolean;
+  /** borrowed from that club for the season; returns at the rollover */
+  loanFrom?: number;
+  /** free agents only: the season the player was released */
+  freeSince?: number;
+  /** refused to join the user's club this season (no second approach) */
+  refusedSeason?: number;
+}
+
+export type OfferStatus = "open" | "accepted" | "rejected" | "expired" | "countered";
+
+/** An AI club's bid for one of the user's players. */
+export interface TransferOffer {
+  id: string;
+  from: number;
+  playerId: string;
+  fee: number;
+  wageOffer?: number;
+  /** the offer lapses once s.round reaches this */
+  expiresRound: number;
+  /** "countered": the user's counter was refused, the original fee still stands (one counter only) */
+  status: OfferStatus;
+  counterFee?: number;
+}
+
+/** A season-long loan; the player object lives in `to`'s squad (loanFrom) or stays in `from`'s (onLoan). */
+export interface Loan {
+  playerId: string;
+  from: number;
+  to: number;
+  /** last season of the loan (returns at that rollover) */
+  until: number;
 }
 
 export interface Selection {
@@ -139,4 +172,11 @@ export interface GameState {
   cup: Cup;
   /** the next matchday is a cup matchday (set when the league reaches a cup round) */
   pendingCupDay: boolean;
+  /** incoming bids for the user's players (open ones and this week's resolved ones) */
+  offers: TransferOffer[];
+  /** released players anyone can sign for a signing fee */
+  freeAgents: SquadPlayer[];
+  loans: Loan[];
+  /** "season:window:clubId" markers – an AI club makes at most one purchase per window */
+  aiDeals: string[];
 }

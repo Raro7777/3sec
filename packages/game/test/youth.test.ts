@@ -100,7 +100,8 @@ describe("youth academy", () => {
     const kept = me.youth.prospects.find((p) => p.id === stay.id)!;
     expect(kept.age).toBe(17);
     expect(me.youth.prospects.length).toBeGreaterThan(1);
-    expect(ai.squad.length).toBe(aiSquad + 1);
+    // promoted (+1); a thin squad may also pick up a free agent in the pre-season market
+    expect(ai.squad.length).toBeGreaterThanOrEqual(aiSquad + 1);
     expect(ai.squad.some((p) => p.id === aiBest.id)).toBe(true);
     for (const c of s.clubs) for (const p of c.youth.prospects) expect(p.age).toBeLessThan(LEAVE_AGE);
   });

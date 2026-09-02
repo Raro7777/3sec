@@ -53,6 +53,12 @@ export function deserialize(json: string | null | undefined): GameState | null {
     // Saves from before the cup: draw round 1 now; the cup days slot in from the next cup round on.
     if (!s.cup || !Array.isArray(s.cup.ties) || typeof s.cup.stage !== "number") newCup(s);
     if (typeof s.pendingCupDay !== "boolean") s.pendingCupDay = false;
+    // Saves from before the deeper market: no offers, free agents or loans yet.
+    if (!Array.isArray(s.offers)) s.offers = [];
+    if (!Array.isArray(s.freeAgents)) s.freeAgents = [];
+    if (!Array.isArray(s.loans)) s.loans = [];
+    if (!Array.isArray(s.aiDeals)) s.aiDeals = [];
+    for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); }
     return s;
   } catch {
     return null;

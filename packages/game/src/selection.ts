@@ -4,7 +4,7 @@ import { overall, slotFit } from "./rating";
 
 export const BENCH_SIZE = 7;
 
-export const isAvailable = (p: SquadPlayer): boolean => p.injuryDays <= 0 && p.ban <= 0;
+export const isAvailable = (p: SquadPlayer): boolean => p.injuryDays <= 0 && p.ban <= 0 && !p.onLoan;
 
 /** Best available XI for the formation (greedy by slot fit × freshness) plus a role-balanced bench. */
 export function autoSelect(club: Club, formation: FormationName = club.selection.formation): Selection {

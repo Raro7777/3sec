@@ -13,7 +13,14 @@ export {
   simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
-export { MIN_SQUAD, MAX_SQUAD, playerValue, seasonBudget, windowOpen, askingPrice, transferTargets, buyPlayer, bestOffer, sellPlayer, aiTransfers, type TransferTarget } from "./transfers";
+export {
+  MIN_SQUAD, MAX_SQUAD, SURPLUS_ABOVE, THIN_SQUAD, OFFER_TTL, MAX_FREE_AGENTS, LOAN_GROWTH, FREE_AGENT_FEE, FREE_AGENT_WAGE,
+  playerValue, seasonBudget, windowOpen, deadlineDay, surplusPlayers, askingPrice, transferTargets, acceptFactor, refusalChance, makeBid, buyPlayer, bestOffer, sellPlayer,
+  openOffers, expireOffers, incomingOffers, acceptOffer, rejectOffer, respondToCounter,
+  releaseToMarket, freeAgentTerms, signFreeAgent, freeAgentRollover,
+  loanableOut, loanDestination, loanOut, loanTargets, loanIn, returnLoans,
+  aiTransfers, aiSignFreeAgents, loanWeek, transferWeek, type TransferTarget, type BidResult, type NegotiationResult, type LoanTarget,
+} from "./transfers";
 export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, ATTR_LABEL, weeklyRate, trainWeek, spendGrowth, type Development, type Grower } from "./training";
 export { MAX_PROSPECTS, MIN_PROMOTE_AGE, LEAVE_AGE, SCOUTING, COACHING, youthWeeklyCost, prospectOverall, youthIntake, youthWeek, youthRollover, promoteProspect, releaseProspect } from "./youth";
-export { wageFor, wageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";
+export { wageFor, wageBill, loanWageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";

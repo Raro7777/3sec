@@ -117,6 +117,11 @@
       .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px; }
       .row.tr button { white-space:nowrap; width:100%; }
       .row.yt { grid-template-columns: 34px 1fr 40px 64px 150px; cursor:default; }
+      .offer { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:6px 8px; border:1px solid var(--line); border-radius:8px; }
+      .offer .of-main { min-width:0; flex:1 1 200px; }
+      .offer .of-main .role { font-size:11px; color:var(--muted); }
+      .offer .of-acts { display:flex; gap:4px; flex-wrap:wrap; }
+      .offer .of-acts button { white-space:nowrap; }
       .row.yt .pot { font-family:"IBM Plex Mono", monospace; font-size:12px; text-align:right; color:var(--muted); }
       .row.yt .acts { display:flex; gap:4px; justify-content:flex-end; }
       .row.yt .acts button { padding:3px 8px; font-size:12px; white-space:nowrap; }
@@ -219,7 +224,7 @@
   <body>
     <div id="app">
       <nav id="nav">
-        <span class="brand">가난한자의 FM</span>
+        <span class="brand">가난한자의 FM<small>by raro</small></span>
         <button class="tab" data-screen="home">홈</button>
         <button class="tab" data-screen="squad">스쿼드</button>
         <button class="tab" data-screen="table">순위</button>
