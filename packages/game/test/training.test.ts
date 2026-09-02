@@ -49,8 +49,8 @@ describe("training and development", () => {
     expect(weeklyRate(29)).toBeCloseTo(0.015);
     expect(weeklyRate(32)).toBeCloseTo(-0.05);
     expect(weeklyRate(33)).toBeCloseTo(-0.11);
-    expect(playingTimeBonus(19, 90)).toBe(0.09);
-    expect(playingTimeBonus(23, 60)).toBe(0.06);
+    expect(playingTimeBonus(19, 90)).toBe(0.07);
+    expect(playingTimeBonus(23, 60)).toBe(0.05);
     expect(playingTimeBonus(23, 59)).toBe(0);
     expect(playingTimeBonus(24, 90)).toBe(0);
     expect(INTENSITY_MULT.high).toBe(1.4);
@@ -63,14 +63,14 @@ describe("training and development", () => {
     kid.lastMinutes = 0;
     trainWeek(c, { next: () => 0.5 });
     const benched = kid.growth;
-    expect(benched).toBeCloseTo(0.24 * BENCHED_FACTOR, 5);
+    expect(benched).toBeCloseTo(0.2 * BENCHED_FACTOR, 5);
     kid.growth = 0; kid.lastMinutes = 90;
     trainWeek(c, rng);
-    expect(kid.growth).toBeCloseTo(0.24, 5);
+    expect(kid.growth).toBeCloseTo(0.2, 5);
     c.training = { focus: "balanced", intensity: "high" };
     kid.growth = 0; kid.lastMinutes = 90;
     trainWeek(c, rng);
-    expect(kid.growth).toBeCloseTo(0.24 * 1.4, 5);
+    expect(kid.growth).toBeCloseTo(0.2 * 1.4, 5);
   });
 
   it("a season of real matches feeds minutes into development and counts injuries", () => {
