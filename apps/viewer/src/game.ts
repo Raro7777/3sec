@@ -33,7 +33,7 @@ const APP_VERSION = "0.19";
  * Formation diagram as inline SVG, attack pointing up. With a club and starters it labels each slot with the
  * player's number and name; without, it is a small silhouette for the picker.
  */
-export function formationSvg(f: FormationName, club: Club | null, starters: string[], width: number): string {
+export function formationSvg(f: FormationName, club: Club | null, starters: string[], width: number, selectedId: string | null = null): string {
   const W = 120, H = 146;
   const slots = FORMATIONS[f];
   const big = width >= 120;
@@ -46,7 +46,10 @@ export function formationSvg(f: FormationName, club: Club | null, starters: stri
     const label = big && p ? `<text x="${cx}" y="${cy + 0.8}" text-anchor="middle" dominant-baseline="middle" font-size="5.4" font-weight="700" fill="#1a1400" font-family="IBM Plex Mono, monospace">${p.number}</text>
       <text x="${cx}" y="${cy + r + 4.8}" text-anchor="middle" font-size="4.7" fill="#e7edf2" font-family="IBM Plex Sans KR, sans-serif" stroke="#1f4d2a" stroke-width="0.9" paint-order="stroke">${p.name}</text>
       <text x="${cx}" y="${cy + r + 8.6}" text-anchor="middle" font-size="3.4" fill="#cfe3d5" font-family="IBM Plex Mono, monospace">${s.role}</text>` : "";
-    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#1a1400" stroke-width="${big ? 1 : 0.6}"/>${label}`;
+    const sel = big && p && selectedId === p.id;
+    return big && p
+      ? `<g data-pid="${p.id}" style="cursor:pointer"><circle cx="${cx}" cy="${cy}" r="${r + 4}" fill="transparent"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${sel ? "#fff" : "#1a1400"}" stroke-width="${sel ? 1.8 : 1}"/>${label}</g>`
+      : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#1a1400" stroke-width="${big ? 1 : 0.6}"/>${label}`;
   }).join("");
   const lines = big
     ? `<rect x="36" y="2" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><rect x="36" y="124" width="48" height="14" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><line x1="2" y1="70" x2="118" y2="70" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/><circle cx="60" cy="70" r="10" fill="none" stroke="#dfe9d9" stroke-width="0.8" opacity=".8"/>`
@@ -176,6 +179,7 @@ export class Game {
       if (b) this.sheetAction(b.dataset.sheet!, b.dataset);
     });
     this.cta.addEventListener("click", () => this.ctaAction());
+    this.applyFontSize(this.fontSize());
     this.renderGuide();
     if (!saved) {
       this.startOnboarding();
@@ -183,6 +187,16 @@ export class Game {
     }
     this.renderAll();
     this.showFirstScreen();
+  }
+
+  private fontSize(): "s" | "m" | "l" {
+    try { const v = localStorage.getItem("3sec.fs"); return v === "s" || v === "l" ? v : "m"; } catch { return "m"; }
+  }
+
+  private applyFontSize(k: "s" | "m" | "l"): void {
+    try { localStorage.setItem("3sec.fs", k); } catch { /* ignore */ }
+    document.body.classList.toggle("fs-s", k === "s");
+    document.body.classList.toggle("fs-l", k === "l");
   }
 
   /** Guide once for a fresh manager (existing flag), otherwise home. */
@@ -391,7 +405,8 @@ export class Game {
     const slots = [1, 2, 3].map((n) => ({ n, info: this.slotInfo(n) }));
     this.el.settings.innerHTML = `<div class="card"><h3>설정 <span>가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
       <div class="hint">현재 게임: <b>${this.stateLabel()}</b> — 진행 상황은 매 조작마다 자동 저장됩니다. 아래 슬롯은 별도 백업이고, 파일로 내보내면 다른 기기로 옮길 수 있습니다.</div>
-      <div class="actions" style="margin-top:6px"><button data-set="guide">게임 가이드 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div></div>
+      <div class="actions" style="margin-top:6px"><button data-set="guide">게임 가이드 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div>
+      <div class="actions" style="margin-top:4px;align-items:center"><span class="hint">글자 크기</span>${(["s", "m", "l"] as const).map((k) => `<button data-fs="${k}" class="${this.fontSize() === k ? "primary" : ""}">${k === "s" ? "작게" : k === "m" ? "보통" : "크게"}</button>`).join("")}</div></div>
     <div class="card"><h3>저장 슬롯</h3>${slots
       .map(({ n, info }) => `<div class="slot"><div><div>슬롯 ${n}</div><div class="meta">${info ? `${info.label}<br>${new Date(info.savedAt).toLocaleString("ko-KR")}` : "비어 있음"}</div></div>
         <div class="btns"><button data-slot-save="${n}">저장</button><button data-slot-load="${n}" ${info ? "" : "disabled"}>불러오기</button><button class="danger" data-slot-del="${n}" ${info ? "" : "disabled"}>삭제</button></div></div>`)
@@ -407,6 +422,7 @@ export class Game {
     // The claude.ai artifact viewer blocks page-initiated downloads; there the share/copy paths remain.
     if (location.hostname.endsWith("claude.ai")) q('[data-set="export"]').style.display = "none";
     q('[data-set="guide"]').addEventListener("click", () => this.show("guide"));
+    this.el.settings.querySelectorAll<HTMLButtonElement>("button[data-fs]").forEach((b) => b.addEventListener("click", () => { this.applyFontSize(b.dataset.fs as "s" | "m" | "l"); this.renderSettings(); }));
     q('[data-set="newGame"]').addEventListener("click", () => this.act("newGame"));
     for (const { n } of slots) {
       this.el.settings.querySelector(`[data-slot-save="${n}"]`)!.addEventListener("click", () => {
@@ -490,11 +506,10 @@ export class Game {
     const over = seasonOver(s);
     const h: string[] = [];
     h.push(`<div class="card"><h3>${me.name} <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(this.todoHtml());
     const expiring = expiringContracts(s);
-    if (expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
-    const offerCount = openOffers(s).length;
-    if (offerCount) h.push(`<div class="hint" style="color:var(--accent)">받은 이적 제안 ${offerCount}건 — 이적 탭에서 수락·거절·역제안할 수 있습니다 (2라운드 후 만료).</div>`);
-    if (me.budget < 0) h.push(`<div class="hint" style="color:var(--bad)">예산이 적자입니다. 연봉이 매주 빠져나가니 선수를 팔거나 다음 시즌 상금을 기다려야 합니다.</div>`);
+    if (false && expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
+
     h.push(this.boardHtml());
     if (s.board.sacked) {
       h.push(`<div class="hint" style="color:var(--bad)"><b>경질되었습니다.</b> ${me.name} 이사회가 계약을 해지했습니다. 다른 구단의 제안을 받거나 새 게임을 시작하세요.</div><div class="actions"><button class="primary" data-act="sacked">거취 정하기 →</button></div>`);
@@ -538,17 +553,22 @@ export class Game {
       const prob = selectionProblem(me);
       if (prob) h.push(`<div class="hint" style="color:var(--warn)">선발 문제: ${prob} — 스쿼드에서 조정하거나 자동으로 보정됩니다.</div>`);
       h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><span style="display:inline-flex;gap:4px;align-items:center"><button data-act="sim1" title="이번 라운드의 모든 경기를 즉시 시뮬레이션합니다">⏩ 1라운드</button><button data-act="sim3" title="3라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 3라운드</button><button data-act="sim5" title="5라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 5라운드</button></span></div>
-      <div class="hint">자동 진행은 내 경기도 AI가 지휘합니다. 여러 라운드를 돌리면 매 라운드 사이에 회복·훈련·연봉이 정산되고 마지막 라운드 결과가 표시됩니다.</div>`);
+      <div class="hint">자동 진행은 내 전술 + 수석코치 성향으로 AI가 지휘합니다.</div>`);
     }
     if (!over) h.push(`<div class="cupLine">${this.cupLineHtml()}</div>`);
     h.push(`</div>`);
     h.push(`<div class="grid2">`);
-    h.push(`<div class="card"><h3>소식</h3><div class="news">${s.news.slice(0, 10).map((n) => `<div>${n}</div>`).join("") || "<div>아직 소식이 없습니다.</div>"}</div></div>`);
+    h.push(`<div class="card"><h3>소식</h3><div class="news">${s.news.slice(0, 5).map((n) => `<div>${n}</div>`).join("") || "<div>아직 소식이 없습니다.</div>"}</div>${s.news.length > 5 ? `<details><summary class="hint" style="cursor:pointer">지난 소식 ${Math.min(25, s.news.length - 5)}건 더 보기</summary><div class="news" style="margin-top:4px">${s.news.slice(5, 30).map((n) => `<div>${n}</div>`).join("")}</div></details>` : ""}</div>`);
     h.push(`<div class="card"><h3>순위 <span>상위 6</span></h3>${this.tableHtml(rows.slice(0, 6), true)}</div>`);
     h.push(`</div>`);
     h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다. · 가난한자의 FM · 만든이 raro</span></div>`);
     this.el.home.innerHTML = h.join("");
     this.wireClubTaps(this.el.home);
+    this.el.home.querySelectorAll<HTMLButtonElement>("button[data-go]").forEach((b) => b.addEventListener("click", () => {
+      const [screen, tab] = (b.dataset.tab ?? "").split(":");
+      if (screen && tab) { this.tabSel[screen] = tab; try { localStorage.setItem("3sec.tabs", JSON.stringify(this.tabSel)); } catch { /* ignore */ } this.renderAll(); }
+      this.show(b.dataset.go as ScreenName);
+    }));
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) => b.addEventListener("click", () => this.act(b.dataset.act!)));
   }
 
@@ -562,6 +582,28 @@ export class Game {
     const note = b.sacked ? "경질" : b.warnings ? `경고 ${b.warnings}회` : b.confidence >= TRUST_AT ? "신임" : b.confidence < WARN_BELOW ? "위험" : s.round < BOARD_FROM_ROUND ? `${BOARD_FROM_ROUND}R부터 평가` : "보통";
     return `<div class="board"><div class="boardHead"><span>이사회 신뢰도 <b style="color:${color}">${Math.round(b.confidence)}</b></span><small>기대 ${exp}위 · 현재 ${pos}위 · <span style="color:${color}">${note}</span></small></div>
       <div class="bar" title="이사회 신뢰도 ${b.confidence}/100"><i style="width:${Math.round(b.confidence)}%;background:${color}"></i></div></div>`;
+  }
+
+  /** What needs the manager's attention right now, as tappable rows (empty string when nothing does). */
+  private todoHtml(): string {
+    const s = this.state;
+    const me = this.me;
+    const items: { text: string; screen: ScreenName; tab?: [string, string]; color: string }[] = [];
+    const prob = selectionProblem(me);
+    if (prob) items.push({ text: `선발 문제: ${prob}`, screen: "squad", tab: ["squad", "sel"], color: "var(--warn)" });
+    const offers = openOffers(s).length;
+    if (offers) items.push({ text: `받은 이적 제안 ${offers}건 (2라운드 후 만료)`, screen: "transfers", tab: ["transfers", "off"], color: "var(--accent)" });
+    const injured = me.squad.filter((p) => p.injuryDays > 0);
+    if (injured.length) items.push({ text: `부상자 ${injured.length}명: ${injured.slice(0, 3).map((p) => `${p.name} ${p.injuryDays}일`).join(", ")}${injured.length > 3 ? " …" : ""}`, screen: "squad", tab: ["squad", "sel"], color: "var(--muted)" });
+    const banned = me.squad.filter((p) => p.ban > 0);
+    if (banned.length) items.push({ text: `출장 정지: ${banned.map((p) => `${p.name} ${p.ban}경기`).join(", ")}`, screen: "squad", tab: ["squad", "sel"], color: "var(--muted)" });
+    const expiring = expiringContracts(s);
+    if (expiring.length && s.round >= 12) items.push({ text: `계약 만료 예정 ${expiring.length}명: ${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " …" : ""}`, screen: "transfers", tab: ["transfers", "sell"], color: "var(--warn)" });
+    const staffExp = expiringStaff(s);
+    if (staffExp.length && s.round >= 12) items.push({ text: `코치 계약 만료 예정 ${staffExp.length}명`, screen: "squad", tab: ["squad", "train"], color: "var(--warn)" });
+    if (me.budget < 0) items.push({ text: "예산 적자: 연봉이 매주 빠져나갑니다. 선수를 팔거나 상금을 기다리세요.", screen: "transfers", tab: ["transfers", "sell"], color: "var(--bad)" });
+    if (!items.length) return "";
+    return `<div class="todo">${items.map((it) => `<button class="todoRow" data-go="${it.screen}" data-tab="${it.tab ? it.tab.join(":") : ""}" style="border-left-color:${it.color}"><span>${it.text}</span><b>›</b></button>`).join("")}</div>`;
   }
 
   /** The opposing manager on the next-fixture card: name, tags and a one-line tip. */
@@ -752,6 +794,11 @@ export class Game {
       return;
     }
     if (kind === "club") { this.openClubSheet(club, ds.cmp === "1"); return; }
+    if (kind === "market") {
+      const el = ds.sel ? this.el.transfers.querySelector<HTMLButtonElement>(ds.sel) : null;
+      this.closeSheet();
+      el?.click();
+    }
   }
 
   private wireClubTaps(root: HTMLElement): void {
@@ -828,8 +875,17 @@ export class Game {
       <div class="pcMid">${this.radarSvg([{ values: this.groupValues(p, groups), color: "#ffd166" }], groups.map((g) => g.label), 150)}
         <div class="pcAttrs">${keys.map((k) => `<div><span>${ATTR_LABEL[k]}</span><b style="color:${attrColor(p.attrs[k])}">${p.attrs[k]}</b></div>`).join("")}</div></div>
       <div class="pcSeason"><span>출장 <b>${st.apps}</b></span><span>골 <b>${st.goals}</b></span><span>도움 <b>${st.assists ?? 0}</b></span><span>평점 <b style="color:${avg ? ratingColor(avg) : "inherit"}">${avg ? fmtRating(avg) : "—"}</b></span><span>MOTM <b>${st.motm ?? 0}</b></span><span>경고 <b>${st.yellows}</b></span>${form.length ? `<span class="chips">${form.map((r) => `<span class="chip" style="background:${ratingColor(r)}">${fmtRating(r)}</span>`).join("")}</span>` : ""}</div>
+      ${this.marketActionHtml(p, clubId)}
       <div class="pcActions">${cmpBtn}<button data-sheet="profile" ${ds}>전체 프로필</button><button data-sheet="close">닫기</button></div>
     </div>`;
+  }
+
+  /** The transfer-market action for this player (bid, sign, sell, loan in), mirrored from the transfers screen. */
+  private marketActionHtml(p: SquadPlayer, clubId: number): string {
+    const sels = [`button[data-bid="${clubId}:${p.id}"]`, `button[data-sign="${p.id}"]`, `button[data-sell="${p.id}"]`, `button[data-loanin="${clubId}:${p.id}"]`, `button[data-loanout="${p.id}"]`, `button[data-renew="${p.id}"]`];
+    const found = sels.map((sel) => ({ sel, el: this.el.transfers.querySelector<HTMLButtonElement>(sel) })).filter((x) => x.el);
+    if (!found.length) return "";
+    return `<div class="pcActions pcMarket">${found.map(({ sel, el }) => `<button class="primary" data-sheet="market" data-sel="${sel.replace(/"/g, "&quot;")}" ${el!.disabled ? "disabled" : ""} title="${el!.title || "이적 시장 조작"}">${el!.textContent?.trim() ?? "거래"}</button>`).join("")}</div>`;
   }
 
   private compareHtml(a: SquadPlayer, ca: Club | null, b: SquadPlayer, cb: Club | null): string {
@@ -939,9 +995,9 @@ export class Game {
 
   /** Resolve a `club:player` info key (club -1 = free agent) and open the profile. */
   private wireInfo(root: HTMLElement, from: ScreenName): void {
-    root.querySelectorAll<HTMLButtonElement>("button[data-info]").forEach((b) => b.addEventListener("click", (e) => {
+    root.querySelectorAll<HTMLElement>("button[data-info], [data-open]").forEach((b) => b.addEventListener("click", (e) => {
       e.stopPropagation();
-      const [c, id] = b.dataset.info!.split(":");
+      const [c, id] = (b.dataset.info ?? b.dataset.open)!.split(":");
       const clubId = Number(c);
       const club = clubId >= 0 ? clubOf(this.state, clubId) : null;
       const p = club ? club.squad.find((x) => x.id === id) : this.state.freeAgents.find((x) => x.id === id);
@@ -1010,9 +1066,9 @@ export class Game {
         <span class="hint">선수 두 명을 차례로 누르면 자리를 맞바꿉니다 (선발 ↔ 벤치 ↔ 예비).</span>
       </div>
       <div class="fmWrap">
-        <div class="fmBig">${formationSvg(sel.formation, me, sel.starters, 250)}</div>
+        <div class="fmBig">${formationSvg(sel.formation, me, sel.starters, 250, this.selA)}</div>
         <div class="fmList">${(Object.keys(FORMATIONS) as FormationName[]).map((f) => `<button class="fmBtn ${f === sel.formation ? "on" : ""}" data-formation="${f}" ${locked ? "disabled" : ""} title="${f} 적용 (자동 선발)">${formationSvg(f, null, [], 56)}<div>${f}</div></button>`).join("")}
-          <div class="hint" style="flex-basis:100%">포메이션을 누르면 그 대형으로 자동 선발되고 역할이 다시 배정됩니다. 경기 중에는 전술 패널에서 바꿉니다.</div></div>
+          <div class="hint" style="flex-basis:100%">포메이션을 누르면 그 대형으로 자동 선발되고 역할이 다시 배정됩니다. 도식의 선수를 누른 뒤 아래 명단에서 다른 선수를 누르면 자리를 바꿉니다.</div></div>
       </div>
       ${prob ? `<div class="hint" style="color:var(--bad)">⚠ ${prob}</div>` : `<div class="hint" style="color:var(--good)">선발 명단 이상 없음</div>`}
     </div>`);
@@ -1089,18 +1145,17 @@ export class Game {
       this.afterSquadChange();
     });
     if (!locked) {
-      this.el.squad.querySelectorAll<HTMLElement>(".row[data-id]").forEach((r) =>
-        r.addEventListener("click", () => {
-          const id = r.dataset.id!;
-          if (!this.selA) this.selA = id;
-          else if (this.selA === id) this.selA = null;
-          else {
-            me.selection = swap(me, this.selA, id);
-            this.selA = null;
-          }
-          this.afterSquadChange();
-        }),
-      );
+      const pickForSwap = (id: string) => {
+        if (!this.selA) this.selA = id;
+        else if (this.selA === id) this.selA = null;
+        else {
+          me.selection = swap(me, this.selA, id);
+          this.selA = null;
+        }
+        this.afterSquadChange();
+      };
+      this.el.squad.querySelectorAll<HTMLElement>(".row[data-id]").forEach((r) => r.addEventListener("click", () => pickForSwap(r.dataset.id!)));
+      this.el.squad.querySelectorAll<HTMLElement>(".fmBig [data-pid]").forEach((g) => g.addEventListener("click", () => pickForSwap(g.dataset.pid!)));
     }
     this.wireInfo(this.el.squad, "squad");
     this.wireStaff();
@@ -1310,6 +1365,8 @@ export class Game {
 
   // ------------------------------------------------------------ transfers
   private transferRole = "전체";
+  private transferSort = "ovr";
+  private transferLimit = 25;
   /** the one follow-up bid the selling club allows after a counter */
   private pendingBid: { clubId: number; playerId: string; counter: number } | null = null;
 
@@ -1336,12 +1393,20 @@ export class Game {
     const locked = !!this.live;
     const can = open && !locked;
     const roles = ["전체", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
-    const targets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).slice(0, 60);
+    const sortFn: Record<string, (a: ReturnType<typeof transferTargets>[number], b: ReturnType<typeof transferTargets>[number]) => number> = {
+      ovr: (a, b) => overall(b.player.attrs, b.player.role) - overall(a.player.attrs, a.player.role),
+      value: (a, b) => (a.price ?? a.value) - (b.price ?? b.value),
+      age: (a, b) => a.player.age - b.player.age || overall(b.player.attrs, b.player.role) - overall(a.player.attrs, a.player.role),
+      pot: (a, b) => b.player.potential - a.player.potential,
+    };
+    const allTargets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).sort(sortFn[this.transferSort] ?? sortFn.ovr!);
+    const targets = allTargets.slice(0, this.transferLimit);
+    const moreBtn = allTargets.length > targets.length ? `<div class="actions" style="justify-content:center"><button id="trMore">더 보기 (${allTargets.length - targets.length}명 남음)</button></div>` : "";
     if (this.pendingBid && !clubOf(s, this.pendingBid.clubId).squad.some((p) => p.id === this.pendingBid!.playerId)) this.pendingBid = null;
     const btn = 'style="padding:3px 8px;font-size:12px"';
     const fmtRow = (p: SquadPlayer, clubName: string, right: string, clubId: number = me.id) => `<div class="row tr" style="cursor:default">
         <span class="num">${p.number}</span><span class="role">${p.role}</span>
-        <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
+        <span class="name" title="${p.name}" data-open="${clubId}:${p.id}" style="cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
         <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
         <span class="val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
         <span style="text-align:right">${right}</span>${INFO_BTN(`${clubId}:${p.id}`)}</div>`;
@@ -1350,6 +1415,7 @@ export class Game {
       <div class="hint">${open ? `<b style="color:var(--good)">열림</b>${deadlineDay(s) ? ' · <b style="color:var(--accent)">마감일</b> — 구단들이 평소보다 쉽게 응합니다' : ""} — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.` : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
       ${locked ? " · 경기 중에는 거래할 수 없습니다." : ""}</div>
       <div class="squad-tools"><label>포지션 <select id="trRole">${roles.map((r) => `<option ${r === this.transferRole ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+        <span class="chips">${([["ovr", "능력순"], ["value", "싼 순"], ["age", "어린 순"], ["pot", "잠재력순"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferSort === k ? "on" : ""}" data-sort="${k}">${l}</button>`).join("")}</span>
       <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span></div></div>`);
     // ---- incoming offers
     const offers = openOffers(s);
@@ -1382,7 +1448,7 @@ export class Game {
           ? `<button class="primary" data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="역제안 ${pb.counter}억 — 마지막 제시">재입찰 ${pb.counter}억</button>`
           : `<button data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn}>호가 ${t.price}억</button>`, t.club.id);
       })
-      .join("")}</div></div>`);
+      .join("")}</div></div>${moreBtn}`);
     hSell.push(`<div class="card"><h3>내 선수 판매 <span>최소 ${MIN_SQUAD}명 유지</span></h3><div class="hint">즉시 판매가는 지금 가장 높은 값을 부르는 구단 기준입니다. 더 받고 싶다면 받은 제안을 기다리거나 역제안하세요.</div><div class="roster">${[...me.squad]
       .sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role))
       .map((p) => {
@@ -1447,8 +1513,11 @@ export class Game {
     });
     (document.getElementById("trRole") as HTMLSelectElement).addEventListener("change", (e) => {
       this.transferRole = (e.target as HTMLSelectElement).value;
+      this.transferLimit = 25;
       this.renderTransfers();
     });
+    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-sort]").forEach((b) => b.addEventListener("click", () => { this.transferSort = b.dataset.sort!; this.transferLimit = 25; this.renderTransfers(); }));
+    document.getElementById("trMore")?.addEventListener("click", () => { this.transferLimit += 25; this.renderTransfers(); });
     on("button[data-bid]", (b) => {
       const [club, id] = b.dataset.bid!.split(":");
       const clubId = Number(club);
@@ -1579,6 +1648,27 @@ export class Game {
   }
 
   // ------------------------------------------------------------ results
+  /** My match at a glance: score, scorers, man of the match and my three best-rated players. */
+  private myMatchSummaryHtml(kind: "league" | "cup", round: number, cupStage: number): string {
+    const s = this.state;
+    const me = this.me;
+    const fx = kind === "cup"
+      ? s.cup.ties.find((t) => t.stage === cupStage && (t.home === me.id || t.away === me.id) && t.score)
+      : s.fixtures.find((f) => f.round === round && (f.home === me.id || f.away === me.id) && f.score);
+    if (!fx || !fx.score) return "";
+    const home = clubOf(s, fx.home), away = clubOf(s, fx.away);
+    const mine = fx.home === me.id ? fx.score[0] - fx.score[1] : fx.score[1] - fx.score[0];
+    const verdict = mine > 0 ? ["승리", "var(--good)"] : mine < 0 ? ["패배", "var(--bad)"] : ["무승부", "var(--muted)"];
+    const rated = me.squad.filter((p) => (p.form?.length ?? 0) > 0 && p.stats.apps > 0).map((p) => ({ p, r: p.form![p.form!.length - 1]! })).sort((a, b) => b.r - a.r).slice(0, 3);
+    const motm = fx.motm ? (home.squad.find((p) => p.id === fx.motm!.playerId) ?? away.squad.find((p) => p.id === fx.motm!.playerId)) : undefined;
+    return `<div class="card mine"><h3>내 경기 <span style="color:${verdict[1]}">${verdict[0]}</span></h3>
+      <div class="fixture" style="padding:2px 0"><div class="team" data-clubcard="${home.id}"><span class="dot" style="background:${home.color}"></span>${home.shortName}</div><div class="vs" style="font-size:26px;font-weight:700">${fx.score[0]} - ${fx.score[1]}</div><div class="team r" data-clubcard="${away.id}">${away.shortName}<span class="dot" style="background:${away.color};margin:0 0 0 6px"></span></div></div>
+      ${fx.scorers.length ? `<div class="scorers">${fx.scorers.join(" · ")}</div>` : '<div class="hint">득점 없음</div>'}
+      ${motm ? `<div class="hint"><span style="color:var(--accent)">★ MOTM</span> ${motm.name} (${home.squad.includes(motm) ? home.shortName : away.shortName}) ${fmtRating(fx.motm!.rating)}</div>` : ""}
+      ${rated.length ? `<div class="pcSeason">${rated.map(({ p, r }) => `<span>${p.name} <b style="color:${ratingColor(r)}">${fmtRating(r)}</b> ${INFO_BTN(`${me.id}:${p.id}`)}</span>`).join("")}</div>` : ""}
+    </div>`;
+  }
+
   private renderResults(round: number, kind: "league" | "cup" = "league", cupStage = 0): void {
     const s = this.state;
     const me = s.userClub;
@@ -1604,8 +1694,10 @@ export class Game {
       body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm)).join("");
       btn = round + 1 >= roundsPerSeason(s.clubs.length) ? "시즌 결산 보기 →" : "다음 라운드로 →";
     }
-    this.el.results.innerHTML = `<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
+    this.el.results.innerHTML = `${this.myMatchSummaryHtml(kind, round, cupStage)}<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
       <div class="card"><h3>순위</h3>${this.tableHtml(table(s))}</div>`;
+    this.wireInfo(this.el.results, "results");
+    this.wireClubTaps(this.el.results);
     document.getElementById("btnNextRound")!.addEventListener("click", () => {
       if (kind === "cup") advanceCupDay(this.state);
       else advanceRound(this.state);
