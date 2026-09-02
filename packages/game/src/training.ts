@@ -2,6 +2,7 @@ import type { Attributes, Role } from "@3sec/engine";
 import type { Club, SquadPlayer, TrainingFocus, TrainingIntensity } from "./types";
 import { overall } from "./rating";
 import { staffBonus, staffRating } from "./staff";
+import { moraleTrainingFactor } from "./morale";
 
 type Attr = keyof Attributes;
 const OUTFIELD: Attr[] = ["pace", "acceleration", "agility", "strength", "stamina", "passing", "vision", "technique", "firstTouch", "dribbling", "finishing", "composure", "tackling", "marking", "positioning", "decisions", "anticipation"];
@@ -93,7 +94,11 @@ export function trainWeek(club: Club, rng: { next(): number }): Development[] {
       const headroom = p.potential - overall(p.attrs, p.role);
       if (headroom <= 0) rate = 0;
       else if (headroom < 1.5) rate *= 0.4;
+      // morale and professionalism (morale.ts): ×0.85..1.15; a player who refused training this week banks nothing
+      rate *= moraleTrainingFactor(p);
+      if (p.trainingRefused) rate = 0;
     }
+    p.trainingRefused = undefined;
     p.growth += rate;
     p.lastMinutes = 0;
     for (const ch of spendGrowth(p, focus, rng)) out.push({ player: p, ...ch });

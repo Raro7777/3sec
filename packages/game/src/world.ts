@@ -7,6 +7,7 @@ import { wageFor } from "./contracts";
 import { generateManager, managerTraining } from "./managers";
 import { generateClubStaff } from "./staff";
 import { newFans } from "./fans";
+import { ensureCaptain, ensurePersonality, lockerRoom } from "./morale";
 
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
 const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
@@ -67,6 +68,8 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
       stats: { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 },
     });
   });
+  // personality and morale come from the id (morale.ts), so the squad's dice are untouched
+  for (const p of squad) ensurePersonality(p);
   return squad;
 }
 
@@ -99,6 +102,9 @@ export function buildClubs(seed: number): Club[] {
     club.selection = autoSelect(club, c.formation);
     // The backroom: drawn last so neither squad nor manager changes with the staff dice.
     club.staff = generateClubStaff(rng, club, 1);
+    // The armband goes to the most experienced player; the locker room starts from the squad's morale (morale.ts).
+    ensureCaptain(club);
+    lockerRoom(club);
     return club;
   });
 }

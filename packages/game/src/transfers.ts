@@ -6,6 +6,7 @@ import { clubOf, playerOf, seasonOver, table } from "./season";
 import { wageFor } from "./contracts";
 import { spendGrowth, weeklyRate } from "./training";
 import { fansTransfer } from "./fans";
+import { moraleOfferRefused } from "./morale";
 
 /** Currency unit: 억원 (100 million KRW). */
 export const MIN_SQUAD = 16;
@@ -367,7 +368,8 @@ export function incomingOffers(s: GameState, rng: Rand): TransferOffer[] {
     const wants = me.squad
       .filter((p) => tradeable(p) && !s.offers.some((o) => o.from === club.id && o.playerId === p.id && (o.status === "open" || o.status === "countered")))
       .map((p) => ({ p, gap: roleGap(club, p), value: playerValue(p) }))
-      .filter((x) => x.gap > 0.5 && x.value * 0.8 <= club.budget)
+      // a player who asked away (morale.ts transferRequest) draws bids even where he would not start
+      .filter((x) => (x.gap > 0.5 || (x.p.transferRequest && x.gap > -1)) && x.value * 0.8 <= club.budget)
       .filter((x) => !pol.youth || x.p.age <= 24 || x.gap >= STRONG_GAP)
       .sort((a, b) => ovr(b.p) - ovr(a.p));
     const strong = wants.filter((x) => x.gap >= STRONG_GAP);
@@ -421,6 +423,9 @@ export function rejectOffer(s: GameState, offerId: string): string | null {
   if (!o) return "유효한 제안이 아닙니다";
   o.status = "rejected";
   s.offers = openOffers(s);
+  // the player hears of it: an ambitious one sulks (morale.ts)
+  const p = clubOf(s, s.userClub).squad.find((q) => q.id === o.playerId);
+  if (p) moraleOfferRefused(p);
   return null;
 }
 
@@ -488,7 +493,8 @@ function signFree(s: GameState, club: Club, p: SquadPlayer): { fee: number; wage
   p.wage = t.wage;
   // a contract signed mid-season covers this season; one signed after the final round starts next season
   p.contractUntil = s.season + t.years - (seasonOver(s) ? 0 : 1);
-  p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 };
+  p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0, assists: 0, ratingSum: 0, ratedApps: 0, motm: 0 };
+  p.form = [];
   moveNumber(club, p);
   club.squad.push(p);
   club.budget = round1(club.budget - t.fee);
@@ -601,11 +607,12 @@ export function returnLoans(s: GameState): void {
   for (const l of s.loans) {
     const from = clubOf(s, l.from), to = clubOf(s, l.to);
     const stayed = from.squad.find((q) => q.id === l.playerId);
-    if (stayed) { stayed.onLoan = undefined; if (from.id === s.userClub) s.news.unshift(`${from.shortName}: ${stayed.name} 임대 복귀 (${to.shortName}).`); continue; }
+    if (stayed) { stayed.onLoan = undefined; stayed.lastLoanClub = to.id; if (from.id === s.userClub) s.news.unshift(`${from.shortName}: ${stayed.name} 임대 복귀 (${to.shortName}).`); continue; }
     const borrowed = to.squad.find((q) => q.id === l.playerId);
     if (!borrowed) continue;
     to.squad = to.squad.filter((q) => q !== borrowed);
     borrowed.loanFrom = undefined;
+    borrowed.lastLoanClub = to.id;
     moveNumber(from, borrowed);
     from.squad.push(borrowed);
     if (to.id === s.userClub) s.news.unshift(`${to.shortName}: 임대 선수 ${borrowed.name} ${from.shortName}(으)로 복귀.`);

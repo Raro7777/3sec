@@ -1,4 +1,5 @@
 import type { Fixture } from "./types";
+import { markDerbies } from "./lore";
 
 /**
  * Double round-robin by the circle method: n teams (even) → (n-1) rounds of n/2 pairs, then the
@@ -39,7 +40,8 @@ export function buildFixtures(n: number): Fixture[] {
   for (const [r, pairs] of rounds.entries()) for (const [h, a] of pairs) all.push({ id: id++, round: r, home: h, away: a, score: null, scorers: [] });
   // the return half mirrors the first with venues swapped
   for (const [r, pairs] of rounds.entries()) for (const [h, a] of pairs) all.push({ id: id++, round: r + n - 1, home: a, away: h, score: null, scorers: [] });
-  return all;
+  // rivalry matches carry the derby flag from the start (lore.ts)
+  return markDerbies(all);
 }
 
 export const roundsPerSeason = (clubs: number): number => 2 * (clubs - 1);
