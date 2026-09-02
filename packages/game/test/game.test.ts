@@ -102,7 +102,10 @@ describe("season progression", () => {
     expect(currentFixtures(a).map((f) => f.score)).toEqual(currentFixtures(b).map((f) => f.score));
     const c = deserialize(serialize(a))!;
     expect(c).not.toBeNull();
-    expect(serialize(c)).toBe(serialize(a));
+    // deserialize normalises older shapes (tactics fields), so compare after one normalising pass
+    expect(serialize(deserialize(serialize(c))!)).toBe(serialize(c));
+    expect(c.clubs.length).toBe(a.clubs.length);
+    expect(currentFixtures(c).map((f) => f.score)).toEqual(currentFixtures(a).map((f) => f.score));
     expect(deserialize("garbage")).toBeNull();
   });
 

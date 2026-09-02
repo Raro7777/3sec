@@ -5,8 +5,13 @@ export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
   DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
-  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers,
+  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, type RecordOptions,
 } from "./season";
+export {
+  CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_PRIZE, cupByes, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
+  currentCupTies, pendingCupTies, userCupTie, userCupStatus, cupDayDue, cupFixture, createCupMatch, penaltyShootout, recordCupResult,
+  simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
+} from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
 export { MIN_SQUAD, MAX_SQUAD, playerValue, seasonBudget, windowOpen, askingPrice, transferTargets, buyPlayer, bestOffer, sellPlayer, aiTransfers, type TransferTarget } from "./transfers";
 export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, ATTR_LABEL, weeklyRate, trainWeek, spendGrowth, type Development, type Grower } from "./training";

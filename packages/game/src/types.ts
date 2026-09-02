@@ -78,6 +78,8 @@ export interface Club {
   selection: Selection;
   training: { focus: TrainingFocus; intensity: TrainingIntensity };
   youth: Youth;
+  /** budget when the season began (the review screen shows the change since) */
+  seasonStartBudget: number;
 }
 
 export interface Fixture {
@@ -88,6 +90,26 @@ export interface Fixture {
   score: [number, number] | null;
   /** "12' Kim Minjun (SEO)" lines for the result screen */
   scorers: string[];
+}
+
+/** One knockout tie of the 3sec 컵. Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
+export interface CupTie {
+  id: number;
+  stage: number;
+  home: number;
+  away: number;
+  score: [number, number] | null;
+  /** shoot-out result when the tie was level after 90 minutes */
+  penalties?: [number, number];
+  scorers: string[];
+}
+
+export interface Cup {
+  ties: CupTie[];
+  /** stage being played next: 0..3, 4 once the final is done */
+  stage: number;
+  /** this season's winner once the final is played */
+  holder?: number;
 }
 
 export interface TableRow {
@@ -114,4 +136,7 @@ export interface GameState {
   fixtures: Fixture[];
   /** newest first, human-readable news (injuries, bans, results) */
   news: string[];
+  cup: Cup;
+  /** the next matchday is a cup matchday (set when the league reaches a cup round) */
+  pendingCupDay: boolean;
 }

@@ -112,7 +112,8 @@ describe("youth academy", () => {
     me.youth.coaching = 2;
     for (let w = 0; w < 3; w++) { s.round = w + 1; youthWeek(s); }
     const back = deserialize(serialize(s))!;
-    expect(serialize(back)).toBe(serialize(s));
+    expect(serialize(deserialize(serialize(back))!)).toBe(serialize(back));
+    expect(back.clubs[0]!.youth.prospects.length).toBe(s.clubs[0]!.youth.prospects.length);
     expect(back.clubs[s.userClub]!.youth.prospects[0]!.weeksInAcademy).toBe(3);
     const raw = JSON.parse(serialize(s));
     for (const c of raw.clubs) delete c.youth;

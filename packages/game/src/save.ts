@@ -14,6 +14,7 @@ export function koreanName(name: string): string {
   return f && g ? f + g : name;
 }
 import { DEFAULT_MANAGER_NAME } from "./season";
+import { newCup } from "./cup";
 
 export const SAVE_KEY = "3sec.save.v1";
 
@@ -34,6 +35,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
       const def = CLUBS[c.id];
       if (def) { c.name = def.name; c.shortName = def.shortName; }
       if (!c.training) c.training = { focus: "balanced", intensity: "normal" };
+      if (typeof c.seasonStartBudget !== "number") c.seasonStartBudget = c.budget;
       c.tactics = normalizeTactics({ ...c.tactics, formation: c.selection?.formation ?? c.tactics.formation });
       // Saves from before the academy: an empty one that fills at the next intake (season start / round 11).
       if (!c.youth || !Array.isArray(c.youth.prospects)) c.youth = { prospects: [], scouting: "local", coaching: 1, nextId: 1 };
@@ -48,6 +50,9 @@ export function deserialize(json: string | null | undefined): GameState | null {
       }
     }
     s.news = (s.news ?? []).filter((n) => !/[A-Za-z]{4,}/.test(n));
+    // Saves from before the cup: draw round 1 now; the cup days slot in from the next cup round on.
+    if (!s.cup || !Array.isArray(s.cup.ties) || typeof s.cup.stage !== "number") newCup(s);
+    if (typeof s.pendingCupDay !== "boolean") s.pendingCupDay = false;
     return s;
   } catch {
     return null;

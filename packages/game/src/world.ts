@@ -75,6 +75,7 @@ export function buildClubs(seed: number): Club[] {
       color: c.color,
       reputation: c.reputation,
       budget: seasonBudget(c.reputation, null),
+      seasonStartBudget: seasonBudget(c.reputation, null),
       squad: buildSquad(rng, `C${id}`, c.reputation),
       tactics: { ...defaultTactics(c.formation), mentality: 0.45 + rng.range(0, 0.1), pressing: 0.4 + rng.range(0, 0.2), directness: 0.4 + rng.range(0, 0.2) },
       selection: { formation: c.formation, starters: [], bench: [] },

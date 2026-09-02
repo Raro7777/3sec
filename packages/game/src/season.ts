@@ -7,13 +7,21 @@ import { aiTransfers, seasonBudget } from "./transfers";
 import { trainWeek, ATTR_LABEL } from "./training";
 import { payWages, settleContracts } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
+import { cupDayDue, newCup } from "./cup";
+
+export interface RecordOptions {
+  /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
+  competition?: "league" | "cup";
+}
 
 export const DEFAULT_MANAGER_NAME = "감독";
 
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`] };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false };
+  newCup(s);
+  for (const c of clubs) c.seasonStartBudget = c.budget;
   youthIntake(s, new Rng(seed * 29 + 3));
   return s;
 }
@@ -64,8 +72,9 @@ export function createMatch(s: GameState, f: Fixture, opts: MatchOptions = {}): 
 }
 
 /** Write a finished match back into the season: score, scorers, player stats, cards, fatigue, injuries, bans. */
-export function recordResult(s: GameState, f: Fixture, m: Match): void {
+export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOptions = {}): void {
   if (m.state.phase !== "FULL_TIME") throw new Error("match not finished");
+  const cup = opts.competition === "cup";
   f.score = [m.state.score[0], m.state.score[1]];
   f.scorers = m.state.events
     .filter((e) => e.type === "GOAL" || e.type === "OWN_GOAL")
@@ -99,6 +108,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
       }
       if (e.type === "YELLOW_CARD") {
         p.stats.yellows++;
+        if (cup) continue;
         p.seasonYellows++;
         if (p.seasonYellows % 5 === 0) {
           p.ban = Math.max(p.ban, 1);
@@ -107,6 +117,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
       }
       if (e.type === "RED_CARD") {
         p.stats.reds++;
+        if (cup) { s.news.unshift(`${c.shortName}: ${p.name} 컵 경기 퇴장.`); continue; }
         const secondYellow = m.state.events.some((x) => x.type === "YELLOW_CARD" && x.playerId === p.id && x.t < e.t);
         p.ban = Math.max(p.ban, secondYellow ? 1 : 2);
         s.news.unshift(`${c.shortName}: ${p.name} 퇴장, ${p.ban}경기 출장 정지.`);
@@ -114,10 +125,10 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
     }
     // Suspended players who sat out this match have served one game.
     const playedIds = new Set(played.map((p) => p.id));
-    for (const p of c.squad) if (p.ban > 0 && !playedIds.has(p.id)) p.ban--;
+    if (!cup) for (const p of c.squad) if (p.ban > 0 && !playedIds.has(p.id)) p.ban--;
   }
   const [h, a] = clubs;
-  s.news.unshift(`${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
+  s.news.unshift(`${cup ? "3sec 컵: " : ""}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
   if (s.news.length > 60) s.news.length = 60;
 }
 
@@ -154,6 +165,8 @@ export function advanceRound(s: GameState): boolean {
     youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
   }
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
+  // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
+  if (cupDayDue(s)) s.pendingCupDay = true;
   return true;
 }
 
@@ -177,9 +190,12 @@ export function startNextSeason(s: GameState): void {
   s.round = 0;
   s.fixtures = buildFixtures(s.clubs.length);
   s.news.unshift(`시즌 ${s.season} 시작.`);
+  newCup(s);
+  s.pendingCupDay = false;
   youthRollover(s, rng);
   youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 3));
   aiTransfers(s, rng);
+  for (const c of s.clubs) c.seasonStartBudget = c.budget;
   prepareRound(s);
 }
 
