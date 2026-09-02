@@ -101,7 +101,11 @@ export function computePositioning(m: Match, _dt: number): void {
     if (carrier && carrierTeam !== p.team) {
       const d = dist(carrier.pos, p.pos);
       if (d < TUNING.engageRadius + 3 * m.teams[p.team].tactics.pressing) {
-        const ahead = add(ball.pos, scale(carrier.vel, 0.3));
+        // Step out goal-side of the carrier, not at the ball: stay between them and the goal.
+        const dir = m.dirOf(p.team);
+        const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
+        const toGoal = norm(sub(ownGoal, ball.pos));
+        const ahead = add(add(ball.pos, scale(toGoal, 0.9)), scale(carrier.vel, 0.25));
         setTarget(p, ahead, 99, "engage");
         continue;
       }
@@ -121,6 +125,12 @@ export function computePositioning(m: Match, _dt: number): void {
       const toGoal = norm(sub(ownGoal, opp.pos));
       // Also lean toward the ball so the pass lane is shadowed.
       const toBall = norm(sub(ball.pos, opp.pos));
+      if (opp.id === ball.owner) {
+        // Jockeying the carrier: hold the line between ball and goal a metre off, retreating with them.
+        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(opp.vel, 0.2));
+        setTarget(p, jockey, 99, "jockey");
+        continue;
+      }
       const markPos = add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4)));
       const d = dist(p.pos, markPos);
       // Track the runner: never slower than the marked player.
@@ -143,6 +153,7 @@ export function computePositioning(m: Match, _dt: number): void {
  * free defender/midfielder. Forwards are not used as markers (they keep the counter-attack outlet).
  */
 function assignMarkers(m: Match, possession: TeamId | null, chasers: Set<string>): void {
+  const prev = new Map(m.marks);
   m.marks.clear();
   if (possession === null) return;
   const defTeam = m.opp(possession);
@@ -150,25 +161,35 @@ function assignMarkers(m: Match, possession: TeamId | null, chasers: Set<string>
   const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
   const ball = m.state.ball;
 
-  // The carrier is handled by the pressers (goal-side); markers take the nearest attackers to our goal.
+  // The carrier is the first threat; then the nearest attackers to our goal.
   const threats = m
     .activePlayers(possession)
-    .filter((q) => !m.isKeeper(q.id) && q.id !== ball.owner)
-    .map((q) => ({ q, d: dist(q.pos, ownGoal) }))
+    .filter((q) => !m.isKeeper(q.id))
+    .map((q) => ({ q, d: q.id === ball.owner ? -1 : dist(q.pos, ownGoal) }))
     .filter((t) => t.d < 45)
     .sort((a, b) => a.d - b.d)
     .slice(0, 6);
 
-  const available = m
-    .activePlayers(defTeam)
-    .filter((p) => !m.isKeeper(p.id) && !chasers.has(p.id) && !isForward(m.def(p.id).role));
+  // Markers: outfield players who are not pressing. (Forwards only mark the carrier when they
+  // happen to be goal-side of them.)
+  const available = m.activePlayers(defTeam).filter((p) => !m.isKeeper(p.id) && !chasers.has(p.id));
 
   for (const { q } of threats) {
+    const isCarrier = q.id === ball.owner;
     let best: PlayerState | null = null;
-    let bestCost = 18;
+    let bestCost = isCarrier ? 14 : 18;
     for (const p of available) {
       const role = m.def(p.id).role;
-      const cost = dist(p.pos, q.pos) + (isMidfielder(role) ? 4 : 0) + (1 - m.def(p.id).attrs.marking / 20) * 3;
+      const fwd = isForward(role);
+      if (fwd && !isCarrier) continue;
+      // Goal-side of the threat? (between the threat and our goal along the length)
+      const goalSide = (p.pos.x - q.pos.x) * dir < -0.3;
+      let cost = dist(p.pos, q.pos) + (isMidfielder(role) ? 2 : fwd ? 6 : 0) + (1 - m.def(p.id).attrs.marking / 20) * 3;
+      if (isCarrier) {
+        // Whoever was already marking the carrier (and is goal-side) keeps the job: they are in the lane.
+        if (!goalSide) cost += 8;
+        if (prev.get(p.id) === q.id) cost -= 4;
+      }
       if (cost < bestCost) {
         bestCost = cost;
         best = p;
@@ -253,6 +274,8 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // Role-specific pull toward the ball (lengthwise and across).
   // In possession midfielders/forwards push up to support; defending, the block stays compact
   // but forwards hold a higher position to offer an outlet.
+  // Out of possession the midfield screens just in front of the back line (compact block of
+  // ~25-30 m between defence and forwards), instead of floating 15-20 m ahead of it.
   const pullX = inPoss
     ? isDefender(role) ? 0.1 : isMidfielder(role) ? 0.4 : 0.55
     : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 : 0.15;
