@@ -1,6 +1,8 @@
 # 여자 배구 매니저 게임 — 기획 문서 (GDD v0.2)
 
 > 상태: 초안(Draft) v0.2. 기술 스택(Unity 2D)·아트 방향(일본 애니메풍, AI 생성+리터치)·개발 체제(1인) 확정. 세부 수치(밸런싱·경제)는 이후 확정.
+>
+> 상세 설계 문서: [경기 시뮬레이션](match-sim.md) · [밸런스 리포트](match-sim-balance-report.md) · [육성 모드](training-mode.md) · [세계관·구단·로스터](world.md) · [아트 스타일 가이드](art-style-guide.md). 코드: `sim/`(C# 시뮬 코어), `data/`(로스터), `tools/`(검증 스크립트).
 
 ## 0. 프로젝트 개요
 

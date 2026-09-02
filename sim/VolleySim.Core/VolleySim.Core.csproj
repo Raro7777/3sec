@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VolleySim.Core: 엔진 비의존 순수 C# 경기 시뮬레이션 코어.
+    - netstandard2.1 : Unity(2021 LTS 이상) .NET Standard 2.1 프로파일과 호환
+    - 외부 NuGet 의존 없음, UnityEngine 참조 없음
+    - 서버(.NET)와 클라이언트(Unity)가 동일 어셈블리로 동일 결과를 재현
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>VolleySim</RootNamespace>
+    <AssemblyName>VolleySim.Core</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

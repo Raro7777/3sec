@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Core", "VolleySim.Core\VolleySim.Core.csproj", "{69D2028C-A430-491D-96EF-F3AD25E375E3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Tests", "VolleySim.Tests\VolleySim.Tests.csproj", "{0A6CA547-C0FE-4484-9208-F6C88E872204}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolleySim.Cli", "VolleySim.Cli\VolleySim.Cli.csproj", "{68DF2F9D-3711-4285-937E-8764E3E36678}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{69D2028C-A430-491D-96EF-F3AD25E375E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{69D2028C-A430-491D-96EF-F3AD25E375E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{69D2028C-A430-491D-96EF-F3AD25E375E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{69D2028C-A430-491D-96EF-F3AD25E375E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A6CA547-C0FE-4484-9208-F6C88E872204}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A6CA547-C0FE-4484-9208-F6C88E872204}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A6CA547-C0FE-4484-9208-F6C88E872204}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A6CA547-C0FE-4484-9208-F6C88E872204}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68DF2F9D-3711-4285-937E-8764E3E36678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68DF2F9D-3711-4285-937E-8764E3E36678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68DF2F9D-3711-4285-937E-8764E3E36678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68DF2F9D-3711-4285-937E-8764E3E36678}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
