@@ -1,5 +1,6 @@
 import { DT, PITCH, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
 import { drawPitch, type View } from "./render";
+import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
 
 export interface SideMatch {
@@ -26,6 +27,10 @@ export class MatchScreen {
   private onFinish: (() => void) | null = null;
   private finished = false;
   private rafStarted = false;
+  /** home club's ground; decides the pitch look and the kick-off banner */
+  private stadium: Stadium = DEFAULT_STADIUM;
+  /** wall-clock time of the first play press this match (banner countdown starts then) */
+  private bannerT0: number | null = null;
 
   private readonly canvas = document.getElementById("pitch") as HTMLCanvasElement;
   private readonly ctx = this.canvas.getContext("2d")!;
@@ -77,6 +82,8 @@ export class MatchScreen {
 
   start(match: Match, userTeam: TeamId, others: SideMatch[], onFinish: () => void): void {
     this.match = match;
+    this.stadium = stadiumFor(match.teams[0].name);
+    this.bannerT0 = null;
     this.userTeam = userTeam;
     this.others = others;
     this.onFinish = onFinish;
@@ -135,6 +142,7 @@ export class MatchScreen {
   private setPlaying(v: boolean): void {
     if (this.finished) v = false;
     this.playing = v;
+    if (v && this.bannerT0 === null) this.bannerT0 = performance.now();
     this.btnPlay.textContent = v ? "❚❚ 일시정지" : "▶ 재생";
   }
 
@@ -250,13 +258,25 @@ export class MatchScreen {
       h = maxH;
       w = h * ratio;
     }
-    const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = Math.floor(w * dpr);
-    this.canvas.height = Math.floor(h * dpr);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.syncBitmap(true);
     if (this.match) this.render();
+  }
+
+  /**
+   * Keep the bitmap equal to the laid-out box x dpr. CSS (max-height:100%) can clamp the canvas
+   * after the stage settles without any resize event; a stale, larger bitmap would then leave
+   * rows below the pitch that never get repainted.
+   */
+  private syncBitmap(force = false): void {
+    const dpr = window.devicePixelRatio || 1;
+    const bw = Math.floor((this.canvas.clientWidth || 1) * dpr);
+    const bh = Math.floor((this.canvas.clientHeight || 1) * dpr);
+    if (!force && this.canvas.width === bw && this.canvas.height === bh) return;
+    this.canvas.width = bw;
+    this.canvas.height = bh;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   private view(): View {
@@ -292,9 +312,10 @@ export class MatchScreen {
     if (!match) return;
     const ctx = this.ctx;
     const s = match.state;
+    this.syncBitmap();
     const v = this.view();
     ctx.clearRect(0, 0, v.w, v.h);
-    drawPitch(ctx, v);
+    drawPitch(ctx, v, this.stadium);
     const toPx = (x: number, y: number): [number, number] => [v.ox + x * v.scale, v.oy + y * v.scale];
     const debug = this.debugChk.checked;
 
@@ -393,6 +414,8 @@ export class MatchScreen {
       FULL_TIME: "경기 종료",
     };
     this.phaseEl.textContent = phaseText[s.phase] ?? s.phase;
+    const bannerAge = this.bannerT0 === null ? 0 : performance.now() - this.bannerT0;
+    if (!this.finished && bannerAge < BANNER_MS) this.drawStadiumBanner(v, bannerAge);
     if (this.selected) this.drawPlayerCard(match.player(this.selected), v);
     while (this.loggedEvents < s.events.length) this.appendLog(s.events[this.loggedEvents++]!);
     this.renderStats();
@@ -409,6 +432,45 @@ export class MatchScreen {
       // The user's match is over but another ground is still playing: finish them quietly.
       this.btnSkip.textContent = "⏩ 다른 구장 종료";
     }
+  }
+
+  /** Ground name, capacity and the home side, top-left, until ~5 s after the first play press. */
+  private drawStadiumBanner(v: View, age: number): void {
+    const ctx = this.ctx;
+    const st = this.stadium;
+    const home = this.match.teams[0];
+    const immersive = document.body.classList.contains("immersive");
+    const fade = Math.min(1, (BANNER_MS - age) / 700); // eases out over the last 0.7 s
+    const alpha = fade * (immersive ? 0.6 : 0.9);
+    if (alpha <= 0) return;
+    const fs = immersive ? 11 : 13;
+    const l1 = `${st.name} · ${st.capacity.toLocaleString("ko-KR")}석`;
+    const l2 = `홈: ${home.name}`;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `600 ${fs}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    const w1 = ctx.measureText(l1).width;
+    ctx.font = `${fs - 1}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    const w2 = ctx.measureText(l2).width;
+    const pad = 8;
+    const w = Math.max(w1, w2) + pad * 2 + 6;
+    const h = fs * 2 + pad * 2 + 4;
+    // in immersive mode the translucent top bar overlays the canvas top; sit below it
+    const x0 = 8;
+    const y0 = immersive ? 48 : 8;
+    ctx.fillStyle = "rgba(10,14,20,0.72)";
+    ctx.fillRect(x0, y0, w, h);
+    ctx.fillStyle = home.color;
+    ctx.fillRect(x0, y0, 3, h);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#e6edf3";
+    ctx.font = `600 ${fs}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    ctx.fillText(l1, x0 + pad + 6, y0 + pad);
+    ctx.fillStyle = "rgba(230,237,243,0.75)";
+    ctx.font = `${fs - 1}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+    ctx.fillText(l2, x0 + pad + 6, y0 + pad + fs + 4);
+    ctx.restore();
   }
 
   private drawPlayerCard(p: PlayerState, v: View): void {
@@ -434,6 +496,9 @@ export class MatchScreen {
     lines.forEach((l, i) => ctx.fillText(l, 16, v.h - h - 2 + i * 16));
   }
 }
+
+/** kick-off banner lifetime in real ms after the first play press */
+const BANNER_MS = 5000;
 
 const HIDDEN_EVENTS = new Set(["SHOT_ON_TARGET", "INTERCEPTION", "TACKLE", "BLOCK"]);
 
