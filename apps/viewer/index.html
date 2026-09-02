@@ -189,6 +189,15 @@
       #stats { display:flex; gap:18px; padding:5px 14px; font-size:12px; color:var(--muted); background:var(--panel2); flex-wrap:wrap; font-variant-numeric:tabular-nums; }
       #stats b { color:var(--text); font-weight:600; margin-right:4px; }
       #others { display:flex; gap:14px; padding:4px 14px; font-size:12px; color:var(--muted); background:var(--panel2); border-top:1px solid var(--line); flex-wrap:wrap; font-family:"IBM Plex Mono", monospace; }
+      /* 동시 중계: live position line, flashes when the position changes */
+      #others .liveTable { flex-basis:100%; color:var(--accent); font-family:"IBM Plex Sans KR", sans-serif; }
+      .immersive #others .liveTable { flex-basis:auto; }
+      #others .liveTable.flash { animation:liveFlash .8s ease-in-out 2; }
+      @keyframes liveFlash { 0%,100% { background:transparent; } 50% { background:rgba(242,193,78,.28); } }
+      /* 휘슬 직전: stoppage time with the result on a knife edge */
+      #clock.danger { color:#ff4d4f; animation:clockPulse .9s ease-in-out infinite; }
+      @keyframes clockPulse { 0%,100% { opacity:1; text-shadow:0 0 0 rgba(255,77,79,0); } 50% { opacity:.55; text-shadow:0 0 12px rgba(255,77,79,.8); } }
+      @media (prefers-reduced-motion: reduce) { #clock.danger, #others .liveTable.flash { animation:none; } }
       #main { flex:1; display:flex; min-height:0; }
       #stage { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; min-width:0; padding:8px; position:relative; }
       #ftOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; }
@@ -222,6 +231,18 @@
       #sheet .sheetBack { position:absolute; inset:0; background:rgba(0,0,0,.6); }
       #sheet .sheetBody { position:relative; width:100%; max-width:560px; max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); overflow:auto; background:var(--panel); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; padding:10px 14px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -10px 40px rgba(0,0,0,.55); animation:sheetUp .18s ease-out; }
       @keyframes sheetUp { from { transform:translateY(24px); opacity:.6; } to { transform:none; opacity:1; } }
+      /* 승부차기 sheet */
+      .shootout .soRow { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); }
+      .shootout .soTeam { width:48px; font-weight:700; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:18px; }
+      .shootout .soCells { display:flex; gap:6px; flex:1; flex-wrap:wrap; }
+      .shootout .soCell { width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1px solid var(--line); display:inline-flex; align-items:center; justify-content:center; font-size:16px; color:var(--muted); }
+      .shootout .soCell.ok { background:rgba(46,204,113,.18); border-color:var(--good); animation:soPop .35s ease-out; }
+      .shootout .soCell.miss { background:rgba(255,77,79,.15); border-color:var(--bad); animation:soPop .35s ease-out; }
+      @keyframes soPop { from { transform:scale(.4); } 60% { transform:scale(1.25); } to { transform:none; } }
+      .shootout .soTally { font-family:"Barlow Condensed",sans-serif; font-size:26px; min-width:28px; text-align:right; }
+      .shootout .soLast { margin-top:10px; font-size:15px; text-align:center; min-height:22px; }
+      .shootout .soResult { margin-top:8px; text-align:center; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:22px; font-weight:700; }
+      @media (prefers-reduced-motion: reduce) { .shootout .soCell.ok, .shootout .soCell.miss { animation:none; } }
       @media (prefers-reduced-motion: reduce) { #sheet .sheetBody { animation:none; } }
       .pc { display:flex; flex-direction:column; gap:8px; }
       .pcHead { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; }
@@ -374,7 +395,7 @@
           <div id="phase"></div>
           <button id="btnPlay" class="primary">▶ 재생</button>
           <label>속도
-            <select id="speed" title="자동: 골문 근처는 천천히, 중원과 중단 시간은 빠르게 (경기당 약 8~10분)">
+            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 8~11분)">
               <option value="auto" selected>자동</option>
               <option value="1">1x</option>
               <option value="2">2x</option>

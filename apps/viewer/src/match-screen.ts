@@ -5,6 +5,9 @@ import { ManagerPanel } from "./panel";
 import { Sfx } from "./sfx";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type MatchKits } from "./kits";
+import { roundsPerSeason, table, type Fixture, type GameState } from "@3sec/game";
+import { encodeGif, type GifFrame } from "./gif";
+import { downloadsBlocked, shareFile } from "./share";
 
 /** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
 interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
@@ -29,7 +32,33 @@ const reducedMotion = (): boolean => { try { return window.matchMedia?.("(prefer
 export interface SideMatch {
   label: string;
   match: Match;
+  /** the league fixture behind this match (lets the live table count its score) */
+  fixture?: Fixture;
 }
+
+/** Optional atmosphere / context for start(): absent fields keep the old behaviour. */
+export interface MatchExtra {
+  /** home crowd of the day; drives the crowd volume and the banner line */
+  crowd?: { attendance: number; capacity: number; derby?: boolean };
+  /** derby day: ribbon in the banner, louder crowd */
+  derby?: boolean;
+  /** season context for the live "가상 순위" line (league matchdays only) */
+  live?: { state: GameState; fixture: Fixture };
+}
+
+/** how often the live table is recomputed (ms) */
+const LIVE_TABLE_MS = 500;
+/** stoppage-time danger window for the clock pulse (match seconds) */
+const WHISTLE_PULSE_S = 60;
+/** GIF export: frames per second of clip and output width */
+const GIF_FPS = 2;
+const GIF_W = 320;
+const GIF_MAX_FRAMES = 40;
+/** auto-speed easing time constants (s): slowing down is quick, speeding up gentle */
+const AUTO_TAU_DOWN = 0.35;
+const AUTO_TAU_UP = 1.2;
+/** "just happened" hold after a shot / save / block / corner / penalty / red card (ms) */
+const DANGER_HOLD_MS = 1500;
 
 /**
  * The live match: canvas, clock, stats, event log, manager panel. The other fixtures of the round
@@ -73,15 +102,31 @@ export class MatchScreen {
   private fx: Fx[] = [];
   private shakeT0 = -1e9;
   private shakeAmp = 0;
+  private shakeDur = 700;
   private flashT0 = -1e9;
   private fxEvents = 0;
+  private extra: MatchExtra = {};
+  /** live table: position at kick-off, the latest live position, when it was last computed and when it last changed */
+  private livePos0 = 0;
+  private livePos = 0;
+  private liveAt = 0;
+  private liveChangedAt = -1e9;
+  private liveHtml = "";
+  /** wall-clock time of the last "danger" event (shot, save, block, corner, penalty, red card) for auto pacing */
+  private dangerAt = -1e9;
+  /** hit box of the "GIF 공유" pill drawn in the replay HUD (canvas CSS px) */
+  private hudGifBtn: { x: number; y: number; w: number; h: number } | null = null;
+  private gifBusy = false;
+  /** wall-clock time of the goal celebration start (auto pacing: slow for the first seconds) */
+  private celebT0 = -1e9;
   private readonly btnSound = document.getElementById("btnSound") as HTMLButtonElement | null;
   private readonly btnReplay = document.getElementById("btnReplay") as HTMLButtonElement | null;
   /** automatic slow-motion replay after a goal (clips are still recorded for the ▶ buttons when off) */
   private autoReplay = (() => { try { return localStorage.getItem("3sec.replay") !== "0"; } catch { return true; } })();
 
   private readonly canvas = document.getElementById("pitch") as HTMLCanvasElement;
-  private readonly ctx = this.canvas.getContext("2d")!;
+  /** the on-screen context; swapped for an offscreen one while rendering GIF frames (see renderClipFrame) */
+  private ctx = this.canvas.getContext("2d")!;
   private readonly scoreEl = document.getElementById("score")!;
   private readonly clockEl = document.getElementById("clock")!;
   private readonly phaseEl = document.getElementById("phase")!;
@@ -122,6 +167,12 @@ export class MatchScreen {
       this.btnTags.addEventListener("click", () => { this.showTags = !this.showTags; try { localStorage.setItem("3sec.tags", this.showTags ? "1" : "0"); } catch { /* ignore */ } paint(); this.render(); });
     }
     this.logEl.addEventListener("click", (e) => {
+      const g = (e.target as HTMLElement).closest<HTMLElement>("[data-gif]");
+      if (g) {
+        const clip = this.clips.find((c) => c.id === Number(g.dataset.gif));
+        if (clip) void this.shareClipGif(clip);
+        return;
+      }
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-clip]");
       if (!b) return;
       const clip = this.clips.find((c) => c.id === Number(b.dataset.clip));
@@ -134,7 +185,18 @@ export class MatchScreen {
     this.debugChk.addEventListener("change", () => this.render());
     this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
     this.btnPanel.addEventListener("click", () => document.body.classList.toggle("panel-open"));
-    this.canvas.addEventListener("pointerdown", () => { document.body.classList.remove("panel-open"); if (this.replay) this.endReplay(); });
+    this.canvas.addEventListener("pointerdown", (e) => {
+      document.body.classList.remove("panel-open");
+      if (!this.replay) return;
+      // the "GIF 공유" pill inside the replay HUD: share the clip instead of ending the replay
+      const b = this.hudGifBtn;
+      if (b) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { void this.shareClipGif(this.replay.clip); return; }
+      }
+      this.endReplay();
+    });
     document.addEventListener("fullscreenchange", () => {
       if (!document.fullscreenElement && this.immersiveByUser) this.setImmersive(false, true);
     });
@@ -151,8 +213,9 @@ export class MatchScreen {
     this.canvas.addEventListener("pointerdown", (e) => this.pick(e));
   }
 
-  start(match: Match, userTeam: TeamId, others: SideMatch[], onFinish: () => void): void {
+  start(match: Match, userTeam: TeamId, others: SideMatch[], onFinish: () => void, extra: MatchExtra = {}): void {
     this.match = match;
+    this.extra = extra;
     this.stadium = stadiumFor(match.teams[0].name);
     this.kits = resolveKits(match.teams[0], match.teams[1]);
     this.cam = { x: 0, y: 0, zoom: 1 };
@@ -165,8 +228,20 @@ export class MatchScreen {
     this.finished = false;
     this.playing = false;
     this.acc = 0;
+    this.effSpeed = 1;
     this.loggedEvents = 0;
     this.fxEvents = 0;
+    this.dangerAt = -1e9;
+    this.celebT0 = -1e9;
+    this.hudGifBtn = null;
+    // crowd volume: how full the ground is, plus a derby bump
+    const crowd = extra.crowd;
+    const derby = !!(extra.derby || crowd?.derby);
+    const fill = crowd && crowd.capacity > 0 ? crowd.attendance / crowd.capacity : 1;
+    this.sfx.setCrowd(Math.min(1, fill + (derby ? 0.2 : 0)));
+    // live table: the user's position before kick-off is the reference for the ▲▼ arrow
+    this.liveAt = 0; this.liveChangedAt = -1e9; this.liveHtml = "";
+    this.livePos0 = this.livePos = extra.live ? this.computeLivePos(false) : 0;
     this.selected = null;
     this.recorder.reset();
     this.clips = [];
@@ -219,6 +294,8 @@ export class MatchScreen {
     this.replay = null;
     this.pendingReplay = null;
     this.goalCam = null;
+    this.hudGifBtn = null;
+    this.clockEl.classList.remove("danger");
     this.cam = { x: 0, y: 0, zoom: 1 };
     this.fx = [];
     this.ftOverlay.hidden = true;
@@ -229,6 +306,11 @@ export class MatchScreen {
 
   get isPlaying(): boolean {
     return this.playing;
+  }
+
+  /** The match sound synth (shared with the shoot-out sheet so its crowd level carries over). */
+  get sounds(): Sfx {
+    return this.sfx;
   }
 
   private setPlaying(v: boolean): void {
@@ -281,7 +363,14 @@ export class MatchScreen {
       // Dead-ball waits (free kicks, corners, celebrations, half time) are real-length in the
       // engine; at any fixed speed they run at least 4x faster so the game never drags.
       const dead = this.match.state.phase !== "PLAY";
-      this.effSpeed = this.speed === "auto" ? this.autoSpeed() : dead ? Math.max(8, this.speed * 4) : this.speed;
+      if (this.speed === "auto") {
+        // tension-aware pacing: ease toward the target (quick when slowing down, gentle when speeding up)
+        const target = this.autoSpeed(ts);
+        const tau = target < this.effSpeed ? AUTO_TAU_DOWN : AUTO_TAU_UP;
+        const k = 1 - Math.exp(-elapsed / tau);
+        this.effSpeed += (target - this.effSpeed) * k;
+        if (Math.abs(this.effSpeed - target) < 0.05) this.effSpeed = target;
+      } else this.effSpeed = dead ? Math.max(8, this.speed * 4) : this.speed;
       // the goal cam is a real-time moment: hold the sim near 1x so the celebration is not skipped
       if (this.goalCam && ts - this.goalCam.t0 < GOAL_CAM_MS) this.effSpeed = Math.min(this.effSpeed, 2);
       this.acc += elapsed * this.effSpeed;
@@ -320,19 +409,43 @@ export class MatchScreen {
       const team = e.team === null ? null : this.match.teams[e.team];
       const color = team?.color ?? "#ffd166";
       const now = performance.now();
+      if (DANGER_EVENTS.has(e.type)) this.dangerAt = now;
       if ((e.type === "GOAL" || e.type === "OWN_GOAL") && !this.finished) {
         const scorer = e.playerId ? this.match.def(e.playerId).name : team?.shortName ?? "";
         const at = e.pos ?? s.ball.pos;
         this.goalCam = { t0: now, x: at.x, y: at.y, caption: `⚽ ${scorer} · ${e.minute}'${e.type === "OWN_GOAL" ? " (자책골)" : ""}`, color };
+        this.celebT0 = now;
       }
+      // 추가시간 결승골: a stoppage-time goal that turns the user's result (draw→win or loss→draw)
+      const late = (e.type === "GOAL" || e.type === "OWN_GOAL") && this.isLateGoalTwist(e);
+      if (late) {
+        const clip = this.clipByEvent.get(idx);
+        if (clip) clip.text = `추가시간 결승골! ${clip.text}`;
+      }
+      // home end sings after a goal for either side; the travelling fans are fewer
+      const scoringSide = e.type === "GOAL" ? e.team : e.type === "OWN_GOAL" && e.team !== null ? (1 - e.team) as TeamId : null;
       switch (e.type) {
         case "GOAL":
-          this.burst("골!!!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
-          this.shake(now, 14); this.flashT0 = now; this.sfx.roar();
+          if (late) {
+            this.burst("극장골!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")} · 추가시간 결승골`, "#ffd166", 3200, true);
+            this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
+            setTimeout(() => this.sfx.roar(), 700);
+          } else {
+            this.burst("골!!!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
+            this.shake(now, 14); this.flashT0 = now; this.sfx.roar();
+          }
+          this.sfx.chant(scoringSide === 0 ? 1 : 0.45);
           break;
         case "OWN_GOAL":
-          this.burst("자책골…", e.text, "#ff6b6b", 2000, true);
-          this.shake(now, 8); this.sfx.boo();
+          if (late) {
+            this.burst("극장골!", `${e.text} · 추가시간 결승골`, "#ffd166", 3200, true);
+            this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
+            setTimeout(() => this.sfx.roar(), 700);
+          } else {
+            this.burst("자책골…", e.text, "#ff6b6b", 2000, true);
+            this.shake(now, 8); this.sfx.boo();
+          }
+          this.sfx.chant(scoringSide === 0 ? 0.8 : 0.35);
           break;
         case "OFFSIDE":
           this.burst("🚩 오프사이드!", team ? `${team.shortName} 공격 무산` : "", "#ff9f43", 1500, false);
@@ -369,7 +482,21 @@ export class MatchScreen {
     this.fx.push({ text, sub, color, t0: performance.now(), dur, big });
   }
 
-  private shake(now: number, amp: number): void { this.shakeT0 = now; this.shakeAmp = amp; }
+  private shake(now: number, amp: number, dur = 700): void { this.shakeT0 = now; this.shakeAmp = amp; this.shakeDur = dur; }
+
+  /**
+   * Does this goal, scored in second-half stoppage time, turn the user's result — a draw into a win
+   * or a loss into a draw? (The score already includes the goal.)
+   */
+  private isLateGoalTwist(e: MatchEvent): boolean {
+    const m = this.match, s = m.state;
+    if (s.half !== 2 || s.clock <= m.halfLength || e.team === null) return false;
+    const scoredFor: TeamId = e.type === "OWN_GOAL" ? (1 - e.team) as TeamId : e.team;
+    const u = this.userTeam;
+    const after = s.score[u] - s.score[1 - u]!;
+    const before = after - (scoredFor === u ? 1 : -1);
+    return (before === 0 && after > 0) || (before < 0 && after === 0);
+  }
 
   private startReplay(clip: Clip, auto: boolean): void {
     this.replay = { clip, pos: 0, started: performance.now(), auto };
@@ -383,15 +510,69 @@ export class MatchScreen {
   }
 
   /**
-   * Highlight pacing: the ball near either goal in open play runs at 3x so chances can be
-   * followed; midfield play at 20x; restarts, celebrations and half time at 40x.
-   * A 90-minute match takes roughly 8-10 real minutes this way.
+   * Tension-aware pacing target for the 자동 mode (eased in frame()): a 0..1 "danger" score from
+   * the live state picks a speed between 20x (nothing on) and 2x (box entries, shots, penalties);
+   * dead balls run at 40x far from goal and 4x when a corner / free kick / penalty is being set up;
+   * a goal celebration holds 3x for its first two seconds and then 40x. Late in a tight game the
+   * ceiling drops. A 90-minute match still takes roughly 8-11 real minutes.
    */
-  private autoSpeed(): number {
-    const s = this.match.state;
-    if (s.phase !== "PLAY") return 40;
-    const nearGoal = Math.abs(s.ball.pos.x) > PITCH.halfLength - 32;
-    return nearGoal ? 3 : 20;
+  private autoSpeed(now: number): number {
+    const m = this.match, s = m.state;
+    const u = this.userTeam;
+    const margin = Math.abs(s.score[0] - s.score[1]);
+    const inStoppage = s.half === 2 && s.clock > m.halfLength;
+    const lateTight = s.half === 2 && (s.clock > m.halfLength - 10 * 60) && margin <= 1;
+    const userBehindOrLevel = s.score[u] - s.score[1 - u]! <= 0 && margin <= 1;
+    let cap = 40;
+    if (lateTight) cap = 10;
+    if (inStoppage && userBehindOrLevel) cap = 6;
+    if (s.phase === "GOAL_CELEBRATION") return Math.min(cap, now - this.celebT0 < 2000 ? 3 : 40);
+    if (s.phase !== "PLAY") {
+      const r = s.restart;
+      if (r && r.kind !== "KICK_OFF") {
+        const dist = Math.hypot(PITCH.halfLength * m.dirOf(r.team) - r.pos.x, r.pos.y);
+        const near = r.kind === "CORNER" || r.kind === "PENALTY" || (r.kind === "FREE_KICK" && dist < 30);
+        if (near) return Math.min(cap, 4);
+      }
+      return Math.min(cap, 40);
+    }
+    const d = this.danger(now);
+    // 0 → 18x, 0.5 → 7x, 1 → 2x (piecewise linear), and 1.5x at the top when the game is on a knife edge
+    // (measured: a full match lands at roughly 8-9 real minutes with these tiers)
+    const high = lateTight ? 1.5 : 2;
+    const v = d < 0.5 ? 18 - (18 - 7) * (d / 0.5) : 7 - (7 - high) * ((d - 0.5) / 0.5);
+    return Math.min(cap, v);
+  }
+
+  /**
+   * How much is happening (0..1): ball in the attacking third and moving toward goal, an attacker
+   * on the ball near the box, a quick counter across midfield, and a hold right after a shot,
+   * save, block, corner, penalty or red card.
+   */
+  private danger(now: number): number {
+    const m = this.match, s = m.state;
+    const b = s.ball;
+    const team = m.possessionTeam();
+    let d = 0;
+    if (team !== null) {
+      const dir = m.dirOf(team);
+      const goalX = PITCH.halfLength * dir;
+      const toGoal = Math.hypot(goalX - b.pos.x, b.pos.y);
+      // attacking third: 0 at 35 m from goal, 1 at the goal line
+      const third = Math.max(0, Math.min(1, (35 - toGoal) / 30));
+      d = Math.max(d, third * 0.7);
+      // moving toward goal
+      const speed = Math.hypot(b.vel.x, b.vel.y);
+      const towards = speed > 1 ? (b.vel.x * dir) / speed : 0;
+      if (towards > 0.3 && toGoal < 45) d = Math.max(d, 0.35 + 0.4 * third);
+      // attacker on the ball inside / near the box
+      if (b.owner && toGoal < 22) d = Math.max(d, 0.85);
+      // fast counter crossing the middle
+      if (speed > 9 && Math.abs(b.pos.x) < 25 && towards > 0.6) d = Math.max(d, 0.45);
+    }
+    const hold = now - this.dangerAt;
+    if (hold < DANGER_HOLD_MS) d = Math.max(d, 1 - 0.3 * (hold / DANGER_HOLD_MS));
+    return Math.max(0, Math.min(1, d));
   }
 
   private fmtClock(): string {
@@ -414,7 +595,7 @@ export class MatchScreen {
     if (e.type === "GOAL" || e.type === "OWN_GOAL") div.style.color = "#ffd166";
     if (e.type === "SUBSTITUTION" || e.type === "TACTICS") div.style.color = "#8ecae6";
     const clip = this.clipByEvent.get(this.loggedEvents - 1);
-    if (clip) div.innerHTML += ` <button data-clip="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px;margin-left:4px" title="주요 장면 다시 보기">▶ 리플레이</button>`;
+    if (clip) div.innerHTML += ` <button data-clip="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px;margin-left:4px" title="주요 장면 다시 보기">▶ 리플레이</button> <button data-gif="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px" title="이 장면을 GIF로 저장/공유">GIF 공유</button>`;
     this.logEl.appendChild(div);
     this.logEl.scrollTop = this.logEl.scrollHeight;
   }
@@ -433,13 +614,76 @@ export class MatchScreen {
       row("오프사이드", a.offsides, b.offsides),
       row("경고/퇴장", `${a.yellows}/${a.reds}`, `${b.yellows}/${b.reds}`),
     ].join("");
-    this.othersEl.innerHTML = this.others
+    this.othersEl.innerHTML = this.liveLine() + this.others
       .map((o) => {
         const s = o.match.state;
         const done = s.phase === "FULL_TIME" ? " ✓" : "";
         return `<span>${o.match.teams[0].shortName} <b style="color:var(--text)">${s.score[0]}-${s.score[1]}</b> ${o.match.teams[1].shortName}${done}</span>`;
       })
       .join("");
+  }
+
+  /**
+   * League table as it stands right now: recorded results plus the live scores of this matchday.
+   * Returns the user's position (1-based), or 0 when no season context was given.
+   */
+  private computeLivePos(includeLive = true): number {
+    const live = this.extra.live;
+    if (!live) return 0;
+    const st = live.state;
+    const scores = new Map<number, [number, number]>();
+    if (includeLive) {
+      scores.set(live.fixture.id, [this.match.state.score[0], this.match.state.score[1]]);
+      for (const o of this.others) if (o.fixture) scores.set(o.fixture.id, [o.match.state.score[0], o.match.state.score[1]]);
+    }
+    const fixtures = st.fixtures.map((f) => (f.score || !scores.has(f.id) ? f : { ...f, score: scores.get(f.id)! }));
+    const rows = table({ ...st, fixtures });
+    const me = live.fixture.home === st.userClub ? live.fixture.home : live.fixture.away;
+    const pos = rows.findIndex((r) => r.club === me) + 1;
+    this.liveRows = rows;
+    return pos;
+  }
+  private liveRows: ReturnType<typeof table> = [];
+
+  /**
+   * "현재 2위 ▲ · 선두와 1점 차": shown in the last three rounds, or whenever the user's club is within
+   * three points of the lead or of the positions either side of it. Recomputed at most twice a second;
+   * the line flashes when the live position changes.
+   */
+  private liveLine(): string {
+    const live = this.extra.live;
+    if (!live || live.fixture.round < 0) return "";
+    const now = performance.now();
+    if (now - this.liveAt >= LIVE_TABLE_MS) {
+      this.liveAt = now;
+      const pos = this.computeLivePos(true);
+      if (pos !== this.livePos) { this.livePos = pos; this.liveChangedAt = now; }
+      const st = live.state;
+      const rows = this.liveRows;
+      const i = pos - 1;
+      const mine = rows[i];
+      if (!mine) { this.liveHtml = ""; return ""; }
+      const near = (j: number) => rows[j] !== undefined && Math.abs(rows[j]!.pts - mine.pts) <= 3;
+      const lastRounds = live.fixture.round >= roundsPerSeason(st.clubs.length) - 3;
+      const matters = lastRounds || near(0) || near(i - 1) || near(i + 1);
+      if (!matters) { this.liveHtml = ""; return ""; }
+      const arrow = pos < this.livePos0 ? '<b style="color:var(--good)">▲</b>' : pos > this.livePos0 ? '<b style="color:var(--bad)">▼</b>' : "";
+      let tail: string;
+      if (i === 0) {
+        const second = rows[1];
+        tail = second ? `2위와 ${mine.pts - second.pts}점 차` : "";
+      } else {
+        const lead = rows[0]!;
+        const above = rows[i - 1]!;
+        const gap = (n: number) => (n === 0 ? "승점 동률" : `${n}점 차`);
+        tail = `선두와 ${gap(lead.pts - mine.pts)}`;
+        if (i > 1 && above.pts !== lead.pts) tail += ` · ${i}위와 ${gap(above.pts - mine.pts)}`;
+      }
+      this.liveHtml = `가상 순위: <b style="color:var(--text)">현재 ${pos}위</b> ${arrow}${tail ? ` · ${tail}` : ""}`;
+    }
+    if (!this.liveHtml) return "";
+    const flash = now - this.liveChangedAt < 1600 ? " flash" : "";
+    return `<span class="liveTable${flash}">${this.liveHtml}</span>`;
   }
 
   private resize(): void {
@@ -526,15 +770,15 @@ export class MatchScreen {
     ctx.save();
     // the stadium shakes after a goal (decaying random offset)
     const shakeAge = now - this.shakeT0;
-    if (shakeAge < 700) {
-      const k = this.shakeAmp * (1 - shakeAge / 700) ** 2;
+    if (shakeAge < this.shakeDur) {
+      const k = this.shakeAmp * (1 - shakeAge / this.shakeDur) ** 2;
       ctx.translate((Math.random() * 2 - 1) * k, (Math.random() * 2 - 1) * k);
     }
     const rp = this.replay;
     const frame: Frame | null = rp ? rp.clip.frames[Math.min(rp.clip.frames.length - 1, Math.floor(rp.pos))] ?? null : null;
     this.updateCamera(now, rp);
     applyCamera(ctx, v, this.cam, this.cam.zoom);
-    drawPitch(ctx, v, this.stadium);
+    drawPitch(ctx, v, this.stadium, this.kits.outfield[1].primary);
     const toPx = (x: number, y: number): [number, number] => [v.ox + x * v.scale, v.oy + y * v.scale];
     const debug = this.debugChk.checked && !rp;
     if (rp && frame) {
@@ -645,7 +889,14 @@ export class MatchScreen {
     const s = match.state;
     const [home, away] = match.teams;
     this.scoreEl.innerHTML = `<span style="color:${home.color}">${home.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${away.color}">${away.shortName}</span>`;
-    this.clockEl.textContent = this.fmtClock() + (this.playing && this.effSpeed !== this.speed ? `  ${this.effSpeed}x` : "");
+    const spd = this.effSpeed < 5 ? (Math.round(this.effSpeed * 10) / 10).toString() : String(Math.round(this.effSpeed));
+    this.clockEl.textContent = this.fmtClock() + (this.playing && this.effSpeed !== this.speed ? `  ${spd}x` : "");
+    // 휘슬 직전: the last minute of stoppage time with the user level or a goal down pulses the clock red
+    const u = this.userTeam;
+    const diff = s.score[u] - s.score[1 - u]!;
+    const stoppageLeft = match.halfLength + s.addedTime - s.clock;
+    const danger = s.half === 2 && s.phase !== "FULL_TIME" && s.clock > match.halfLength && stoppageLeft <= WHISTLE_PULSE_S && (diff === 0 || diff === -1);
+    this.clockEl.classList.toggle("danger", danger);
     const phaseText: Record<string, string> = {
       PRE_KICKOFF: "킥오프 대기",
       PLAY: "",
@@ -862,7 +1113,88 @@ export class MatchScreen {
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     const bar = Math.min(28, v.h * 0.06);
     ctx.fillRect(0, 0, v.w, bar); ctx.fillRect(0, v.h - bar, v.w, bar);
+    // "GIF 공유" pill, bottom-right (tap target stored for the pointer handler)
+    if (ctx === this.canvas.getContext("2d")) {
+      const fs = Math.max(11, v.scale * 1.1);
+      ctx.font = `600 ${fs}px 'IBM Plex Sans KR',sans-serif`;
+      const label = this.gifBusy ? "GIF 만드는 중…" : "⬇ GIF 공유";
+      const bw = ctx.measureText(label).width + 20, bh = fs + 12;
+      const bx = v.w - pad - bw, by = v.h - pad - bh - Math.max(12, v.scale * 1.3) - 16;
+      ctx.fillStyle = this.gifBusy ? "rgba(60,60,60,0.85)" : "rgba(242,193,78,0.92)";
+      ctx.beginPath(); ctx.roundRect?.(bx, by, bw, bh, bh / 2); if (!ctx.roundRect) ctx.rect(bx, by, bw, bh); ctx.fill();
+      ctx.fillStyle = this.gifBusy ? "#ddd" : "#1a1400";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(label, bx + bw / 2, by + bh / 2 + 1);
+      this.hudGifBtn = { x: bx, y: by, w: bw, h: bh };
+    }
     ctx.restore();
+  }
+
+  /**
+   * Render the clip offscreen at GIF_FPS (≤ GIF_MAX_FRAMES, GIF_W px wide) with the same pitch and
+   * frame painters, encode it, and hand it to the share sheet (or a download).
+   */
+  private async shareClipGif(clip: Clip): Promise<void> {
+    if (this.gifBusy) return;
+    if (downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 GIF를 공유할 수 있습니다."); return; }
+    this.gifBusy = true;
+    this.render();
+    try {
+      await new Promise((r) => setTimeout(r, 30)); // let the "만드는 중" pill paint
+      const ratio = (PITCH.length + 8) / (PITCH.width + 8);
+      const w = GIF_W, h = Math.round(GIF_W / ratio);
+      const step = Math.max(1, Math.round(20 / GIF_FPS));
+      const idx: number[] = [];
+      for (let i = 0; i < clip.frames.length && idx.length < GIF_MAX_FRAMES; i += step) idx.push(i);
+      if (idx[idx.length - 1] !== clip.frames.length - 1) idx.push(clip.frames.length - 1);
+      const frames: GifFrame[] = [];
+      const off = document.createElement("canvas");
+      off.width = w; off.height = h;
+      const octx = off.getContext("2d", { willReadFrequently: true })!;
+      const v: View = { w, h, scale: Math.min(w / (PITCH.length + 8), h / (PITCH.width + 8)), ox: w / 2, oy: h / 2 };
+      const team = clip.team === null ? "" : this.match.teams[clip.team].shortName;
+      const cap = `${clip.minute}' ${team} ${clip.text}`;
+      for (const i of idx) {
+        this.renderClipFrame(octx, v, clip.frames[i]!, cap);
+        frames.push({ data: octx.getImageData(0, 0, w, h).data, width: w, height: h });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      // hold the last frame a little longer so the goal lands
+      frames.push(frames[frames.length - 1]!);
+      const bytes = encodeGif(frames, Math.round(100 / GIF_FPS));
+      const blob = new Blob([bytes as BlobPart], { type: "image/gif" });
+      const name = `3sec-${clip.minute}min-${clip.type.toLowerCase()}.gif`;
+      const r = await shareFile(blob, name, `${cap} · 가난한자의 FM`);
+      if (r === "blocked") alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 GIF를 공유할 수 있습니다.");
+    } catch (err) {
+      console.error(err);
+      alert("GIF를 만들지 못했습니다.");
+    } finally {
+      this.gifBusy = false;
+      this.render();
+    }
+  }
+
+  /** One clip frame into an arbitrary context (same painters as the live view), with a caption. */
+  private renderClipFrame(octx: CanvasRenderingContext2D, v: View, f: Frame, caption: string): void {
+    const saved = this.ctx;
+    this.ctx = octx;
+    try {
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, v.w, v.h);
+      drawPitch(octx, v, this.stadium, this.kits.outfield[1].primary);
+      this.drawFrame(f, v);
+      const fs = Math.max(10, v.scale * 1.3);
+      octx.font = `600 ${fs}px 'IBM Plex Sans KR',sans-serif`;
+      octx.textAlign = "center"; octx.textBaseline = "bottom";
+      const cw = Math.min(v.w - 8, octx.measureText(caption).width + 16);
+      octx.fillStyle = "rgba(0,0,0,0.6)";
+      octx.fillRect(v.w / 2 - cw / 2, v.h - fs - 12, cw, fs + 10);
+      octx.fillStyle = "#fff";
+      octx.fillText(caption, v.w / 2, v.h - 6);
+    } finally {
+      this.ctx = saved;
+    }
   }
 
   /** Text bursts: punch in, hold, fade. */
@@ -918,17 +1250,24 @@ export class MatchScreen {
     const alpha = fade * (immersive ? 0.6 : 0.9);
     if (alpha <= 0) return;
     const fs = immersive ? 11 : 13;
+    const crowd = this.extra.crowd;
+    const derby = !!(this.extra.derby || crowd?.derby);
     const l1 = `${st.name} · ${st.capacity.toLocaleString("ko-KR")}석`;
     const l2 = `홈: ${home.name}`;
+    const l3 = crowd ? (crowd.attendance >= crowd.capacity ? `관중 ${crowd.attendance.toLocaleString("ko-KR")}명 · 매진` : `관중 ${crowd.attendance.toLocaleString("ko-KR")}명`) : "";
+    const ribbon = derby ? "더비 데이" : "";
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = `600 ${fs}px 'IBM Plex Sans KR', system-ui, sans-serif`;
     const w1 = ctx.measureText(l1).width;
+    const wr = ribbon ? ctx.measureText(ribbon).width + 14 : 0;
     ctx.font = `${fs - 1}px 'IBM Plex Sans KR', system-ui, sans-serif`;
     const w2 = ctx.measureText(l2).width;
+    const w3 = l3 ? ctx.measureText(l3).width : 0;
     const pad = 8;
-    const w = Math.max(w1, w2) + pad * 2 + 6;
-    const h = fs * 2 + pad * 2 + 4;
+    const lines = 2 + (l3 ? 1 : 0);
+    const w = Math.max(w1 + (wr ? wr + 8 : 0), w2, w3) + pad * 2 + 6;
+    const h = fs * lines + pad * 2 + 4 * (lines - 1);
     // in immersive mode the translucent top bar overlays the canvas top; sit below it
     const x0 = 8;
     const y0 = immersive ? 48 : 8;
@@ -941,9 +1280,21 @@ export class MatchScreen {
     ctx.fillStyle = "#e6edf3";
     ctx.font = `600 ${fs}px 'IBM Plex Sans KR', system-ui, sans-serif`;
     ctx.fillText(l1, x0 + pad + 6, y0 + pad);
+    if (ribbon) {
+      // derby ribbon: a small red tag after the ground name
+      const rx = x0 + pad + 6 + w1 + 8, ry = y0 + pad - 2, rh = fs + 4;
+      ctx.fillStyle = "#e63946";
+      ctx.fillRect(rx, ry, wr, rh);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(ribbon, rx + 7, ry + 2);
+    }
     ctx.fillStyle = "rgba(230,237,243,0.75)";
     ctx.font = `${fs - 1}px 'IBM Plex Sans KR', system-ui, sans-serif`;
     ctx.fillText(l2, x0 + pad + 6, y0 + pad + fs + 4);
+    if (l3) {
+      ctx.fillStyle = crowd && crowd.attendance >= crowd.capacity ? "#ffd166" : "rgba(230,237,243,0.75)";
+      ctx.fillText(l3, x0 + pad + 6, y0 + pad + (fs + 4) * 2);
+    }
     ctx.restore();
   }
 
@@ -975,6 +1326,8 @@ export class MatchScreen {
 const BANNER_MS = 5000;
 
 const HIDDEN_EVENTS = new Set(["SHOT_ON_TARGET", "INTERCEPTION", "TACKLE", "BLOCK"]);
+/** events that hold the auto pacing slow for a moment afterwards */
+const DANGER_EVENTS = new Set<string>(["SHOT", "SHOT_ON_TARGET", "SAVE", "BLOCK", "CORNER", "PENALTY", "RED_CARD"]);
 
 function restartLabel(kind: string): string {
   return ({ KICK_OFF: "킥오프", THROW_IN: "스로인", GOAL_KICK: "골킥", CORNER: "코너킥", FREE_KICK: "프리킥", PENALTY: "페널티킥" } as Record<string, string>)[kind] ?? kind;

@@ -47,19 +47,19 @@ interface CacheEntry {
 const cache: CacheEntry[] = [];
 const CACHE_MAX = 4;
 
-export function drawPitch(ctx: CanvasRenderingContext2D, v: View, stadium: Stadium = DEFAULT_STADIUM): void {
+export function drawPitch(ctx: CanvasRenderingContext2D, v: View, stadium: Stadium = DEFAULT_STADIUM, awayColor?: string): void {
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-  const key = stadiumKey(stadium, v.w, v.h, dpr);
+  const key = stadiumKey(stadium, v.w, v.h, dpr) + (awayColor ? `|${awayColor}` : "");
   let hit = cache.find((c) => c.key === key);
   if (!hit) {
     const off = makeCanvas(Math.max(1, Math.round(v.w * dpr)), Math.max(1, Math.round(v.h * dpr)));
     const octx = off?.getContext("2d");
     if (!off || !octx) {
-      paintStadium(ctx, v, stadium);
+      paintStadium(ctx, v, stadium, awayColor);
       return;
     }
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintStadium(octx, v, stadium);
+    paintStadium(octx, v, stadium, awayColor);
     hit = { key, canvas: off };
     cache.push(hit);
     if (cache.length > CACHE_MAX) cache.shift();
@@ -76,7 +76,7 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement | null {
 }
 
 /** Full static painting; draws directly on `ctx` (used for the cache and as a fallback). */
-export function paintStadium(ctx: CanvasRenderingContext2D, v: View, stadium: Stadium): void {
+export function paintStadium(ctx: CanvasRenderingContext2D, v: View, stadium: Stadium, awayColor?: string): void {
   const { scale, ox, oy } = v;
   const hl = PITCH.halfLength;
   const hw = PITCH.halfWidth;
@@ -86,6 +86,20 @@ export function paintStadium(ctx: CanvasRenderingContext2D, v: View, stadium: St
   // --- Surround: stands (club tone) or an athletics track ---------------------------------
   ctx.fillStyle = stadium.surround.color;
   ctx.fillRect(0, 0, v.w, v.h);
+  // Away end: a block of the visitors' colour in the upper part of the right-hand stand (behind
+  // the apron, beside the goal, where there are no ad boards), with darker rows so it reads as seats.
+  if (awayColor) {
+    const x0 = X(hl + APRON + 0.15), y0 = 0;
+    const bw = Math.max(6, v.w - x0), bh = Math.max(8, Y(-hw * 0.3));
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = awayColor;
+    ctx.fillRect(x0, y0, bw, bh);
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#000";
+    for (let yy = y0 + 2; yy < bh; yy += Math.max(3, 0.6 * scale)) ctx.fillRect(x0, yy, bw, 1);
+    ctx.restore();
+  }
   if (stadium.surround.track) {
     // lane lines around the apron
     ctx.strokeStyle = "rgba(255,255,255,0.35)";

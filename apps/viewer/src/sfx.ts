@@ -8,6 +8,12 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private noiseBuf: AudioBuffer | null = null;
   enabled = true;
+  /** 0..1 crowd size: scales every crowd sound (roar/ooh/boo/clap/chant); whistles are unaffected */
+  private crowdLevel = 1;
+
+  /** How full the ground is (0..1); a derby or a sell-out pushes it toward 1. */
+  setCrowd(level: number): void { this.crowdLevel = Math.max(0, Math.min(1, level)); }
+  get crowdVolume(): number { return this.crowdLevel; }
 
   constructor() {
     try { this.enabled = localStorage.getItem(KEY) !== "0"; } catch { this.enabled = true; }
@@ -71,9 +77,11 @@ export class Sfx {
   }
 
   /** Crowd noise burst: `dur` seconds, low-pass at `lp` Hz, peak `vol`, attack `atk` seconds. */
-  private crowd(dur: number, lp: number, vol: number, atk = 0.08, lpEnd = lp): void {
+  private crowd(dur: number, lp: number, vol: number, atk = 0.08, lpEnd = lp, delay = 0): void {
     const ac = this.ac; if (!ac) return;
-    const t0 = ac.currentTime;
+    // a quarter-full ground is still audible; a full one is loud
+    vol *= 0.35 + 0.65 * this.crowdLevel;
+    const t0 = ac.currentTime + delay;
     const src = ac.createBufferSource();
     src.buffer = this.noise(ac);
     src.loop = true;
@@ -108,4 +116,28 @@ export class Sfx {
   }
   /** Applause murmur (substitution, full time). */
   clap(): void { this.crowd(1.4, 3000, 0.18, 0.2, 1500); }
+
+  /**
+   * Terrace chant after a goal: four clap beats (♩ ♩ ♩♩ ♩ at ~120 bpm) over a low crowd hum,
+   * `strength` 1 for the home end, less for the travelling fans. Starts after `delay` seconds.
+   */
+  chant(strength = 1, delay = 0.9): void {
+    const ac = this.ac; if (!ac) return;
+    const k = strength * (0.35 + 0.65 * this.crowdLevel);
+    const beats = [0, 0.5, 1.0, 1.25, 1.5, 2.0, 2.5, 2.75, 3.0];
+    this.crowd(3.8, 700, 0.16 * strength, 0.4, 400, delay);
+    for (const b of beats) {
+      const t0 = ac.currentTime + delay + b;
+      const src = ac.createBufferSource();
+      src.buffer = this.noise(ac);
+      src.playbackRate.value = 1.3 + Math.random() * 0.3;
+      const f = ac.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2200; f.Q.value = 0.8;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.32 * k, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
+      src.connect(f); f.connect(g); g.connect(ac.destination);
+      src.start(t0); src.stop(t0 + 0.2);
+    }
+  }
 }
