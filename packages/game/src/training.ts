@@ -1,6 +1,7 @@
 import type { Attributes, Role } from "@3sec/engine";
 import type { Club, SquadPlayer, TrainingFocus, TrainingIntensity } from "./types";
 import { overall } from "./rating";
+import { staffBonus, staffRating } from "./staff";
 
 type Attr = keyof Attributes;
 const OUTFIELD: Attr[] = ["pace", "acceleration", "agility", "strength", "stamina", "passing", "vision", "technique", "firstTouch", "dribbling", "finishing", "composure", "tackling", "marking", "positioning", "decisions", "anticipation"];
@@ -75,16 +76,19 @@ export function spendGrowth(p: Grower, focus: Attr[], rng: { next(): number }): 
  * One week of training for a club: every player's growth accumulator moves by the age rate
  * (scaled by intensity, dampened for a youngster who sat out the week, capped by potential); whole
  * points are spent on attributes, biased toward the training focus. Declines hit physical attributes
- * first, as in life. The week's minutes are consumed here (reset to 0).
+ * first, as in life. The week's minutes are consumed here (reset to 0). The assistant coach scales every
+ * growth rate (staffBonus); keepers train under the GK coach instead when the club has one.
  */
 export function trainWeek(club: Club, rng: { next(): number }): Development[] {
   const out: Development[] = [];
   const mult = INTENSITY_MULT[club.training.intensity] ?? 1;
   const focus = FOCUS_ATTRS[club.training.focus];
+  const coach = staffBonus(club, "assistant");
+  const gkCoach = staffRating(club, "gk") ? staffBonus(club, "gk") : coach;
   for (const p of club.squad) {
     let rate = weeklyRate(p.age);
     if (rate > 0) {
-      rate *= mult;
+      rate *= mult * (p.role === "GK" ? gkCoach : coach);
       if (p.age <= 23 && !p.onLoan && !(p.lastMinutes ?? 0)) rate *= BENCHED_FACTOR;
       const headroom = p.potential - overall(p.attrs, p.role);
       if (headroom <= 0) rate = 0;

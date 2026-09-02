@@ -1,5 +1,23 @@
 import type { Attributes, FormationName, PlayerDef, Role, Tactics } from "@3sec/engine";
 
+/** Season counters of a player; the rating fields are optional for saves and squads built before match ratings. */
+export interface PlayerStats {
+  apps: number;
+  goals: number;
+  minutes: number;
+  yellows: number;
+  reds: number;
+  assists?: number;
+  /** sum of match ratings (average = ratingSum / ratedApps) */
+  ratingSum?: number;
+  ratedApps?: number;
+  /** man-of-the-match awards (highest rating of the game) */
+  motm?: number;
+}
+
+/** One finished season on a player's CV. */
+export interface CareerEntry { season: number; club: number; apps: number; goals: number; assists: number; /** average match rating (0 without a rated appearance) */ rating: number }
+
 /** A squad member: the engine's player definition plus career/season state. */
 export interface SquadPlayer extends PlayerDef {
   age: number;
@@ -19,7 +37,11 @@ export interface SquadPlayer extends PlayerDef {
   wage: number;
   /** last season the contract covers (expires after that season) */
   contractUntil: number;
-  stats: { apps: number; goals: number; minutes: number; yellows: number; reds: number };
+  stats: PlayerStats;
+  /** last five match ratings, oldest first (league + cup) */
+  form?: number[];
+  /** finished seasons, oldest first (appended at the rollover) */
+  career?: CareerEntry[];
   /** away on loan at another club: stays in this squad but is unavailable and costs half a wage */
   onLoan?: boolean;
   /** borrowed from that club for the season; returns at the rollover */
@@ -132,6 +154,23 @@ export interface Manager {
   history: ManagerHistory[];
 }
 
+/** Coaching-staff roles: 수석코치, 피지컬 코치, 유스 코치, GK 코치, 스카우트, 의무 팀장. */
+export type StaffRole = "assistant" | "fitness" | "youth" | "gk" | "scout" | "physio";
+
+/** One member of a club's coaching staff (or of the free pool in `GameState.staffMarket`). */
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: StaffRole;
+  /** 1..20 */
+  rating: number;
+  age: number;
+  /** salary per season in 억원 (≈ 0.15 × rating^1.3 / 10, at least 0.3) */
+  wage: number;
+  /** last season the contract covers */
+  contractUntil: number;
+}
+
 export type TrainingFocus = "balanced" | "attacking" | "defending" | "technical" | "physical" | "tactical";
 export type TrainingIntensity = "low" | "normal" | "high";
 
@@ -149,6 +188,8 @@ export interface Club {
   selection: Selection;
   training: { focus: TrainingFocus; intensity: TrainingIntensity };
   youth: Youth;
+  /** coaching staff (see staff.ts); at most MAX_STAFF, one per role except two assistants */
+  staff: StaffMember[];
   /** the AI head coach; null for the user's club */
   manager: Manager | null;
   /** consecutive board reviews the club sat well below its expected position (sacking follows) */
@@ -159,6 +200,8 @@ export interface Club {
   seasonInjuries?: number;
   /** wages actually paid this season (억원); reset at the rollover */
   seasonWages?: number;
+  /** coaching-staff wages paid this season (억원, staff.ts); reset at the rollover with seasonWages */
+  seasonStaffWages?: number;
   /** income actually banked this season (억원); reset at the rollover */
   seasonRevenue?: number;
 }
@@ -171,6 +214,8 @@ export interface Fixture {
   score: [number, number] | null;
   /** "12' Kim Minjun (SEO)" lines for the result screen */
   scorers: string[];
+  /** man of the match: the highest-rated player of the game */
+  motm?: { playerId: string; rating: number };
 }
 
 /** One knockout tie of the 3sec 컵. Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
@@ -231,6 +276,29 @@ export interface SeasonRecord {
   managerOfYear?: ManagerOfYear;
 }
 
+/** Why and when the user's board pulled the trigger (the viewer shows the sacked screen while this is set). */
+export interface SackRecord {
+  season: number;
+  /** rounds played when it happened (roundsPerSeason at the rollover) */
+  round: number;
+  position: number;
+  expected: number;
+  pts: number;
+  reason: "warnings" | "rollover";
+}
+
+/** The user's board: how much it trusts the manager (0..100) and the warnings it has issued this season. */
+export interface Board {
+  confidence: number;
+  warnings: number;
+  /** the round of the last weekly review (-1 before the first) */
+  lastReview: number;
+  /** consecutive reviews with confidence below the warning line */
+  lowWeeks: number;
+  /** set while the user is between jobs */
+  sacked?: SackRecord;
+}
+
 /** Winner of the season's manager award (the user may win it too). */
 export interface ManagerOfYear { name: string; club: number; position: number; expected: number }
 
@@ -247,6 +315,10 @@ export interface GameState {
   fixtures: Fixture[];
   /** newest first, human-readable news (injuries, bans, results) */
   news: string[];
+  /** season in which the title-clinch celebration was already shown */
+  celebratedSeason?: number;
+  /** season whose cup win the viewer already celebrated */
+  cupCelebratedSeason?: number;
   cup: Cup;
   /** the next matchday is a cup matchday (set when the league reaches a cup round) */
   pendingCupDay: boolean;
@@ -263,4 +335,12 @@ export interface GameState {
   seasonHistory: SeasonRecord[];
   /** sacked managers waiting for a job, newest first, capped at 10 */
   freeManagers: Manager[];
+  /** the user's board (confidence, warnings, sacking) */
+  board: Board;
+  /** free coaching staff anyone can hire; regenerated at each window (staff.ts creates it on demand) */
+  staffMarket?: StaffMember[];
+  /** key of the window the staff market was generated for (staff.ts) */
+  staffMarketKey?: string;
+  /** the season staffRollover last ran for (staff.ts; makes the rollover idempotent) */
+  staffSeason?: number;
 }

@@ -3,6 +3,7 @@ import type { Club, GameState, Manager, ManagerOfYear, ManagerTraitId, ManagerTr
 import { randomName } from "./world";
 import { clubOf, table } from "./season";
 import { autoSelect } from "./selection";
+import { userStartingStaff } from "./staff";
 
 /** Sacked managers kept in the free pool. */
 export const MAX_FREE_MANAGERS = 10;
@@ -295,10 +296,12 @@ export function managerRollover(s: GameState, rng: Rng): ManagerOfYear | null {
   return award;
 }
 
-/** The user's club has no AI manager and starts on plain training (the human sets it). Called by newGame. */
+/** The user's club has no AI manager, starts on plain training (the human sets it) and with a modest three-man staff. Called by newGame. */
 export function clearUserManager(s: GameState): void {
   const me = clubOf(s, s.userClub);
   me.manager = null;
   me.pressure = 0;
   me.training = { focus: "balanced", intensity: "normal" };
+  me.staff = userStartingStaff(new Rng(s.seed * 53 + me.id * 1009 + 21), me, s.season);
+  s.staffSeason = s.season; // the staff rollover (staff.ts) is owed from this season on
 }

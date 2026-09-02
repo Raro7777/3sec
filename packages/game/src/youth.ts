@@ -6,6 +6,7 @@ import { wageFor } from "./contracts";
 import { MAX_SQUAD, THIN_SQUAD } from "./transfers";
 import { randomName } from "./world";
 import { autoSelect, repairSelection } from "./selection";
+import { NATIONAL_SCOUT_RATING, STAFF_ROLE_LABEL, scoutCapped, staffBonus, youthNarrowFactor } from "./staff";
 
 /** Academy size cap; the weakest prospect makes room for a new one. */
 export const MAX_PROSPECTS = 8;
@@ -51,13 +52,18 @@ const ROLES: Role[] = ["GK", "CB", "CB", "LB", "RB", "DM", "CM", "CM", "AM", "LW
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const tierOf = (c: Club): ScoutingTierDef => SCOUTING[c.youth.scouting] ?? SCOUTING.local;
+/**
+ * The tier the user's intake actually runs at: "national" needs a scout rated ≥ NATIONAL_SCOUT_RATING, else it drops
+ * to "regional". AI clubs are exempt (their tier is the manager's policy and they hire scouts on their own).
+ */
+export const intakeTier = (c: Club, user = true): ScoutingTierDef => (user && scoutCapped(c) ? SCOUTING.regional : tierOf(c));
 const coachingOf = (c: Club): number => clamp(Math.round(c.youth.coaching) || 1, 1, 3);
 
 export const youthWeeklyCost = (c: Club): number => round1(tierOf(c).cost + COACHING[coachingOf(c)]!.cost);
 export const prospectOverall = (p: YouthProspect): number => overall(p.attrs, p.role);
 
 function makeProspect(rng: Rng, club: Club, s: GameState, seq: number): YouthProspect {
-  const tier = tierOf(club);
+  const tier = intakeTier(club, club.id === s.userClub);
   const age = rng.int(15, 18);
   const role = rng.pick(ROLES);
   // Prospects arrive well short of the first team; the youngest are rawer still, and an unscouted intake is mediocre.
@@ -87,12 +93,13 @@ function makeProspect(rng: Rng, club: Club, s: GameState, seq: number): YouthPro
 export function youthIntake(s: GameState, rng: Rng): void {
   for (const c of s.clubs) {
     const fresh: YouthProspect[] = [];
-    for (let i = 0; i < tierOf(c).intake; i++) fresh.push(makeProspect(rng, c, s, c.youth.nextId++));
+    for (let i = 0; i < intakeTier(c, c.id === s.userClub).intake; i++) fresh.push(makeProspect(rng, c, s, c.youth.nextId++));
     const all = [...c.youth.prospects, ...fresh].sort((a, b) => b.truePotential - a.truePotential || prospectOverall(b) - prospectOverall(a));
     const kept = all.slice(0, MAX_PROSPECTS);
     const dropped = all.slice(MAX_PROSPECTS);
     c.youth.prospects = kept;
     if (c.id !== s.userClub) continue;
+    if (scoutCapped(c)) s.news.unshift(`유스: 능력 ${NATIONAL_SCOUT_RATING} 이상의 ${STAFF_ROLE_LABEL.scout}가 없어 전국 스카우팅이 권역 수준으로 운영됐습니다.`);
     const names = fresh.map((p) => `${p.name}(${p.age}세 ${p.role})`).join(", ");
     s.news.unshift(`유스: 유망주 ${fresh.length}명 입단 — ${names}.`);
     if (dropped.length) s.news.unshift(`유스: 정원(${MAX_PROSPECTS}명) 초과로 ${dropped.map((p) => p.name).join(", ")} 방출.`);
@@ -112,7 +119,9 @@ export function youthWeek(s: GameState): void {
   for (const c of s.clubs) {
     c.budget = round1(c.budget - youthWeeklyCost(c));
     const tier = tierOf(c);
-    const mult = 0.8 + 0.3 * coachingOf(c);
+    // the youth coach lifts development (×0.85 + 0.02·rating) and speeds the scouts' estimate (×0.8 + 0.03·rating)
+    const mult = (0.8 + 0.3 * coachingOf(c)) * staffBonus(c, "youth");
+    const narrowMult = youthNarrowFactor(c);
     for (const p of c.youth.prospects) {
       p.weeksInAcademy++;
       let rate = weeklyRate(p.age) * mult;
@@ -121,7 +130,7 @@ export function youthWeek(s: GameState): void {
       else if (headroom < 1.5) rate *= 0.4;
       p.growth += rate;
       spendGrowth(p, [], rng);
-      const step = tier.narrow * (1 + 0.5 * p.reportsSeen);
+      const step = tier.narrow * (1 + 0.5 * p.reportsSeen) * narrowMult;
       const [lo, hi] = p.potentialRange;
       const before = lo;
       narrowTowardTruth(p, lo + step, hi - step);

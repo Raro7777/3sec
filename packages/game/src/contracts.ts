@@ -2,6 +2,7 @@ import type { Club, GameState, SquadPlayer } from "./types";
 import { playerValue, MIN_SQUAD, releaseToMarket } from "./transfers";
 import { clubOf } from "./season";
 import { autoSelect, repairSelection } from "./selection";
+import { staffWageBill } from "./staff";
 
 /** Salary per season (억원) a player of this value expects. */
 export function wageFor(p: SquadPlayer): number {
@@ -56,13 +57,16 @@ export function weeklyRevenue(club: Club, position: number | null): number {
   return Math.round((base + pos) * 100) / 100;
 }
 
-/** Every club banks its weekly income and pays a week of wages; a poor club can slide into the red, which blocks buying. */
+/** Every club banks its weekly income and pays a week of wages (players, loanees and coaching staff); a poor club can slide into the red, which blocks buying. */
 export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<number, number>): void {
   for (const c of s.clubs) {
     const income = weeklyRevenue(c, positions?.get(c.id) ?? null);
     const wages = (wageBill(c) + loanWageBill(s, c)) / weeksPerSeason;
-    c.budget = Math.round((c.budget + income - wages) * 10) / 10;
+    const staff = staffWageBill(c) / weeksPerSeason;
+    c.budget = Math.round((c.budget + income - wages - staff) * 10) / 10;
     c.seasonWages = Math.round(((c.seasonWages ?? 0) + wages) * 100) / 100;
+    // booked apart so the player wage counter keeps its meaning; financeSummary should add the two (see staff.ts TODO)
+    c.seasonStaffWages = Math.round(((c.seasonStaffWages ?? 0) + staff) * 100) / 100;
     c.seasonRevenue = Math.round(((c.seasonRevenue ?? 0) + income) * 100) / 100;
   }
 }

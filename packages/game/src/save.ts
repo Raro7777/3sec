@@ -1,4 +1,4 @@
-import type { GameState } from "./types";
+import type { GameState, SquadPlayer } from "./types";
 import { CLUBS } from "./world";
 import { overall } from "./rating";
 import { wageFor } from "./contracts";
@@ -16,8 +16,18 @@ export function koreanName(name: string): string {
 }
 import { DEFAULT_MANAGER_NAME } from "./season";
 import { newCup } from "./cup";
+import { migrateStaff } from "./staff";
+import { newBoard } from "./board";
 
 export const SAVE_KEY = "3sec.save.v1";
+
+/** Saves from before assists, match ratings, form and the career list. */
+function migrateRatings(p: SquadPlayer): void {
+  if (!p.stats) p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 };
+  for (const k of ["assists", "ratingSum", "ratedApps", "motm"] as const) if (typeof p.stats[k] !== "number") p.stats[k] = 0;
+  if (!Array.isArray(p.form)) p.form = [];
+  if (!Array.isArray(p.career)) p.career = [];
+}
 
 export function serialize(s: GameState): string {
   return JSON.stringify(s);
@@ -58,6 +68,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
         if (typeof p.contractUntil !== "number") p.contractUntil = s.season + 1;
         if (typeof p.wage !== "number") p.wage = wageFor(p);
         if (typeof p.lastMinutes !== "number") p.lastMinutes = 0;
+        migrateRatings(p);
       }
     }
     s.news = (s.news ?? []).filter((n) => !/[A-Za-z]{4,}/.test(n));
@@ -73,7 +84,13 @@ export function deserialize(json: string | null | undefined): GameState | null {
     if (!Array.isArray(s.marketLog)) s.marketLog = [];
     if (!Array.isArray(s.seasonHistory)) s.seasonHistory = [];
     if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
-    for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); }
+    migrateStaff(s);
+    for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); migrateRatings(p); }
+    // Saves from before the user's board.
+    if (!s.board || typeof s.board.confidence !== "number") s.board = newBoard();
+    if (typeof s.board.warnings !== "number") s.board.warnings = 0;
+    if (typeof s.board.lastReview !== "number") s.board.lastReview = -1;
+    if (typeof s.board.lowWeeks !== "number") s.board.lowWeeks = 0;
     return s;
   } catch {
     return null;

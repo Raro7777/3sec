@@ -1,4 +1,5 @@
 import type { Club, GameState, ManagerTraits, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
+import { scoutReport, staffWeek, type ScoutReport } from "./staff";
 import { overall } from "./rating";
 import { autoSelect, repairSelection } from "./selection";
 import { clubOf, playerOf, seasonOver, table } from "./season";
@@ -105,13 +106,21 @@ export interface TransferTarget {
   player: SquadPlayer;
   price: number | null;
   value: number;
+  /** the user's scout's 관찰 보고 (potential estimate); absent without a scout */
+  report?: ScoutReport;
 }
 
 export function transferTargets(s: GameState): TransferTarget[] {
   const out: TransferTarget[] = [];
+  const me = s.clubs[s.userClub]!;
   for (const club of s.clubs) {
     if (club.id === s.userClub) continue;
-    for (const player of club.squad) out.push({ club, player, price: askingPrice(club, player), value: playerValue(player) });
+    for (const player of club.squad) {
+      const t: TransferTarget = { club, player, price: askingPrice(club, player), value: playerValue(player) };
+      const report = scoutReport(me, player, s.season);
+      if (report) t.report = report;
+      out.push(t);
+    }
   }
   return out.sort((a, b) => ovr(b.player) - ovr(a.player));
 }
@@ -702,8 +711,9 @@ export function loanWeek(s: GameState): void {
   }
 }
 
-/** One market week (called after wages): offers lapse, new ones arrive, AI clubs trade and sign free agents. */
+/** One market week (called after wages): the staff market ticks, offers lapse, new ones arrive, AI clubs trade and sign free agents. */
 export function transferWeek(s: GameState, rng: Rand): void {
+  staffWeek(s);
   loanWeek(s);
   expireOffers(s);
   if (!windowOpen(s)) return;

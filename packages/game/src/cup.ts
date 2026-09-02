@@ -1,5 +1,6 @@
 import { Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
 import type { Cup, CupTie, Fixture, GameState } from "./types";
+import { applyStaffRecovery } from "./staff";
 import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver } from "./season";
 
 export const CUP_NAME = "3sec 컵";
@@ -176,9 +177,12 @@ export function simulateCupDay(s: GameState, opts: MatchOptions = {}, includeUse
 /** Close the cup matchday once every tie is decided: a midweek passes (light recovery, no wages/training). */
 export function advanceCupDay(s: GameState): boolean {
   if (s.pendingCupDay && pendingCupTies(s).length) return false;
-  for (const c of s.clubs) for (const p of c.squad) {
-    p.condition = Math.min(1, p.condition + 0.4);
-    p.injuryDays = Math.max(0, p.injuryDays - 3);
+  for (const c of s.clubs) {
+    for (const p of c.squad) {
+      p.condition = Math.min(1, p.condition + 0.4);
+      p.injuryDays = Math.max(0, p.injuryDays - 3);
+    }
+    applyStaffRecovery(c, 0.5);
   }
   // Normally the next stage waits for its own league round; a save that fell behind catches up at once.
   s.pendingCupDay = cupDayDue(s);

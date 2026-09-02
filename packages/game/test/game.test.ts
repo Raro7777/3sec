@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FORMATIONS } from "@3sec/engine";
 import {
   advanceRound, autoSelect, buildFixtures, createMatch, currentFixtures, deserialize, newGame, playerOf, recordResult,
-  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection, yellowBan, homeAwayRecord, financeSummary, cupPrize, seasonBudget, weeklyRevenue, wageBill } from "../src/index";
+  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection, yellowBan, homeAwayRecord, financeSummary, cupPrize, seasonBudget, weeklyRevenue, wageBill, staffWageBill } from "../src/index";
 
 const SHORT = { halfLength: 4 * 60 };
 
@@ -151,7 +151,7 @@ describe("season progression", () => {
     // a save without the counters falls back to the estimates
     me.seasonWages = 0; me.seasonRevenue = 0;
     const est = financeSummary(s, me.id);
-    expect(est.wages).toBe(wageBill(me));
+    expect(est.wages).toBeCloseTo(wageBill(me) + staffWageBill(me), 1);
     expect(est.revenue).toBeCloseTo(weeklyRevenue(me, pos) * roundsPerSeason(12), 1);
   });
 });

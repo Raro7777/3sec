@@ -1,6 +1,7 @@
 import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type TeamDef, type TeamId } from "@3sec/engine";
 import type { Club, Fixture, GameState, SeasonRecord, SquadPlayer, TableRow } from "./types";
 import { buildClubs } from "./world";
+import { injuryFactor, injuryDaysFactor, recoveryBonus, staffWageBill } from "./staff";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
 import { expireOffers, freeAgentRollover, incomingOffers, returnLoans, seasonBudget, transferWeek } from "./transfers";
@@ -11,6 +12,8 @@ import { cupDayDue, cupPrize, newCup } from "./cup";
 import { overall } from "./rating";
 import { REVIEW_FROM_ROUND, applyManagerMatchday, applyManagerPolicy, boardReview, clearUserManager, managerRollover } from "./managers";
 import { pendingCupTies } from "./cup";
+import { appendCareer, applyRatings, emptyStats } from "./ratings";
+import { BOARD_FROM_ROUND, boardCupWin, boardRollover, boardWeek, newBoard } from "./board";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -22,7 +25,7 @@ export const DEFAULT_MANAGER_NAME = "감독";
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [] };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard() };
   clearUserManager(s);
   newCup(s);
   for (const c of clubs) resetSeasonCounters(c);
@@ -36,6 +39,7 @@ function resetSeasonCounters(c: Club): void {
   c.seasonStartBudget = c.budget;
   c.seasonInjuries = 0;
   c.seasonWages = 0;
+  c.seasonStaffWages = 0;
   c.seasonRevenue = 0;
 }
 
@@ -131,8 +135,8 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
       p.condition = Math.max(0.2, 1 - ps.fatigue * 0.9);
       // Injuries: roughly one per club every 2-3 matches, more likely on tired legs. Mostly short.
       const intensity = c.training.intensity === "high" ? 1.3 : c.training.intensity === "low" ? 0.85 : 1;
-      if (rng.chance(0.022 * (0.6 + ps.fatigue) * intensity)) {
-        const days = Math.min(90, Math.round(3 + Math.pow(rng.next(), 2.2) * 60));
+      if (rng.chance(0.022 * (0.6 + ps.fatigue) * intensity * injuryFactor(c))) {
+        const days = Math.min(90, Math.round((3 + Math.pow(rng.next(), 2.2) * 60) * injuryDaysFactor(c)));
         p.injuryDays = days;
         c.seasonInjuries = (c.seasonInjuries ?? 0) + 1;
         s.news.unshift(`${c.shortName}: ${p.name} 부상, 약 ${days}일 결장.`);
@@ -143,7 +147,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
       const p = playerOf(c, e.playerId);
       if (e.type === "GOAL") p.stats.goals++;
       if (e.type === "INJURY" && p.injuryDays === 0) {
-        const days = Math.min(90, Math.round(5 + Math.pow(rng.next(), 1.8) * 50));
+        const days = Math.min(90, Math.round((5 + Math.pow(rng.next(), 1.8) * 50) * injuryDaysFactor(c)));
         p.injuryDays = days;
         c.seasonInjuries = (c.seasonInjuries ?? 0) + 1;
         s.news.unshift(`${c.shortName}: ${p.name} 경기 중 부상, 약 ${days}일 결장.`);
@@ -170,7 +174,14 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
     const playedIds = new Set(played.map((p) => p.id));
     if (!cup) for (const p of c.squad) if (p.ban > 0 && !playedIds.has(p.id)) p.ban--;
   }
+  // Assists, match ratings, form and the man of the match.
+  applyRatings(f, m, clubs);
   const [h, a] = clubs;
+  // A cup win inside 90 minutes pleases the user's board (shoot-outs are settled later, in cup.ts).
+  if (cup && s.board) {
+    const [hg, ag] = f.score;
+    if ((f.home === s.userClub && hg > ag) || (f.away === s.userClub && ag > hg)) boardCupWin(s);
+  }
   s.news.unshift(`${cup ? "3sec 컵: " : ""}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
   if (s.news.length > 60) s.news.length = 60;
 }
@@ -195,7 +206,7 @@ export function advanceRound(s: GameState): boolean {
   for (const c of s.clubs) {
     const recover = c.training.intensity === "high" ? 0.5 : c.training.intensity === "low" ? 0.7 : 0.6;
     for (const p of c.squad) {
-      p.condition = Math.min(1, p.condition + recover);
+      p.condition = Math.min(1, p.condition + recover + recoveryBonus(c));
       p.injuryDays = Math.max(0, p.injuryDays - 7);
     }
     const dev = trainWeek(c, rng);
@@ -207,6 +218,8 @@ export function advanceRound(s: GameState): boolean {
   if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
   // The boards judge their managers once the table has settled (the final table is judged at the rollover).
   if (s.round >= REVIEW_FROM_ROUND && !seasonOver(s)) boardReview(s, new Rng(s.seed * 43 + s.season * 719 + s.round * 53));
+  // The user's own board: confidence drifts weekly, warnings and the sack follow.
+  if (s.round >= BOARD_FROM_ROUND) boardWeek(s);
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
   if (cupDayDue(s)) s.pendingCupDay = true;
@@ -223,6 +236,9 @@ export function startNextSeason(s: GameState): void {
   const award = managerRollover(s, new Rng(s.seed * 43 + s.season * 719 + 999));
   if (award) record.managerOfYear = award;
   s.seasonHistory.push(record);
+  // The user's board judges the season; every player's season goes on the CV before the counters reset.
+  boardRollover(s);
+  appendCareer(s);
   // Weekly income already covers running costs, so the rollover only pays out prize money.
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1) - seasonBudget(c.reputation, null);
   // With the new budgets known, every AI manager sets his training and academy for the coming season.
@@ -240,7 +256,8 @@ export function startNextSeason(s: GameState): void {
     p.injuryDays = 0;
     p.condition = 1;
     p.lastMinutes = 0;
-    p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 };
+    p.stats = emptyStats();
+    p.form = [];
   }
   s.season++;
   s.round = 0;
@@ -292,7 +309,7 @@ export function financeSummary(s: GameState, clubId: number): FinanceSummary {
   return {
     start: c.seasonStartBudget,
     end: c.budget,
-    wages: c.seasonWages ? r1(c.seasonWages) : wageBill(c),
+    wages: c.seasonWages ? r1(c.seasonWages + (c.seasonStaffWages ?? 0)) : wageBill(c) + staffWageBill(c),
     revenue: c.seasonRevenue ? r1(c.seasonRevenue) : r1(weeklyRevenue(c, pos) * rounds),
     cupPrize: cupPrize(s, clubId),
     leaguePrize: seasonBudget(c.reputation, pos) - seasonBudget(c.reputation, null),
@@ -318,4 +335,16 @@ export function topScorers(s: GameState, n = 10): { player: SquadPlayer; club: C
   const all: { player: SquadPlayer; club: Club }[] = [];
   for (const club of s.clubs) for (const player of club.squad) if (player.stats.goals > 0) all.push({ player, club });
   return all.sort((a, b) => b.player.stats.goals - a.player.stats.goals || b.player.stats.apps - a.player.stats.apps).slice(0, n);
+}
+
+/**
+ * Has the league title been decided already? Returns the champion's club id when no other club
+ * can still catch the leader, or null.
+ */
+export function titleClinched(s: GameState): number | null {
+  const rows = table(s);
+  const lead = rows[0]!, second = rows[1]!;
+  const remaining = roundsPerSeason(s.clubs.length) - Math.min(lead.played, roundsPerSeason(s.clubs.length));
+  if (lead.played === 0) return null;
+  return lead.pts - second.pts > remaining * 3 ? lead.club : null;
 }
