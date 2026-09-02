@@ -51,12 +51,14 @@ export function selectionProblem(club: Club): string | null {
   const slots = FORMATIONS[sel.formation];
   if (sel.starters.length !== slots.length) return "선발 11명이 필요합니다";
   const ids = new Set<string>();
+  // with fewer than eleven fit players the club fields whoever it has (see repairSelection)
+  const shortHanded = club.squad.filter(isAvailable).length < slots.length;
   for (const [i, id] of sel.starters.entries()) {
     const p = club.squad.find((q) => q.id === id);
     if (!p) return `알 수 없는 선수 ${id}`;
     if (ids.has(id)) return `${p.name}이(가) 중복 등록되었습니다`;
     ids.add(id);
-    if (!isAvailable(p)) return `${p.name}은(는) ${p.injuryDays > 0 ? "부상" : "출장 정지"} 중입니다`;
+    if (!isAvailable(p) && !shortHanded) return `${p.name}은(는) ${p.injuryDays > 0 ? "부상" : "출장 정지"} 중입니다`;
     if (i === 0 && p.role !== "GK" && club.squad.some((q) => q.role === "GK" && isAvailable(q))) return "1번 자리는 골키퍼여야 합니다";
   }
   if (sel.bench.length > BENCH_SIZE) return `교체 명단은 최대 ${BENCH_SIZE}명입니다`;
@@ -90,9 +92,13 @@ export function repairSelection(club: Club): Selection {
       ?? club.squad.find((q) => isAvailable(q) && !used.has(q.id) && (i > 0 || q.role === "GK"))?.id
       // no fit keeper left (injuries, bans, expired contracts): an outfield player goes in goal for now
       ?? (i === 0 ? [...club.squad].filter((q) => isAvailable(q) && !used.has(q.id)).sort((a, b) => b.attrs.handling + b.attrs.reflexes - a.attrs.handling - a.attrs.reflexes)[0]?.id : undefined);
-    if (!fill) throw new Error(`${slot.role} 자리에 출전 가능한 선수가 없습니다`);
-    used.add(fill);
-    return fill;
+    // fewer than eleven fit players: the least-injured reserve plays through the knock (a ban still rules a player out first)
+    const patched = fill
+      ?? [...club.squad].filter((q) => !q.onLoan && !used.has(q.id) && q.ban <= 0).sort((a, b) => a.injuryDays - b.injuryDays)[0]?.id
+      ?? [...club.squad].filter((q) => !q.onLoan && !used.has(q.id)).sort((a, b) => a.ban - b.ban)[0]?.id;
+    if (!patched) throw new Error(`${slot.role} 자리에 출전 가능한 선수가 없습니다`);
+    used.add(patched);
+    return patched;
   });
   const bench: string[] = [];
   for (const id of [...sel.bench, ...auto.bench]) if (bench.length < BENCH_SIZE && ok(id)) { used.add(id); bench.push(id); }

@@ -227,6 +227,9 @@ export function advanceRound(s: GameState): boolean {
 }
 
 /** Start the next season: ages, development, fresh fixtures and stats. */
+/** Budget (억원) above which the board reinvests 60% of the surplus at the rollover. */
+export const BUDGET_CAP = 120;
+
 export function startNextSeason(s: GameState): void {
   if (!seasonOver(s)) throw new Error("season still running");
   const rng = new Rng(s.seed * 13 + s.season * 977);
@@ -241,6 +244,16 @@ export function startNextSeason(s: GameState): void {
   appendCareer(s);
   // Weekly income already covers running costs, so the rollover only pays out prize money.
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1) - seasonBudget(c.reputation, null);
+  // Money that just sits in the bank goes into the club instead: the board reinvests most of any surplus above
+  // BUDGET_CAP in infrastructure, which nudges reputation (and with it income and expectations) upward.
+  for (const c of s.clubs) {
+    if (c.budget <= BUDGET_CAP) continue;
+    const invest = Math.round((c.budget - BUDGET_CAP) * 0.6 * 10) / 10;
+    c.budget = Math.round((c.budget - invest) * 10) / 10;
+    const rep = Math.min(0.2, invest / 150);
+    c.reputation = Math.round(Math.min(15, c.reputation + rep) * 10) / 10;
+    if (c.id === s.userClub) s.news.unshift(`${c.shortName}: 이사회가 잉여 예산 ${invest}억을 구단 인프라에 투자했습니다 (평판 +${rep.toFixed(1)}). 남는 돈은 선수단에 쓰길 기대합니다.`);
+  }
   // With the new budgets known, every AI manager sets his training and academy for the coming season.
   for (const c of s.clubs) if (c.id !== s.userClub) applyManagerPolicy(c);
   expireOffers(s, true);

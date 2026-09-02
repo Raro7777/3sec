@@ -190,7 +190,8 @@ describe("board review", () => {
     expect(managerRollover(s2, new Rng(9))).toEqual(award);
     for (const c of s2.clubs) if (c.id !== s2.userClub) {
       const stayed = c.manager!.id === before.get(c.id)!.id;
-      const cv = (stayed ? c.manager! : s2.freeManagers.find((m) => m.id === before.get(c.id)!.id)!).history;
+      // a sacked manager is either in the free pool or already hired by another club
+      const cv = (stayed ? c.manager! : (s2.freeManagers.find((m) => m.id === before.get(c.id)!.id) ?? s2.clubs.map((x) => x.manager).find((m) => m?.id === before.get(c.id)!.id))!).history;
       expect(cv.some((h) => h.season === 1 && h.club === c.id)).toBe(true);
     }
     expect(s2.news.some((n) => n.startsWith("올해의 감독:"))).toBe(true);

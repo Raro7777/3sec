@@ -5,7 +5,7 @@ export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
   DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
-  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, yellowBan, homeAwayRecord, financeSummary,
+  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary,
   type RecordOptions, type HomeAwayRecord, type FinanceSummary,
 } from "./season";
 export {
