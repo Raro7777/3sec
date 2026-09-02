@@ -57,7 +57,7 @@ export function selectionProblem(club: Club): string | null {
     if (ids.has(id)) return `${p.name}이(가) 중복 등록되었습니다`;
     ids.add(id);
     if (!isAvailable(p)) return `${p.name}은(는) ${p.injuryDays > 0 ? "부상" : "출장 정지"} 중입니다`;
-    if (i === 0 && p.role !== "GK") return "1번 자리는 골키퍼여야 합니다";
+    if (i === 0 && p.role !== "GK" && club.squad.some((q) => q.role === "GK" && isAvailable(q))) return "1번 자리는 골키퍼여야 합니다";
   }
   if (sel.bench.length > BENCH_SIZE) return `교체 명단은 최대 ${BENCH_SIZE}명입니다`;
   for (const id of sel.bench) {
@@ -86,7 +86,10 @@ export function repairSelection(club: Club): Selection {
       used.add(keep);
       return keep;
     }
-    const fill = auto.starters.find((id) => ok(id) && (i > 0 || club.squad.find((q) => q.id === id)!.role === "GK")) ?? club.squad.find((q) => isAvailable(q) && !used.has(q.id) && (i > 0 || q.role === "GK"))?.id;
+    const fill = auto.starters.find((id) => ok(id) && (i > 0 || club.squad.find((q) => q.id === id)!.role === "GK"))
+      ?? club.squad.find((q) => isAvailable(q) && !used.has(q.id) && (i > 0 || q.role === "GK"))?.id
+      // no fit keeper left (injuries, bans, expired contracts): an outfield player goes in goal for now
+      ?? (i === 0 ? [...club.squad].filter((q) => isAvailable(q) && !used.has(q.id)).sort((a, b) => b.attrs.handling + b.attrs.reflexes - a.attrs.handling - a.attrs.reflexes)[0]?.id : undefined);
     if (!fill) throw new Error(`${slot.role} 자리에 출전 가능한 선수가 없습니다`);
     used.add(fill);
     return fill;
