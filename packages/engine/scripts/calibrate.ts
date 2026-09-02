@@ -63,6 +63,8 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   reactionDelay: [0, 1.0],
   panicClear: [0, 0.8],
   shieldBase: [0.3, 0.92],
+  attrCompression: [0.5, 0.9],
+  homeBoost: [0, 0.1],
 };
 
 interface Metrics {

@@ -28,7 +28,7 @@ function park(m: Match, team: 0 | 1, except: string[]): void {
 
 describe("scenario: striker one-on-one with the keeper", () => {
   it("scores roughly 30-55% of the time, keeper saves or striker misses the rest", () => {
-    let goals = 0, saves = 0, N = 40;
+    let goals = 0, saves = 0, N = 80;
     for (let s = 0; s < N; s++) {
       const m = mk(100 + s);
       const dir = m.dirOf(0);
@@ -46,7 +46,14 @@ describe("scenario: striker one-on-one with the keeper", () => {
       m.state.ball.lastTouchTeam = 0;
       const before = m.state.score[0];
       let t = 0;
-      while (t++ < 20 * 12 && m.state.phase === "PLAY") m.step();
+      // Only the first attempt counts: stop once the striker has shot and the ball is dead,
+      // saved, or in the keeper's hands (follow-up scraps are not a one-on-one).
+      while (t++ < 20 * 12 && m.state.phase === "PLAY") {
+        m.step();
+        const shot = m.state.events.some((e) => e.type === "SHOT");
+        const gkHasIt = m.state.ball.owner !== null && m.teamOf.get(m.state.ball.owner) === 1;
+        if (shot && (gkHasIt || m.state.events.some((e) => e.type === "SAVE"))) break;
+      }
       if (m.state.score[0] > before) goals++;
       else if (m.state.events.some((e) => e.type === "SAVE")) saves++;
     }

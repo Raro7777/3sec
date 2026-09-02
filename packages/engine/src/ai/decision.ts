@@ -77,8 +77,8 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     // touch first (during which the defender arrives), only the composed strike immediately.
     const firstTime = p.possessionTime < 0.5 && pressure < 2.5 ? -0.9 * (1.1 - a01(attrs.composure)) : 0;
     // Clean through on goal from distance: carry it closer instead of snatching at it.
-    const cleanThrough = dGoal > 15 && blockers === 0 && spaceAhead(m, p, norm(sub(goal, p.pos)), true) > 12;
-    const throughPenalty = cleanThrough ? -0.7 - Math.min(0.5, (dGoal - 15) * 0.05) : 0;
+    const cleanThrough = dGoal > 12 && blockers === 0 && spaceAhead(m, p, norm(sub(goal, p.pos)), true) > 10;
+    const throughPenalty = cleanThrough ? -0.8 - Math.min(0.6, (dGoal - 12) * 0.06) : 0;
     const shotScore =
       TUNING.shotBase +
       (tactics.mentality - 0.5) * 0.4 +
@@ -338,6 +338,13 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   // Receiver runs to meet the ball
   target.target = aim;
   target.desiredSpeed = 99;
+  // Give-and-go: after a short pass with space ahead, the passer keeps moving past the ball
+  // for a couple of seconds and offers the return (a one-two), instead of standing still.
+  if (!lofted && !isCross && d < 18 && !m.isKeeper(p.id)) {
+    const dir = m.dirOf(p.team);
+    const fwd = { x: dir, y: 0 };
+    if (p.pos.x * dir > -25 && spaceAhead(m, p, fwd, true) > 8 && m.rng.chance(0.55)) m.runUntil.set(p.id, m.state.tick + 50);
+  }
 }
 
 // ---------------------------------------------------------------- shooting
@@ -357,7 +364,7 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   const aimY = side * (PITCH.goalHalfWidth - 0.35 - m.rng.range(0, 0.6 + 1.8 * (1 - skill)));
   // Pressure and a hurried first-time strike degrade the finish far more than distance does.
   // A calm, settled finish with nobody near is the most precise strike in the game.
-  const calm = pressure > 4 && p.possessionTime > 1 && !isPenalty ? 0.6 : 1;
+  const calm = pressure > 4 && p.possessionTime > 1 && !isPenalty ? 0.5 : 1;
   const pressureFactor = (1 + Math.max(0, 2.5 - pressure) * 0.8 * (1.55 - a01(attrs.composure))) * (p.possessionTime < 0.5 ? 1.6 : 1) * calm;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.

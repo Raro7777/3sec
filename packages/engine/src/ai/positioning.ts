@@ -4,7 +4,7 @@ import type { PlayerState, TeamId } from "../types";
 import { PITCH, clampToPitch, inPenaltyArea } from "../pitch";
 import { isDefender, isForward, isMidfielder } from "../formation";
 import { a01, maxAccel, maxSpeed } from "../physics/player";
-import { add, dist, lerp, norm, scale, sub, type Vec2 } from "../math/vec";
+import { add, dist, lerp, norm, pointSegment, scale, sub, type Vec2 } from "../math/vec";
 
 /**
  * Sets `target` and `desiredSpeed` for every player each tick.
@@ -19,6 +19,18 @@ export function computePositioning(m: Match, _dt: number): void {
 
   // Off-ball shape is recomputed at 20/3 Hz; chasers and the keeper every tick.
   const heavy = s.tick % 3 === 0;
+  // The carrier's two nearest outfield team-mates (6-28 m away) are this tick's supporters.
+  const supporters = new Set<string>();
+  if (ball.owner && possession !== null) {
+    const carrier = m.player(ball.owner);
+    m.activePlayers(possession)
+      .filter((q) => q.id !== carrier.id && !m.isKeeper(q.id))
+      .map((q) => ({ q, d: dist(q.pos, carrier.pos) }))
+      .filter((x) => x.d > 6 && x.d < 28)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 2)
+      .forEach((x) => supporters.add(x.q.id));
+  }
 
   // ------------------------------------------------------------ chasers
   // For each team pick who should go to the ball (only in open play).
@@ -150,7 +162,33 @@ export function computePositioning(m: Match, _dt: number): void {
       continue;
     }
 
+    // Timed off-ball run (give-and-go / overlap): sprint into the space ahead, then rejoin the shape.
+    const runEnd = m.runUntil.get(p.id);
+    if (runEnd !== undefined) {
+      if (runEnd > s.tick && possession === p.team && ball.owner !== p.id) {
+        const dir = m.dirOf(p.team);
+        setTarget(p, runTarget(m, p, dir), 99, "run");
+        continue;
+      }
+      m.runUntil.delete(p.id);
+    }
+
     let target = shapePosition(m, p, possession);
+    // Off-ball support: the two nearest team-mates of the carrier come to an open angle 10-12 m
+    // away where the pass lane is clear; the same-side full-back overlaps a winger on the ball.
+    if (possession === p.team && ball.owner && ball.owner !== p.id && supporters.has(p.id)) {
+      const sp = supportTarget(m, p, m.player(ball.owner));
+      if (sp) target = { x: target.x * 0.3 + sp.x * 0.7, y: target.y * 0.3 + sp.y * 0.7 };
+    }
+    if (possession === p.team && ball.owner && overlapFor(m, p, m.player(ball.owner))) {
+      const carrier = m.player(ball.owner);
+      const dir = m.dirOf(p.team);
+      const side = Math.sign(carrier.pos.y) || 1;
+      target = { x: carrier.pos.x + dir * 14, y: Math.max(-PITCH.halfWidth + 3, Math.min(PITCH.halfWidth - 3, carrier.pos.y + side * 5)) };
+      m.runUntil.set(p.id, s.tick + 40);
+      setTarget(p, target, 99, "run");
+      continue;
+    }
     // Hysteresis: a spot that moved less than 2 m is not worth moving for – players stand,
     // scan and adjust in steps, they do not drift continuously.
     if (!runFlag && (p.intent === "shape" || p.intent === "support") && dist(target, p.target) < 3) target = p.target;
@@ -215,6 +253,56 @@ function assignMarkers(m: Match, possession: TeamId | null, chasers: Set<string>
       available.splice(available.indexOf(best), 1);
     }
   }
+}
+
+/** Where a timed run goes: straight ahead, bending away from the nearest opponent. */
+function runTarget(m: Match, p: PlayerState, dir: 1 | -1): Vec2 {
+  let nearest: PlayerState | null = null;
+  let nd = Infinity;
+  for (const o of m.activePlayers(m.opp(p.team))) {
+    const d = dist(o.pos, p.pos);
+    if (d < nd) { nd = d; nearest = o; }
+  }
+  const away = nearest && nd < 8 ? Math.sign(p.pos.y - nearest.pos.y) || 1 : 0;
+  return { x: p.pos.x + dir * 14, y: p.pos.y + away * 4 };
+}
+
+/** Support angle for a team-mate of the carrier: open, lane clear, a little ahead if possible. */
+function supportTarget(m: Match, p: PlayerState, carrier: PlayerState): Vec2 | null {
+  const dir = m.dirOf(p.team);
+  const opponents = m.activePlayers(m.opp(p.team));
+  const R = 11;
+  let best: Vec2 | null = null;
+  let bestScore = -Infinity;
+  for (const deg of [-140, -95, -50, -15, 15, 50, 95, 140]) {
+    const a = (deg * Math.PI) / 180;
+    const pt = { x: carrier.pos.x + dir * Math.cos(a) * R, y: carrier.pos.y + Math.sin(a) * R };
+    if (Math.abs(pt.x) > PITCH.halfLength - 2 || Math.abs(pt.y) > PITCH.halfWidth - 1) continue;
+    let open = Infinity;
+    let laneMin = Infinity;
+    for (const o of opponents) {
+      open = Math.min(open, dist(o.pos, pt));
+      const { d } = pointSegment(o.pos, carrier.pos, pt);
+      laneMin = Math.min(laneMin, d);
+    }
+    // Prefer staying on the player's own side of the carrier so the shape keeps its width.
+    const sameSide = Math.sign(pt.y - carrier.pos.y) === Math.sign(p.pos.y - carrier.pos.y) ? 1.5 : 0;
+    const score = Math.min(open, 9) + (laneMin > 1.5 ? 3 : 0) + Math.cos(a) * 2 + sameSide - dist(p.pos, pt) * 0.08;
+    if (score > bestScore) { bestScore = score; best = pt; }
+  }
+  return best;
+}
+
+/** Full-back overlapping a winger who has the ball wide in the opposition half. */
+function overlapFor(m: Match, p: PlayerState, carrier: PlayerState): boolean {
+  const role = m.def(p.id).role;
+  if (role !== "LB" && role !== "RB") return false;
+  const cRole = m.def(carrier.id).role;
+  if (cRole !== "LW" && cRole !== "RW" && cRole !== "LM" && cRole !== "RM") return false;
+  const dir = m.dirOf(p.team);
+  if (carrier.pos.x * dir < 5 || carrier.pos.x * dir > 38 || Math.abs(carrier.pos.y) < 12) return false;
+  if (Math.sign(m.homeSlot(p.id).y) !== Math.sign(m.homeSlot(carrier.id).y)) return false;
+  return dist(p.pos, carrier.pos) < 25 && (carrier.pos.x - p.pos.x) * dir > -2;
 }
 
 function setTarget(p: PlayerState, target: Vec2, speed: number, intent: string): void {
@@ -298,10 +386,13 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // An attacking mentality commits the full-backs/centre-backs further forward in possession
   // (and leaves the team open on the counter); a defensive one keeps them home.
   const mentPull = (tactics.mentality - 0.5) * 0.5; // -0.25 .. +0.25
+  // A low block is also a compact one: the lower the line, the tighter the midfield screens the
+  // back four (lengthwise and across), so the ball has to go around ten men, not through them.
+  const compact = !inPoss ? Math.max(0, (0.4 - tactics.defensiveLine) / 0.4) : 0; // 0 .. 1
   const pullX = inPoss
     ? isDefender(role) ? Math.max(0, 0.1 + mentPull) : isMidfielder(role) ? 0.4 + mentPull * 0.6 : 0.55
-    : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 : 0.15;
-  const pullY = isDefender(role) ? 0.15 : isMidfielder(role) ? 0.3 : 0.2;
+    : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 + 0.3 * compact : 0.15 + 0.15 * compact;
+  const pullY = (isDefender(role) ? 0.15 : isMidfielder(role) ? 0.3 : 0.2) * (1 + 0.6 * compact);
 
   let x = home.x * dir + shiftX;
   let y = home.y + shiftY;

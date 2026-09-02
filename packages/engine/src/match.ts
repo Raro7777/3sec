@@ -76,6 +76,11 @@ export class Match {
 
   /** who a pass was aimed at (for chasing / completion stats) */
   intendedReceiver: string | null = null;
+  /** players making a timed off-ball run (give-and-go / overlap): id -> tick it ends */
+  readonly runUntil = new Map<string, number>();
+  /** AI-managed teams' base tactics; score management is applied on top */
+  private aiBase: Partial<Record<TeamId, Tactics>> = {};
+  private aiBucket: Partial<Record<TeamId, string>> = {};
   /** tick of the last pass/clearance kick (defenders react with a delay) */
   lastKickTick = -1000;
   /** tick at which possession last changed hands (transition / counter-attack window) */
@@ -197,13 +202,29 @@ export class Match {
       const q = (t: TeamDef) => t.players.reduce((acc, p) => acc + Object.values(p.attrs).reduce((x, y) => x + y, 0) / 20, 0) / t.players.length;
       const gap = q(this.teams[team]) - q(this.teams[team === 0 ? 1 : 0]);
       if (gap < -1.5) {
+        // The bigger the gap, the deeper and more direct: a low block, narrow, and long balls to the outlet.
+        const k = Math.min(1, (-gap - 1.5) / 2.5); // 0 at gap -1.5 .. 1 at gap -4
         const t = this.teams[team].tactics;
-        this.teams[team].tactics = { ...t, directness: Math.min(1, t.directness + 0.3), defensiveLine: Math.max(0, t.defensiveLine - 0.2), mentality: Math.max(0, t.mentality - 0.15), pressing: Math.max(0, t.pressing - 0.15) };
+        this.teams[team].tactics = {
+          ...t,
+          directness: Math.min(1, t.directness + 0.3 + 0.15 * k),
+          defensiveLine: Math.max(0, t.defensiveLine - 0.25 - 0.15 * k),
+          mentality: Math.max(0, t.mentality - 0.2 - 0.15 * k),
+          pressing: Math.max(0, t.pressing - 0.2 - 0.1 * k),
+          width: Math.max(0, t.width - 0.15),
+        };
       } else if (gap > 1.5) {
         const t = this.teams[team].tactics;
         this.teams[team].tactics = { ...t, mentality: Math.min(1, t.mentality + 0.1), pressing: Math.min(1, t.pressing + 0.15), defensiveLine: Math.min(1, t.defensiveLine + 0.15) };
       }
     }
+
+    // Home advantage: the crowd lifts the home side a touch (worth ~+0.15 goals per match).
+    if (TUNING.homeBoost > 0) {
+      const t = this.teams[0].tactics;
+      this.teams[0].tactics = { ...t, mentality: Math.min(1, t.mentality + TUNING.homeBoost), pressing: Math.min(1, t.pressing + TUNING.homeBoost) };
+    }
+    for (const team of this.aiManaged) this.aiBase[team] = { ...this.teams[team].tactics };
 
     const ball: BallState = {
       pos: { x: 0, y: 0 },
@@ -483,14 +504,23 @@ export class Match {
     for (const team of this.aiManaged) {
       const opp = this.opp(team);
       const diff = s.score[team] - s.score[opp];
-      // Tactical shift once, late in the game.
-      if (!this.aiShifted[team] && minute >= 70) {
-        if (diff < 0) {
-          this.setTactics(team, { mentality: 0.8, defensiveLine: 0.7, pressing: 0.75, directness: 0.65 });
-          this.aiShifted[team] = true;
-        } else if (diff > 0 && minute >= 80) {
-          this.setTactics(team, { mentality: 0.25, defensiveLine: 0.3, pressing: 0.4 });
-          this.aiShifted[team] = true;
+      // Game management: a side two goals up sits in and protects the lead; a side behind pushes
+      // harder the later it gets. Applied on top of the base tactics whenever the situation changes.
+      const base = this.aiBase[team];
+      if (base) {
+        let dm = 0, dl = 0, dp = 0, dd = 0;
+        if (diff >= 3) { dm = -0.4; dl = -0.25; dp = -0.35; }
+        else if (diff >= 2) { dm = -0.3; dl = -0.2; dp = -0.25; }
+        else if (diff === 1 && minute >= 70) { dm = -0.12; dl = -0.1; dp = -0.05; }
+        else if (diff === -1 && minute >= 60) { dm = 0.15; dl = 0.1; dp = 0.1; dd = 0.1; }
+        else if (diff <= -2 && minute >= 45) { dm = 0.3; dl = 0.2; dp = 0.2; dd = 0.15; }
+        else if (diff < 0 && minute >= 80) { dm = 0.3; dl = 0.2; dp = 0.2; dd = 0.15; }
+        const bucket = `${dm}|${dl}|${dp}|${dd}`;
+        if (bucket !== this.aiBucket[team]) {
+          this.aiBucket[team] = bucket;
+          const c = (v: number) => Math.max(0, Math.min(1, v));
+          this.setTactics(team, { mentality: c(base.mentality + dm), defensiveLine: c(base.defensiveLine + dl), pressing: c(base.pressing + dp), directness: c(base.directness + dd) });
+          this.aiShifted[team] = dm !== 0;
         }
       }
       // Substitutions: from the hour, replace the most fatigued outfielder with the best-fitting sub.
@@ -865,7 +895,7 @@ export class Match {
       const gAttrs = this.def(best.id).attrs;
       const reach = TUNING.gkReach + 1.0 * a01(gAttrs.reflexes);
       const rel = Math.min(1.2, bestD / reach);
-      const pSave = Math.max(0.05, Math.min(0.95, 0.74 - 0.5 * rel * rel - Math.max(0, ballSpeed - 22) * 0.015 + 0.2 * (a01(gAttrs.reflexes) - 0.5)));
+      const pSave = Math.max(0.05, Math.min(0.95, 0.64 - 0.5 * rel * rel - Math.max(0, ballSpeed - 22) * 0.015 + 0.2 * (a01(gAttrs.reflexes) - 0.5)));
       if (!this.shot.onTargetCounted) {
         this.shot.onTargetCounted = true;
         s.stats[this.shot.team].shotsOnTarget++;
@@ -1056,14 +1086,20 @@ export class Match {
       const d = dist(p.pos, b.pos);
       if (d > 1.2) continue;
       const attrs = this.def(p.id).attrs;
+      // Numbers beat skill in a crowd: with team-mates within 3 m of the ball (a packed box),
+      // challenges come faster and the dribbler has nowhere to turn. This is what lets a low
+      // block frustrate a far better side.
+      let crowd = 0;
+      for (const q of this.activePlayers(p.team)) if (q.id !== p.id && !this.isKeeper(q.id) && dist(q.pos, b.pos) < 3) crowd++;
+      crowd = Math.min(2, crowd);
       // Attempt rate ~1.5/s when in range.
       // Aggressive pressing means more (and rasher) challenges.
-      if (!this.rng.chance(TUNING.tackleRate * (0.75 + 0.5 * this.teams[p.team].tactics.pressing) * DT)) continue;
+      if (!this.rng.chance(TUNING.tackleRate * (0.75 + 0.5 * this.teams[p.team].tactics.pressing) * (1 + 0.3 * crowd) * DT)) continue;
 
       const isGk = this.isKeeper(p.id);
       const tackleSkill = isGk ? a01(attrs.handling) * 0.8 : a01(attrs.tackling);
       const keepSkill = a01(oAttrs.dribbling) * 0.7 + a01(oAttrs.strength) * 0.3 + a01(oAttrs.composure) * 0.15;
-      const pWin = tackleSkill / (tackleSkill + keepSkill * 1.05);
+      const pWin = Math.min(0.85, tackleSkill / (tackleSkill + keepSkill * 1.05) + 0.08 * crowd);
 
       // Foul probability: clumsy tacklers (low tackling) foul more; tackles from behind more.
       const facingDot = Math.cos(owner.facing - Math.atan2(p.pos.y - owner.pos.y, p.pos.x - owner.pos.x));

@@ -1,3 +1,4 @@
+import { TUNING } from "../tuning";
 import type { Attributes, PlayerState } from "../types";
 import { angleOf, dist, len, norm, scale, sub, type Vec2 } from "../math/vec";
 
@@ -7,7 +8,7 @@ import { angleOf, dist, len, norm, scale, sub, type Vec2 } from "../math/vec";
  * produced 48 shots to 2. With it, strong vs weak looks like ~25 to 6, as in real football.
  */
 export const ATTR_COMPRESSION = 0.7;
-export const a01 = (x: number): number => 0.5 + (Math.min(20, Math.max(1, x)) / 20 - 0.5) * ATTR_COMPRESSION;
+export const a01 = (x: number): number => 0.5 + (Math.min(20, Math.max(1, x)) / 20 - 0.5) * TUNING.attrCompression;
 
 /**
  * Top speed in m/s: 1 => 7.0, 20 => 9.6 (elite sprinter ~ 9.5–10 m/s).

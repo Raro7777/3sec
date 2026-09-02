@@ -46,10 +46,14 @@ export interface Tuning {
   panicClear: number;
   /** base probability the intended receiver wins a contested reception (shielding) */
   shieldBase: number;
+  /** how much of the 1..20 attribute range reaches the physics/AI (1 = full spread) */
+  attrCompression: number;
+  /** home advantage: mentality/pressing lift for the home side (crowd), 0 = none */
+  homeBoost: number;
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.3,
+  shotBase: 0.42,
   shotXgMult: 3.0713,
   longRangeBase: 0.168,
   shotAngSd: 0.44,
@@ -66,11 +70,13 @@ export const TUNING: Tuning = {
   tackleRate: 1.7,
   foulBase: 0.05,
   yellowBase: 0.13,
-  gkReach: 2.95,
+  gkReach: 3.05,
   offsideWobble: 4,
   reactionDelay: 0.45,
   panicClear: 0.7,
   shieldBase: 0.72,
+  attrCompression: 0.35,
+  homeBoost: 0.05,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });
