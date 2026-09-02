@@ -49,11 +49,11 @@ export interface Tuning {
 }
 
 export const TUNING: Tuning = {
-  shotBase: 0.2,
+  shotBase: 0.25,
   shotXgMult: 4.725,
   longRangeBase: 0.35,
   shotAngSd: 0.42,
-  crossBase: -0.4,
+  crossBase: -0.3,
   passMarginWeight: 0.8,
   carryBonus: 0.9,
   receiverBias: 1.2825,

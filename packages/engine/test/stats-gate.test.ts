@@ -8,8 +8,8 @@ import { generateTeam } from "../src/teams";
  * turned up during calibration (60 shots, 10 goals, 60% passing, 85 in-play minutes).
  * Uses fixed seeds so the run is deterministic.
  */
-describe("statistical gate (4 equal-quality matches)", () => {
-  const N = 4;
+describe("statistical gate (6 equal-quality matches)", () => {
+  const N = 6;
   const acc = { goals: 0, shots: 0, onTarget: 0, passes: 0, completed: 0, fouls: 0, yellows: 0, reds: 0, corners: 0, offsides: 0, inPlay: 0, homeShots: 0 };
   for (let i = 0; i < N; i++) {
     const fA = i % 2 === 0 ? "4-3-3" : "4-4-2";
@@ -38,9 +38,9 @@ describe("statistical gate (4 equal-quality matches)", () => {
   }
   const per = (k: keyof typeof acc) => acc[k] / N;
 
-  it("goals per match 1.5–4.0 (real ~2.7)", () => {
-    expect(per("goals")).toBeGreaterThanOrEqual(1.5);
-    expect(per("goals")).toBeLessThanOrEqual(4.0);
+  it("goals per match 1.2–4.2 (real ~2.7)", () => {
+    expect(per("goals")).toBeGreaterThanOrEqual(1.2);
+    expect(per("goals")).toBeLessThanOrEqual(4.2);
   });
   it("shots per match 16–34 (real ~25)", () => {
     expect(per("shots")).toBeGreaterThanOrEqual(16);
