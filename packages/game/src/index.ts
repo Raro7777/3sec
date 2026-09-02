@@ -23,4 +23,4 @@ export {
 } from "./transfers";
 export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, ATTR_LABEL, weeklyRate, trainWeek, spendGrowth, type Development, type Grower } from "./training";
 export { MAX_PROSPECTS, MIN_PROMOTE_AGE, LEAVE_AGE, SCOUTING, COACHING, youthWeeklyCost, prospectOverall, youthIntake, youthWeek, youthRollover, promoteProspect, releaseProspect } from "./youth";
-export { wageFor, wageBill, loanWageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";
+export { weeklyRevenue, wageFor, wageBill, loanWageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";

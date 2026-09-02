@@ -60,6 +60,10 @@
       .result.me { color:var(--accent); }
       .scorers { grid-column:1 / -1; font-size:11px; color:var(--muted); line-height:1.5; }
       .hint { color:var(--muted); font-size:12px; line-height:1.5; }
+      .slot { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
+      .slot .meta { font-size:12px; color:var(--muted); }
+      .slot .btns { display:flex; gap:4px; }
+      textarea { width:100%; min-height:90px; background:#1a2530; color:var(--text); border:1px solid #2c3d4b; border-radius:6px; padding:6px; font-family:'IBM Plex Mono', monospace; font-size:11px; }
       .guide h4 { margin:10px 0 4px; font-size:14px; color:var(--accent); }
       .guide p, .guide li { font-size:13px; line-height:1.6; color:var(--text); margin:0; }
       .guide ul { margin:0; padding-left:18px; }
@@ -231,7 +235,7 @@
         <button class="tab" data-screen="transfers">이적</button>
         <button class="tab" data-screen="youth">유스</button>
         <button class="tab" data-screen="match" id="tabMatch" disabled>경기</button>
-        <button class="tab" data-screen="guide" title="게임 가이드">?</button>
+        <button class="tab" data-screen="settings" title="설정">⚙</button>
         <span class="spacer"></span>
         <span class="season" id="seasonLabel"></span>
       </nav>
@@ -243,6 +247,7 @@
       <section class="screen" id="screen-transfers"><div class="page" id="transfers"></div></section>
       <section class="screen" id="screen-youth"><div class="page" id="youth"></div></section>
       <section class="screen" id="screen-guide"><div class="page" id="guide"></div></section>
+      <section class="screen" id="screen-settings"><div class="page" id="settings"></div></section>
       <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
       <section class="screen" id="screen-review"><div class="page" id="review"></div></section>
 

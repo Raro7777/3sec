@@ -14,7 +14,9 @@ import {
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
-type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review";
+type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings";
+const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
+const APP_VERSION = "0.15";
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
 const CLUB_BLURBS: string[] = [
@@ -66,6 +68,7 @@ export class Game {
     transfers: document.getElementById("transfers")!,
     youth: document.getElementById("youth")!,
     guide: document.getElementById("guide")!,
+    settings: document.getElementById("settings")!,
     onboarding: document.getElementById("onboarding")!,
     results: document.getElementById("results")!,
     review: document.getElementById("review")!,
@@ -252,7 +255,120 @@ export class Game {
     this.renderTable();
     this.renderTransfers();
     this.renderYouth();
+    this.renderSettings();
   }
+  // ------------------------------------------------------------ settings (new game / save / load)
+  private slotInfo(n: number): { savedAt: string; label: string; data: string } | null {
+    try {
+      const raw = localStorage.getItem(SLOT_KEY(n));
+      return raw ? (JSON.parse(raw) as { savedAt: string; label: string; data: string }) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private stateLabel(st: GameState = this.state): string {
+    const c = st.clubs[st.userClub]!;
+    return `${st.managerName} 감독 · ${c.name} · 시즌 ${st.season} ${Math.min(st.round + 1, roundsPerSeason(st.clubs.length))}R`;
+  }
+
+  private applyLoaded(st: GameState, source: string): void {
+    this.state = st;
+    prepareRound(this.state);
+    this.live = null;
+    this.save();
+    this.renderAll();
+    this.show("home");
+    alert(`${source}에서 불러왔습니다: ${this.stateLabel(st)}`);
+  }
+
+  private renderSettings(): void {
+    const s = this.state;
+    const slots = [1, 2, 3].map((n) => ({ n, info: this.slotInfo(n) }));
+    this.el.settings.innerHTML = `<div class="card"><h3>설정 <span>가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
+      <div class="hint">현재 게임: <b>${this.stateLabel()}</b> — 진행 상황은 매 조작마다 자동 저장됩니다. 아래 슬롯은 별도 백업이고, 파일로 내보내면 다른 기기로 옮길 수 있습니다.</div>
+      <div class="actions" style="margin-top:6px"><button data-set="guide">게임 가이드 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div></div>
+    <div class="card"><h3>저장 슬롯</h3>${slots
+      .map(({ n, info }) => `<div class="slot"><div><div>슬롯 ${n}</div><div class="meta">${info ? `${info.label}<br>${new Date(info.savedAt).toLocaleString("ko-KR")}` : "비어 있음"}</div></div>
+        <div class="btns"><button data-slot-save="${n}">저장</button><button data-slot-load="${n}" ${info ? "" : "disabled"}>불러오기</button><button class="danger" data-slot-del="${n}" ${info ? "" : "disabled"}>삭제</button></div></div>`)
+      .join("")}</div>
+    <div class="card"><h3>파일로 저장 / 불러오기 <span>기기 간 이동</span></h3>
+      <div class="actions"><button data-set="export">파일로 내보내기</button><button data-set="share">공유하기</button><button data-set="copy">텍스트 복사</button><label style="cursor:pointer"><input type="file" id="setImportFile" accept=".json,application/json,text/plain" style="display:none"><span style="border:1px solid #2c3d4b;border-radius:6px;padding:6px 10px;background:#1a2530;color:var(--text)">파일에서 불러오기</span></label></div>
+      <div class="hint" style="margin-top:6px">붙여넣기로 불러오기: 저장 텍스트를 아래에 붙여 넣고 버튼을 누르세요.</div>
+      <textarea id="setImportText" placeholder='{"version":1, ...}'></textarea>
+      <div class="actions"><button data-set="importText">텍스트에서 불러오기</button></div></div>
+    <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
+
+    const q = (sel: string) => this.el.settings.querySelector<HTMLElement>(sel)!;
+    q('[data-set="guide"]').addEventListener("click", () => this.show("guide"));
+    q('[data-set="newGame"]').addEventListener("click", () => this.act("newGame"));
+    for (const { n } of slots) {
+      this.el.settings.querySelector(`[data-slot-save="${n}"]`)!.addEventListener("click", () => {
+        const existing = this.slotInfo(n);
+        if (existing && !confirm(`슬롯 ${n}(${existing.label})을 덮어쓸까요?`)) return;
+        try {
+          localStorage.setItem(SLOT_KEY(n), JSON.stringify({ savedAt: new Date().toISOString(), label: this.stateLabel(), data: serialize(s) }));
+        } catch {
+          alert("저장 공간이 부족합니다.");
+        }
+        this.renderSettings();
+      });
+      this.el.settings.querySelector(`[data-slot-load="${n}"]`)!.addEventListener("click", () => {
+        const info = this.slotInfo(n);
+        if (!info) return;
+        if (this.live && !confirm("진행 중인 경기가 있습니다. 불러오면 그 경기는 사라집니다. 계속할까요?")) return;
+        const st = deserialize(info.data);
+        if (!st) { alert("슬롯 데이터가 손상되었습니다."); return; }
+        this.applyLoaded(st, `슬롯 ${n}`);
+      });
+      this.el.settings.querySelector(`[data-slot-del="${n}"]`)!.addEventListener("click", () => {
+        if (!confirm(`슬롯 ${n}을 삭제할까요?`)) return;
+        try { localStorage.removeItem(SLOT_KEY(n)); } catch { /* ignore */ }
+        this.renderSettings();
+      });
+    }
+    const fileName = () => `gananhanja-fm-s${s.season}-r${s.round + 1}.json`;
+    q('[data-set="export"]').addEventListener("click", () => {
+      const blob = new Blob([serialize(s)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName(); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    });
+    q('[data-set="share"]').addEventListener("click", async () => {
+      const nav = navigator as Navigator & { share?: (d: { files?: File[]; title?: string; text?: string }) => Promise<void>; canShare?: (d: { files?: File[] }) => boolean };
+      try {
+        const file = new File([serialize(s)], fileName(), { type: "application/json" });
+        if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) await nav.share({ files: [file], title: "가난한자의 FM 저장" });
+        else if (nav.share) await nav.share({ title: "가난한자의 FM 저장", text: serialize(s) });
+        else alert("이 기기는 공유를 지원하지 않습니다. '텍스트 복사'를 사용하세요.");
+      } catch { /* cancelled */ }
+    });
+    q('[data-set="copy"]').addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(serialize(s)); alert("저장 텍스트를 복사했습니다. 메모장이나 메신저에 붙여 두세요."); }
+      catch { (document.getElementById("setImportText") as HTMLTextAreaElement).value = serialize(s); alert("아래 상자에 저장 텍스트를 채웠습니다. 길게 눌러 복사하세요."); }
+    });
+    (document.getElementById("setImportFile") as HTMLInputElement).addEventListener("change", async (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0];
+      if (!f) return;
+      const st = deserialize(await f.text());
+      if (!st) { alert("저장 파일을 읽을 수 없습니다."); return; }
+      if (!confirm(`${this.stateLabel(st)} 을(를) 불러올까요? 현재 게임은 덮어쓰입니다.`)) return;
+      this.applyLoaded(st, "파일");
+    });
+    q('[data-set="importText"]').addEventListener("click", () => {
+      const st = deserialize((document.getElementById("setImportText") as HTMLTextAreaElement).value.trim());
+      if (!st) { alert("저장 텍스트를 읽을 수 없습니다."); return; }
+      if (!confirm(`${this.stateLabel(st)} 을(를) 불러올까요? 현재 게임은 덮어쓰입니다.`)) return;
+      this.applyLoaded(st, "텍스트");
+    });
+    q('[data-set="wipe"]').addEventListener("click", () => {
+      if (!confirm("자동 저장과 슬롯을 모두 지웁니다. 정말 초기화할까요?")) return;
+      try { localStorage.removeItem(SAVE_KEY); [1, 2, 3].forEach((n) => localStorage.removeItem(SLOT_KEY(n))); localStorage.removeItem("3sec.guide.seen"); } catch { /* ignore */ }
+      location.reload();
+    });
+  }
+
 
   private get me(): Club {
     return clubOf(this.state, this.state.userClub);

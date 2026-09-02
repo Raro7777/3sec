@@ -24,7 +24,7 @@ describe("training and development", () => {
     const budget = me.budget;
     simulateRound(s, { halfLength: 60 });
     advanceRound(s);
-    expect(me.budget).toBeLessThan(budget + 0.01);
+    expect(me.budget).not.toBe(budget); // income in, wages out
     expect(wageBill(me)).toBeGreaterThan(0);
   });
 

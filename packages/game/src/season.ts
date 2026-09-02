@@ -159,7 +159,7 @@ export function advanceRound(s: GameState): boolean {
     const dev = trainWeek(c, rng);
     if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
-  payWages(s, roundsPerSeason(s.clubs.length));
+  payWages(s, roundsPerSeason(s.clubs.length), new Map(table(s).map((r, i) => [r.club, i + 1])));
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
   youthWeek(s);
   if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));

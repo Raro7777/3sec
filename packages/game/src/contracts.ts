@@ -5,7 +5,7 @@ import { autoSelect, repairSelection } from "./selection";
 
 /** Salary per season (억원) a player of this value expects. */
 export function wageFor(p: SquadPlayer): number {
-  return Math.max(0.3, Math.round(playerValue(p) * 0.08 * 10) / 10);
+  return Math.max(0.3, Math.round(playerValue(p) * 0.05 * 10) / 10);
 }
 
 /** Season wage bill; a player away on loan costs his club only half (the borrowing club pays the rest). */
@@ -49,8 +49,19 @@ export function renewContract(s: GameState, playerId: string, years: 1 | 2 | 3):
 }
 
 /** Every club pays a week of wages; a poor club can slide into the red, which blocks buying. */
-export function payWages(s: GameState, weeksPerSeason: number): void {
-  for (const c of s.clubs) c.budget = Math.round((c.budget - (wageBill(c) + loanWageBill(s, c)) / weeksPerSeason) * 10) / 10;
+/** Weekly income (gate, broadcasting, sponsors) in 억원: reputation-driven, with a small league-position bonus. */
+export function weeklyRevenue(club: Club, position: number | null): number {
+  const base = 0.6 + Math.max(0, club.reputation - 10) * 0.35;
+  const pos = position === null ? 0 : Math.max(0, 12 - position) * 0.03;
+  return Math.round((base + pos) * 100) / 100;
+}
+
+/** Every club banks its weekly income and pays a week of wages; a poor club can slide into the red, which blocks buying. */
+export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<number, number>): void {
+  for (const c of s.clubs) {
+    const income = weeklyRevenue(c, positions?.get(c.id) ?? null);
+    c.budget = Math.round((c.budget + income - (wageBill(c) + loanWageBill(s, c)) / weeksPerSeason) * 10) / 10;
+  }
 }
 
 /**
