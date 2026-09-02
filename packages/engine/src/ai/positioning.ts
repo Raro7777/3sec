@@ -81,6 +81,17 @@ export function computePositioning(m: Match, _dt: number): void {
     }
 
     if (chasers.has(p.id)) {
+      if (carrier && carrierTeam !== p.team) {
+        // Pressing a carrier: close down goal-side (between ball and own goal) so the shooting
+        // and passing lanes are shut – this is where blocks and tackles happen.
+        const dir = m.dirOf(p.team);
+        const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
+        const toGoal = norm(sub(ownGoal, ball.pos));
+        const dGoal = dist(ball.pos, ownGoal);
+        const jockey = add(add(ball.pos, scale(toGoal, dGoal < 25 ? 1.0 : 1.4)), scale(carrier.vel, 0.25));
+        setTarget(p, jockey, 99, "press");
+        continue;
+      }
       const target = interceptPoint(m, p);
       setTarget(p, target, 99, "chase");
       continue;
@@ -121,7 +132,8 @@ export function computePositioning(m: Match, _dt: number): void {
 
     const target = shapePosition(m, p, possession);
     const d = dist(p.pos, target);
-    const speed = d > 14 ? 99 : d > 6 ? 5.5 : d > 2 ? 3.5 : 1.5;
+    // Shape adjustments are jogs and walks, not sprints (players cover ~10-11 km, not 15).
+    const speed = d > 14 ? 7 : d > 6 ? 4.5 : d > 2 ? 2.5 : 1.2;
     setTarget(p, target, speed, possession === p.team ? "support" : "shape");
   }
 }
@@ -138,6 +150,7 @@ function assignMarkers(m: Match, possession: TeamId | null, chasers: Set<string>
   const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
   const ball = m.state.ball;
 
+  // The carrier is handled by the pressers (goal-side); markers take the nearest attackers to our goal.
   const threats = m
     .activePlayers(possession)
     .filter((q) => !m.isKeeper(q.id) && q.id !== ball.owner)
@@ -444,5 +457,5 @@ function restartPositioning(m: Match, p: PlayerState): void {
   }
 
   const d = dist(p.pos, target);
-  setTarget(p, target, d > 10 ? 7 : 4, "restart");
+  setTarget(p, target, d > 10 ? 5 : 3, "restart");
 }

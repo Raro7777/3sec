@@ -471,7 +471,8 @@ export class Match {
       // Substitutions: from the hour, replace the most fatigued outfielder with the best-fitting sub.
       if (minute >= 60 && minute % 5 === 0 && s.subsUsed[team] < 3) {
         const eleven = s.lineups[team].slice(1).map((id) => this.player(id)).filter((p) => !p.sentOff);
-        const tired = eleven.filter((p) => p.fatigue > 0.6).sort((a, b) => b.fatigue - a.fatigue)[0];
+        const threshold = minute >= 75 ? 0.4 : 0.5;
+        const tired = eleven.filter((p) => p.fatigue > threshold).sort((a, b) => b.fatigue - a.fatigue)[0];
         if (!tired) continue;
         const bench = this.benchAvailable(team).filter((p) => this.def(p.id).role !== "GK");
         let best: PlayerState | null = null;
@@ -639,6 +640,7 @@ export class Match {
     for (const p of this.activePlayers()) {
       stepPlayer(p, this.def(p.id).attrs, DT);
     }
+    this.resolveBodyContact();
 
     const taker = this.player(r.takerId!);
     if (r.timer <= 0 && dist(taker.pos, r.pos) < 1.2) {
@@ -681,6 +683,7 @@ export class Match {
     for (const p of this.activePlayers()) {
       stepPlayer(p, this.def(p.id).attrs, DT);
     }
+    this.resolveBodyContact();
 
     // Ball: dribble-follow or free physics
     if (b.owner) {
@@ -700,6 +703,48 @@ export class Match {
     this.refereeBallOut();
     if (this.state.phase !== "PLAY") return;
     this.checkHalfEnd();
+  }
+
+  /**
+   * Soft body contact: players cannot run through each other. Overlapping pairs are pushed
+   * apart (the stronger player yields less) and lose the velocity component driving them
+   * together. This is what lets a goal-side defender actually bar the way to goal.
+   */
+  private resolveBodyContact(): void {
+    const ps = this.activePlayers();
+    const minD = 0.75;
+    for (let i = 0; i < ps.length; i++) {
+      const a = ps[i]!;
+      for (let j = i + 1; j < ps.length; j++) {
+        const c = ps[j]!;
+        const dx = c.pos.x - a.pos.x;
+        const dy = c.pos.y - a.pos.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= minD * minD || d2 < 1e-9) continue;
+        const d = Math.sqrt(d2);
+        const nx = dx / d;
+        const ny = dy / d;
+        const overlap = minD - d;
+        const sa = a01(this.def(a.id).attrs.strength);
+        const sc = a01(this.def(c.id).attrs.strength);
+        const wa = sc / (sa + sc); // a moves proportionally to c's strength
+        a.pos.x -= nx * overlap * wa;
+        a.pos.y -= ny * overlap * wa;
+        c.pos.x += nx * overlap * (1 - wa);
+        c.pos.y += ny * overlap * (1 - wa);
+        // Kill approach velocity (inelastic contact)
+        const va = a.vel.x * nx + a.vel.y * ny;
+        const vc = c.vel.x * nx + c.vel.y * ny;
+        if (va > 0) {
+          a.vel.x -= nx * va * 0.9;
+          a.vel.y -= ny * va * 0.9;
+        }
+        if (vc < 0) {
+          c.vel.x -= nx * vc * 0.9;
+          c.vel.y -= ny * vc * 0.9;
+        }
+      }
+    }
   }
 
   /** Control radius for gaining a loose ball. */

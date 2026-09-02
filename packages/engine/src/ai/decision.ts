@@ -51,8 +51,9 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     return 0.3;
   }
 
-  // Settle the ball first: a player needs a moment after receiving (shorter when pressed).
-  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : 1);
+  // Settle the ball first: a player needs a moment after receiving – a touch and a look up
+  // (~1 s with time and space; hurried when pressed).
+  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : pressure < 5 ? 1 : 1.7);
   if (p.possessionTime < settle) {
     const point = dribbleTarget(m, p);
     setDribble(m, p, point, 4);
