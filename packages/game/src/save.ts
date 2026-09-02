@@ -1,5 +1,7 @@
 import type { GameState } from "./types";
 import { CLUBS } from "./world";
+import { overall } from "./rating";
+import { wageFor } from "./contracts";
 
 export const SAVE_KEY = "3sec.save.v1";
 
@@ -17,6 +19,13 @@ export function deserialize(json: string | null | undefined): GameState | null {
       // Older saves carry English club names; the roster of clubs is fixed by id, so refresh the labels.
       const def = CLUBS[c.id];
       if (def) { c.name = def.name; c.shortName = def.shortName; }
+      if (!c.training) c.training = { focus: "balanced", intensity: "normal" };
+      for (const p of c.squad) {
+        if (typeof p.potential !== "number") { const o = overall(p.attrs, p.role); p.potential = Math.max(o, Math.min(20, Math.round((o + Math.max(0, 27 - p.age) * 0.55 + 0.5) * 10) / 10)); }
+        if (typeof p.growth !== "number") p.growth = 0;
+        if (typeof p.contractUntil !== "number") p.contractUntil = s.season + 1;
+        if (typeof p.wage !== "number") p.wage = wageFor(p);
+      }
     }
     return s;
   } catch {

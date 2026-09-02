@@ -16,7 +16,9 @@ export class MatchScreen {
   private others: SideMatch[] = [];
   private userTeam: TeamId = 0;
   private playing = false;
-  private speed = 1;
+  /** fixed multiplier, or 'auto' = highlight pacing (slow near goal, fast elsewhere) */
+  private speed: number | "auto" = "auto";
+  private effSpeed = 1;
   private acc = 0;
   private lastTs = 0;
   private loggedEvents = 0;
@@ -36,6 +38,10 @@ export class MatchScreen {
   private readonly btnPlay = document.getElementById("btnPlay") as HTMLButtonElement;
   private readonly btnSkip = document.getElementById("btnSkip") as HTMLButtonElement;
   private readonly btnContinue = document.getElementById("btnContinue") as HTMLButtonElement;
+  private readonly btnFull = document.getElementById("btnFull") as HTMLButtonElement;
+  private readonly btnPanel = document.getElementById("btnPanel") as HTMLButtonElement;
+  /** user explicitly toggled immersive mode (otherwise it follows phone orientation) */
+  private immersiveByUser: boolean | null = null;
   private readonly speedSel = document.getElementById("speed") as HTMLSelectElement;
   private readonly debugChk = document.getElementById("debug") as HTMLInputElement;
   private readonly panel: ManagerPanel;
@@ -48,9 +54,18 @@ export class MatchScreen {
     this.btnPlay.addEventListener("click", () => this.setPlaying(!this.playing));
     this.btnSkip.addEventListener("click", () => void this.skipToEnd());
     this.btnContinue.addEventListener("click", () => this.onFinish?.());
-    this.speedSel.addEventListener("change", () => (this.speed = Number(this.speedSel.value)));
+    this.speedSel.addEventListener("change", () => (this.speed = this.speedSel.value === "auto" ? "auto" : Number(this.speedSel.value)));
     this.debugChk.addEventListener("change", () => this.render());
-    window.addEventListener("resize", () => this.resize());
+    this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
+    this.btnPanel.addEventListener("click", () => document.body.classList.toggle("panel-open"));
+    this.canvas.addEventListener("pointerdown", () => document.body.classList.remove("panel-open"));
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && this.immersiveByUser) this.setImmersive(false, true);
+    });
+    window.addEventListener("resize", () => {
+      this.autoImmersive();
+      this.resize();
+    });
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" && document.getElementById("screen-match")!.classList.contains("active") && !this.finished) {
         e.preventDefault();
@@ -76,11 +91,41 @@ export class MatchScreen {
     this.btnPlay.disabled = false;
     this.setPlaying(false);
     this.panel.attach(match, userTeam);
-    this.resize();
+    this.immersiveByUser = null;
+    requestAnimationFrame(() => { this.autoImmersive(); this.resize(); });
     if (!this.rafStarted) {
       this.rafStarted = true;
       requestAnimationFrame((ts) => this.frame(ts));
     }
+  }
+
+  /** Phones in landscape get the big pitch automatically; portrait goes back, unless the user chose. */
+  private autoImmersive(): void {
+    if (this.immersiveByUser !== null) return;
+    const active = document.getElementById("screen-match")!.classList.contains("active");
+    const landscapePhone = window.innerWidth > window.innerHeight && window.innerHeight < 560;
+    const want = active && landscapePhone && !this.finished;
+    if (want !== document.body.classList.contains("immersive")) this.setImmersive(want, false);
+  }
+
+  private setImmersive(on: boolean, byUser: boolean): void {
+    document.body.classList.toggle("immersive", on);
+    if (!on) document.body.classList.remove("panel-open");
+    if (byUser) this.immersiveByUser = on ? true : null;
+    this.btnFull.textContent = on ? "⛶ 닫기" : "⛶ 크게";
+    if (byUser && on) {
+      document.documentElement.requestFullscreen?.().catch(() => undefined);
+      (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.("landscape").catch(() => undefined);
+    } else if (byUser && !on && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    }
+    requestAnimationFrame(() => this.resize());
+  }
+
+  /** Called by the controller when leaving the match screen. */
+  leave(): void {
+    this.immersiveByUser = null;
+    this.setImmersive(false, false);
   }
 
   get isPlaying(): boolean {
@@ -119,7 +164,11 @@ export class MatchScreen {
     const elapsed = Math.min(0.25, (ts - this.lastTs) / 1000);
     this.lastTs = ts;
     if (this.playing) {
-      this.acc += elapsed * this.speed;
+      // Dead-ball waits (free kicks, corners, celebrations, half time) are real-length in the
+      // engine; at any fixed speed they run at least 4x faster so the game never drags.
+      const dead = this.match.state.phase !== "PLAY";
+      this.effSpeed = this.speed === "auto" ? this.autoSpeed() : dead ? Math.max(8, this.speed * 4) : this.speed;
+      this.acc += elapsed * this.effSpeed;
       let steps = 0;
       while (this.acc >= DT && steps < 400) {
         this.stepAll(1);
@@ -130,6 +179,18 @@ export class MatchScreen {
     }
     this.render();
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /**
+   * Highlight pacing: the ball near either goal in open play runs at 3x so chances can be
+   * followed; midfield play at 20x; restarts, celebrations and half time at 40x.
+   * A 90-minute match takes roughly 8-10 real minutes this way.
+   */
+  private autoSpeed(): number {
+    const s = this.match.state;
+    if (s.phase !== "PLAY") return 40;
+    const nearGoal = Math.abs(s.ball.pos.x) > PITCH.halfLength - 32;
+    return nearGoal ? 3 : 20;
   }
 
   private fmtClock(): string {
@@ -322,7 +383,7 @@ export class MatchScreen {
 
     const [home, away] = match.teams;
     this.scoreEl.innerHTML = `<span style="color:${home.color}">${home.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${away.color}">${away.shortName}</span>`;
-    this.clockEl.textContent = this.fmtClock();
+    this.clockEl.textContent = this.fmtClock() + (this.playing && this.effSpeed !== this.speed ? `  ${this.effSpeed}x` : "");
     const phaseText: Record<string, string> = {
       PRE_KICKOFF: "킥오프 대기",
       PLAY: "",
@@ -343,6 +404,7 @@ export class MatchScreen {
       this.btnPlay.disabled = true;
       this.btnSkip.disabled = true;
       this.btnContinue.style.display = "";
+      document.body.classList.remove("panel-open");
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
       this.btnSkip.textContent = "⏩ 다른 구장 종료";

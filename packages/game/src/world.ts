@@ -2,6 +2,8 @@ import { Rng, defaultTactics, generateAttributes, type FormationName, type Role 
 import type { Club, SquadPlayer } from "./types";
 import { autoSelect } from "./selection";
 import { seasonBudget } from "./transfers";
+import { overall } from "./rating";
+import { wageFor } from "./contracts";
 
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
 const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
@@ -36,13 +38,21 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
     let number = i === 0 ? 1 : i === 1 ? 12 : rng.int(2, 40);
     while (numbers.has(number)) number = rng.int(2, 99);
     numbers.add(number);
+    const attrs = generateAttributes(rng, role, quality);
+    const ovr = overall(attrs, role);
+    // Young players carry headroom; from the late twenties the ceiling is where they stand.
+    const potential = Math.max(ovr, Math.min(20, Math.round((ovr + Math.max(0, 27 - age) * 0.55 + rng.gauss(0.5, 1)) * 10) / 10));
     squad.push({
       id: `${idPrefix}-${i + 1}`,
       name: `${rng.pick(FIRST)}${rng.pick(GIVEN)}`,
       number,
       role,
-      attrs: generateAttributes(rng, role, quality),
+      attrs,
       age,
+      potential,
+      growth: 0,
+      wage: 0,
+      contractUntil: rng.int(1, 3),
       condition: 1,
       injuryDays: 0,
       ban: 0,
@@ -66,7 +76,9 @@ export function buildClubs(seed: number): Club[] {
       squad: buildSquad(rng, `C${id}`, c.reputation),
       tactics: { ...defaultTactics(c.formation), mentality: 0.45 + rng.range(0, 0.1), pressing: 0.4 + rng.range(0, 0.2), directness: 0.4 + rng.range(0, 0.2) },
       selection: { formation: c.formation, starters: [], bench: [] },
+      training: { focus: "balanced", intensity: "normal" },
     };
+    for (const p of club.squad) p.wage = wageFor(p);
     club.selection = autoSelect(club, c.formation);
     return club;
   });

@@ -11,6 +11,14 @@ export interface SquadPlayer extends PlayerDef {
   ban: number;
   /** yellow cards accumulated this season toward the next one-match ban */
   seasonYellows: number;
+  /** ceiling the player can grow toward (attribute scale, 1..20) */
+  potential: number;
+  /** fractional development accumulated by weekly training (+ grows, − declines) */
+  growth: number;
+  /** salary per season in 억원 */
+  wage: number;
+  /** last season the contract covers (expires after that season) */
+  contractUntil: number;
   stats: { apps: number; goals: number; minutes: number; yellows: number; reds: number };
 }
 
@@ -21,6 +29,9 @@ export interface Selection {
   /** up to 7 substitutes */
   bench: string[];
 }
+
+export type TrainingFocus = "balanced" | "attacking" | "defending" | "technical" | "physical" | "tactical";
+export type TrainingIntensity = "low" | "normal" | "high";
 
 export interface Club {
   id: number;
@@ -34,6 +45,7 @@ export interface Club {
   squad: SquadPlayer[];
   tactics: Tactics;
   selection: Selection;
+  training: { focus: TrainingFocus; intensity: TrainingIntensity };
 }
 
 export interface Fixture {

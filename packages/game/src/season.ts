@@ -4,6 +4,8 @@ import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
 import { aiTransfers, seasonBudget } from "./transfers";
+import { trainWeek, ATTR_LABEL } from "./training";
+import { payWages, settleContracts } from "./contracts";
 
 export function newGame(seed: number, userClub = 0): GameState {
   const clubs = buildClubs(seed);
@@ -72,7 +74,8 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
       p.stats.minutes += Math.round(90 * Math.min(1, ps.distance / 9000));
       p.condition = Math.max(0.2, 1 - ps.fatigue * 0.9);
       // Injuries: roughly one per club every 2-3 matches, more likely on tired legs. Mostly short.
-      if (rng.chance(0.022 * (0.6 + ps.fatigue))) {
+      const intensity = c.training.intensity === "high" ? 1.3 : c.training.intensity === "low" ? 0.85 : 1;
+      if (rng.chance(0.022 * (0.6 + ps.fatigue) * intensity)) {
         const days = Math.min(90, Math.round(3 + Math.pow(rng.next(), 2.2) * 60));
         p.injuryDays = days;
         s.news.unshift(`${c.shortName}: ${p.name} 부상, 약 ${days}일 결장.`);
@@ -122,10 +125,17 @@ export function simulateRound(s: GameState, opts: MatchOptions = {}, includeUser
 export function advanceRound(s: GameState): boolean {
   if (currentFixtures(s).some((f) => !f.score)) return false;
   s.round++;
-  for (const c of s.clubs) for (const p of c.squad) {
-    p.condition = Math.min(1, p.condition + 0.6);
-    p.injuryDays = Math.max(0, p.injuryDays - 7);
+  const rng = new Rng(s.seed * 19 + s.season * 503 + s.round * 7);
+  for (const c of s.clubs) {
+    const recover = c.training.intensity === "high" ? 0.5 : c.training.intensity === "low" ? 0.7 : 0.6;
+    for (const p of c.squad) {
+      p.condition = Math.min(1, p.condition + recover);
+      p.injuryDays = Math.max(0, p.injuryDays - 7);
+    }
+    const dev = trainWeek(c, rng);
+    if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
+  payWages(s, roundsPerSeason(s.clubs.length));
   if (s.round === 10) aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
   if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   return true;
@@ -137,12 +147,10 @@ export function startNextSeason(s: GameState): void {
   const rng = new Rng(s.seed * 13 + s.season * 977);
   const finalTable = table(s);
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1);
+  settleContracts(s, s.season + 1, rng);
   for (const c of s.clubs) for (const p of c.squad) {
     p.age++;
-    const drift = p.age <= 23 ? 0.9 : p.age <= 29 ? 0.2 : p.age <= 32 ? -0.3 : -0.9;
-    for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) {
-      if (rng.chance(0.35)) p.attrs[k] = Math.max(1, Math.min(20, Math.round(p.attrs[k] + rng.gauss(drift, 0.8))));
-    }
+    if (p.age >= 28) p.potential = Math.min(p.potential, Math.max(1, Math.round(p.potential * 10) / 10));
     p.seasonYellows = 0;
     p.ban = 0;
     p.injuryDays = 0;

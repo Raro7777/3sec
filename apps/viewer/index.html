@@ -65,7 +65,7 @@
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
       .row { display:grid; grid-template-columns: 26px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px; }
-      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 118px; }
+      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px; }
       .row.tr button { white-space:nowrap; width:100%; }
       .row:hover { background:#18232d; }
       .row.sel { border-color:var(--accent); background:#1d2733; }
@@ -106,6 +106,19 @@
       #subMsg { font-size:12px; color:var(--warn); min-height:14px; }
       #log { height:120px; overflow-y:auto; font-size:12px; padding:6px 14px; background:var(--panel2); border-top:1px solid var(--line); font-family:"IBM Plex Mono", ui-monospace, monospace; }
       #log div { opacity:.9; line-height:1.55; }
+      /* immersive match view: pitch fills the screen, manager panel becomes a drawer */
+      .immersive #intro, .immersive #nav, .immersive #stats, .immersive #log { display:none !important; }
+      .immersive #app { padding-bottom:0 !important; }
+      .immersive #screen-match { position:fixed; inset:0; z-index:15; background:#000; }
+      .immersive #topbar { position:absolute; top:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.72); backdrop-filter:blur(6px); padding:4px 10px; padding-left:calc(10px + env(safe-area-inset-left)); gap:8px; flex-wrap:nowrap; overflow-x:auto; border-bottom:0; }
+      .immersive #topbar #phase { flex-basis:auto; }
+      .immersive #topbar label { white-space:nowrap; }
+      .immersive #main { flex-direction:row !important; overflow:hidden !important; height:100%; }
+      .immersive #stage { flex:1 !important; height:100% !important; max-height:none !important; padding:0 !important; }
+      .immersive #panel { position:absolute; top:0; right:0; bottom:0; width:min(340px, 88vw); transform:translateX(100%); transition:transform .2s ease; z-index:3; border-left:1px solid var(--line); border-top:0; padding-top:44px; padding-right:calc(12px + env(safe-area-inset-right)); box-shadow:-8px 0 24px rgba(0,0,0,.5); }
+      .immersive.panel-open #panel { transform:none; }
+      .immersive #others { position:absolute; bottom:0; left:0; right:0; z-index:2; background:rgba(11,16,20,.6); border-top:0; padding:3px 10px calc(3px + env(safe-area-inset-bottom)); justify-content:center; }
+      .immersive #btnPanel { display:inline-block !important; }
       #overlay { position:fixed; inset:0; background:rgba(5,8,11,0.82); display:none; align-items:center; justify-content:center; z-index:20; flex-direction:column; gap:10px; }
       #overlay.show { display:flex; }
       #overlay .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; min-width:260px; text-align:center; }
@@ -134,7 +147,7 @@
         #log { height:100px; }
         .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px; }
         .row.wide .age, .row.wide .st { display:none; }
-        .row.tr { grid-template-columns: 22px 30px 1fr 36px 104px; }
+        .row.tr { grid-template-columns: 22px 30px 1fr 36px 118px; }
         .row.tr .age, .row.tr .val { display:none; }
       }
     </style>
@@ -165,16 +178,20 @@
           <div id="phase"></div>
           <button id="btnPlay" class="primary">▶ 재생</button>
           <label>속도
-            <select id="speed">
-              <option value="1" selected>1x</option>
+            <select id="speed" title="자동: 골문 근처는 천천히, 중원과 중단 시간은 빠르게 (경기당 약 8~10분)">
+              <option value="auto" selected>자동</option>
+              <option value="1">1x</option>
               <option value="2">2x</option>
               <option value="4">4x</option>
               <option value="8">8x</option>
               <option value="16">16x</option>
+              <option value="32">32x</option>
             </select>
           </label>
           <button id="btnSkip" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
           <button id="btnContinue" class="primary" style="display:none">계속 →</button>
+          <button id="btnFull" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
+          <button id="btnPanel" style="display:none">☰ 전술·교체</button>
           <label><input id="debug" type="checkbox" /> 디버그</label>
         </div>
         <div id="stats"></div>

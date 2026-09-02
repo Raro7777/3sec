@@ -4,6 +4,7 @@ import {
   overall, playerOf, prepareRound, recordResult, roundsPerSeason, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
   MAX_SQUAD, MIN_SQUAD, bestOffer, buyPlayer, playerValue, sellPlayer, transferTargets, windowOpen,
+  FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
@@ -67,10 +68,11 @@ export class Game {
 
   // ------------------------------------------------------------ navigation
   private show(name: ScreenName): void {
+    if (this.current === "match" && name !== "match") this.screen.leave();
     this.current = name;
     for (const s of document.querySelectorAll<HTMLElement>(".screen")) s.classList.toggle("active", s.id === `screen-${name}`);
     for (const b of document.querySelectorAll<HTMLButtonElement>("#nav button.tab")) b.classList.toggle("active", b.dataset.screen === name);
-    if (name === "match") window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("resize"));
   }
 
   private renderAll(): void {
@@ -96,7 +98,10 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3>${me.name} <span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3>${me.name} <span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    const expiring = expiringContracts(s);
+    if (expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
+    if (me.budget < 0) h.push(`<div class="hint" style="color:var(--bad)">예산이 적자입니다. 연봉이 매주 빠져나가니 선수를 팔거나 다음 시즌 상금을 기다려야 합니다.</div>`);
     if (this.live) {
       h.push(`<div class="hint">경기가 진행 중입니다.</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button></div>`);
     } else if (over) {
@@ -179,7 +184,7 @@ export class Game {
     const row = (p: SquadPlayer, slotRole: string | null) => {
       const ovr = slotRole ? slotFit(p.attrs, p.role, slotRole as SquadPlayer["role"]) : overall(p.attrs, p.role);
       const cond = p.condition;
-      const status = p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : "";
+      const status = p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : p.contractUntil <= this.state.season ? "계약 만료 예정" : p.age <= 23 && p.potential - ovr >= 1.5 ? `잠재 ${p.potential.toFixed(0)}` : "";
       const roleText = slotRole && slotRole !== p.role ? `${slotRole}<span style="opacity:.5">(${p.role})</span>` : p.role;
       return `<div class="row wide ${this.selA === p.id ? "sel" : ""} ${isAvailable(p) ? "" : "off"}" data-id="${p.id}">
         <span class="num">${p.number}</span><span class="role">${roleText}</span>
@@ -196,6 +201,13 @@ export class Game {
     h.push(`<div class="card"><h3>벤치 <span>${sel.bench.length}/7</span></h3>${header}<div class="roster">${sel.bench.map((id) => row(playerOf(me, id), null)).join("")}</div>
       <h3 style="margin-top:8px">예비 <span>${reserves.length}</span></h3><div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></div>`);
     h.push(`</div>`);
+    const tr = me.training;
+    h.push(`<div class="card"><h3>훈련 <span>매주 적용</span></h3>
+      <div class="squad-tools">
+        <label>초점 <select id="trFocus">${(Object.keys(FOCUS_LABEL) as TrainingFocus[]).map((f) => `<option value="${f}" ${f === tr.focus ? "selected" : ""}>${FOCUS_LABEL[f]}</option>`).join("")}</select></label>
+        <label>강도 <select id="trIntensity">${(Object.keys(INTENSITY_LABEL) as TrainingIntensity[]).map((i) => `<option value="${i}" ${i === tr.intensity ? "selected" : ""}>${INTENSITY_LABEL[i]}</option>`).join("")}</select></label>
+      </div>
+      <div class="hint">어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만 회복이 느리고 부상이 잦아집니다.</div></div>`);
     h.push(`<div class="card"><h3>기본 전술 <span>경기 중에도 변경 가능</span></h3><div id="sqSliders"></div></div>`);
     this.el.squad.innerHTML = h.join("");
 
@@ -221,6 +233,8 @@ export class Game {
         }),
       );
     }
+    (document.getElementById("trFocus") as HTMLSelectElement).addEventListener("change", (e) => { me.training = { ...me.training, focus: (e.target as HTMLSelectElement).value as TrainingFocus }; this.save(); });
+    (document.getElementById("trIntensity") as HTMLSelectElement).addEventListener("change", (e) => { me.training = { ...me.training, intensity: (e.target as HTMLSelectElement).value as TrainingIntensity }; this.save(); });
     const sl = document.getElementById("sqSliders")!;
     for (const def of SLIDERS) {
       const div = document.createElement("div");
@@ -298,7 +312,33 @@ export class Game {
       })
       .join("")}</div></div>`);
     h.push(`</div>`);
+    const contracts = [...me.squad].sort((a, b) => a.contractUntil - b.contractUntil || b.wage - a.wage);
+    h.push(`<div class="card"><h3>계약 <span>연봉 총액 ${wageBill(me)}억/시즌</span></h3>
+      <div class="hint">계약은 시즌 단위입니다. 만료 시즌(이번 시즌이면 <b style="color:var(--warn)">만료 예정</b>)인 선수는 시즌이 끝나면 떠나므로 미리 재계약하세요. 계약금은 선수 가치의 5%×연수입니다.</div>
+      <div class="roster">${contracts
+        .map((p) => {
+          const exp = p.contractUntil <= s.season;
+          const t1 = renewalTerms(p, 1), t3 = renewalTerms(p, 3);
+          return `<div class="row tr" style="cursor:default"><span class="num">${p.number}</span><span class="role">${p.role}</span>
+            <span class="name">${p.name} <span style="opacity:.55;font-size:11px">연봉 ${p.wage}억</span></span>
+            <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;color:${exp ? "var(--warn)" : "var(--muted)"}">~S${p.contractUntil}</span>
+            <span style="text-align:right;display:flex;gap:4px;justify-content:flex-end">${[1, 3].map((y) => `<button data-renew="${p.id}:${y}" ${locked || me.budget < (y === 1 ? t1.fee : t3.fee) ? "disabled" : ""} title="계약금 ${y === 1 ? t1.fee : t3.fee}억 · 연봉 ${y === 1 ? t1.wage : t3.wage}억" style="padding:3px 6px;font-size:11px">+${y}년 ${y === 1 ? t1.fee : t3.fee}억</button>`).join("")}</span></div>`;
+        })
+        .join("")}</div></div>`);
     this.el.transfers.innerHTML = h.join("");
+    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-renew]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const [id, y] = b.dataset.renew!.split(":");
+        const p = playerOf(me, id!);
+        const t = renewalTerms(p, Number(y));
+        if (!confirm(`${p.name}과(와) ${y}년 재계약할까요? 계약금 ${t.fee}억, 연봉 ${t.wage}억/시즌`)) return;
+        const err = renewContract(s, id!, Number(y) as 1 | 2 | 3);
+        if (err) alert(err);
+        this.save();
+        this.renderAll();
+      }),
+    );
     (document.getElementById("trRole") as HTMLSelectElement).addEventListener("change", (e) => {
       this.transferRole = (e.target as HTMLSelectElement).value;
       this.renderTransfers();
@@ -396,6 +436,7 @@ export class Game {
       }
     }
     this.live = null;
+    this.screen.leave();
     this.save();
     this.renderAll();
     this.renderResults(round);
