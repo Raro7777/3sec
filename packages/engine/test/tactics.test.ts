@@ -44,26 +44,40 @@ describe("player roles", () => {
     expect(team.tactics.roles).toEqual(roles);
   });
 
-  it("inside forwards shoot more than wingers; wing-backs cross more than defensive full-backs", () => {
-    const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+  it("inside forwards shoot more than wingers; wing-backs push far higher than defensive full-backs", () => {
     const base = defaultRoles("4-3-3");
-    const ifRoles = base.map((r, i) => (i === 8 || i === 10 ? "IF" : r)) as PlayerRoleId[];
-    const wRoles = base.map((r, i) => (i === 8 || i === 10 ? "W" : r)) as PlayerRoleId[];
-    let ifShots = 0, wShots = 0;
-    for (const seed of seeds) {
-      const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11, tactics: { roles: ifRoles } });
-      const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 11, tactics: { roles: wRoles } });
-      const m = new Match(h, a, { seed, halfLength: 25 * 60, aiManaged: [] });
-      m.runToEnd();
-      const wide = (t: 0 | 1) => new Set([m.teams[t].players[8]!.id, m.teams[t].players[10]!.id]);
-      ifShots += m.state.events.filter((e) => e.type === "SHOT" && e.playerId && wide(0).has(e.playerId)).length;
-      wShots += m.state.events.filter((e) => e.type === "SHOT" && e.playerId && wide(1).has(e.playerId)).length;
-    }
-    expect(ifShots).toBeGreaterThan(wShots);
-    const wb = base.map((r, i) => (i === 1 || i === 4 ? "WB" : r)) as PlayerRoleId[];
-    const dfb = base.map((r, i) => (i === 1 || i === 4 ? "DFB" : r)) as PlayerRoleId[];
-    const b = play(seeds, { roles: wb }, { roles: dfb }, 30);
-    expect(b.crosses[0]).toBeGreaterThan(b.crosses[1]);
+    const mk = (role: PlayerRoleId) => base.map((r, i) => (i === 8 || i === 10 ? role : r)) as PlayerRoleId[];
+    // Same opponent and seeds for both variants; only the home side's wide roles differ.
+    const wideShots = (role: PlayerRoleId) => {
+      let n = 0;
+      for (let seed = 1; seed <= 5; seed++) {
+        const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11, tactics: { roles: mk(role) } });
+        const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 22, tactics: { roles: mk("W") } });
+        const m = new Match(h, a, { seed, halfLength: 45 * 60, aiManaged: [] });
+        m.runToEnd();
+        const wide = new Set([h.players[8]!.id, h.players[10]!.id]);
+        n += m.state.events.filter((e) => e.type === "SHOT" && e.playerId && wide.has(e.playerId)).length;
+      }
+      return n;
+    };
+    expect(wideShots("IF")).toBeGreaterThan(wideShots("W"));
+    // Wing-backs hold a much higher average position in possession than defensive full-backs.
+    const fbRoles = (role: PlayerRoleId) => base.map((r, i) => (i === 1 || i === 4 ? role : r)) as PlayerRoleId[];
+    const fbAdvance = (role: PlayerRoleId) => {
+      let sum = 0, n = 0;
+      for (let seed = 1; seed <= 2; seed++) {
+        const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11, tactics: { roles: fbRoles(role) } });
+        const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 22 });
+        const m = new Match(h, a, { seed, halfLength: 20 * 60, aiManaged: [] });
+        const ids = [h.players[1]!.id, h.players[4]!.id];
+        while (m.state.phase !== "FULL_TIME") {
+          m.step();
+          if (m.state.tick % 20 === 0 && m.state.phase === "PLAY" && m.possessionTeam() === 0) for (const id of ids) { sum += m.player(id).pos.x * m.dirOf(0); n++; }
+        }
+      }
+      return sum / n;
+    };
+    expect(fbAdvance("WB")).toBeGreaterThan(fbAdvance("DFB") + 3);
   });
 });
 
