@@ -5,7 +5,7 @@ import { FORMATIONS, MAX_SUBS, type FormationName, type Match, type PlayerState,
  */
 export class ManagerPanel {
   private match!: Match;
-  private readonly team: TeamId;
+  private team: TeamId;
   private selOut: string | null = null;
   private selIn: string | null = null;
   private lastRoster = 0;
@@ -41,8 +41,9 @@ export class ManagerPanel {
     this.el.btnSub.addEventListener("click", () => this.queueSub());
   }
 
-  attach(match: Match): void {
+  attach(match: Match, team: TeamId = this.team): void {
     this.match = match;
+    this.team = team;
     this.selOut = null;
     this.selIn = null;
     this.el.teamName.textContent = match.teams[this.team].name;

@@ -17,6 +17,9 @@ importers:
       '@3sec/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@3sec/game':
+        specifier: workspace:*
+        version: link:../../packages/game
     devDependencies:
       typescript:
         specifier: ^5.6.3

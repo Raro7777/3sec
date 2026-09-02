@@ -1,6 +1,6 @@
 {
   "name": "viewer",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@3sec/engine": "workspace:*"
+    "@3sec/engine": "workspace:*",
+    "@3sec/game": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
