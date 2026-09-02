@@ -529,13 +529,7 @@ export class MatchScreen {
       ctx.moveTo(px, py);
       ctx.lineTo(px + Math.cos(p.facing) * r * 1.3, py + Math.sin(p.facing) * r * 1.3);
       ctx.stroke();
-      if (debug || this.selected === p.id) {
-        ctx.fillStyle = "#fff";
-        ctx.font = `${Math.max(9, v.scale * 1.1)}px ui-monospace, monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(String(def.number), px, py + r + 1);
-      }
+      this.drawNumber(px, py, r, def.number, team.color, this.selected === p.id);
     }
 
     const b = s.ball;
@@ -609,6 +603,29 @@ export class MatchScreen {
     }
   }
 
+  /** Shirt number: inside the disc when there is room (contrast picked from the kit colour), else just below it. */
+  private drawNumber(px: number, py: number, r: number, num: number, kit: string, selected: boolean): void {
+    const ctx = this.ctx;
+    const text = String(num);
+    if (r >= 5.5) {
+      const size = Math.max(7, r * (text.length > 1 ? 1.05 : 1.3));
+      ctx.font = `700 ${size}px 'IBM Plex Mono', ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = luminance(kit) > 0.5 ? "#101418" : "#ffffff";
+      ctx.fillText(text, px, py + 0.5);
+    } else {
+      ctx.font = `700 ${Math.max(8, r * 1.6)}px 'IBM Plex Mono', ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText(text, px, py + r + 1);
+      ctx.fillStyle = selected ? "#ffd166" : "#ffffff";
+      ctx.fillText(text, px, py + r + 1);
+    }
+  }
+
   /** Replay scene: players and ball from a recorded frame. */
   private drawFrame(f: Frame, v: View): void {
     const ctx = this.ctx;
@@ -625,10 +642,7 @@ export class MatchScreen {
       ctx.lineWidth = 1.2; ctx.strokeStyle = f.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)"; ctx.stroke();
       ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(p.f) * r * 1.3, py + Math.sin(p.f) * r * 1.3); ctx.stroke();
-      ctx.fillStyle = "#fff";
-      ctx.font = `${Math.max(8, v.scale * 0.9)}px ui-monospace, monospace`;
-      ctx.textAlign = "center"; ctx.textBaseline = "top";
-      ctx.fillText(String(def.number), px, py + r + 1);
+      this.drawNumber(px, py, r, def.number, team.color, false);
     }
     const bx = v.ox + f.bx * v.scale, by = v.oy + f.by * v.scale;
     const br = Math.max(2.5, 0.45 * v.scale) * (1 + f.bz * 0.12);
@@ -786,6 +800,13 @@ const HIDDEN_EVENTS = new Set(["SHOT_ON_TARGET", "INTERCEPTION", "TACKLE", "BLOC
 
 function restartLabel(kind: string): string {
   return ({ KICK_OFF: "킥오프", THROW_IN: "스로인", GOAL_KICK: "골킥", CORNER: "코너킥", FREE_KICK: "프리킥", PENALTY: "페널티킥" } as Record<string, string>)[kind] ?? kind;
+}
+
+/** Relative luminance (0..1) of a #rrggbb colour. */
+function luminance(hex: string): number {
+  const n = parseInt(hex.replace("#", "").padEnd(6, "0").slice(0, 6), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => { const s = x / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
 }
 
 function shade(hex: string, amt: number): string {
