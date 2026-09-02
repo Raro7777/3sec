@@ -1,6 +1,6 @@
 {
-  "name": "3sec Football Manager",
-  "short_name": "3sec FM",
+  "name": "가난한자의 FM",
+  "short_name": "가난한자의 FM",
   "description": "물리 기반 매치 엔진 위에서 스쿼드·전술·교체를 지휘하는 축구 매니저",
   "start_url": "./",
   "scope": "./",

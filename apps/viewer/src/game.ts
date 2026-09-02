@@ -115,7 +115,7 @@ export class Game {
     const stars = (n: number) => `<span class="stars" title="전력 ${n}/5">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
     const h: string[] = [];
     h.push(`<div class="card onb-welcome"><h3>환영합니다</h3>
-      <div class="onb-title">3sec 풋볼 매니저에 오신 것을 환영합니다</div>
+      <div class="onb-title">가난한자의 FM에 오신 것을 환영합니다</div>
       <div class="hint">12개 구단이 22라운드 리그를 치릅니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요. 전력이 강한 팀은 우승을, 약한 팀은 잔류를 목표로 합니다.</div>
       <label style="margin-top:4px">감독 이름 <input id="onbName" type="text" placeholder="감독 이름" maxlength="12" autocomplete="off" /></label>
       <div class="hint">비워두면 "감독"으로 불립니다.</div></div>`);
