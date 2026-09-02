@@ -1,5 +1,5 @@
 """
-league-and-economy.md 수치 검증용 경제·리그 몬테카를로 (표준 라이브러리만, 기본 n=1,500 ≈ 15~20초).
+league-and-economy.md 수치 검증용 경제·리그 몬테카를로 (표준 라이브러리만, 기본 n=500 · 6 시나리오 ≈ 25초).
 
 문서(docs/league-and-economy.md)의 초기값을 그대로 구현하고 시즌 1~3(옵션 --seasons 5)의
   1) 티켓 수입·지출 흐름(소스별), 스카우트 횟수, 희귀도별 획득 분포, 첫 SSR 시점
@@ -43,29 +43,30 @@ DEFAULT_CFG = dict(
     # 리그 (A.1, A.3, A.4)
     seasons=3, rounds=14,
     points_rule={"3-0": (3, 0), "3-1": (3, 0), "3-2": (2, 1)},
-    playoff_teams=4, semi_bestof=1, po_bestof=3, final_bestof=5,
-    ladder=[0.35, 0.45, 0.55, 0.65, 0.75, 0.85], ladder_cap=0.85,
+    playoff_teams=4, semi_bestof=1, po_bestof=3, final_bestof=5, final_advantage=1,
+    ladder=[0.35, 0.48, 0.58, 0.66, 0.72, 0.76], ladder_cap=0.80,
     club_g_offset={"t01": 0.0, "t02": 0.0, "t03": 0.0, "t04": 0.0, "t05": 0.0, "t06": 0.0},
     k_logit=0.235,          # 승률 = sigmoid(k × (내 라인업 OVR − 상대 OVR) + 홈)  (밸런스 리포트 9절 회귀)
-    home_logit=0.10,        # 홈 이점(로짓). 경기 시뮬 HomeCourtLogit 0.05 의 승률 환산 가정치
+    home_logit=0.10,        # 홈 이점(로짓). 경기 시뮬 HomeCourtLogit 의 승률 환산 가정치
     filler_ovr=46.0, filler_per_season=1.0, filler_cap=50.0,
     # 스카우트 (B.2)
     rate={"R": 0.80, "SR": 0.17, "SSR": 0.03},
     pity_sr=10, pity_ssr=60,
-    price_general_ticket=1, price_pos_ticket=1, price_pos_gold=400,
-    shards_per_dup=10, lb_cost=10, lb_max=5, lb_potential=3, shard_up_ratio=5,
+    price_general_ticket=1, price_pos_ticket=1, price_pos_gold=1200,
+    shards_per_dup=10, lb_cost=30, lb_max=5, lb_potential=3, shard_up_ratio=5,
     n_card_stats=42.0, n_card_potential=57.0,   # 포지션 지정 폴백용 N 무명 신인(평균 stats / potential)
-    # 수입 (B.3)
-    init_tickets=10, init_gold=1000, tutorial_sr_setter=True,
-    match_ticket=1, win_ticket=1, match_gold=200, win_gold=300, set_gold=50, home_gold=100,
-    rank_tickets=[15, 12, 10, 8, 6, 5, 4], rank_gold=[5000, 4000, 3200, 2600, 2000, 1600, 1200],
-    playoff_entry_ticket=2, playoff_win_ticket=2, champion_ticket=5, champion_gold=3000,
-    first_grad_ticket=1, grad_milestones={5: 3, 10: 3, 20: 5, 40: 5, 70: 8, 100: 10},
-    grad_gold={"S": 1500, "A": 1100, "B": 800, "C": 500, "D": 300},
+    # 수입 (B.3) — 티켓은 승리·순위·마일스톤에서만, 경기 참가는 조각으로
+    init_tickets=5, init_gold=1200, tutorial_sr_setter=True,
+    match_shards=2, win_shards=4, shards_per_ticket=12,
+    match_gold=100, win_gold=180, set_gold=25, home_gold=50,
+    rank_tickets=[8, 7, 6, 5, 4, 4, 3], rank_gold=[2600, 2200, 1800, 1500, 1200, 900, 700],
+    playoff_entry_ticket=1, playoff_win_ticket=1, champion_ticket=3, champion_gold=2000,
+    first_grad_ticket=1, grad_milestones={5: 2, 10: 2, 20: 3, 40: 4, 70: 5, 100: 6},
+    grad_gold={"S": 700, "A": 500, "B": 350, "C": 220, "D": 130},
     daily_ticket=0, weekly_ticket=0, days_per_matchday=1,   # 정식: 일일 1 / 주간 3
     # 육성 (training-mode 12.1 최적 정책 기준)
-    trainings_per_matchday=3, preseason_trainings=5, retrain_max=4,
-    reach_core=0.78, reach_other=0.45, ovr_sigma=1.7, policy_offset=0.0,   # 안전 정책이면 −2.2
+    trainings_per_matchday=1, preseason_trainings=2, retrain_max=3,
+    reach_core=0.61, reach_other=0.36, ovr_sigma=1.7, policy_offset=0.0,   # 안전 정책이면 −2.2
     supporter_bonus=[0.0, 0.4, 0.6, 0.8], supporter_s_bonus=0.3,
     # 정책
     scout_mode="smart",     # smart | general_only
@@ -115,7 +116,11 @@ class Card:
         self.id, self.name, self.pos, self.rarity, self.team, self.stats, self.pot = id, name, pos, rarity, team, stats, pot
 
     def expected_grad_ovr(self, cfg, lb=0):
-        """최적 정책 기대 졸업 OVR: 핵심3 도달 78% · 나머지 45% (training-mode 4.4 SSR OH 예시 78.4 에 캘리브레이션)."""
+        """최적 정책 기대 졸업 OVR: 핵심3 도달 61% · 나머지 36%.
+
+        training-mode 12.1 표(SSR OH 78.4 / SR OH 68.1 / R OH 57.4 / SSR S 76.9 / OP 77.9 / MB 78.8 / L 79.1)에
+        최소제곱으로 맞춘 값. 잔차: R OH +2.5, SSR L +4.7(백윤슬은 문서의 제네릭 SSR L 보다 강한 카드라 과대가 아님).
+        """
         core = CORE3[self.pos]
         fin = []
         for k, s, p in zip(STATS, self.stats, self.pot):
@@ -150,7 +155,14 @@ def p_match_from_set(p):
     return p ** 3 * (1 + 3 * q + 6 * q * q)
 
 
+_PSET_CACHE = {}
+
+
 def p_set_from_match(pm):
+    key = round(pm, 4)
+    hit = _PSET_CACHE.get(key)
+    if hit is not None:
+        return hit
     lo, hi = 0.0, 1.0
     for _ in range(40):
         mid = (lo + hi) / 2
@@ -158,7 +170,8 @@ def p_set_from_match(pm):
             lo = mid
         else:
             hi = mid
-    return (lo + hi) / 2
+    _PSET_CACHE[key] = v = (lo + hi) / 2
+    return v
 
 
 def play_match(rng, ovr_home, ovr_away, cfg):
@@ -233,6 +246,7 @@ class Run:
         self.po_wins = 0
         self.stats_by_season = []
         self.season_idx = 1
+        self._lineup_cache = None
 
     # ---------- 라인업 ----------
     def filler_ovr(self):
@@ -240,12 +254,15 @@ class Run:
         return min(cfg["filler_cap"], cfg["filler_ovr"] + cfg["filler_per_season"] * (self.season_idx - 1))
 
     def lineup(self):
-        """슬롯 순서(S OH OH OP MB MB L)대로 (cardId|None, OVR)."""
+        """슬롯 순서(S OH OH OP MB MB L)대로 (cardId|None, OVR). 로스터가 바뀔 때만 재계산."""
+        if self._lineup_cache is not None:
+            return self._lineup_cache
         out = []
         for pos in POSITIONS:
             cands = sorted(((rec[0], cid) for cid, rec in self.inst.items() if self.cards[cid].pos == pos), reverse=True)
             for i in range(SLOT_NEED[pos]):
                 out.append((cands[i][1], cands[i][0]) if i < len(cands) else (None, self.filler_ovr()))
+        self._lineup_cache = out
         return out
 
     def lineup_ovr(self):
@@ -400,6 +417,7 @@ class Run:
             self.inst[pick] = [o, 1]
         else:
             rec[0] = max(rec[0], o); rec[1] += 1
+        self._lineup_cache = None
         self.pending_retrain.discard(pick)
         self.grads += 1
         g = cfg["grad_gold"][grade_of(o)]
@@ -436,20 +454,22 @@ class Run:
                     self.tickets += 1
                     self.income["패배 조각→티켓"] += 1
             return
-        self.tickets += cfg["match_ticket"]
-        self.income["경기 참가"] += cfg["match_ticket"]
+        self.frag += cfg["match_shards"] + (cfg["win_shards"] if won else 0)
+        while self.frag >= cfg["shards_per_ticket"]:
+            self.frag -= cfg["shards_per_ticket"]
+            self.tickets += 1
+            self.income["경기 조각→티켓"] += 1
         gold = cfg["match_gold"] + cfg["set_gold"] * sets_won + (cfg["home_gold"] if home else 0)
         if won:
-            self.tickets += cfg["win_ticket"]
-            self.income["승리"] += cfg["win_ticket"]
             gold += cfg["win_gold"]
         self.gold += gold
         self.income["경기 골드"] += gold
 
     # ---------- 시즌 ----------
-    def play_series(self, a, b, bestof, clubs):
+    def play_series(self, a, b, bestof, clubs, advantage=0):
+        """a = 상위 시드(홈 우선). advantage = a 가 미리 갖고 시작하는 승수(챔프전 정규 1위 우대)."""
         need = bestof // 2 + 1
-        wa = wb = 0
+        wa, wb = advantage, 0
         game = 0
         while wa < need and wb < need:
             home = a if game % 2 == 0 else b
@@ -473,6 +493,7 @@ class Run:
     def play_season(self, season):
         cfg = self.cfg
         self.season_idx = season
+        self._lineup_cache = None
         g = min(cfg["ladder_cap"], cfg["ladder"][min(season - 1, len(cfg["ladder"]) - 1)])
         clubs = club_strength(self.players, {t: min(1.0, g + cfg["club_g_offset"][t]) for t in CLUB_NAMES})
         me = "me"
@@ -527,7 +548,7 @@ class Run:
             self.tickets += cfg["playoff_entry_ticket"]; self.income["포스트시즌 진출"] += cfg["playoff_entry_ticket"]
         w34 = self.play_series(po[2], po[3], cfg["semi_bestof"], clubs)
         w2 = self.play_series(po[1], w34, cfg["po_bestof"], clubs)
-        champion = self.play_series(po[0], w2, cfg["final_bestof"], clubs)
+        champion = self.play_series(po[0], w2, cfg["final_bestof"], clubs, cfg["final_advantage"])
         if not cfg["proto_rules"]:
             self.tickets += cfg["playoff_win_ticket"] * self.po_wins
             self.income["포스트시즌 승리"] += cfg["playoff_win_ticket"] * self.po_wins
@@ -632,7 +653,7 @@ def report_seasons(runs, cfg, label):
 
 
 def report_pool(pool, players, cfg):
-    print("\n### 카드 풀 기대 졸업 OVR (최적 정책·서포터 없음·핵심 78%/기타 45% 도달, 한계돌파 0 → 5)\n")
+    print("\n### 카드 풀 기대 졸업 OVR (최적 정책·서포터 없음·핵심 61%/기타 36% 도달 — training-mode 12.1 에 피팅, 한계돌파 0 → 5)\n")
     print("| 포지션 | R (장수) | SR (장수) | SSR (장수) | N 폴백 |")
     print("|---|---|---|---|---|")
     for pos in POSITIONS:
@@ -651,15 +672,15 @@ def report_pool(pool, players, cfg):
 
 
 def report_pity(cfg, seed):
-    """천장 규칙의 실효 확률 (뽑기만, 200,000회)."""
-    print("\n### 천장 규칙의 실효 확률 (200,000회 뽑기, 기본 R 80 / SR 17 / SSR 3)\n")
+    """천장 규칙의 실효 확률 (뽑기만, 120,000회)."""
+    print("\n### 천장 규칙의 실효 확률 (120,000회 뽑기, 기본 R 80 / SR 17 / SSR 3)\n")
     print("| 규칙 | 실효 등급 확률 | SSR 간격 평균 | SSR 간격 p50 / p90 / 최대 | SR+ 간격 p90 / 최대 |")
     print("|---|---|---|---|---|")
     for pity_sr, pity_ssr in ((10 ** 9, 10 ** 9), (10, 10 ** 9), (10, 60), (10, 50)):
         c = dict(cfg); c.update(pity_sr=pity_sr, pity_ssr=pity_ssr, proto_rules=False)
         r = Run(seed, [], [], c)
         cnt = Counter(); gaps = []; gaps_sr = []; last = 0; last_sr = 0
-        N = 200000
+        N = 120000
         for i in range(1, N + 1):
             rar = r.roll_rarity()
             cnt[rar] += 1
@@ -673,14 +694,15 @@ def report_pity(cfg, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=1500)
+    ap.add_argument("--n", type=int, default=500)
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--seasons", type=int, default=3)
-    ap.add_argument("--trainings", type=int, default=None, help="매치데이당 육성 횟수 (기본 3)")
+    ap.add_argument("--trainings", type=int, default=None,
+                    help=f"매치데이당 육성 횟수 (기본 {DEFAULT_CFG['trainings_per_matchday']})")
     ap.add_argument("--only", default="", help="new|proto|general|live|safe|t2 중 하나만")
     args = ap.parse_args()
-    n = 300 if args.quick else args.n
+    n = 150 if args.quick else args.n
     t0 = time.time()
     players = load_players()
     cfg = dict(DEFAULT_CFG)
@@ -693,7 +715,7 @@ def main():
     report_pity(cfg, args.seed)
     scenarios = []
     if args.only in ("", "new"):
-        scenarios.append(("신규 설계 — 프로토타입 범위 수입 (초기 10 · 참가 1 · 승리 +1 · 순위/PO/마일스톤 · 천장 10/60 · 포지션 지정 · 조각→한계돌파)", dict(cfg)))
+        scenarios.append(("신규 설계(기준선) — 프로토타입 범위 수입 (초기 5 · 경기 조각 2/승리 +4 · 순위/PO/마일스톤 · 천장 10/60 · 포지션 지정 · 중복→조각→한계돌파)", dict(cfg)))
     if args.only in ("", "proto"):
         c = dict(cfg); c.update(proto_rules=True, init_tickets=5, init_gold=0, tutorial_sr_setter=False, scout_mode="general_only")
         scenarios.append(("현행 프로토타입 규칙 — 초기 5 · 승리 +1 · 패배 조각 1/3 · 천장 없음 · 일반만 · 중복 = 즉시 한계돌파", c))
