@@ -65,6 +65,8 @@
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
       .row { display:grid; grid-template-columns: 26px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px; }
+      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 118px; }
+      .row.tr button { white-space:nowrap; width:100%; }
       .row:hover { background:#18232d; }
       .row.sel { border-color:var(--accent); background:#1d2733; }
       .row.off { opacity:.45; }
@@ -132,6 +134,8 @@
         #log { height:100px; }
         .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px; }
         .row.wide .age, .row.wide .st { display:none; }
+        .row.tr { grid-template-columns: 22px 30px 1fr 36px 104px; }
+        .row.tr .age, .row.tr .val { display:none; }
       }
     </style>
   </head>

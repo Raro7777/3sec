@@ -274,11 +274,11 @@ export class Game {
     const locked = !!this.live;
     const roles = ["ALL", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
     const targets = transferTargets(s).filter((t) => this.transferRole === "ALL" || t.player.role === this.transferRole).slice(0, 60);
-    const fmtRow = (p: SquadPlayer, clubName: string, right: string) => `<div class="row wide" style="cursor:default">
+    const fmtRow = (p: SquadPlayer, clubName: string, right: string) => `<div class="row tr" style="cursor:default">
         <span class="num">${p.number}</span><span class="role">${p.role}</span>
         <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
         <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
+        <span class="val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
         <span style="text-align:right">${right}</span></div>`;
     const h: string[] = [];
     h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD}</span></h3>
