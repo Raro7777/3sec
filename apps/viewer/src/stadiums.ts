@@ -1,5 +1,6 @@
 /**
  * Per-club stadium looks. Everything here is a palette/spec; render.ts turns it into canvas paint.
+ * `capacity` mirrors CLUBS[].capacity in packages/game/src/world.ts (the fan system's attendance cap) — keep them in step.
  * Grass greens stay in the mid range on purpose: player discs (incl. mint/teal/lime kits) must
  * stay legible on every pitch, so nothing here is very dark or very pale.
  */
@@ -85,6 +86,19 @@ const byClub = new Map(STADIUMS.map((s) => [s.club, s]));
 /** Home stadium for a club name; unknown names (e.g. engine test teams) get the default. */
 export function stadiumFor(clubName: string): Stadium {
   return byClub.get(clubName) ?? DEFAULT_STADIUM;
+}
+
+/** Regional rivalries: a meeting of two clubs from one group is a derby day (louder crowd, ribbon). */
+const DERBY_GROUPS: string[][] = [
+  ["서울 FC", "인천 블루", "수원 윙스"],
+  ["부산 유나이티드", "울산 앵커스", "창원 세일즈"],
+  ["대구 울브스", "포항 아이언"],
+  ["광주 레이즈", "전주 그린"],
+  ["대전 코메츠", "제주 아일랜더스"],
+];
+
+export function isDerby(homeClub: string, awayClub: string): boolean {
+  return homeClub !== awayClub && DERBY_GROUPS.some((g) => g.includes(homeClub) && g.includes(awayClub));
 }
 
 /** Cache key that changes whenever the static painting would differ. */

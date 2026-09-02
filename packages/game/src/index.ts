@@ -10,7 +10,7 @@ export {
 } from "./season";
 export {
   CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_PRIZE, cupByes, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
-  currentCupTies, pendingCupTies, userCupTie, userCupStatus, cupDayDue, cupFixture, createCupMatch, penaltyShootout, recordCupResult,
+  currentCupTies, pendingCupTies, userCupTie, userCupStatus, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, type ShootoutKick, type ShootoutDetail, recordCupResult,
   simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
@@ -46,3 +46,9 @@ export {
   staffWageBill, staffMarketKey, refreshStaffMarket, ensureStaffMarket, staffRoomProblem, staffSigningFee, hireStaff, staffSeverance, fireStaff, staffRenewalFee, renewStaff, expiringStaff,
   aiHireStaff, staffWeek, staffRollover, migrateStaff, type ScoutReport, staffStyle, staffStyleTags, autoUserTactics, type StaffStyle,
 } from "./staff";
+export {
+  FAN_START_MOOD, FAN_NEUTRAL_MOOD, FAN_DRIFT, FAN_MOOD, FAN_PROTEST_BELOW, FAN_PROTEST_WEEKS, FAN_PROTEST_CONFIDENCE, FAN_FRENZY_AT, FAN_FRENZY_GATE,
+  FAN_BASE_SHARE, FAN_BASE_PER_REP, TICKET_BASE, TICKET_PER_REP, POOR_CROWD_SHARE, DEFAULT_CAPACITY,
+  clubCapacity, fanBase, newFans, moodBand, moodLabel, ticketPrice, gateReceipts, fanHomeEdge, avgHomeAttendance, adjustMood, crowdInterest, expectedAttendance,
+  recordAttendance, fansWeek, fansCupResult, isStar, fansTransfer, fansRollover, migrateFans, type MoodBand,
+} from "./fans";

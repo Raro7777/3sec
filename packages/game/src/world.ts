@@ -6,6 +6,7 @@ import { overall } from "./rating";
 import { wageFor } from "./contracts";
 import { generateManager, managerTraining } from "./managers";
 import { generateClubStaff } from "./staff";
+import { newFans } from "./fans";
 
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
 const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
@@ -13,19 +14,20 @@ const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지�
 export const randomName = (rng: Rng): string => `${rng.pick(FIRST)}${rng.pick(GIVEN)}`;
 
 /** Fictional clubs; reputation spreads the league from title favourites to relegation fodder. */
-export const CLUBS: { name: string; shortName: string; color: string; reputation: number; formation: FormationName }[] = [
-  { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.3, formation: "4-3-3" },
-  { name: "부산 유나이티드", shortName: "부산", color: "#4cc9f0", reputation: 12, formation: "4-4-2" },
-  { name: "인천 블루", shortName: "인천", color: "#3a86ff", reputation: 13.2, formation: "4-2-3-1" },
-  { name: "대구 울브스", shortName: "대구", color: "#8ecae6", reputation: 11.3, formation: "3-5-2" },
-  { name: "광주 레이즈", shortName: "광주", color: "#ffd166", reputation: 11.5, formation: "4-3-3" },
-  { name: "대전 코메츠", shortName: "대전", color: "#c77dff", reputation: 10.8, formation: "4-4-2" },
-  { name: "수원 윙스", shortName: "수원", color: "#06d6a0", reputation: 12.9, formation: "4-2-3-1" },
-  { name: "울산 앵커스", shortName: "울산", color: "#f4a261", reputation: 14, formation: "4-3-3" },
-  { name: "전주 그린", shortName: "전주", color: "#2a9d8f", reputation: 13.7, formation: "4-2-3-1" },
-  { name: "포항 아이언", shortName: "포항", color: "#adb5bd", reputation: 12, formation: "4-4-2" },
-  { name: "제주 아일랜더스", shortName: "제주", color: "#ff8fab", reputation: 10.5, formation: "3-5-2" },
-  { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11.2, formation: "4-3-3" },
+/** `capacity` = stadium seats; the viewer's stadiums.ts mirrors these numbers (keep them in step). */
+export const CLUBS: { name: string; shortName: string; color: string; reputation: number; formation: FormationName; capacity: number }[] = [
+  { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.3, formation: "4-3-3", capacity: 58000 },
+  { name: "부산 유나이티드", shortName: "부산", color: "#4cc9f0", reputation: 12, formation: "4-4-2", capacity: 43000 },
+  { name: "인천 블루", shortName: "인천", color: "#3a86ff", reputation: 13.2, formation: "4-2-3-1", capacity: 38000 },
+  { name: "대구 울브스", shortName: "대구", color: "#8ecae6", reputation: 11.3, formation: "3-5-2", capacity: 26000 },
+  { name: "광주 레이즈", shortName: "광주", color: "#ffd166", reputation: 11.5, formation: "4-3-3", capacity: 22000 },
+  { name: "대전 코메츠", shortName: "대전", color: "#c77dff", reputation: 10.8, formation: "4-4-2", capacity: 31000 },
+  { name: "수원 윙스", shortName: "수원", color: "#06d6a0", reputation: 12.9, formation: "4-2-3-1", capacity: 44000 },
+  { name: "울산 앵커스", shortName: "울산", color: "#f4a261", reputation: 14, formation: "4-3-3", capacity: 40000 },
+  { name: "전주 그린", shortName: "전주", color: "#2a9d8f", reputation: 13.7, formation: "4-2-3-1", capacity: 36000 },
+  { name: "포항 아이언", shortName: "포항", color: "#adb5bd", reputation: 12, formation: "4-4-2", capacity: 20000 },
+  { name: "제주 아일랜더스", shortName: "제주", color: "#ff8fab", reputation: 10.5, formation: "3-5-2", capacity: 18000 },
+  { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11.2, formation: "4-3-3", capacity: 24000 },
 ];
 
 /** 20-man squad: two keepers, eight defenders, six midfielders, four forwards. */
@@ -87,6 +89,8 @@ export function buildClubs(seed: number): Club[] {
       staff: [],
       manager: null,
       pressure: 0,
+      capacity: c.capacity,
+      fans: newFans(c.reputation, c.capacity),
     };
     for (const p of club.squad) p.wage = wageFor(p);
     // The dugout: a personality drawn after the squad so squads are unchanged by the manager's dice.

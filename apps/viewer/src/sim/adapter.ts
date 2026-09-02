@@ -6,7 +6,7 @@
  *   and `penaltyShootout` read: `state.{phase,score,events,players}`, `teams[side].shortName`, `def(id)`.
  */
 import type { Match, MatchOptions, PlayerDef, TeamId } from "@3sec/engine";
-import { autoUserTactics, clubOf, cupFixture, fixtureSeed, teamDef, type Club, type CupTie, type Fixture, type GameState } from "@3sec/game";
+import { autoUserTactics, clubOf, cupFixture, fanHomeEdge, fixtureSeed, teamDef, type Club, type CupTie, type Fixture, type GameState } from "@3sec/game";
 import type { MatchResult, ResultPlayer, SimJob } from "./protocol";
 
 /** Mirrors `createMatch` in packages/game/src/season.ts: user's side human-managed, everyone else AI, tired legs carried over. */
@@ -18,7 +18,7 @@ export function leagueJob(s: GameState, f: Fixture, opts: MatchOptions = {}): Si
   // Auto rounds: my side is run by the AI with my tactics nudged by the assistant coach (autoUserTactics).
   const aiManaged: TeamId[] = [0, 1];
   const tac = (c: Club) => (c.id === s.userClub ? autoUserTactics(s) : c.tactics);
-  return { id: jobId(f), home: teamDef(home, 0, tac(home)), away: teamDef(away, 1, tac(away)), opts: { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...opts } };
+  return { id: jobId(f), home: teamDef(home, 0, tac(home)), away: teamDef(away, 1, tac(away)), opts: { seed: fixtureSeed(s, f), aiManaged, initialFatigue, homeEdge: fanHomeEdge(home), ...opts } };
 }
 
 /** Mirrors `createCupMatch`: a cup tie viewed as a (negative-id) fixture. */

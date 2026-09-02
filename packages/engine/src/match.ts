@@ -41,6 +41,8 @@ export interface MatchOptions {
   initialFatigue?: Record<string, number>;
   /** neutral venue: no home advantage for team 0 */
   neutral?: boolean;
+  /** attribute-point boost for every home player (default TUNING.homeEdge); the game layer scales it with fan mood */
+  homeEdge?: number;
 }
 
 export const MAX_SUBS = 5;
@@ -184,8 +186,9 @@ export class Match {
     for (const team of this.teams) {
       for (const [i, def0] of [...team.players, ...team.bench].entries()) {
         // Home advantage: the crowd lifts every home player a fraction of an attribute point for this match.
-        const def = team.id === 0 && TUNING.homeEdge > 0 && !opts.neutral
-          ? { ...def0, attrs: Object.fromEntries(Object.entries(def0.attrs).map(([k, v]) => [k, Math.min(20, v + TUNING.homeEdge)])) as unknown as typeof def0.attrs }
+        const homeEdge = opts.homeEdge ?? TUNING.homeEdge;
+        const def = team.id === 0 && homeEdge > 0 && !opts.neutral
+          ? { ...def0, attrs: Object.fromEntries(Object.entries(def0.attrs).map(([k, v]) => [k, Math.min(20, v + homeEdge)])) as unknown as typeof def0.attrs }
           : def0;
         this.defs.set(def.id, def);
         this.teamOf.set(def.id, team.id);

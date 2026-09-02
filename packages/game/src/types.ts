@@ -204,6 +204,30 @@ export interface Club {
   seasonStaffWages?: number;
   /** income actually banked this season (억원); reset at the rollover */
   seasonRevenue?: number;
+  /** gate receipts banked this season (억원, part of seasonRevenue; fans.ts); reset at the rollover */
+  seasonGate?: number;
+  /** stadium seats (fans.ts; mirrored by the viewer's stadiums.ts) */
+  capacity: number;
+  /** the supporters: mood and attendance counters (fans.ts) */
+  fans: Fans;
+}
+
+/** A club's supporters (fans.ts). */
+export interface Fans {
+  /** core supporters who turn up whatever happens (derived from reputation and capacity) */
+  base: number;
+  /** 0..100 – how the fans feel about the team right now (55 = content) */
+  mood: number;
+  /** consecutive weekly updates with the mood under FAN_PROTEST_BELOW (a protest follows) */
+  lowWeeks: number;
+  /** crowd at the last home match (0 before the first) */
+  lastAttendance: number;
+  /** home crowds summed this season */
+  seasonAttendance: number;
+  /** home matches played this season */
+  seasonHome: number;
+  /** biggest home crowd this season */
+  bestAttendance: number;
 }
 
 export interface Fixture {
@@ -216,6 +240,8 @@ export interface Fixture {
   scorers: string[];
   /** man of the match: the highest-rated player of the game */
   motm?: { playerId: string; rating: number };
+  /** home crowd (fans.ts; set when the result is recorded) */
+  attendance?: number;
 }
 
 /** One knockout tie of the 3sec 컵. Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
@@ -230,6 +256,8 @@ export interface CupTie {
   scorers: string[];
   /** man of the match (see ratings.ts) */
   motm?: { playerId: string; rating: number };
+  /** home crowd (fans.ts) */
+  attendance?: number;
 }
 
 export interface Cup {

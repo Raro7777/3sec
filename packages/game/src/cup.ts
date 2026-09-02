@@ -2,6 +2,7 @@ import { Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
 import type { Cup, CupTie, Fixture, GameState } from "./types";
 import { applyStaffRecovery } from "./staff";
 import { boardCupWin } from "./board";
+import { fansCupResult } from "./fans";
 import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver, type GameMatchOptions } from "./season";
 
 export const CUP_NAME = "3sec 컵";
@@ -96,6 +97,18 @@ export function createCupMatch(s: GameState, t: CupTie, opts: GameMatchOptions =
  * pitch at full time, best first; the keeper is the goalkeeper still on the pitch.
  */
 export function penaltyShootout(s: GameState, t: CupTie, m: Match): [number, number] {
+  return penaltyShootoutDetail(s, t, m).score;
+}
+
+/** One kick of a shoot-out, in order: which side, who, and whether it went in. */
+export interface ShootoutKick { team: TeamId; playerId: string; name: string; scored: boolean }
+export interface ShootoutDetail { kicks: ShootoutKick[]; score: [number, number] }
+
+/**
+ * The kick-by-kick sequence of `penaltyShootout` (same seed, same draws, same order, same result).
+ * The forced tiebreak after 40 rounds (score[0]++ without a kick) is not a kick and appears only in `score`.
+ */
+export function penaltyShootoutDetail(s: GameState, t: CupTie, m: Match): ShootoutDetail {
   const rng = new Rng(fixtureSeed(s, cupFixture(t)) ^ 0x9e3779b9);
   const side = (team: TeamId) => {
     const onPitch = m.state.players.filter((p) => p.team === team && p.onPitch && !p.sentOff).map((p) => m.def(p.id));
@@ -104,11 +117,14 @@ export function penaltyShootout(s: GameState, t: CupTie, m: Match): [number, num
     return { keeper, takers: takers.length ? takers : [keeper] };
   };
   const teams = [side(0), side(1)];
+  const kicks: ShootoutKick[] = [];
   const kick = (team: 0 | 1, i: number): boolean => {
     const me = teams[team]!, them = teams[1 - team]!;
     const taker = me.takers[i % me.takers.length]!;
     const edge = ((taker.attrs.finishing + taker.attrs.composure) / 2 - them.keeper.attrs.reflexes) * 0.016;
-    return rng.chance(0.76 + Math.max(-0.08, Math.min(0.08, edge)));
+    const scored = rng.chance(0.76 + Math.max(-0.08, Math.min(0.08, edge)));
+    kicks.push({ team, playerId: taker.id, name: taker.name, scored });
+    return scored;
   };
   const score: [number, number] = [0, 0];
   for (let i = 0; i < 5; i++) {
@@ -122,7 +138,7 @@ export function penaltyShootout(s: GameState, t: CupTie, m: Match): [number, num
     if (kick(1, i)) score[1]++;
   }
   if (score[0] === score[1]) score[0]++;
-  return score;
+  return { kicks, score };
 }
 
 /** Write a finished cup match back: player stats and injuries via recordResult (no league bookkeeping), the tie's score, a shoot-out if drawn, prize money. */
@@ -132,6 +148,7 @@ export function recordCupResult(s: GameState, t: CupTie, m: Match): void {
   t.score = f.score;
   t.scorers = f.scorers;
   t.motm = f.motm;
+  t.attendance = f.attendance;
   const home = clubOf(s, t.home), away = clubOf(s, t.away);
   if (t.score![0] === t.score![1]) {
     t.penalties = penaltyShootout(s, t, m);
@@ -141,6 +158,7 @@ export function recordCupResult(s: GameState, t: CupTie, m: Match): void {
   }
   const winner = clubOf(s, tieWinner(t)!);
   const loser = winner === home ? away : home;
+  fansCupResult(s, winner, loser, t.stage);
   if (t.stage === 1) loser.budget += CUP_PRIZE.qfLoser;
   if (t.stage === 2) loser.budget += CUP_PRIZE.sfLoser;
   if (t.stage === 3) {

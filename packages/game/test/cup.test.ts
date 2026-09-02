@@ -91,18 +91,20 @@ describe("3sec 컵 bracket", () => {
     playCup(s);
     const final = s.cup.ties[10]!;
     const winner = tieWinner(final)!, runnerUp = final.home === winner ? final.away : final.home;
-    expect(s.clubs[winner]!.budget - start[winner]!).toBe(CUP_PRIZE.winner);
-    expect(s.clubs[runnerUp]!.budget - start[runnerUp]!).toBe(CUP_PRIZE.runnerUp);
+    // home ties also bank gate receipts (fans.ts), booked in seasonGate: the prize is what is left
+    const net = (id: number) => s.clubs[id]!.budget - start[id]! - (s.clubs[id]!.seasonGate ?? 0);
+    expect(net(winner)).toBeCloseTo(CUP_PRIZE.winner, 0);
+    expect(net(runnerUp)).toBeCloseTo(CUP_PRIZE.runnerUp, 0);
     for (const t of s.cup.ties.filter((x) => x.stage === 2)) {
       const l = tieWinner(t) === t.home ? t.away : t.home;
-      expect(s.clubs[l]!.budget - start[l]!).toBe(CUP_PRIZE.sfLoser);
+      expect(net(l)).toBeCloseTo(CUP_PRIZE.sfLoser, 0);
     }
     for (const t of s.cup.ties.filter((x) => x.stage === 1)) {
       const l = tieWinner(t) === t.home ? t.away : t.home;
-      expect(s.clubs[l]!.budget - start[l]!).toBe(CUP_PRIZE.qfLoser);
+      expect(net(l)).toBeCloseTo(CUP_PRIZE.qfLoser, 0);
     }
-    for (const c of s.clubs) expect(cupPrize(s, c.id)).toBe(c.budget - start[c.id]!);
-    expect(s.clubs.reduce((n, c) => n + c.budget - start[c.id]!, 0)).toBe(30 + 15 + 2 * 8 + 4 * 4);
+    for (const c of s.clubs) expect(cupPrize(s, c.id)).toBeCloseTo(net(c.id), 0);
+    expect(s.clubs.reduce((n, c) => n + net(c.id), 0)).toBeCloseTo(30 + 15 + 2 * 8 + 4 * 4, 0);
   });
 
   it("schedules cup days after league rounds 6, 11, 16 and 21", () => {

@@ -14,6 +14,7 @@ import { REVIEW_FROM_ROUND, applyManagerMatchday, applyManagerPolicy, boardRevie
 import { pendingCupTies } from "./cup";
 import { appendCareer, applyRatings, emptyStats } from "./ratings";
 import { BOARD_FROM_ROUND, boardCupWin, boardRollover, boardWeek, newBoard } from "./board";
+import { fanHomeEdge, fansRollover, fansWeek, recordAttendance } from "./fans";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -41,6 +42,7 @@ function resetSeasonCounters(c: Club): void {
   c.seasonWages = 0;
   c.seasonStaffWages = 0;
   c.seasonRevenue = 0;
+  fansRollover(c);
 }
 
 /**
@@ -113,7 +115,8 @@ export function createMatch(s: GameState, f: Fixture, opts: GameMatchOptions = {
   if (f.home !== s.userClub || autoUser) aiManaged.push(0);
   if (f.away !== s.userClub || autoUser) aiManaged.push(1);
   const tac = (c: Club) => (autoUser && c.id === s.userClub ? autoUserTactics(s) : c.tactics);
-  return new Match(teamDef(home, 0, tac(home)), teamDef(away, 1, tac(away)), { seed: fixtureSeed(s, f), aiManaged, initialFatigue, ...engineOpts });
+  // The crowd's lift for the home side scales with the fans' mood (fans.ts).
+  return new Match(teamDef(home, 0, tac(home)), teamDef(away, 1, tac(away)), { seed: fixtureSeed(s, f), aiManaged, initialFatigue, homeEdge: fanHomeEdge(home), ...engineOpts });
 }
 
 /** Write a finished match back into the season: score, scorers, player stats, cards, fatigue, injuries, bans. */
@@ -182,6 +185,8 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
   // Assists, match ratings, form and the man of the match.
   applyRatings(f, m, clubs);
   const [h, a] = clubs;
+  // The crowd, the gate and the fans' counters (fans.ts).
+  recordAttendance(s, f, cup);
   // A cup win inside 90 minutes pleases the user's board (shoot-outs are settled later, in cup.ts).
   if (cup && s.board) {
     const [hg, ag] = f.score;
@@ -218,6 +223,8 @@ export function advanceRound(s: GameState): boolean {
     if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
   payWages(s, roundsPerSeason(s.clubs.length), new Map(table(s).map((r, i) => [r.club, i + 1])));
+  // The supporters weigh the week (fans.ts): results, goals, the table, runs; a protest can cost the user's board.
+  fansWeek(s);
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
   youthWeek(s);
   if (s.round === 10) youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 11));
@@ -315,6 +322,8 @@ export interface FinanceSummary {
   cupPrize: number;
   /** league prize money due at the rollover for the current position */
   leaguePrize: number;
+  /** gate receipts banked this season (part of `revenue`; fans.ts) */
+  gate: number;
 }
 
 /** The season's money story for the review screen. */
@@ -331,6 +340,7 @@ export function financeSummary(s: GameState, clubId: number): FinanceSummary {
     revenue: c.seasonRevenue ? r1(c.seasonRevenue) : r1(weeklyRevenue(c, pos) * rounds),
     cupPrize: cupPrize(s, clubId),
     leaguePrize: seasonBudget(c.reputation, pos) - seasonBudget(c.reputation, null),
+    gate: r1(c.seasonGate ?? 0),
   };
 }
 

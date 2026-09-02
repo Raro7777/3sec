@@ -5,6 +5,7 @@ import { autoSelect, repairSelection } from "./selection";
 import { clubOf, playerOf, seasonOver, table } from "./season";
 import { wageFor } from "./contracts";
 import { spendGrowth, weeklyRate } from "./training";
+import { fansTransfer } from "./fans";
 
 /** Currency unit: 억원 (100 million KRW). */
 export const MIN_SQUAD = 16;
@@ -175,6 +176,7 @@ export function marketSummary(s: GameState, season: number = s.season): MarketSu
 
 /** Move a player between clubs for a fee: squads, budgets, shirt number, both selections. */
 function movePlayer(s: GameState, from: Club, to: Club, p: SquadPlayer, fee: number): void {
+  fansTransfer(s, from, to, p);
   from.squad = from.squad.filter((q) => q !== p);
   from.budget = round1(from.budget + fee);
   reselect(s, from);

@@ -18,6 +18,7 @@ import { DEFAULT_MANAGER_NAME } from "./season";
 import { newCup } from "./cup";
 import { migrateStaff } from "./staff";
 import { newBoard } from "./board";
+import { migrateFans } from "./fans";
 
 export const SAVE_KEY = "3sec.save.v1";
 
@@ -85,6 +86,8 @@ export function deserialize(json: string | null | undefined): GameState | null {
     if (!Array.isArray(s.seasonHistory)) s.seasonHistory = [];
     if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
     migrateStaff(s);
+    // Saves from before the fans: capacity, content supporters and empty attendance counters.
+    migrateFans(s);
     for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); migrateRatings(p); }
     // Saves from before the user's board.
     if (!s.board || typeof s.board.confidence !== "number") s.board = newBoard();

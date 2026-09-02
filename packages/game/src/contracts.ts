@@ -49,15 +49,18 @@ export function renewContract(s: GameState, playerId: string, years: 1 | 2 | 3):
   return null;
 }
 
-/** Every club pays a week of wages; a poor club can slide into the red, which blocks buying. */
-/** Weekly income (gate, broadcasting, sponsors) in 억원: reputation-driven, with a small league-position bonus. */
+/**
+ * Weekly fixed income (broadcasting, sponsors, merchandise) in 억원: reputation-driven, with a small league-position
+ * bonus. Gate receipts come on top, per home match, from fans.ts (recordAttendance) — together they land where the
+ * old flat figure was (≈2.0–2.3억/week for a top club, ≈1.5억 for a mid club).
+ */
 export function weeklyRevenue(club: Club, position: number | null): number {
-  const base = 0.6 + Math.max(0, club.reputation - 10) * 0.35;
+  const base = 0.5 + Math.max(0, club.reputation - 10) * 0.25;
   const pos = position === null ? 0 : Math.max(0, 12 - position) * 0.03;
   return Math.round((base + pos) * 100) / 100;
 }
 
-/** Every club banks its weekly income and pays a week of wages (players, loanees and coaching staff); a poor club can slide into the red, which blocks buying. */
+/** Every club banks its weekly fixed income and pays a week of wages (players, loanees and coaching staff); a poor club can slide into the red, which blocks buying. */
 export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<number, number>): void {
   for (const c of s.clubs) {
     const income = weeklyRevenue(c, positions?.get(c.id) ?? null);

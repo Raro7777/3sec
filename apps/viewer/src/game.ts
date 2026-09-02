@@ -17,6 +17,7 @@ import {
   BOARD_FROM_ROUND, TRUST_AT, WARN_BELOW, acceptJob, confidenceBand, jobOffers, userExpectation, userPosition,
   titleClinched,
   MAX_STAFF, STAFF_ROLE_LABEL, ensureStaffMarket, expiringStaff, fireStaff, hireStaff, renewStaff, staffRenewalFee, staffRoomProblem, staffSeverance, staffSigningFee, staffWageBill, staffStyleTags, type StaffMember,
+  avgHomeAttendance, clubCapacity, moodBand, moodLabel,
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { celebrate } from "./celebrate";
@@ -511,6 +512,7 @@ export class Game {
     if (false && expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
 
     h.push(this.boardHtml());
+    h.push(this.fansHtml());
     if (s.board.sacked) {
       h.push(`<div class="hint" style="color:var(--bad)"><b>경질되었습니다.</b> ${me.name} 이사회가 계약을 해지했습니다. 다른 구단의 제안을 받거나 새 게임을 시작하세요.</div><div class="actions"><button class="primary" data-act="sacked">거취 정하기 →</button></div>`);
     } else if (this.live) {
@@ -582,6 +584,20 @@ export class Game {
     const note = b.sacked ? "경질" : b.warnings ? `경고 ${b.warnings}회` : b.confidence >= TRUST_AT ? "신임" : b.confidence < WARN_BELOW ? "위험" : s.round < BOARD_FROM_ROUND ? `${BOARD_FROM_ROUND}R부터 평가` : "보통";
     return `<div class="board"><div class="boardHead"><span>이사회 신뢰도 <b style="color:${color}">${Math.round(b.confidence)}</b></span><small>기대 ${exp}위 · 현재 ${pos}위 · <span style="color:${color}">${note}</span></small></div>
       <div class="bar" title="이사회 신뢰도 ${b.confidence}/100"><i style="width:${Math.round(b.confidence)}%;background:${color}"></i></div></div>`;
+  }
+
+  /** Compact fan strip for the home card: mood bar with its label and the last home crowd (fans.ts). */
+  private fansHtml(): string {
+    const me = this.me;
+    const f = me.fans;
+    if (!f) return "";
+    const band = moodBand(f.mood);
+    const color = band === "good" ? "var(--good)" : band === "ok" ? "var(--accent)" : band === "warn" ? "var(--warn)" : "var(--bad)";
+    const cap = clubCapacity(me);
+    const n = (x: number) => x.toLocaleString("ko-KR");
+    const last = f.lastAttendance ? `지난 홈경기 관중 ${n(f.lastAttendance)}명${f.lastAttendance >= cap ? " · 매진" : ""}` : `홈구장 ${n(cap)}석 · 아직 홈경기 없음`;
+    return `<div class="board"><div class="boardHead"><span>팬 분위기 <b style="color:${color}">${moodLabel(f.mood)}</b> <small>${Math.round(f.mood)}</small></span><small>${last}</small></div>
+      <div class="bar" title="팬 분위기 ${f.mood}/100"><i style="width:${Math.round(f.mood)}%;background:${color}"></i></div></div>`;
   }
 
   /** What needs the manager's attention right now, as tappable rows (empty string when nothing does). */
@@ -937,7 +953,7 @@ export class Game {
       if (mine > 0) w++; else if (mine < 0) l++; else d++;
     }
     const st = stadiumFor(c.name);
-    return { pos: idx + 1, pts: row.pts, played: row.played, gd: row.gf - row.ga, form: this.form(c.id), rep: c.reputation, mgr: c.id === me ? s.managerName : c.manager?.name ?? "—", tags: c.manager ? managerTags(c.manager) : [], stadium: st.name, capacity: st.capacity, budget: c.budget, wages: wageBill(c), size: c.squad.length, avgAge, xiAvg, best, scorer, h2h: `${w}승 ${d}무 ${l}패`, expected: expectedPositions(s).get(c.id) ?? 0 };
+    return { pos: idx + 1, pts: row.pts, played: row.played, gd: row.gf - row.ga, form: this.form(c.id), rep: c.reputation, mgr: c.id === me ? s.managerName : c.manager?.name ?? "—", tags: c.manager ? managerTags(c.manager) : [], stadium: st.name, capacity: st.capacity, budget: c.budget, wages: wageBill(c), size: c.squad.length, avgAge, xiAvg, best, scorer, h2h: `${w}승 ${d}무 ${l}패`, expected: expectedPositions(s).get(c.id) ?? 0, mood: c.fans?.mood ?? 0, avgAtt: c.fans ? avgHomeAttendance(c) : 0, bestAtt: c.fans?.bestAttendance ?? 0, gate: c.seasonGate ?? 0 };
   }
 
   private openClubSheet(clubId: number, compare: boolean): void {
@@ -966,6 +982,8 @@ export class Game {
         num("예산 (억)", f.budget, g.budget),
         num("연봉 총액 (억)", f.wages, g.wages),
         num("구장 좌석", f.capacity, g.capacity, (v) => v.toLocaleString()),
+        num("팬 분위기", f.mood, g.mood, (v) => `${moodLabel(v)} ${Math.round(v)}`),
+        num("평균 홈 관중", f.avgAtt, g.avgAtt, (v) => (v ? `${v.toLocaleString("ko-KR")}명` : "—")),
       ].join("");
       this.openSheet(`<div class="pc cmp">
         <div class="cmpHead"><div class="cmpP"><b style="color:${c.color}">${c.name}</b><small>${f.mgr} 감독 · 최근 ${f.form}</small></div><span class="vs">VS</span><div class="cmpP" style="text-align:right"><b style="color:${me.color}">${me.name}</b><small>${g.mgr} 감독 · 최근 ${g.form}</small></div></div>
@@ -980,6 +998,7 @@ export class Game {
         <div class="pcOvr"><b>${f.pos}위</b><small>${f.pts}점 · ${f.played}경기</small></div></div>
       <div class="pcStats wrap"><div>전력<b>${stars(f.rep)}</b></div><div>최근 5경기<b>${f.form}</b></div><div>기대 순위<b>${f.expected}위</b></div><div>득실<b>${f.gd > 0 ? "+" : ""}${f.gd}</b></div></div>
       <div class="pcStats wrap"><div>홈구장<b>${f.stadium}</b><small>${f.capacity.toLocaleString()}석</small></div><div>예산<b>${f.budget}억</b></div><div>연봉 총액<b>${f.wages}억</b></div><div>스쿼드<b>${f.size}명</b><small>평균 ${f.avgAge.toFixed(1)}세</small></div></div>
+      <div class="pcStats wrap"><div>팬 분위기<b>${moodLabel(f.mood)}</b><small>${Math.round(f.mood)}/100</small></div><div>평균 홈 관중<b>${f.avgAtt ? `${f.avgAtt.toLocaleString("ko-KR")}명` : "—"}</b><small>${f.bestAtt ? `최다 ${f.bestAtt.toLocaleString("ko-KR")}명` : ""}</small></div><div>입장 수입<b>${f.gate ? `${(Math.round(f.gate * 10) / 10).toFixed(1)}억` : "—"}</b><small>이번 시즌</small></div><div>객석 점유<b>${f.avgAtt ? `${Math.round((f.avgAtt / f.capacity) * 100)}%` : "—"}</b></div></div>
       <div class="pcStats wrap"><div>선발 평균<b>${f.xiAvg.toFixed(1)}</b></div><div>최고 선수<b>${f.best ? f.best.name : "—"}</b><small>${f.best ? overall(f.best.attrs, f.best.role).toFixed(1) : ""}</small></div><div>득점 1위<b>${f.scorer && f.scorer.stats.goals ? f.scorer.name : "—"}</b><small>${f.scorer && f.scorer.stats.goals ? `${f.scorer.stats.goals}골` : ""}</small></div><div>상대 전적<b>${c.id === me.id ? "—" : f.h2h}</b></div></div>
       <div class="pcActions">${c.id !== me.id ? `<button class="primary" data-sheet="club" data-club="${c.id}" data-cmp="1">내 팀과 비교</button>` : ""}<button data-sheet="close">닫기</button></div>
     </div>`);
@@ -1672,26 +1691,27 @@ export class Game {
   private renderResults(round: number, kind: "league" | "cup" = "league", cupStage = 0): void {
     const s = this.state;
     const me = s.userClub;
-    const line = (home: Club, away: Club, score: [number, number] | null, scorers: string[], extra = "", motm?: Fixture["motm"]) => {
+    const line = (home: Club, away: Club, score: [number, number] | null, scorers: string[], extra = "", motm?: Fixture["motm"], attendance?: number) => {
       const mine = home.id === me || away.id === me;
       let star = "";
       if (motm) {
         const mp = home.squad.find((p) => p.id === motm.playerId) ?? away.squad.find((p) => p.id === motm.playerId);
         if (mp) star = `<div class="scorers"><span style="color:var(--accent)">★ MOTM</span> ${mp.name} (${home.squad.includes(mp) ? home.shortName : away.shortName}) <b style="color:${ratingColor(motm.rating)}">${fmtRating(motm.rating)}</b></div>`;
       }
-      return `<div class="result ${mine ? "me" : ""}"><span class="r">${home.name}</span><span class="sc">${score ? `${score[0]} - ${score[1]}` : "—"}</span><span>${away.name}${extra}</span>${scorers.length ? `<div class="scorers">${scorers.join(" · ")}</div>` : ""}${star}</div>`;
+      const crowd = attendance ? `<div class="scorers" style="opacity:.8">관중 ${attendance.toLocaleString("ko-KR")}명${attendance >= clubCapacity(home) ? ' · <span style="color:var(--accent)">매진</span>' : ""}</div>` : "";
+      return `<div class="result ${mine ? "me" : ""}"><span class="r">${home.name}</span><span class="sc">${score ? `${score[0]} - ${score[1]}` : "—"}</span><span>${away.name}${extra}</span>${scorers.length ? `<div class="scorers">${scorers.join(" · ")}</div>` : ""}${star}${crowd}</div>`;
     };
     let title: string, body: string, btn: string;
     if (kind === "cup") {
       const ties = s.cup.ties.filter((t) => t.stage === cupStage);
       title = `${CUP_NAME} ${CUP_STAGE_LABEL[cupStage]} 결과`;
-      body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : "", t.motm)).join("");
+      body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : "", t.motm, t.attendance)).join("");
       if (cupStage === 3 && s.cup.holder !== undefined) body += `<div class="hint" style="color:var(--accent);margin-top:6px">${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b></div>`;
       btn = "다음 라운드로 →";
     } else {
       const fx = s.fixtures.filter((f) => f.round === round);
       title = `라운드 ${round + 1} 결과`;
-      body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm)).join("");
+      body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm, f.attendance)).join("");
       btn = round + 1 >= roundsPerSeason(s.clubs.length) ? "시즌 결산 보기 →" : "다음 라운드로 →";
     }
     this.el.results.innerHTML = `${this.myMatchSummaryHtml(kind, round, cupStage)}<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
@@ -1786,12 +1806,14 @@ export class Game {
         ${stat("홈", `${ha.home.won}승 ${ha.home.drawn}무 ${ha.home.lost}패`)}
         ${stat("원정", `${ha.away.won}승 ${ha.away.drawn}무 ${ha.away.lost}패`)}
         ${stat("부상", `${injuries}건`)}
+        ${stat("홈 관중", me.fans?.seasonHome ? `평균 ${avgHomeAttendance(me).toLocaleString("ko-KR")}명 <small>총 ${me.fans.seasonAttendance.toLocaleString("ko-KR")}명 · ${me.fans.seasonHome}경기</small>` : "—")}
+        ${stat("시즌 최다 관중", me.fans?.bestAttendance ? `${me.fans.bestAttendance.toLocaleString("ko-KR")}명 <small>${me.fans.bestAttendance >= clubCapacity(me) ? "매진" : `${clubCapacity(me).toLocaleString("ko-KR")}석 중`} · 팬 분위기 ${moodLabel(me.fans.mood)}</small>` : "—")}
       </div>
       <h3 style="margin-top:10px">재정 요약 <span>억원</span></h3>
       <div class="stats">
         ${stat("시즌 시작 → 종료", `${money(fin.start)} → ${money(fin.end)} ${signed(fin.end - fin.start)}`)}
         ${stat("지급 연봉", `−${money(fin.wages)}`)}
-        ${stat("수입 (입장·중계·후원)", `+${money(fin.revenue)}`)}
+        ${stat("수입 (입장·중계·후원)", `+${money(fin.revenue)}${fin.gate ? ` <small>입장 수입 ${money(fin.gate)}</small>` : ""}`)}
         ${stat("컵 상금", fin.cupPrize ? `+${money(fin.cupPrize)}` : "—")}
         ${stat("순위 상금 (다음 시즌 지급)", `+${money(fin.leaguePrize)}`)}
       </div>
