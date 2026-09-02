@@ -79,7 +79,7 @@ export const TUNING: Tuning = {
   shieldBase: 0.72,
   attrCompression: 0.35,
   homeBoost: 0.03,
-  homeEdge: 0.6,
+  homeEdge: 0.8,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });
