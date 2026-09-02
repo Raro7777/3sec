@@ -153,7 +153,7 @@ describe("free agents", () => {
     const s = newGame(36);
     const me = s.clubs[s.userClub]!;
     for (const c of s.clubs) for (const p of c.squad) p.contractUntil = 9; // nobody else is released, no thin squads
-    const leaver = me.squad.find((p) => p.age <= 26 && !me.selection.starters.includes(p.id))!;
+    const leaver = me.squad.find((p) => p.age <= 26 && p.role !== "GK" && !me.selection.starters.includes(p.id))!; // the last two keepers are always kept
     leaver.contractUntil = 1;
     s.round = roundsPerSeason(12);
     startNextSeason(s);
@@ -312,7 +312,7 @@ describe("AI market weeks", () => {
     for (const key of new Set(s.aiDeals)) expect(s.aiDeals.filter((k) => k === key).length).toBeLessThanOrEqual(AI_DEALS_PER_WINDOW);
   });
 
-  it("an AI club may buy twice in one window but not three times", () => {
+  it("a rich AI club may buy three times in one window but not four", () => {
     const s = newGame(44);
     const buyer = s.clubs[(s.userClub + 1) % 12]!;
     buyer.budget = 100000;
@@ -320,7 +320,7 @@ describe("AI market weeks", () => {
     for (let i = 0; i < 12; i++) transferWeek(s, new Rng(i + 3));
     const bought = s.marketLog.filter((e) => e.kind === "transfer" && e.to === buyer.id).length;
     expect(bought).toBeGreaterThanOrEqual(1);
-    expect(bought).toBeLessThanOrEqual(AI_DEALS_PER_WINDOW);
+    expect(bought).toBeLessThanOrEqual(AI_DEALS_PER_WINDOW + 1); // 60억 이상이면 한 건 더
     expect(s.aiDeals.filter((k) => k === `1:pre:${buyer.id}`).length).toBe(bought);
   });
 });
