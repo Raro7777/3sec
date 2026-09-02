@@ -333,7 +333,9 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   const pressureFactor = 1 + Math.max(0, 2.5 - pressure) * 0.4;
   // ~0.16 rad for a poor finisher, ~0.07 for an elite one (before pressure): at 15 m that is
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
-  const angSd = (TUNING.shotAngSd - 0.16 * skill) * pressureFactor * (isPenalty ? 0.22 : 1);
+  // Long-range strikes are markedly less precise (body shape, ball movement, power over placement).
+  const rangeFactor = 1 + Math.max(0, d - 16) * 0.03;
+  const angSd = (TUNING.shotAngSd - 0.16 * skill) * pressureFactor * rangeFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
 
