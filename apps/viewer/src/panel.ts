@@ -1,4 +1,4 @@
-import { FORMATIONS, MAX_SUBS, ROLES, TACTIC_PRESETS, rolesForSlot, type FormationName, type Match, type PlayerRoleId, type PlayerState, type Tactics, type TeamId } from "@3sec/engine";
+import { FORMATIONS, MAX_SUBS, ROLES, TACTIC_PRESETS, rolesForSlot, type CornerTarget, type FormationName, type Match, type PlayerRoleId, type PlayerState, type Tactics, type TeamId } from "@3sec/engine";
 
 type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 
@@ -89,6 +89,11 @@ export class ManagerPanel {
     trap.innerHTML = `<input type="checkbox" data-key="offsideTrap"> 오프사이드 트랩`;
     trap.querySelector("input")!.addEventListener("change", (e) => this.match.setTactics(this.team, { offsideTrap: (e.target as HTMLInputElement).checked }));
     this.el.sliders.appendChild(trap);
+    // set pieces: takers and corner delivery (filled per match in syncSliders)
+    const sp = document.createElement("div");
+    sp.id = "setPieces";
+    sp.style.cssText = "display:grid;grid-template-columns:64px 1fr;gap:4px 8px;align-items:center;margin:6px 0 2px;font-size:12px;color:var(--muted)";
+    this.el.sliders.appendChild(sp);
     for (const def of this.sliderDefs) {
       const row = document.createElement("div");
       row.className = "tactic";
@@ -112,12 +117,35 @@ export class ManagerPanel {
     const t = this.match.teams[this.team].tactics;
     const trap = this.el.sliders.querySelector<HTMLInputElement>('input[data-key="offsideTrap"]');
     if (trap) trap.checked = !!t.offsideTrap;
+    this.renderSetPieces();
     for (const input of this.el.sliders.querySelectorAll<HTMLInputElement>("input[type=range]")) {
       const key = input.dataset.key as SliderKey;
       input.value = String(Math.round(t[key] * 100));
       const def = this.sliderDefs.find((d) => d.key === key)!;
       input.parentElement!.querySelector(".val")!.textContent = this.describe(def, t[key]);
     }
+  }
+
+  private renderSetPieces(): void {
+    const m = this.match;
+    const box = document.getElementById("setPieces");
+    if (!box) return;
+    const t = m.teams[this.team].tactics;
+    const sp = t.setPieces ?? {};
+    const eleven = m.state.lineups[this.team].slice(1).map((id) => m.player(id)).filter((p) => !p.sentOff);
+    const opt = (cur?: string) => `<option value="">자동</option>${eleven.map((p) => `<option value="${p.id}" ${p.id === cur ? "selected" : ""}>${m.def(p.id).number} ${m.def(p.id).name}</option>`).join("")}`;
+    const targets: [CornerTarget, string][] = [["center", "중앙(PK 지점)"], ["near", "니어포스트"], ["far", "파포스트"], ["short", "짧게"]];
+    box.innerHTML = `<span>코너 키커</span><select data-sp="cornerTaker">${opt(sp.cornerTaker)}</select>
+      <span>프리킥 키커</span><select data-sp="freeKickTaker">${opt(sp.freeKickTaker)}</select>
+      <span>PK 키커</span><select data-sp="penaltyTaker">${opt(sp.penaltyTaker)}</select>
+      <span>코너 타깃</span><select data-sp="cornerTarget">${targets.map(([v, l]) => `<option value="${v}" ${(sp.cornerTarget ?? "center") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    box.querySelectorAll<HTMLSelectElement>("select[data-sp]").forEach((sel) =>
+      sel.addEventListener("change", () => {
+        const key = sel.dataset.sp as keyof NonNullable<Tactics["setPieces"]>;
+        const next = { ...(m.teams[this.team].tactics.setPieces ?? {}) } as Record<string, string | undefined>;
+        next[key] = sel.value || undefined;
+        m.setTactics(this.team, { setPieces: next as Tactics["setPieces"] });
+      }));
   }
 
   /** Cheap per-frame update: fatigue bars and counters. Full rebuild when the roster changed. */
@@ -127,6 +155,7 @@ export class ManagerPanel {
     if (force || rosterKey !== this.rosterKey) {
       this.rosterKey = rosterKey;
       this.renderRoster(true);
+      this.renderSetPieces();
       return;
     }
     const now = performance.now();
