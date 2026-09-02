@@ -12,18 +12,18 @@ export const randomName = (rng: Rng): string => `${rng.pick(FIRST)}${rng.pick(GI
 
 /** Fictional clubs; reputation spreads the league from title favourites to relegation fodder. */
 export const CLUBS: { name: string; shortName: string; color: string; reputation: number; formation: FormationName }[] = [
-  { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.5, formation: "4-3-3" },
+  { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.3, formation: "4-3-3" },
   { name: "부산 유나이티드", shortName: "부산", color: "#4cc9f0", reputation: 12, formation: "4-4-2" },
-  { name: "인천 블루", shortName: "인천", color: "#3a86ff", reputation: 13.5, formation: "4-2-3-1" },
-  { name: "대구 울브스", shortName: "대구", color: "#8ecae6", reputation: 11, formation: "3-5-2" },
+  { name: "인천 블루", shortName: "인천", color: "#3a86ff", reputation: 13.2, formation: "4-2-3-1" },
+  { name: "대구 울브스", shortName: "대구", color: "#8ecae6", reputation: 11.3, formation: "3-5-2" },
   { name: "광주 레이즈", shortName: "광주", color: "#ffd166", reputation: 11.5, formation: "4-3-3" },
-  { name: "대전 코메츠", shortName: "대전", color: "#c77dff", reputation: 10.5, formation: "4-4-2" },
-  { name: "수원 윙스", shortName: "수원", color: "#06d6a0", reputation: 13, formation: "4-2-3-1" },
-  { name: "울산 앵커스", shortName: "울산", color: "#f4a261", reputation: 14.5, formation: "4-3-3" },
-  { name: "전주 그린", shortName: "전주", color: "#2a9d8f", reputation: 14, formation: "4-2-3-1" },
+  { name: "대전 코메츠", shortName: "대전", color: "#c77dff", reputation: 10.8, formation: "4-4-2" },
+  { name: "수원 윙스", shortName: "수원", color: "#06d6a0", reputation: 12.9, formation: "4-2-3-1" },
+  { name: "울산 앵커스", shortName: "울산", color: "#f4a261", reputation: 14, formation: "4-3-3" },
+  { name: "전주 그린", shortName: "전주", color: "#2a9d8f", reputation: 13.7, formation: "4-2-3-1" },
   { name: "포항 아이언", shortName: "포항", color: "#adb5bd", reputation: 12, formation: "4-4-2" },
-  { name: "제주 아일랜더스", shortName: "제주", color: "#ff8fab", reputation: 10, formation: "3-5-2" },
-  { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11, formation: "4-3-3" },
+  { name: "제주 아일랜더스", shortName: "제주", color: "#ff8fab", reputation: 10.5, formation: "3-5-2" },
+  { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11.2, formation: "4-3-3" },
 ];
 
 /** 20-man squad: two keepers, eight defenders, six midfielders, four forwards. */
@@ -36,7 +36,8 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
     const age = Math.max(18, Math.min(35, Math.round(rng.gauss(26, 4.5))));
     // Peak years 25-30; youngsters and veterans are a little short of the club's level.
     const ageAdj = age < 22 ? -1.5 : age < 25 ? -0.5 : age > 32 ? -1.5 : age > 30 ? -0.5 : 0;
-    const quality = reputation + ageAdj + rng.gauss(0, 0.8) + (i >= 11 ? -0.8 : 0);
+    // Squads are uneven: a poor club still has a couple of players above its station, a rich one has passengers.
+    const quality = reputation + ageAdj + rng.gauss(0, 1.25) + (i >= 11 ? -0.8 : 0);
     let number = i === 0 ? 1 : i === 1 ? 12 : rng.int(2, 40);
     while (numbers.has(number)) number = rng.int(2, 99);
     numbers.add(number);
