@@ -179,6 +179,18 @@ export class Match {
       }
     }
     this.aiManaged = new Set(opts.aiManaged ?? [1]);
+    // An AI manager who knows the squad is outclassed sets up to sit deep and go direct.
+    for (const team of this.aiManaged) {
+      const q = (t: TeamDef) => t.players.reduce((acc, p) => acc + Object.values(p.attrs).reduce((x, y) => x + y, 0) / 20, 0) / t.players.length;
+      const gap = q(this.teams[team]) - q(this.teams[team === 0 ? 1 : 0]);
+      if (gap < -1.5) {
+        const t = this.teams[team].tactics;
+        this.teams[team].tactics = { ...t, directness: Math.min(1, t.directness + 0.3), defensiveLine: Math.max(0, t.defensiveLine - 0.2), mentality: Math.max(0, t.mentality - 0.15), pressing: Math.max(0, t.pressing - 0.15) };
+      } else if (gap > 1.5) {
+        const t = this.teams[team].tactics;
+        this.teams[team].tactics = { ...t, mentality: Math.min(1, t.mentality + 0.1), pressing: Math.min(1, t.pressing + 0.15), defensiveLine: Math.min(1, t.defensiveLine + 0.15) };
+      }
+    }
 
     const ball: BallState = {
       pos: { x: 0, y: 0 },
@@ -1045,7 +1057,7 @@ export class Match {
     // Cards: promising attack / from behind increases card chance (simplified).
     const distToGoal = dist(spot, goalCenter(attackDir));
     // Referees are noticeably more lenient with a player already booked (second yellow ≈ rare).
-    const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.35 : 1);
+    const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.25 : 1);
     const text = `Foul by ${this.name(offender.id)} on ${this.name(victim.id)}`;
     this.emit("FOUL", offender.team, offender.id, text, spot);
     if (this.rng.chance(pYellow)) {
@@ -1058,7 +1070,7 @@ export class Match {
         s.stats[offender.team].yellows++;
         this.emit("YELLOW_CARD", offender.team, offender.id, `Yellow card: ${this.name(offender.id)}`);
       }
-    } else if (this.rng.chance(0.004)) {
+    } else if (this.rng.chance(0.002)) {
       offender.sentOff = true;
       s.stats[offender.team].reds++;
       this.emit("RED_CARD", offender.team, offender.id, `Straight red – ${this.name(offender.id)} is sent off`);

@@ -132,8 +132,10 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   options.push({ kind: "dribble", score: dribbleScore + m.rng.gauss(0, noise) });
 
   // ---- Clear (own third, under pressure, no good pass)
+  // Weaker passers under pressure play safe and clear; better ones trust their feet.
   if (p.pos.x * dir < -25 && pressure < 4) {
-    options.push({ kind: "clear", score: 0.5 + (pressure < 2 ? 0.5 : 0) + m.rng.gauss(0, noise) });
+    const safety = 0.2 * (1 - a01(attrs.passing)) + 0.1 * (1 - a01(attrs.composure));
+    options.push({ kind: "clear", score: 0.5 + (pressure < 2 ? 0.5 : 0) + safety + m.rng.gauss(0, noise) });
   }
 
   // ---- Hold (only when nothing else appeals and not under pressure)
@@ -263,9 +265,10 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     if (lane < 1.2) score -= 0.6 * (1 - a01(attrs.passing));
     // Pressure makes releasing the ball attractive
     if (pressure < 2.5) score += 0.25;
-    // Receiver in a scoring position is attractive
+    // Receiver in a scoring position is attractive; a team-mate already sprinting in behind doubly so
     const rxg = m.xgAt(lead, team);
     score += rxg * 2.5;
+    if (q.intent === "run" && progress > 5) score += 0.35;
 
     if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted, margin, lane, d };
   }
