@@ -84,6 +84,31 @@
       .club-card .cc-blurb { font-size:12px; color:var(--muted); line-height:1.45; }
       .onb-actions { align-items:center; }
       .card h3 .mgr { color:var(--accent); margin-left:6px; margin-right:auto; }
+      /* cup & season review */
+      .cupTag { display:inline-block; font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:12px; letter-spacing:.06em; color:#1a1400; background:var(--accent); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle; }
+      .fixture.cup .vs { color:var(--accent); }
+      .cupLine { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+      .cupLine b { color:var(--accent); }
+      .bracket { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+      .bracket .stage { display:flex; flex-direction:column; gap:4px; min-width:0; }
+      .bracket .stageHead { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:14px; letter-spacing:.04em; color:var(--accent); }
+      .bracket .stageHead small { color:var(--muted); font-family:"IBM Plex Mono", monospace; font-weight:400; margin-left:4px; }
+      .bracket .tie { display:grid; grid-template-columns:1fr auto 1fr; gap:4px; align-items:center; font-size:12px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--panel2); }
+      .bracket .tie.me { border-color:var(--accent); }
+      .bracket .tie > span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .bracket .tie .w { color:var(--text); font-weight:600; } .bracket .tie .l { color:var(--muted); }
+      .bracket .tie .sc { font-family:"IBM Plex Mono", monospace; text-align:center; display:flex; flex-direction:column; }
+      .bracket .tie .sc small { font-size:10px; color:var(--accent); }
+      .bracket .tie > span:last-child { text-align:right; }
+      .review .rvTitle { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:40px; line-height:1; color:var(--accent); margin:4px 0; }
+      .review .rvTitle small { font-size:16px; color:var(--muted); margin-left:6px; font-family:"IBM Plex Sans KR", sans-serif; font-weight:600; }
+      .review .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-top:8px; }
+      .review .stat { border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:var(--panel2); display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .review .stat small { color:var(--muted); font-size:11px; }
+      .review .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .review .stat b small { font-size:11px; font-weight:400; }
+      tr.rel td { color:var(--warn); } .relTag { display:inline-block; margin-left:4px; font-size:10px; color:var(--bad); }
+      @media (max-width: 860px) { .bracket { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
       /* squad */
       .squad-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
@@ -214,6 +239,7 @@
       <section class="screen" id="screen-youth"><div class="page" id="youth"></div></section>
       <section class="screen" id="screen-guide"><div class="page" id="guide"></div></section>
       <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
+      <section class="screen" id="screen-review"><div class="page" id="review"></div></section>
 
       <section class="screen" id="screen-match">
         <div id="topbar">
