@@ -53,7 +53,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
 
   // Settle the ball first: a player needs a moment after receiving – a touch and a look up
   // (~1 s with time and space; hurried when pressed).
-  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : pressure < 5 ? 1 : 1.7);
+  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : pressure < 5 ? 1.3 : 2.2);
   if (p.possessionTime < settle) {
     const point = dribbleTarget(m, p);
     setDribble(m, p, point, 4);
@@ -357,7 +357,7 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
       if (m.isKeeper(o.id)) continue;
       const { d: od, t } = pointSegment(o.pos, p.pos, end);
       if (t <= 0 || od > 1.3) continue;
-      const pBlock = (0.7 - od * 0.35) * (elev > 0.3 ? 0.4 : 1);
+      const pBlock = (0.85 - od * 0.4) * (elev > 0.3 ? 0.4 : 1);
       if (m.rng.chance(pBlock)) {
         m.blockShot(o);
         break;
