@@ -40,9 +40,13 @@ export function computePositioning(m: Match, _dt: number): void {
         chasers.add(m.intendedReceiver);
       }
       // Defenders need a moment to read a pass; the passing team's receiver reacts at once.
-      const reacting = team !== ball.lastTouchTeam && s.tick - m.lastKickTick < TUNING.reactionDelay * 20;
-      const n = reacting ? 0 : possession === team ? 1 : tactics.pressing > 0.65 ? 2 : 1;
-      for (let i = 0; i < Math.min(n, ranked.length); i++) chasers.add(ranked[i]!.p.id);
+      // Each defender reads the pass at their own speed: anticipation 1 => ~1.6x the base delay, 20 => ~0.6x.
+      const sinceKick = s.tick - m.lastKickTick;
+      const ready = team === ball.lastTouchTeam
+        ? ranked
+        : ranked.filter(({ p }) => sinceKick >= TUNING.reactionDelay * 20 * (1.6 - 1.2 * a01(m.def(p.id).attrs.anticipation)));
+      const n = possession === team ? 1 : tactics.pressing > 0.65 ? 2 : 1;
+      for (let i = 0; i < Math.min(n, ready.length); i++) chasers.add(ready[i]!.p.id);
     }
   } else {
     chasers.clear();
@@ -136,7 +140,7 @@ export function computePositioning(m: Match, _dt: number): void {
       // A poor marker keeps losing their man by a couple of metres (ball-watching, late reactions).
       const mk = a01(m.def(p.id).attrs.marking);
       const mph = s.tick * 0.006 + m.def(p.id).number * 1.7;
-      const slack = (1 - mk) * 3.5;
+      const slack = (1 - mk) * 4.5;
       const markPos = add(add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4))), { x: Math.sin(mph) * slack, y: Math.cos(mph * 0.8) * slack });
       const d = dist(p.pos, markPos);
       // Track the runner: never slower than the marked player.

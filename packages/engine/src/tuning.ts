@@ -67,8 +67,8 @@ export const TUNING: Tuning = {
   foulBase: 0.05,
   yellowBase: 0.13,
   gkReach: 2.95,
-  offsideWobble: 5,
-  reactionDelay: 0.4,
+  offsideWobble: 4,
+  reactionDelay: 0.45,
   panicClear: 0.7,
   shieldBase: 0.72,
 };

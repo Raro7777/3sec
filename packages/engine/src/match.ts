@@ -837,7 +837,7 @@ export class Match {
         const inDefBox = inPenaltyArea(b.pos, this.dirOf(recv.team));
         const pReceiver =
           (inDefBox ? 0.45 : TUNING.shieldBase) +
-          0.3 * (a01(ra.firstTouch) * 0.5 + a01(ra.strength) * 0.5 - a01(da.anticipation) * 0.5 - a01(da.marking) * 0.5);
+          0.45 * (a01(ra.firstTouch) * 0.5 + a01(ra.strength) * 0.5 - a01(da.anticipation) * 0.5 - a01(da.marking) * 0.5);
         if (this.rng.chance(Math.max(0.15, Math.min(0.92, pReceiver)))) best = recv;
       }
     }
@@ -923,7 +923,7 @@ export class Match {
       const score =
         (this.isKeeper(p.id) ? 1.5 : 0) +
         (defending ? 0.35 : 0) +
-        0.5 * a01(attrs.strength) +
+        0.9 * a01(attrs.strength) +
         0.5 * a01(attrs.anticipation) -
         d +
         this.rng.range(0, 0.4);
