@@ -6,7 +6,7 @@
   "crossBase": 0.3,
   "passMarginWeight": 0.6,
   "carryBonus": 0.55,
-  "receiverBias": 0.95,
+  "receiverBias": 1.2825,
   "controlBase": 0.55,
   "markGapNear": 1,
   "markGapMid": 1.7,
