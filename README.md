@@ -37,6 +37,17 @@ dotnet run --project sim/VolleySim.Cli -- --matches 1 --seed 3 \
   --players data/players.json --teams data/teams.json --commentary
 ```
 
+## 육성 모드 + 코어 루프 프로토타입 (`sim/VolleySim.Training`, `sim/VolleySim.Play`)
+
+`VolleySim.Training`(netstandard2.1)은 training-mode.md v0.2 규칙의 C# 구현이고, `VolleySim.Play`(net8.0 콘솔)는 "스카우트 → 육성 → 졸업 → 로스터/서포터 → 라인업 → 경기"가 한 바퀴 도는 한국어 텍스트 프로토타입이다. 실행법·설계 편차·관찰 리포트는 [docs/prototype-play.md](docs/prototype-play.md).
+
+```bash
+dotnet run --project sim/VolleySim.Play                                  # 대화형
+dotnet run --project sim/VolleySim.Play -- --script sim/VolleySim.Play/scripts/demo.txt
+dotnet run --project sim/VolleySim.Play -- --auto --runs 8 --seed 1 --matches 3   # 정책 자동 육성 후 6구단과 경기
+dotnet run --project sim/VolleySim.Play -- --oracle-table                # 파이썬 오라클 정책표 재현
+```
+
 ## 도구
 
 - `tools/training-sim/train_sim.py` — 육성 모드 수식 검증용 파이썬 몬테카를로 (`python3 tools/training-sim/train_sim.py`)

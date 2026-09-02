@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 코어 루프 텍스트 프로토타입(한국어 콘솔): 스카우트 → 육성 → 졸업 → 로스터/서포터 → 라인업 → 경기 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VolleySim.Play</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VolleySim.Core\VolleySim.Core.csproj" />
+    <ProjectReference Include="..\VolleySim.Training\VolleySim.Training.csproj" />
+  </ItemGroup>
+
+</Project>

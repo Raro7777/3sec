@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VolleySim.Training: 육성 모드(training-mode.md v0.2) 순수 C# 구현.
+    - netstandard2.1, 외부 NuGet 없음 (Unity/서버 공용)
+    - VolleySim.Core 참조: 도메인(Player/Stats), 난수(DeterministicRandom), 평가전 실제 시뮬(MatchSimulator)
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>VolleySim.Training</RootNamespace>
+    <AssemblyName>VolleySim.Training</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VolleySim.Core\VolleySim.Core.csproj" />
+  </ItemGroup>
+
+</Project>
