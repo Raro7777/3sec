@@ -69,9 +69,13 @@ export function computePositioning(m: Match, _dt: number): void {
     const ranked = m
       .activePlayers(defTeam)
       .filter((p) => !m.isKeeper(p.id))
-      .map((p) => ({ p, d: dist(p.pos, ball.pos) }))
+      .map((p) => ({ p, d: dist(p.pos, ball.pos) / m.roleOf(p.id).press }))
       .sort((a, b) => a.d - b.d);
-    const n = Math.round(TUNING.pressers) + (tactics.pressing > 0.65 ? 1 : 0);
+    // Engage line: where the press starts. 1 = hunt everywhere, 0 = only in front of our own box;
+    // beyond it the team contains (holds shape) instead of chasing.
+    const ballXDef = ball.pos.x * m.dirOf(defTeam);
+    const pressLimit = -25 + 75 * tactics.engageLine;
+    const n = ballXDef > pressLimit ? 0 : Math.round(TUNING.pressers) + (tactics.pressing > 0.65 ? 1 : 0);
     for (let i = 0; i < Math.min(n, ranked.length); i++) chasers.add(ranked[i]!.p.id);
   }
 
@@ -116,7 +120,7 @@ export function computePositioning(m: Match, _dt: number): void {
     // Engage: an opponent dribbling within reach gets challenged even if we are not the designated presser.
     if (carrier && carrierTeam !== p.team) {
       const d = dist(carrier.pos, p.pos);
-      if (d < TUNING.engageRadius + 3 * m.teams[p.team].tactics.pressing) {
+      if (d < TUNING.engageRadius * m.roleOf(p.id).press + 3 * m.teams[p.team].tactics.pressing) {
         // Step out goal-side of the carrier, not at the ball: stay between them and the goal.
         const dir = m.dirOf(p.team);
         const ownGoal = { x: -PITCH.halfLength * dir, y: 0 };
@@ -153,7 +157,13 @@ export function computePositioning(m: Match, _dt: number): void {
       const mk = a01(m.def(p.id).attrs.marking);
       const mph = s.tick * 0.006 + m.def(p.id).number * 1.7;
       const slack = (1 - mk) * 4.5;
-      const markPos = add(add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4))), { x: Math.sin(mph) * slack, y: Math.cos(mph * 0.8) * slack });
+      let markPos = add(add(opp.pos, add(scale(toGoal, gap), scale(toBall, 0.4))), { x: Math.sin(mph) * slack, y: Math.cos(mph * 0.8) * slack });
+      // Offside trap: defenders never drop deeper than a flat line just behind the ball, so a
+      // runner who goes early is caught rather than followed.
+      if (m.teams[p.team].tactics.offsideTrap && isDefender(m.def(p.id).role)) {
+        const holdX = ball.pos.x * dir - 6;
+        if (markPos.x * dir < holdX) markPos = { x: holdX * dir, y: markPos.y };
+      }
       const d = dist(p.pos, markPos);
       // Track the runner: never slower than the marked player.
       const oppSpeed = Math.hypot(opp.vel.x, opp.vel.y);
@@ -297,6 +307,7 @@ function supportTarget(m: Match, p: PlayerState, carrier: PlayerState): Vec2 | n
 function overlapFor(m: Match, p: PlayerState, carrier: PlayerState): boolean {
   const role = m.def(p.id).role;
   if (role !== "LB" && role !== "RB") return false;
+  if (!m.roleOf(p.id).overlap) return false;
   const cRole = m.def(carrier.id).role;
   if (cRole !== "LW" && cRole !== "RW" && cRole !== "LM" && cRole !== "RM") return false;
   const dir = m.dirOf(p.team);
@@ -394,9 +405,11 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 + 0.3 * compact : 0.15 + 0.15 * compact;
   const pullY = (isDefender(role) ? 0.15 : isMidfielder(role) ? 0.3 : 0.2) * (1 + 0.6 * compact);
 
-  let x = home.x * dir + shiftX;
-  let y = home.y + shiftY;
-  if (ballX > x) x += (ballX - x) * pullX;
+  const rd = m.roleOf(p.id);
+  let x = home.x * dir + shiftX + rd.dx * 52.5;
+  let y = home.y * (1 + rd.dy) + shiftY;
+  // "hold": how far the role pushes up with the ball (0 = bombs on, 1 = stays home)
+  if (ballX > x) x += (ballX - x) * pullX * (inPoss ? 1.4 - 0.8 * rd.hold : 1);
 
   // Pull toward the ball laterally (compactness when defending)
   y += (ball.pos.y - y) * pullY * (inPoss ? 0.5 : 1);
@@ -404,7 +417,10 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // Defensive line: keep the back four roughly level, goal-side of the ball, and never deeper
   // than the edge of the box unless the ball is already there.
   if (isDefender(role) && !inPoss) {
-    const lineX = Math.min(x, ballX - 8);
+    // Offside trap: hold a higher line and step up together the moment the opponent plays a pass.
+    const trap = tactics.offsideTrap;
+    const justPassed = trap && ball.lastTouchTeam !== team && s.tick - m.lastKickTick < 8;
+    const lineX = Math.min(x, ballX - (trap ? 5 : 8)) + (justPassed ? 2.5 : 0);
     x = Math.max(lineX, Math.min(ballX - 3, -PITCH.halfLength + 12 + 8 * tactics.defensiveLine));
   }
   // Defending forwards stay on the shoulder of the opponent's back line (ready to break),
@@ -413,7 +429,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
 
   // Attackers in possession: hold the line of the second-last defender. Timing is imperfect:
   // players with poor anticipation drift offside now and then.
-  if (inPoss && isForward(role)) {
+  if (inPoss && (isForward(role) || rd.runs >= 1.3)) {
     const line = m.offsideLine(team);
     const ant = m.def(p.id).attrs.anticipation / 20;
     // Runs in behind: every few seconds, when a team-mate has the ball behind them with time to
@@ -425,7 +441,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
     const carrierFree = ball.owner !== null && m.pressureAt(ball.pos, team) > 2.5;
     // On a transition (ball just won) forwards break immediately, whatever the cycle says.
     const transition = m.inTransition(team);
-    if (carrierBehind && carrierFree && (transition || phase < 0.4)) {
+    if (carrierBehind && carrierFree && (transition || phase < Math.min(0.85, 0.4 * rd.runs))) {
       // burst: aim 3-4 m beyond the line; early starters are caught, late ones stay on
       const early = (1 - ant) * TUNING.offsideWobble * 0.35; // 0 .. ~1.8 m
       x = line + 0.5 + early;
@@ -440,7 +456,7 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
 
   // Positioning attribute: poor positional sense = the spot is a few metres off and drifts.
   const posSkill = a01(m.def(p.id).attrs.positioning);
-  const drift = (1 - posSkill) * 5; // 0 .. ~3.5 m for the weakest
+  const drift = (1 - posSkill) * 5 * (tactics.offsideTrap && isDefender(role) && !inPoss ? 0.3 : 1); // 0 .. ~3.5 m for the weakest; a trap keeps the line flat
   const ph = s.tick * 0.004 + m.def(p.id).number;
   let target: Vec2 = { x: x * dir + Math.sin(ph) * drift, y: y + Math.cos(ph * 0.7) * drift };
 
@@ -469,7 +485,7 @@ function keeperPositioning(m: Match, gk: PlayerState): void {
   if (!ball.owner && ownBox && !m.shot && ball.z < 2) {
     const oppNearest = m.pressureAt(ball.pos, gk.team);
     const myDist = dist(gk.pos, ball.pos);
-    if (myDist < oppNearest + 1.5 && myDist < 14) {
+    if (myDist < oppNearest + (m.roleOf(gk.id).sweeper ? 3 : 1.5) && myDist < (m.roleOf(gk.id).sweeper ? 22 : 14)) {
       setTarget(gk, interceptPoint(m, gk), 99, "claim");
       return;
     }
@@ -490,7 +506,8 @@ function keeperPositioning(m: Match, gk: PlayerState): void {
   // Default: on the bisector between ball and goal centre, a few metres off the line.
   const toBall = sub(ball.pos, goal);
   const d = Math.max(1, dist(ball.pos, goal));
-  let off = ownerTeam === m.opp(gk.team) ? Math.min(4.5, 1 + d * 0.06) : Math.min(8, 2 + d * 0.1);
+  const sweep = m.roleOf(gk.id).sweeper ? 1.6 : 1;
+  let off = (ownerTeam === m.opp(gk.team) ? Math.min(4.5, 1 + d * 0.06) : Math.min(8, 2 + d * 0.1)) * sweep;
   // One-on-one: no team-mate between the carrier and goal => come out to narrow the angle.
   if (ownerTeam === m.opp(gk.team) && d < 32) {
     const carrier = m.player(ball.owner!);

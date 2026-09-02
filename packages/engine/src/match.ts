@@ -1,5 +1,9 @@
 import { Rng } from "./rng";
 import { TUNING } from "./tuning";
+import { normalizeTactics } from "./teams";
+import { ROLES, type RoleDef } from "./ai/roles";
+
+const TACTIC_LABEL: Partial<Record<keyof Tactics, string>> = { mentality: "멘탈리티", defensiveLine: "수비라인", pressing: "프레싱", directness: "직접성", width: "폭", tempo: "템포", counter: "역습", engageLine: "압박선", offsideTrap: "오프사이드 트랩", formation: "포메이션" };
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
 import { FORMATIONS, roleDistance, slotToPitch } from "./formation";
 import { BALL, kickBall, stepBall } from "./physics/ball";
@@ -165,6 +169,8 @@ export class Match {
 
   constructor(home: TeamDef, away: TeamDef, opts: MatchOptions = {}) {
     this.initialFatigue = opts.initialFatigue ?? {};
+    home = { ...home, tactics: normalizeTactics(home.tactics) };
+    away = { ...away, tactics: normalizeTactics(away.tactics) };
     this.teams = [home, away];
     this.rng = new Rng(opts.seed ?? 1);
     this.halfLength = opts.halfLength ?? 45 * 60;
@@ -188,6 +194,7 @@ export class Match {
           distance: 0,
           yellow: 0,
           sentOff: false,
+          injured: false,
           kickCooldown: 0,
           possessionTime: 0,
           intent: "",
@@ -451,17 +458,18 @@ export class Match {
   setTactics(team: TeamId, patch: Partial<Tactics>): void {
     const t = this.teams[team];
     const prev = t.tactics;
-    const next: Tactics = { ...prev, ...patch };
-    for (const k of ["mentality", "defensiveLine", "pressing", "directness", "width"] as const) {
-      next[k] = Math.max(0, Math.min(1, next[k]));
-    }
+    const merged = { ...prev, ...patch };
+    // A formation change resets the roles unless the caller supplied a matching set.
+    if (merged.formation !== prev.formation && !patch.roles) merged.roles = undefined;
+    const next: Tactics = normalizeTactics(merged);
     t.tactics = next;
     if (next.formation !== prev.formation) {
       this.reassignLineup(team);
       this.emit("TACTICS", team, null, `${t.shortName} 포메이션 변경 → ${next.formation}`);
     } else {
-      const changed = (Object.keys(patch) as (keyof Tactics)[]).filter((k) => prev[k] !== next[k]);
-      if (changed.length) this.emit("TACTICS", team, null, `${t.shortName} 전술 조정: ${changed.join(", ")}`);
+      const changed = (Object.keys(patch) as (keyof Tactics)[]).filter((k) => k !== "roles" && prev[k] !== next[k]);
+      const rolesChanged = !!patch.roles && JSON.stringify(prev.roles) !== JSON.stringify(next.roles);
+      if (changed.length || rolesChanged) this.emit("TACTICS", team, null, `${t.shortName} 전술 조정: ${[...changed.map((k) => TACTIC_LABEL[k] ?? k), ...(rolesChanged ? ["역할"] : [])].join(", ")}`);
     }
   }
 
@@ -523,11 +531,13 @@ export class Match {
           this.aiShifted[team] = dm !== 0;
         }
       }
-      // Substitutions: from the hour, replace the most fatigued outfielder with the best-fitting sub.
-      if (minute >= 60 && minute % 5 === 0 && s.subsUsed[team] < 3) {
-        const eleven = s.lineups[team].slice(1).map((id) => this.player(id)).filter((p) => !p.sentOff);
+      // Substitutions: an injured player comes off at once; from the hour, the most fatigued
+      // outfielder is replaced by the best-fitting sub.
+      const eleven = s.lineups[team].slice(1).map((id) => this.player(id)).filter((p) => !p.sentOff);
+      const hurt = eleven.find((p) => p.injured && !s.pendingSubs.some((q) => q.outId === p.id));
+      if ((hurt && s.subsUsed[team] < MAX_SUBS) || (minute >= 60 && minute % 5 === 0 && s.subsUsed[team] < 3)) {
         const threshold = minute >= 75 ? 0.4 : 0.5;
-        const tired = eleven.filter((p) => p.fatigue > threshold).sort((a, b) => b.fatigue - a.fatigue)[0];
+        const tired = hurt ?? eleven.filter((p) => p.fatigue > threshold).sort((a, b) => b.fatigue - a.fatigue)[0];
         if (!tired) continue;
         const bench = this.benchAvailable(team).filter((p) => this.def(p.id).role !== "GK");
         let best: PlayerState | null = null;
@@ -552,6 +562,7 @@ export class Match {
     s.tick++;
     this.refreshActive();
     if (this.aiManaged.size) this.aiManage();
+    if (s.phase === "PLAY") this.checkInjuries();
 
     for (const p of s.players) {
       if (p.kickCooldown > 0) p.kickCooldown -= DT;
@@ -959,6 +970,7 @@ export class Match {
         (this.isKeeper(p.id) ? 1.5 : 0) +
         (defending ? 0.35 : 0) +
         0.9 * a01(attrs.strength) +
+        this.roleOf(p.id).aerial +
         0.5 * a01(attrs.anticipation) -
         d +
         this.rng.range(0, 0.4);
@@ -1037,6 +1049,36 @@ export class Match {
     if (this.shot && this.shot.team !== best.team) this.shot = null;
   }
 
+  /** The role assigned to this player's current slot (or their default). */
+  roleOf(id: string): RoleDef {
+    const team = this.teamOf.get(id)!;
+    const slot = this.slotIndex(id);
+    const roles = this.teams[team].tactics.roles;
+    const rid = slot >= 0 ? roles?.[slot] : undefined;
+    return ROLES[rid ?? (this.isKeeper(id) ? "GK" : "CB")] ?? ROLES.CB;
+  }
+
+  /**
+   * Injuries: a small hazard every second on the pitch (higher on tired legs) plus a bump on
+   * every tackle received. An injured player limps until substituted; the AI manager reacts at
+   * the next stoppage, a human manager sees the flag in the panel.
+   */
+  private checkInjuries(): void {
+    const s = this.state;
+    if (s.tick % 20 !== 0) return; // once a second
+    for (const p of this.activePlayers()) {
+      if (p.injured || this.isKeeper(p.id)) continue;
+      const hazard = 0.0000012 * (1 + 4 * p.fatigue);
+      if (this.rng.chance(hazard)) this.injure(p, "근육");
+    }
+  }
+
+  injure(p: PlayerState, kind: string): void {
+    if (p.injured) return;
+    p.injured = true;
+    this.emit("INJURY", p.team, p.id, `부상: ${this.name(p.id)} (${kind}) – 교체가 필요합니다`, p.pos);
+  }
+
   /** Register a touch for attribution (throw-ins, own goals, offside reset). */
   touch(p: PlayerState): void {
     const b = this.state.ball;
@@ -1108,6 +1150,7 @@ export class Match {
 
       if (this.rng.chance(pFoul)) {
         this.foul(p, owner);
+        if (this.rng.chance(0.012)) this.injure(owner, "태클 충격");
         return;
       }
       if (this.rng.chance(pWin)) {

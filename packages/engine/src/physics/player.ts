@@ -39,8 +39,8 @@ export function maxTurnRate(attrs: Attributes, speed: number): number {
 export function stepPlayer(p: PlayerState, attrs: Attributes, dt: number): void {
   const toTarget = sub(p.target, p.pos);
   const d = len(toTarget);
-  const vMax = maxSpeed(attrs, p.fatigue);
-  const aMax = maxAccel(attrs, p.fatigue);
+  const vMax = maxSpeed(attrs, p.fatigue) * (p.injured ? 0.55 : 1);
+  const aMax = maxAccel(attrs, p.fatigue) * (p.injured ? 0.7 : 1);
 
   // Arrive behaviour: slow down within braking distance.
   let wantSpeed = Math.min(p.desiredSpeed, vMax);

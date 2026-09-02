@@ -1,5 +1,6 @@
 import { FORMATIONS } from "./formation";
 import { Rng } from "./rng";
+import { defaultRoles, normalizeRoles, autoRoles } from "./ai/roles";
 import type { Attributes, FormationName, PlayerDef, Role, Tactics, TeamDef, TeamId } from "./types";
 
 const FIRST = ["Kim", "Lee", "Park", "Choi", "Jung", "Kang", "Cho", "Yoon", "Jang", "Lim", "Han", "Oh", "Seo", "Shin", "Kwon", "Hwang", "Ahn", "Song", "Ryu", "Hong"];
@@ -41,7 +42,19 @@ export function generateAttributes(rng: Rng, role: Role, quality: number): Attri
 }
 
 export function defaultTactics(formation: FormationName = "4-3-3"): Tactics {
-  return { formation, mentality: 0.5, defensiveLine: 0.5, pressing: 0.5, directness: 0.5, width: 0.6 };
+  return { formation, mentality: 0.5, defensiveLine: 0.5, pressing: 0.5, directness: 0.5, width: 0.6, tempo: 0.5, counter: 0.5, engageLine: 0.5, offsideTrap: false, roles: defaultRoles(formation) };
+}
+
+/** Fill in fields older saves lack and make the roles array legal for the formation. */
+export function normalizeTactics(t: Partial<Tactics> & { formation: FormationName }): Tactics {
+  const d = defaultTactics(t.formation);
+  const out: Tactics = { ...d, ...t, roles: normalizeRoles(t.formation, t.roles) };
+  for (const k of ["mentality", "defensiveLine", "pressing", "directness", "width", "tempo", "counter", "engageLine"] as const) {
+    const v = out[k];
+    out[k] = typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d[k];
+  }
+  out.offsideTrap = !!out.offsideTrap;
+  return out;
 }
 
 /** Bench roles: reserve keeper plus cover for each line. */
@@ -85,6 +98,6 @@ export function generateTeam(opts: GenerateTeamOptions): TeamDef {
     color: opts.color,
     players,
     bench,
-    tactics: { ...defaultTactics(formation), ...opts.tactics },
+    tactics: normalizeTactics({ ...defaultTactics(formation), ...opts.tactics, formation, roles: opts.tactics?.roles ?? autoRoles(formation, players.map((p) => p.attrs)) }),
   };
 }

@@ -52,7 +52,26 @@ export interface Tactics {
   directness: number;
   /** 0..1 – team width */
   width: number;
+  /** 0..1 – how quickly players release the ball (default 0.5) */
+  tempo: number;
+  /** 0..1 – how hard the team breaks after winning the ball (default 0.5) */
+  counter: number;
+  /** 0..1 – where the press starts: 0 = own box only, 1 = everywhere (default 0.5) */
+  engageLine: number;
+  /** step the back line up on the opponent's pass to catch runners offside */
+  offsideTrap: boolean;
+  /** player role per formation slot (slot 0 = GK); missing/invalid entries fall back to defaults */
+  roles?: PlayerRoleId[];
 }
+
+export type PlayerRoleId =
+  | "GK" | "SK"
+  | "CB" | "BPD" | "STP"
+  | "FB" | "WB" | "DFB"
+  | "ANC" | "DLP" | "BWM" | "BBM" | "PM"
+  | "AP" | "SS"
+  | "W" | "IF" | "DW"
+  | "AF" | "TM" | "PCH" | "F9";
 
 export interface TeamDef {
   id: TeamId;
@@ -102,6 +121,8 @@ export interface PlayerState {
   distance: number;
   yellow: number;
   sentOff: boolean;
+  /** hurt during the match: limps at half pace until substituted */
+  injured: boolean;
   /** cooldown before this player may kick again (s) */
   kickCooldown: number;
   /** time since gaining possession (s) */
@@ -157,7 +178,8 @@ export type MatchEventType =
   | "BLOCK"
   | "TACKLE"
   | "SUBSTITUTION"
-  | "TACTICS";
+  | "TACTICS"
+  | "INJURY";
 
 export interface MatchEvent {
   t: number; // match seconds

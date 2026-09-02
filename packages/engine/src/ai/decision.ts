@@ -26,6 +26,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const tactics = m.teams[team].tactics;
   const dGoal = dist(p.pos, goal);
   const noise = 0.25 * (1.2 - a01(attrs.decisions));
+  const rd = m.roleOf(p.id);
 
   interface Option {
     kind: "shoot" | "pass" | "cross" | "dribble" | "clear" | "hold";
@@ -53,7 +54,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
 
   // Settle the ball first: a player needs a moment after receiving – a touch and a look up
   // (~1 s with time and space; hurried when pressed).
-  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : pressure < 5 ? 1.3 : 2.2);
+  const settle = (0.35 + 0.6 * (1 - a01(attrs.firstTouch))) * (pressure < 2.5 ? 0.4 : pressure < 5 ? 1.3 : 2.2) * (1.4 - 0.8 * tactics.tempo);
   if (p.possessionTime < settle) {
     const point = dribbleTarget(m, p);
     setDribble(m, p, point, 4);
@@ -88,13 +89,14 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       blockers * 0.6 +
       firstTime +
       throughPenalty +
-      longRange;
+      longRange +
+      rd.shoot;
     options.push({ kind: "shoot", score: shotScore + m.rng.gauss(0, noise) });
   }
 
   // ---- Pass
   const pass = bestPass(m, p, { longAllowed: true, minScore: -Infinity });
-  if (pass) options.push({ kind: "pass", score: pass.score + m.rng.gauss(0, noise), target: pass.target });
+  if (pass) options.push({ kind: "pass", score: pass.score + rd.pass + m.rng.gauss(0, noise), target: pass.target });
 
   // ---- Cross: wide in the final third, team-mates in the box
   const inWideFinalThird = p.pos.x * dir > 22 && Math.abs(p.pos.y) > 13;
@@ -113,7 +115,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
       }
     }
     if (cross) {
-      const crossScore = TUNING.crossBase + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0) + (tactics.width - 0.5) * 0.6;
+      const crossScore = TUNING.crossBase + 0.4 * a01(attrs.technique) + Math.min(best, 0.8) + (pressure < 2 ? 0.3 : 0) + (tactics.width - 0.5) * 0.6 + rd.cross;
       options.push({ kind: "cross", score: crossScore + m.rng.gauss(0, noise), target: cross });
     }
   }
@@ -124,7 +126,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   // Carry: with time and space a player brings the ball forward for a moment before releasing it
   // (keeps the pass rate realistic: ~1 pass every 5-6 s of possession).
   // Patient (low-directness) teams carry the ball forward instead of forcing passes.
-  const carryBase = TUNING.carryBonus * (1.25 - 0.5 * tactics.directness);
+  const carryBase = TUNING.carryBonus * (1.25 - 0.5 * tactics.directness) * (1.3 - 0.6 * tactics.tempo);
   const carry = pressure > 4 && p.possessionTime < 1.6 ? carryBase : pressure > 2.5 && p.possessionTime < 0.9 ? carryBase * 0.55 : 0;
   const dribbleScore =
     0.35 +
@@ -132,7 +134,8 @@ export function decideOnBall(m: Match, p: PlayerState): number {
     Math.min(space, 12) * 0.04 +
     0.3 * a01(attrs.dribbling) +
     (pressure < 1.8 ? -0.4 : pressure < 3 ? -0.15 : 0) +
-    (p.pos.x * dir < -20 ? -0.25 : 0) + // don't dribble out of defence
+    (p.pos.x * dir < -20 ? -0.25 + Math.max(0, rd.dribble) : 0) + // don't dribble out of defence (ball-playing defenders may)
+    rd.dribble +
     (dGoal < 25 ? 0.1 : 0) +
     (dGoal > 15 && dGoal < 35 && spaceAhead(m, p, fwd, true) > 12 ? 0.5 : 0) - // through on goal: drive at the keeper
     Math.min(0.5, Math.max(0, p.possessionTime - 1.6) * 0.15); // don't dribble forever
@@ -146,7 +149,7 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   }
 
   // ---- Hold (only when nothing else appeals and not under pressure)
-  options.push({ kind: "hold", score: pressure > 6 ? 0.45 : -0.5 });
+  options.push({ kind: "hold", score: pressure > 6 ? 0.45 - 0.4 * (tactics.tempo - 0.5) : -0.5 });
 
   options.sort((a, b) => b.score - a.score);
   const choice = options[0]!;
@@ -260,13 +263,13 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     if (blockedAtFeet && !lofted) score -= 1.5;
     else if (lofted) score += Math.min(lane, 4) * 0.05;
     else if (margin < 0) score -= 1.0;
-    else score += (Math.min(margin, 1.5) - 0.6) * (TUNING.passMarginWeight - 0.6 * tactics.mentality); // tight lanes are a gamble; cautious teams shun them
+    else score += (Math.min(margin, 1.5) - 0.6) * Math.max(0.1, TUNING.passMarginWeight - 0.6 * tactics.mentality - 0.4 * m.roleOf(p.id).risk); // tight lanes are a gamble; cautious teams shun them
     score += Math.min(receiverSpace, 6) * 0.05; // ≤ 0.3
     // Directness and mentality both reward vertical passes; a defensive mentality prefers safety.
     // Counter-attack: in the seconds after winning the ball, vertical passes into space are gold.
     const transition = m.inTransition(team);
     const effDirect = Math.min(1, tactics.directness + Math.max(0, 0.5 - tactics.mentality) * 0.6 + (transition ? 0.15 : 0));
-    score += progress * (0.010 + 0.010 * effDirect) * (0.7 + 0.6 * tactics.mentality) * (transition ? 1.15 : 1); // 20 m ≈ 0.3
+    score += progress * (0.010 + 0.010 * effDirect) * (0.7 + 0.6 * tactics.mentality) * (transition ? 1 + 0.3 * tactics.counter : 1); // 20 m ≈ 0.3
     score -= d > 22 ? (d - 22) * (0.035 - 0.015 * effDirect) : 0; // long balls are risky
     score -= lofted ? 0.3 * (1 - a01(attrs.technique)) + 0.25 : 0;
     score -= offsidePenalty;
@@ -280,7 +283,7 @@ function bestPass(m: Match, p: PlayerState, opts: { longAllowed: boolean; minSco
     // Receiver in a scoring position is attractive; a team-mate already sprinting in behind doubly so
     const rxg = m.xgAt(lead, team);
     score += rxg * 2.5 * (0.5 + vision); // seeing the team-mate in the scoring position
-    if (q.intent === "run" && progress > 5) score += (transition ? 0.45 : 0.35) * (0.5 + vision); // spotting the runner is vision
+    if (q.intent === "run" && progress > 5) score += (transition ? 0.25 + 0.4 * tactics.counter : 0.35) * (0.5 + vision); // spotting the runner is vision
 
     if (score > opts.minScore && (!best || score > best.score)) best = { target: q, score, lofted, margin, lane, d };
   }

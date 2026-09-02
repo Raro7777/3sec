@@ -87,6 +87,7 @@ describe("player kinematics", () => {
       distance: 0,
       yellow: 0,
       sentOff: false,
+      injured: false,
       kickCooldown: 0,
       possessionTime: 0,
       intent: "",
