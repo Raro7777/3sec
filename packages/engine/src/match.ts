@@ -420,7 +420,7 @@ export class Match {
         "SUBSTITUTION",
         sub.team,
         inn.id,
-        `Substitution (${this.teams[sub.team].shortName}): ${this.name(inn.id)} on for ${this.name(out.id)}`,
+        `교체 (${this.teams[sub.team].shortName}): ${this.name(out.id)} OUT → ${this.name(inn.id)} IN`,
       );
     }
     this.refreshActive();
@@ -437,10 +437,10 @@ export class Match {
     t.tactics = next;
     if (next.formation !== prev.formation) {
       this.reassignLineup(team);
-      this.emit("TACTICS", team, null, `${t.shortName} switch to ${next.formation}`);
+      this.emit("TACTICS", team, null, `${t.shortName} 포메이션 변경 → ${next.formation}`);
     } else {
       const changed = (Object.keys(patch) as (keyof Tactics)[]).filter((k) => prev[k] !== next[k]);
-      if (changed.length) this.emit("TACTICS", team, null, `${t.shortName} adjust ${changed.join(", ")}`);
+      if (changed.length) this.emit("TACTICS", team, null, `${t.shortName} 전술 조정: ${changed.join(", ")}`);
     }
   }
 
@@ -572,11 +572,11 @@ export class Match {
       return false;
     }
     if (s.half === 1) {
-      this.emit("HALF_TIME", null, null, `Half time: ${this.scoreline()}`);
+      this.emit("HALF_TIME", null, null, `전반 종료: ${this.scoreline()}`);
       s.phase = "HALF_TIME";
       s.phaseTimer = 3;
     } else {
-      this.emit("FULL_TIME", null, null, `Full time: ${this.scoreline()}`);
+      this.emit("FULL_TIME", null, null, `경기 종료: ${this.scoreline()}`);
       s.phase = "FULL_TIME";
     }
     b.owner = null;
@@ -669,7 +669,7 @@ export class Match {
 
     const taker = this.player(r.takerId!);
     if (r.timer <= 0 && dist(taker.pos, r.pos) < 1.2) {
-      if (r.kind === "KICK_OFF") this.emit("KICK_OFF", r.team, taker.id, `Kick-off: ${this.teams[r.team].shortName}`);
+      if (r.kind === "KICK_OFF") this.emit("KICK_OFF", r.team, taker.id, `킥오프: ${this.teams[r.team].shortName}`);
       executeRestart(this, r, taker);
       s.restart = null;
       s.phase = "PLAY";
@@ -875,7 +875,7 @@ export class Match {
         return;
       }
       s.stats[best.team].saves++;
-      this.emit("SAVE", best.team, best.id, `Save by ${this.name(best.id)}`);
+      this.emit("SAVE", best.team, best.id, `${this.name(best.id)} 선방`);
       this.shot = null;
       b.pos = { ...best.pos };
       this.gainPossession(best);
@@ -887,11 +887,11 @@ export class Match {
       // Keeper gathering an on-target shot counts as a save.
       if (isGk && this.shot && this.shot.team !== best.team && this.shot.onTargetCounted) {
         s.stats[best.team].saves++;
-        this.emit("SAVE", best.team, best.id, `Save by ${this.name(best.id)}`);
+        this.emit("SAVE", best.team, best.id, `${this.name(best.id)} 선방`);
       }
       // Interception bookkeeping (pass completion itself is settled in gainPossession/touch)
       if (prevTeam !== null && prevToucher && prevToucher !== best.id && prevTeam !== best.team && this.intendedReceiver) {
-        this.emit("INTERCEPTION", best.team, best.id, `${this.name(best.id)} intercepts`);
+        this.emit("INTERCEPTION", best.team, best.id, `${this.name(best.id)} 가로채기`);
       }
       this.gainPossession(best);
       this.intendedReceiver = null;
@@ -1027,7 +1027,7 @@ export class Match {
     if (lp && lp.team === p.team && lp.fromId !== p.id && lp.offsidePositions[p.id]) {
       s.lastPass = null;
       s.stats[p.team].offsides++;
-      this.emit("OFFSIDE", p.team, p.id, `Offside: ${this.name(p.id)}`, p.pos);
+      this.emit("OFFSIDE", p.team, p.id, `오프사이드: ${this.name(p.id)}`, p.pos);
       const spot = { x: p.pos.x, y: p.pos.y };
       this.setupRestart("FREE_KICK", this.opp(p.team), spot);
       return;
@@ -1076,7 +1076,7 @@ export class Match {
       }
       if (this.rng.chance(pWin)) {
         s.stats[p.team].tackles++;
-        this.emit("TACKLE", p.team, p.id, `${this.name(p.id)} wins the ball from ${this.name(owner.id)}`);
+        this.emit("TACKLE", p.team, p.id, `${this.name(p.id)} 태클 성공 (${this.name(owner.id)})`);
         // Ball squirts loose toward the tackler's side.
         const away = norm(sub(p.pos, owner.pos));
         const ang = Math.atan2(away.y, away.x) + this.rng.range(-0.8, 0.8);
@@ -1103,30 +1103,30 @@ export class Match {
     const distToGoal = dist(spot, goalCenter(attackDir));
     // Referees are noticeably more lenient with a player already booked (second yellow ≈ rare).
     const pYellow = (TUNING.yellowBase + (distToGoal < 30 ? 0.12 : 0) + (inBox ? 0.1 : 0)) * (offender.yellow > 0 ? 0.25 : 1);
-    const text = `Foul by ${this.name(offender.id)} on ${this.name(victim.id)}`;
+    const text = `파울: ${this.name(offender.id)} → ${this.name(victim.id)}`;
     this.emit("FOUL", offender.team, offender.id, text, spot);
     if (this.rng.chance(pYellow)) {
       offender.yellow++;
       if (offender.yellow >= 2) {
         offender.sentOff = true;
         s.stats[offender.team].reds++;
-        this.emit("RED_CARD", offender.team, offender.id, `Second yellow – ${this.name(offender.id)} is sent off`);
+        this.emit("RED_CARD", offender.team, offender.id, `경고 누적 퇴장 – ${this.name(offender.id)}`);
       } else {
         s.stats[offender.team].yellows++;
-        this.emit("YELLOW_CARD", offender.team, offender.id, `Yellow card: ${this.name(offender.id)}`);
+        this.emit("YELLOW_CARD", offender.team, offender.id, `경고: ${this.name(offender.id)}`);
       }
     } else if (this.rng.chance(0.002)) {
       offender.sentOff = true;
       s.stats[offender.team].reds++;
-      this.emit("RED_CARD", offender.team, offender.id, `Straight red – ${this.name(offender.id)} is sent off`);
+      this.emit("RED_CARD", offender.team, offender.id, `다이렉트 퇴장 – ${this.name(offender.id)}`);
     }
 
     if (inBox) {
       s.stats[victimTeam].xg += 0.76;
-      this.emit("PENALTY", victimTeam, null, `Penalty to ${this.teams[victimTeam].shortName}!`, spot);
+      this.emit("PENALTY", victimTeam, null, `페널티킥: ${this.teams[victimTeam].shortName}!`, spot);
       this.setupRestart("PENALTY", victimTeam, penaltySpot(attackDir));
     } else {
-      this.emit("FREE_KICK", victimTeam, null, `Free kick to ${this.teams[victimTeam].shortName}`, spot);
+      this.emit("FREE_KICK", victimTeam, null, `프리킥: ${this.teams[victimTeam].shortName}`, spot);
       this.setupRestart("FREE_KICK", victimTeam, spot);
     }
   }
@@ -1138,7 +1138,7 @@ export class Match {
     s.stats[shooter.team].shots++;
     s.stats[shooter.team].xg += xg;
     this.shot = { shooterId: shooter.id, team: shooter.team, xg, saveAttempted: false, onTargetCounted: false };
-    this.emit("SHOT", shooter.team, shooter.id, `${this.name(shooter.id)} ${header ? "heads at goal" : "shoots"} (xG ${xg.toFixed(2)})`, shooter.pos);
+    this.emit("SHOT", shooter.team, shooter.id, `${this.name(shooter.id)} ${header ? "헤딩 슛" : "슛"} (xG ${xg.toFixed(2)})`, shooter.pos);
   }
 
   /** A defender blocks the shot: the ball ricochets off them. */
@@ -1168,7 +1168,7 @@ export class Match {
     b.pos = { x: blocker.pos.x, y: blocker.pos.y };
     blocker.kickCooldown = 0.4;
     this.touch(blocker);
-    this.emit("BLOCK", blocker.team, blocker.id, `Blocked by ${this.name(blocker.id)}`);
+    this.emit("BLOCK", blocker.team, blocker.id, `${this.name(blocker.id)} 블록`);
     this.shot = null;
   }
 
@@ -1198,7 +1198,7 @@ export class Match {
     if (!shot.onTargetCounted) {
       shot.onTargetCounted = true;
       s.stats[shot.team].shotsOnTarget++;
-      this.emit("SHOT_ON_TARGET", shot.team, shot.shooterId, `On target`);
+      this.emit("SHOT_ON_TARGET", shot.team, shot.shooterId, `유효 슈팅`);
     }
 
     const attrs = this.def(gk.id).attrs;
@@ -1229,7 +1229,7 @@ export class Match {
 
     // Saved!
     s.stats[defTeam].saves++;
-    this.emit("SAVE", defTeam, gk.id, `Save by ${this.name(gk.id)}`);
+    this.emit("SAVE", defTeam, gk.id, `${this.name(gk.id)} 선방`);
     gk.kickCooldown = 0;
     const holdChance = 0.35 + 0.5 * a01(attrs.handling) - Math.max(0, speed - 20) * 0.03;
     if (this.rng.chance(holdChance)) {
@@ -1266,7 +1266,7 @@ export class Match {
       const lastTeam = b.lastTouchTeam ?? 0;
       const to = this.opp(lastTeam);
       const spot = { x: Math.max(-hl + 1, Math.min(hl - 1, b.pos.x)), y: Math.sign(b.pos.y) * (hw - 0.3) };
-      this.emit("THROW_IN", to, null, `Throw-in: ${this.teams[to].shortName}`, spot);
+      this.emit("THROW_IN", to, null, `스로인: ${this.teams[to].shortName}`, spot);
       this.shot = null;
       this.setupRestart("THROW_IN", to, spot);
       return;
@@ -1287,7 +1287,7 @@ export class Match {
       if (Math.abs(b.pos.y) < PITCH.goalHalfWidth + 0.15 && b.z < PITCH.goalHeight + 0.15 && Math.abs(b.pos.x) < hl + 0.3) {
         b.vel.x *= -0.6;
         b.pos.x = Math.sign(b.pos.x) * (hl - 0.1);
-        this.emit("SHOT", scoringTeam, b.lastTouch, `Off the woodwork!`);
+        this.emit("SHOT", scoringTeam, b.lastTouch, `골대 강타!`);
         this.shot = null;
         return;
       }
@@ -1297,13 +1297,13 @@ export class Match {
       if (lastTeam === scoringTeam) {
         // Attacker put it out: goal kick
         const spot = { x: (hl - PITCH.goalAreaDepth) * side, y: Math.sign(b.pos.y || 1) * 5 };
-        this.emit("GOAL_KICK", defendingTeam, null, `Goal kick: ${this.teams[defendingTeam].shortName}`, spot);
+        this.emit("GOAL_KICK", defendingTeam, null, `골킥: ${this.teams[defendingTeam].shortName}`, spot);
         this.setupRestart("GOAL_KICK", defendingTeam, spot);
       } else {
         // Defender put it out: corner
         s.stats[scoringTeam].corners++;
         const spot = { x: (hl - 0.3) * side, y: Math.sign(b.pos.y || 1) * (hw - 0.3) };
-        this.emit("CORNER", scoringTeam, null, `Corner: ${this.teams[scoringTeam].shortName}`, spot);
+        this.emit("CORNER", scoringTeam, null, `코너킥: ${this.teams[scoringTeam].shortName}`, spot);
         this.setupRestart("CORNER", scoringTeam, spot);
       }
     }
@@ -1317,9 +1317,9 @@ export class Match {
     const scorer = b.lastTouch;
     const ownGoal = scorer !== null && this.teamOf.get(scorer) === defendingTeam;
     if (ownGoal) {
-      this.emit("OWN_GOAL", scoringTeam, scorer, `OWN GOAL by ${this.name(scorer!)} – ${this.scoreline()}`, b.pos);
+      this.emit("OWN_GOAL", scoringTeam, scorer, `자책골! ${this.name(scorer!)} – ${this.scoreline()}`, b.pos);
     } else {
-      this.emit("GOAL", scoringTeam, scorer, `GOAL! ${scorer ? this.name(scorer) : ""} – ${this.scoreline()}`, b.pos);
+      this.emit("GOAL", scoringTeam, scorer, `골! ${scorer ? this.name(scorer) : ""} – ${this.scoreline()}`, b.pos);
     }
     this.lastGoalTeam = scoringTeam;
     this.shot = null;

@@ -90,7 +90,7 @@ export class MatchScreen {
   private setPlaying(v: boolean): void {
     if (this.finished) v = false;
     this.playing = v;
-    this.btnPlay.textContent = v ? "❚❚ Pause" : "▶ Play";
+    this.btnPlay.textContent = v ? "❚❚ 일시정지" : "▶ 재생";
   }
 
   private stepAll(n: number): void {
@@ -345,7 +345,7 @@ export class MatchScreen {
       this.btnContinue.style.display = "";
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
-      this.btnSkip.textContent = "⏩ 다른 경기 종료";
+      this.btnSkip.textContent = "⏩ 다른 구장 종료";
     }
   }
 
@@ -355,14 +355,14 @@ export class MatchScreen {
     const a = def.attrs;
     const lines = [
       `#${def.number} ${def.name} (${def.role})`,
-      `PAC ${a.pace} ACC ${a.acceleration} STA ${a.stamina} STR ${a.strength}`,
-      `PAS ${a.passing} VIS ${a.vision} TEC ${a.technique} FT ${a.firstTouch}`,
-      `DRI ${a.dribbling} FIN ${a.finishing} CMP ${a.composure} DEC ${a.decisions}`,
-      `TCK ${a.tackling} MRK ${a.marking} POS ${a.positioning}`,
+      `속도 ${a.pace} 가속 ${a.acceleration} 체력 ${a.stamina} 힘 ${a.strength}`,
+      `패스 ${a.passing} 시야 ${a.vision} 기술 ${a.technique} 터치 ${a.firstTouch}`,
+      `드리블 ${a.dribbling} 마무리 ${a.finishing} 침착 ${a.composure} 판단 ${a.decisions}`,
+      `태클 ${a.tackling} 마킹 ${a.marking} 위치 ${a.positioning}`,
       `피로 ${(p.fatigue * 100).toFixed(0)}%  속도 ${Math.hypot(p.vel.x, p.vel.y).toFixed(1)} m/s  의도 ${p.intent}`,
     ];
-    ctx.font = "12px ui-monospace, monospace";
-    const w = 330;
+    ctx.font = "12px 'IBM Plex Sans KR', system-ui, sans-serif";
+    const w = 340;
     const h = 16 * lines.length + 12;
     ctx.fillStyle = "rgba(10,14,20,0.85)";
     ctx.fillRect(8, v.h - h - 8, w, h);

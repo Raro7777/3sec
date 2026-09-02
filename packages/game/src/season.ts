@@ -7,7 +7,7 @@ import { aiTransfers, seasonBudget } from "./transfers";
 
 export function newGame(seed: number, userClub = 0): GameState {
   const clubs = buildClubs(seed);
-  return { version: 1, seed, season: 1, round: 0, userClub, clubs, fixtures: buildFixtures(clubs.length), news: [`Season 1 begins. You manage ${clubs[userClub]!.name}.`] };
+  return { version: 1, seed, season: 1, round: 0, userClub, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. 당신은 ${clubs[userClub]!.name} 감독입니다.`] };
 }
 
 export const clubOf = (s: GameState, id: number): Club => s.clubs[id]!;
@@ -75,7 +75,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
       if (rng.chance(0.022 * (0.6 + ps.fatigue))) {
         const days = Math.min(90, Math.round(3 + Math.pow(rng.next(), 2.2) * 60));
         p.injuryDays = days;
-        s.news.unshift(`${c.shortName}: ${p.name} injured, out ~${days} days.`);
+        s.news.unshift(`${c.shortName}: ${p.name} 부상, 약 ${days}일 결장.`);
       }
     }
     for (const e of m.state.events) {
@@ -87,14 +87,14 @@ export function recordResult(s: GameState, f: Fixture, m: Match): void {
         p.seasonYellows++;
         if (p.seasonYellows % 5 === 0) {
           p.ban = Math.max(p.ban, 1);
-          s.news.unshift(`${c.shortName}: ${p.name} suspended one match (5 yellow cards).`);
+          s.news.unshift(`${c.shortName}: ${p.name} 경고 누적 5장으로 1경기 출장 정지.`);
         }
       }
       if (e.type === "RED_CARD") {
         p.stats.reds++;
         const secondYellow = m.state.events.some((x) => x.type === "YELLOW_CARD" && x.playerId === p.id && x.t < e.t);
         p.ban = Math.max(p.ban, secondYellow ? 1 : 2);
-        s.news.unshift(`${c.shortName}: ${p.name} sent off, banned ${p.ban} match${p.ban > 1 ? "es" : ""}.`);
+        s.news.unshift(`${c.shortName}: ${p.name} 퇴장, ${p.ban}경기 출장 정지.`);
       }
     }
     // Suspended players who sat out this match have served one game.
@@ -127,7 +127,7 @@ export function advanceRound(s: GameState): boolean {
     p.injuryDays = Math.max(0, p.injuryDays - 7);
   }
   if (s.round === 10) aiTransfers(s, new Rng(s.seed * 17 + s.season * 331));
-  if (seasonOver(s)) s.news.unshift(`Season ${s.season} is over. Champions: ${clubOf(s, table(s)[0]!.club).name}.`);
+  if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   return true;
 }
 
@@ -152,7 +152,7 @@ export function startNextSeason(s: GameState): void {
   s.season++;
   s.round = 0;
   s.fixtures = buildFixtures(s.clubs.length);
-  s.news.unshift(`Season ${s.season} begins.`);
+  s.news.unshift(`시즌 ${s.season} 시작.`);
   aiTransfers(s, rng);
   prepareRound(s);
 }

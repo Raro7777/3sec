@@ -266,14 +266,14 @@ export class Game {
   }
 
   // ------------------------------------------------------------ transfers
-  private transferRole = "ALL";
+  private transferRole = "전체";
   private renderTransfers(): void {
     const s = this.state;
     const me = this.me;
     const open = windowOpen(s);
     const locked = !!this.live;
-    const roles = ["ALL", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
-    const targets = transferTargets(s).filter((t) => this.transferRole === "ALL" || t.player.role === this.transferRole).slice(0, 60);
+    const roles = ["전체", "GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"];
+    const targets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).slice(0, 60);
     const fmtRow = (p: SquadPlayer, clubName: string, right: string) => `<div class="row tr" style="cursor:default">
         <span class="num">${p.number}</span><span class="role">${p.role}</span>
         <span class="name" title="${p.name}">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>

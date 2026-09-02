@@ -51,7 +51,7 @@ describe("world and selection", () => {
     expect(c.selection.starters[9]).toBe(reserve.id);
     expect(c.selection.starters.includes(st)).toBe(false);
     playerOf(c, reserve.id).injuryDays = 10;
-    expect(selectionProblem(c)).toMatch(/injured/);
+    expect(selectionProblem(c)).toMatch(/부상/);
     c.selection = repairSelection(c);
     expect(selectionProblem(c)).toBeNull();
     expect(c.selection.starters.includes(reserve.id)).toBe(false);

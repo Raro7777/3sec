@@ -3,29 +3,29 @@ import type { Club, SquadPlayer } from "./types";
 import { autoSelect } from "./selection";
 import { seasonBudget } from "./transfers";
 
-const FIRST = ["Kim", "Lee", "Park", "Choi", "Jung", "Kang", "Cho", "Yoon", "Jang", "Lim", "Han", "Oh", "Seo", "Shin", "Kwon", "Hwang", "Ahn", "Song", "Ryu", "Hong", "Moon", "Yang", "Bae", "Baek", "Nam"];
-const GIVEN = ["Minjun", "Seojun", "Doyun", "Yejun", "Siwoo", "Hajun", "Jiho", "Juwon", "Jihoon", "Junseo", "Hyunwoo", "Woojin", "Sunwoo", "Eunwoo", "Jaeyoon", "Taeyang", "Yujun", "Seungmin", "Dohyun", "Geonwoo", "Minseok", "Jinwoo", "Sangho", "Youngjin", "Kyungmin"];
+const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
+const GIVEN = ["민준", "서준", "도윤", "예준", "시우", "하준", "지호", "주원", "지훈", "준서", "현우", "우진", "선우", "은우", "재윤", "태양", "유준", "승민", "도현", "건우", "민석", "진우", "상호", "영진", "경민", "태현", "성민", "동현", "재현", "승현"];
 
 /** Fictional clubs; reputation spreads the league from title favourites to relegation fodder. */
 export const CLUBS: { name: string; shortName: string; color: string; reputation: number; formation: FormationName }[] = [
-  { name: "Seoul FC", shortName: "SEO", color: "#e63946", reputation: 12.5, formation: "4-3-3" },
-  { name: "Busan United", shortName: "BUS", color: "#4cc9f0", reputation: 12, formation: "4-4-2" },
-  { name: "Incheon Blue", shortName: "INC", color: "#3a86ff", reputation: 13.5, formation: "4-2-3-1" },
-  { name: "Daegu Wolves", shortName: "DAE", color: "#8ecae6", reputation: 11, formation: "3-5-2" },
-  { name: "Gwangju Rays", shortName: "GWA", color: "#ffd166", reputation: 11.5, formation: "4-3-3" },
-  { name: "Daejeon Comets", shortName: "DJN", color: "#c77dff", reputation: 10.5, formation: "4-4-2" },
-  { name: "Suwon Wings", shortName: "SUW", color: "#06d6a0", reputation: 13, formation: "4-2-3-1" },
-  { name: "Ulsan Anchors", shortName: "ULS", color: "#f4a261", reputation: 14.5, formation: "4-3-3" },
-  { name: "Jeonju Green", shortName: "JEO", color: "#2a9d8f", reputation: 14, formation: "4-2-3-1" },
-  { name: "Pohang Iron", shortName: "POH", color: "#adb5bd", reputation: 12, formation: "4-4-2" },
-  { name: "Jeju Islanders", shortName: "JEJ", color: "#ff8fab", reputation: 10, formation: "3-5-2" },
-  { name: "Changwon Sails", shortName: "CHA", color: "#a7c957", reputation: 11, formation: "4-3-3" },
+  { name: "서울 FC", shortName: "서울", color: "#e63946", reputation: 12.5, formation: "4-3-3" },
+  { name: "부산 유나이티드", shortName: "부산", color: "#4cc9f0", reputation: 12, formation: "4-4-2" },
+  { name: "인천 블루", shortName: "인천", color: "#3a86ff", reputation: 13.5, formation: "4-2-3-1" },
+  { name: "대구 울브스", shortName: "대구", color: "#8ecae6", reputation: 11, formation: "3-5-2" },
+  { name: "광주 레이즈", shortName: "광주", color: "#ffd166", reputation: 11.5, formation: "4-3-3" },
+  { name: "대전 코메츠", shortName: "대전", color: "#c77dff", reputation: 10.5, formation: "4-4-2" },
+  { name: "수원 윙스", shortName: "수원", color: "#06d6a0", reputation: 13, formation: "4-2-3-1" },
+  { name: "울산 앵커스", shortName: "울산", color: "#f4a261", reputation: 14.5, formation: "4-3-3" },
+  { name: "전주 그린", shortName: "전주", color: "#2a9d8f", reputation: 14, formation: "4-2-3-1" },
+  { name: "포항 아이언", shortName: "포항", color: "#adb5bd", reputation: 12, formation: "4-4-2" },
+  { name: "제주 아일랜더스", shortName: "제주", color: "#ff8fab", reputation: 10, formation: "3-5-2" },
+  { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11, formation: "4-3-3" },
 ];
 
 /** 20-man squad: two keepers, eight defenders, six midfielders, four forwards. */
 const SQUAD_ROLES: Role[] = ["GK", "GK", "CB", "CB", "CB", "CB", "LB", "LB", "RB", "RB", "DM", "CM", "CM", "CM", "AM", "LW", "RW", "ST", "ST", "LM"];
 
-export function buildSquad(rng: Rng, shortName: string, reputation: number): SquadPlayer[] {
+export function buildSquad(rng: Rng, idPrefix: string, reputation: number): SquadPlayer[] {
   const numbers = new Set<number>();
   const squad: SquadPlayer[] = [];
   SQUAD_ROLES.forEach((role, i) => {
@@ -37,8 +37,8 @@ export function buildSquad(rng: Rng, shortName: string, reputation: number): Squ
     while (numbers.has(number)) number = rng.int(2, 99);
     numbers.add(number);
     squad.push({
-      id: `${shortName}-${i + 1}`,
-      name: `${rng.pick(FIRST)} ${rng.pick(GIVEN)}`,
+      id: `${idPrefix}-${i + 1}`,
+      name: `${rng.pick(FIRST)}${rng.pick(GIVEN)}`,
       number,
       role,
       attrs: generateAttributes(rng, role, quality),
@@ -63,7 +63,7 @@ export function buildClubs(seed: number): Club[] {
       color: c.color,
       reputation: c.reputation,
       budget: seasonBudget(c.reputation, null),
-      squad: buildSquad(rng, c.shortName, c.reputation),
+      squad: buildSquad(rng, `C${id}`, c.reputation),
       tactics: { ...defaultTactics(c.formation), mentality: 0.45 + rng.range(0, 0.1), pressing: 0.4 + rng.range(0, 0.2), directness: 0.4 + rng.range(0, 0.2) },
       selection: { formation: c.formation, starters: [], bench: [] },
     };
