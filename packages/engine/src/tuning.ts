@@ -62,7 +62,7 @@ export const TUNING: Tuning = {
   markGapMid: 1.7,
   markGapFar: 2.8,
   pressers: 2,
-  engageRadius: 4.725,
+  engageRadius: 3.5,
   tackleRate: 1.7,
   foulBase: 0.05,
   yellowBase: 0.16,

@@ -140,12 +140,15 @@ export function computePositioning(m: Match, _dt: number): void {
       continue;
     }
 
-    const target = shapePosition(m, p, possession);
+    let target = shapePosition(m, p, possession);
+    // Hysteresis: a spot that moved less than 2 m is not worth moving for – players stand,
+    // scan and adjust in steps, they do not drift continuously.
+    if (!runFlag && (p.intent === "shape" || p.intent === "support") && dist(target, p.target) < 3) target = p.target;
     const d = dist(p.pos, target);
     // Shape adjustments are jogs and walks, not sprints (players cover ~10-11 km, not 15);
     // a run in behind is the exception.
     // Dead zone: within a metre of the spot players stand and scan instead of shuffling.
-    const speed = runFlag ? 99 : d > 14 ? 7 : d > 6 ? 4.5 : d > 2.5 ? 2.5 : d > 1.0 ? 1.2 : 0;
+    const speed = runFlag ? 99 : d > 14 ? 7 : d > 6 ? 4.5 : d > 2.5 ? 2.5 : d > 1.5 ? 1.2 : 0;
     setTarget(p, target, speed, runFlag ? "run" : possession === p.team ? "support" : "shape");
   }
 }
