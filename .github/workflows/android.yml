@@ -1,13 +1,8 @@
 name: Android APK
 
+# Run on demand only (Actions tab → "Android APK" → Run workflow); the result is attached to
+# the rolling apk-latest release.
 on:
-  push:
-    branches: ["**"]
-    paths:
-      - "apps/viewer/**"
-      - "packages/**"
-      - ".github/workflows/android.yml"
-      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 permissions:
