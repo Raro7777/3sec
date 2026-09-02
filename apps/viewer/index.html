@@ -17,6 +17,7 @@
       :root { color-scheme: dark; --bg:#0b1014; --panel:#121a21; --panel2:#0e151b; --line:#22303b; --text:#e7edf2; --muted:#93a4b3; --accent:#ffd166; --good:#5fd38a; --warn:#f4a259; --bad:#ef5b5b; }
       html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif; }
       * { box-sizing:border-box; }
+      [hidden] { display:none !important; }
       button, .row, .tab { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
       #app { display:flex; flex-direction:column; height:100%; background:var(--bg); }
       #nav { display:flex; align-items:center; gap:4px; padding:6px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
@@ -117,8 +118,34 @@
       .squad-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
       .row { display:grid; grid-template-columns: 26px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
-      .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px; }
-      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px; }
+      .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px 24px; }
+      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px 24px; }
+      .row .info, .of-acts .info { padding:0; width:22px; height:22px; border-radius:50%; font-size:12px; line-height:20px; text-align:center; color:var(--muted); background:transparent; border-color:var(--line); justify-self:end; }
+      .row .info:hover, .of-acts .info:hover { color:var(--accent); border-color:var(--accent); background:transparent; }
+      /* board confidence strip (home) */
+      .board { margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+      .board .boardHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; }
+      .board .boardHead b { font-family:"IBM Plex Mono", monospace; font-size:14px; }
+      .board .boardHead small { color:var(--muted); font-size:12px; white-space:nowrap; }
+      .board .bar { height:6px; }
+      /* player profile */
+      .profile .pfHead { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+      .profile .pfNum { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:34px; color:var(--muted); min-width:44px; text-align:center; }
+      .profile .pfName { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-weight:700; font-size:26px; line-height:1.1; }
+      .profile .pfOvr { text-align:center; } .profile .pfOvr b { display:block; font-family:"IBM Plex Mono", monospace; font-size:24px; } .profile .pfOvr small { color:var(--muted); font-size:11px; }
+      .profile .stats, .card .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; }
+      .card .stat { border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:var(--panel2); display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .card .stat small { color:var(--muted); font-size:11px; }
+      .card .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .card .stat b small { font-size:11px; font-weight:400; }
+      .stars { color:var(--accent); letter-spacing:.05em; } .stars i { font-style:normal; color:#2c3d4b; }
+      .attrs { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px 16px; }
+      .attrGroup h4 { margin:0 0 4px; font-size:12px; color:var(--accent); letter-spacing:.04em; }
+      .attr { display:grid; grid-template-columns:64px 1fr 22px; gap:8px; align-items:center; font-size:12px; padding:2px 0; }
+      .attr span:first-child { color:var(--muted); }
+      .attr .bar { height:7px; } .attr b { font-family:"IBM Plex Mono", monospace; text-align:right; font-weight:600; }
+      .chips { display:flex; gap:6px; flex-wrap:wrap; }
+      .chip { display:inline-block; min-width:40px; text-align:center; padding:3px 8px; border-radius:12px; font-family:"IBM Plex Mono", monospace; font-size:12px; font-weight:600; color:#0b1014; }
       .row.tr button { white-space:nowrap; width:100%; }
       .row.yt { grid-template-columns: 34px 1fr 40px 64px 150px; cursor:default; }
       .offer { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:6px 8px; border:1px solid var(--line); border-radius:8px; }
@@ -216,9 +243,11 @@
         #panel { width:auto; border-left:0; border-top:1px solid var(--line); }
         #score { font-size:20px; min-width:140px; }
         #log { height:100px; }
-        .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px; }
+        .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px 24px; }
         .row.wide .age, .row.wide .st { display:none; }
-        .row.tr { grid-template-columns: 22px 30px 1fr 36px 118px; }
+        .row.tr { grid-template-columns: 22px 30px 1fr 36px 118px 24px; }
+        .profile .pfName { font-size:22px; }
+        .attrs { grid-template-columns:1fr; }
         .row.tr .age, .row.tr .val { display:none; }
         .row.yt { grid-template-columns: 30px 1fr 36px 52px 112px; }
       }
@@ -250,6 +279,8 @@
       <section class="screen" id="screen-settings"><div class="page" id="settings"></div></section>
       <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
       <section class="screen" id="screen-review"><div class="page" id="review"></div></section>
+      <section class="screen" id="screen-profile"><div class="page" id="profile"></div></section>
+      <section class="screen" id="screen-sacked"><div class="page" id="sacked"></div></section>
 
       <section class="screen" id="screen-match">
         <div id="topbar">
