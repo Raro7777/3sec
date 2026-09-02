@@ -36,6 +36,10 @@ export function deserialize(json: string | null | undefined): GameState | null {
       if (def) { c.name = def.name; c.shortName = def.shortName; }
       if (!c.training) c.training = { focus: "balanced", intensity: "normal" };
       if (typeof c.seasonStartBudget !== "number") c.seasonStartBudget = c.budget;
+      // Saves from before the season review's counters.
+      if (typeof c.seasonInjuries !== "number") c.seasonInjuries = 0;
+      if (typeof c.seasonWages !== "number") c.seasonWages = 0;
+      if (typeof c.seasonRevenue !== "number") c.seasonRevenue = 0;
       c.tactics = normalizeTactics({ ...c.tactics, formation: c.selection?.formation ?? c.tactics.formation });
       // Saves from before the academy: an empty one that fills at the next intake (season start / round 11).
       if (!c.youth || !Array.isArray(c.youth.prospects)) c.youth = { prospects: [], scouting: "local", coaching: 1, nextId: 1 };
@@ -47,6 +51,7 @@ export function deserialize(json: string | null | undefined): GameState | null {
         if (typeof p.growth !== "number") p.growth = 0;
         if (typeof p.contractUntil !== "number") p.contractUntil = s.season + 1;
         if (typeof p.wage !== "number") p.wage = wageFor(p);
+        if (typeof p.lastMinutes !== "number") p.lastMinutes = 0;
       }
     }
     s.news = (s.news ?? []).filter((n) => !/[A-Za-z]{4,}/.test(n));
@@ -58,6 +63,9 @@ export function deserialize(json: string | null | undefined): GameState | null {
     if (!Array.isArray(s.freeAgents)) s.freeAgents = [];
     if (!Array.isArray(s.loans)) s.loans = [];
     if (!Array.isArray(s.aiDeals)) s.aiDeals = [];
+    // Saves from before the market log and the season history.
+    if (!Array.isArray(s.marketLog)) s.marketLog = [];
+    if (!Array.isArray(s.seasonHistory)) s.seasonHistory = [];
     for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); }
     return s;
   } catch {

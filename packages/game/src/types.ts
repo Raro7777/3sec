@@ -28,6 +28,8 @@ export interface SquadPlayer extends PlayerDef {
   freeSince?: number;
   /** refused to join the user's club this season (no second approach) */
   refusedSeason?: number;
+  /** minutes played since the last training week (playing time feeds development; reset by trainWeek) */
+  lastMinutes?: number;
 }
 
 export type OfferStatus = "open" | "accepted" | "rejected" | "expired" | "countered";
@@ -113,6 +115,12 @@ export interface Club {
   youth: Youth;
   /** budget when the season began (the review screen shows the change since) */
   seasonStartBudget: number;
+  /** injuries suffered this season (league + cup); reset at the rollover */
+  seasonInjuries?: number;
+  /** wages actually paid this season (억원); reset at the rollover */
+  seasonWages?: number;
+  /** income actually banked this season (억원); reset at the rollover */
+  seasonRevenue?: number;
 }
 
 export interface Fixture {
@@ -156,6 +164,31 @@ export interface TableRow {
   pts: number;
 }
 
+export type MarketKind = "transfer" | "loan" | "free";
+
+/** One completed deal anywhere in the league (transfer, loan or free-agent signing). */
+export interface MarketEntry {
+  season: number;
+  text: string;
+  kind: MarketKind;
+  /** fee in 억원 (0 for loans) */
+  fee: number;
+  /** selling / lending club, absent for free-agent signings */
+  from?: number;
+  to: number;
+  playerId: string;
+  playerName: string;
+}
+
+/** A finished season, kept for the review's history list. */
+export interface SeasonRecord {
+  season: number;
+  champion: number;
+  cupWinner: number | null;
+  userPosition: number;
+  userPts: number;
+}
+
 export interface GameState {
   version: 1;
   seed: number;
@@ -177,6 +210,10 @@ export interface GameState {
   /** released players anyone can sign for a signing fee */
   freeAgents: SquadPlayer[];
   loans: Loan[];
-  /** "season:window:clubId" markers – an AI club makes at most one purchase per window */
+  /** "season:window:clubId" markers, one per AI purchase – at most AI_DEALS_PER_WINDOW of the same key */
   aiDeals: string[];
+  /** every completed transfer / loan / free-agent signing league-wide, newest first, capped at 80 */
+  marketLog: MarketEntry[];
+  /** finished seasons, oldest first */
+  seasonHistory: SeasonRecord[];
 }

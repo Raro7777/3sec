@@ -156,6 +156,7 @@ function toPlayer(club: Club, p: YouthProspect, season: number): SquadPlayer {
     injuryDays: 0,
     ban: 0,
     seasonYellows: 0,
+    lastMinutes: 0,
     stats: { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 },
   };
   player.wage = Math.max(0.3, round1(wageFor(player) * 0.5));

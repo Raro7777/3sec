@@ -60,7 +60,10 @@ export function weeklyRevenue(club: Club, position: number | null): number {
 export function payWages(s: GameState, weeksPerSeason: number, positions?: Map<number, number>): void {
   for (const c of s.clubs) {
     const income = weeklyRevenue(c, positions?.get(c.id) ?? null);
-    c.budget = Math.round((c.budget + income - (wageBill(c) + loanWageBill(s, c)) / weeksPerSeason) * 10) / 10;
+    const wages = (wageBill(c) + loanWageBill(s, c)) / weeksPerSeason;
+    c.budget = Math.round((c.budget + income - wages) * 10) / 10;
+    c.seasonWages = Math.round(((c.seasonWages ?? 0) + wages) * 100) / 100;
+    c.seasonRevenue = Math.round(((c.seasonRevenue ?? 0) + income) * 100) / 100;
   }
 }
 

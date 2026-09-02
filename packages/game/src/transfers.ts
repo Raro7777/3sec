@@ -1,4 +1,4 @@
-import type { Club, GameState, SquadPlayer, TransferOffer } from "./types";
+import type { Club, GameState, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
 import { overall } from "./rating";
 import { autoSelect, repairSelection } from "./selection";
 import { clubOf, playerOf, seasonOver, table } from "./season";
@@ -20,6 +20,13 @@ export const LOAN_GROWTH = 0.02;
 /** Free agent terms: signing fee share of value, wage premium over the going rate. */
 export const FREE_AGENT_FEE = 0.3;
 export const FREE_AGENT_WAGE = 1.2;
+/** Purchases an AI club may make in one window. */
+export const AI_DEALS_PER_WINDOW = 2;
+/** Lines kept in the league-wide market log. */
+export const MARKET_LOG_MAX = 80;
+/** An AI club with more players than this may loan a surplus youngster out (one per season). */
+const AI_LOAN_ABOVE = 21;
+const AI_LOAN_MAX_AGE = 22;
 
 type Rand = { next(): number };
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -50,7 +57,7 @@ export function deadlineDay(s: GameState): boolean {
   return s.round === 0 || s.round === 11;
 }
 
-/** Key of the window currently open (one AI purchase per club per window). */
+/** Key of the window currently open (AI_DEALS_PER_WINDOW purchases per club per window). */
 function windowKey(s: GameState): string {
   return `${s.season}:${s.round === 0 ? "pre" : seasonOver(s) ? "post" : "winter"}`;
 }
@@ -103,6 +110,42 @@ function reselect(s: GameState, c: Club): void {
   c.selection = c.id === s.userClub ? repairSelection(c) : autoSelect(c, c.selection.formation);
 }
 
+/** Append a completed deal to the league-wide market log (newest first, capped). */
+function logMarket(s: GameState, kind: MarketKind, p: SquadPlayer, to: Club, fee: number, from?: Club): void {
+  if (!Array.isArray(s.marketLog)) s.marketLog = [];
+  const text = kind === "free" ? `${to.shortName}: ${p.name} 자유계약 영입 (계약금 ${fee}억)`
+    : kind === "loan" ? `${from!.shortName} → ${to.shortName}: ${p.name} 시즌 임대`
+    : `${from!.shortName} → ${to.shortName}: ${p.name} 이적 (${fee}억)`;
+  const entry: MarketEntry = { season: s.season, text, kind, fee, to: to.id, playerId: p.id, playerName: p.name };
+  if (from) entry.from = from.id;
+  s.marketLog.unshift(entry);
+  if (s.marketLog.length > MARKET_LOG_MAX) s.marketLog.length = MARKET_LOG_MAX;
+}
+
+export interface MarketSummary {
+  transfers: number;
+  loans: number;
+  frees: number;
+  /** the season's biggest fee, if anyone paid one */
+  biggest: MarketEntry | null;
+  /** the user's arrivals (transfers, loans in, free agents) and departures (sales, loans out) */
+  userIn: MarketEntry[];
+  userOut: MarketEntry[];
+}
+
+/** Counts and highlights of one season's market activity from the log. */
+export function marketSummary(s: GameState, season: number = s.season): MarketSummary {
+  const rows = (s.marketLog ?? []).filter((e) => e.season === season);
+  const out: MarketSummary = { transfers: 0, loans: 0, frees: 0, biggest: null, userIn: [], userOut: [] };
+  for (const e of rows) {
+    if (e.kind === "transfer") out.transfers++; else if (e.kind === "loan") out.loans++; else out.frees++;
+    if (e.fee > 0 && (!out.biggest || e.fee > out.biggest.fee)) out.biggest = e;
+    if (e.to === s.userClub) out.userIn.push(e);
+    if (e.from === s.userClub) out.userOut.push(e);
+  }
+  return out;
+}
+
 /** Move a player between clubs for a fee: squads, budgets, shirt number, both selections. */
 function movePlayer(s: GameState, from: Club, to: Club, p: SquadPlayer, fee: number): void {
   from.squad = from.squad.filter((q) => q !== p);
@@ -113,6 +156,7 @@ function movePlayer(s: GameState, from: Club, to: Club, p: SquadPlayer, fee: num
   to.squad.push(p);
   to.budget = round1(to.budget - fee);
   reselect(s, to);
+  logMarket(s, "transfer", p, to, fee, from);
   // Any open offers for a player who has left are void.
   for (const o of s.offers) if (o.playerId === p.id && (o.status === "open" || o.status === "countered")) o.status = "expired";
 }
@@ -265,9 +309,15 @@ export function expireOffers(s: GameState, all = false): void {
   s.offers = openOffers(s);
 }
 
+/** A user player who would be a clear starter for an AI club (role gap ≥ this) draws a bid half the weeks. */
+const STRONG_GAP = 2;
+const STRONG_BID_CHANCE = 0.5;
+
 /**
  * AI clubs bid for the user's players who would start for them: 0–2 offers a week (one more on deadline
- * day), fee 0.8–1.1 × value — richer and needier clubs bid higher. Offers lapse after OFFER_TTL rounds.
+ * day), fee 0.8–1.1 × value — richer and needier clubs bid higher. A club that sees a clear starter
+ * (gap ≥ 2) in the user's squad bids for him with probability 0.5 regardless of its top need (at most two
+ * such extra bids a week). Offers lapse after OFFER_TTL rounds.
  */
 export function incomingOffers(s: GameState, rng: Rand): TransferOffer[] {
   const me = clubOf(s, s.userClub);
@@ -275,17 +325,26 @@ export function incomingOffers(s: GameState, rng: Rand): TransferOffer[] {
   if (!windowOpen(s) || me.squad.filter(tradeable).length <= MIN_SQUAD) return made;
   const deadline = deadlineDay(s);
   const cap = deadline ? 3 : 2;
+  let strongBids = 0;
   const clubs = [...s.clubs].filter((c) => c.id !== s.userClub).sort(() => 0.5 - rng.next());
   for (const club of clubs) {
-    if (made.length >= cap) break;
+    if (made.length >= cap + 2) break;
     if (club.squad.length >= MAX_SQUAD - 1 || club.budget <= 0) continue;
-    if (rng.next() > (deadline ? 0.45 : 0.25)) continue;
     const wants = me.squad
       .filter((p) => tradeable(p) && !s.offers.some((o) => o.from === club.id && o.playerId === p.id && (o.status === "open" || o.status === "countered")))
       .map((p) => ({ p, gap: roleGap(club, p), value: playerValue(p) }))
       .filter((x) => x.gap > 0.5 && x.value * 0.8 <= club.budget)
       .sort((a, b) => ovr(b.p) - ovr(a.p));
-    const pick = wants[Math.floor(rng.next() * Math.min(3, wants.length))];
+    const strong = wants.filter((x) => x.gap >= STRONG_GAP);
+    let pick: (typeof wants)[number] | undefined;
+    if (strong.length && strongBids < 2 && rng.next() < STRONG_BID_CHANCE) {
+      pick = strong[Math.floor(rng.next() * strong.length)];
+      strongBids++;
+    } else {
+      if (made.length - strongBids >= cap) continue;
+      if (rng.next() > (deadline ? 0.45 : 0.25)) continue;
+      pick = wants[Math.floor(rng.next() * Math.min(3, wants.length))];
+    }
     if (!pick) continue;
     const rich = clamp(club.budget / (3 * pick.value), 0, 1);
     const need = clamp(pick.gap / 3, 0, 1);
@@ -411,6 +470,7 @@ export function signFreeAgent(s: GameState, playerId: string): string | null {
   const t = freeAgentTerms(p);
   if (me.budget < t.fee) return `계약금 부족 (필요 ${t.fee}억, 보유 ${me.budget}억)`;
   signFree(s, me, p);
+  logMarket(s, "free", p, me, t.fee);
   s.news.unshift(`${me.shortName}: 자유계약 ${p.name} 영입 (계약금 ${t.fee}억, 연봉 ${t.wage}억, ${t.years}년).`);
   return null;
 }
@@ -460,6 +520,7 @@ export function loanOut(s: GameState, playerId: string): string | null {
   p.onLoan = true;
   s.loans.push({ playerId: p.id, from: me.id, to: to.id, until: s.season });
   me.selection = repairSelection(me);
+  logMarket(s, "loan", p, to, 0, me);
   s.news.unshift(`${me.shortName}: ${p.name} → ${to.shortName} 시즌 임대 (연봉 50% 부담).`);
   return null;
 }
@@ -494,6 +555,7 @@ export function loanIn(s: GameState, clubId: number, playerId: string): string |
   me.squad.push(p);
   reselect(s, me);
   s.loans.push({ playerId: p.id, from: from.id, to: me.id, until: s.season });
+  logMarket(s, "loan", p, me, 0, from);
   s.news.unshift(`${me.shortName}: ${p.name} 임대 영입 (${from.shortName}, 시즌 종료까지, 연봉 ${p.wage}억 부담).`);
   return null;
 }
@@ -519,15 +581,17 @@ export function returnLoans(s: GameState): void {
 // ------------------------------------------------------------------ AI market
 
 /**
- * AI clubs strengthen their weakest line during a window: one purchase per club per window, from another
- * AI club's sellable players — over-full clubs' surplus men go at plain value and need less of an upgrade.
+ * AI clubs strengthen their weakest line during a window: up to AI_DEALS_PER_WINDOW purchases per club per
+ * window (the second one less eagerly), from another AI club's sellable players — over-full clubs' surplus
+ * men go at plain value and need less of an upgrade.
  */
 export function aiTransfers(s: GameState, rng: Rand): void {
   if (!windowOpen(s)) return;
   const key = windowKey(s);
   s.aiDeals = s.aiDeals.filter((k) => k.startsWith(key + ":"));
   for (const club of s.clubs) {
-    if (club.id === s.userClub || club.squad.length >= MAX_SQUAD - 1 || s.aiDeals.includes(`${key}:${club.id}`)) continue;
+    const done = s.aiDeals.filter((k) => k === `${key}:${club.id}`).length;
+    if (club.id === s.userClub || club.squad.length >= MAX_SQUAD - 1 || done >= AI_DEALS_PER_WINDOW) continue;
     const xi = club.selection.starters.map((id) => playerOf(club, id)).filter(Boolean);
     const weakest = xi.slice(1).sort((a, b) => ovr(a) - ovr(b))[0];
     if (!weakest) continue;
@@ -537,7 +601,7 @@ export function aiTransfers(s: GameState, rng: Rand): void {
       .filter((t) => ovr(t.player) >= need + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
       .sort((a, b) => ovr(b.player) / b.price! - ovr(a.player) / a.price!);
     const pick = candidates[0];
-    if (!pick || rng.next() > (deadlineDay(s) ? 0.8 : 0.6)) continue;
+    if (!pick || rng.next() > (deadlineDay(s) ? 0.8 : 0.6) * (done ? 0.6 : 1)) continue;
     const from = pick.club;
     movePlayer(s, from, club, pick.player, pick.price!);
     s.aiDeals.push(`${key}:${club.id}`);
@@ -556,7 +620,47 @@ export function aiSignFreeAgents(s: GameState): void {
       .find((p) => freeAgentTerms(p).fee <= club.budget && (p.age <= 31 || club.squad.length < 18));
     if (!pick) continue;
     const t = signFree(s, club, pick);
+    logMarket(s, "free", pick, club, t.fee);
     s.news.unshift(`${club.shortName}: 자유계약 ${pick.name} 영입 (계약금 ${t.fee}억).`);
+  }
+}
+
+/**
+ * AI clubs with depth (squad > 21) loan a surplus youngster (≤ 22, not a starter) to another AI club
+ * that needs his role — at most one outgoing loan per club per season, roughly one in three weeks of a
+ * window. The player moves for the season (loanFrom) and goes home at the rollover.
+ */
+export function aiLoans(s: GameState, rng: Rand): void {
+  if (!windowOpen(s)) return;
+  for (const from of s.clubs) {
+    if (from.id === s.userClub || from.squad.length <= AI_LOAN_ABOVE) continue;
+    if (s.loans.some((l) => l.from === from.id)) continue;
+    if (rng.next() > 0.35) continue;
+    const spare = from.squad
+      .filter((p) => tradeable(p) && p.age <= AI_LOAN_MAX_AGE && !isStarter(from, p) && p.injuryDays === 0)
+      .sort((a, b) => ovr(b) - ovr(a))[0];
+    if (!spare) continue;
+    let best: { club: Club; score: number } | null = null;
+    for (const to of s.clubs) {
+      if (to.id === s.userClub || to.id === from.id || to.squad.length >= MAX_SQUAD - 1) continue;
+      const gap = roleGap(to, spare);
+      const depth = playing(to).filter((q) => q.role === spare.role).length;
+      if (gap < -1 && depth > 1) continue; // no need for him there
+      const score = gap - depth * 0.5;
+      if (!best || score > best.score) best = { club: to, score };
+    }
+    if (!best) continue;
+    const to = best.club;
+    from.squad = from.squad.filter((q) => q !== spare);
+    reselect(s, from);
+    spare.loanFrom = from.id;
+    spare.condition = 1;
+    moveNumber(to, spare);
+    to.squad.push(spare);
+    reselect(s, to);
+    s.loans.push({ playerId: spare.id, from: from.id, to: to.id, until: s.season });
+    logMarket(s, "loan", spare, to, 0, from);
+    s.news.unshift(`${from.shortName}: ${spare.name}(${spare.age}세 ${spare.role}) → ${to.shortName} 시즌 임대.`);
   }
 }
 
@@ -576,4 +680,5 @@ export function transferWeek(s: GameState, rng: Rand): void {
   incomingOffers(s, rng);
   aiSignFreeAgents(s);
   aiTransfers(s, rng);
+  aiLoans(s, rng);
 }

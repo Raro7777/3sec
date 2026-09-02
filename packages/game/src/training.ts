@@ -21,13 +21,26 @@ export const INTENSITY_LABEL: Record<TrainingIntensity, string> = { low: "가볍
 
 /** Weekly development rate in attribute points: youngsters grow, veterans decline. */
 export function weeklyRate(age: number): number {
-  if (age <= 20) return 0.14;
-  if (age <= 23) return 0.1;
-  if (age <= 26) return 0.05;
-  if (age <= 29) return 0.012;
-  if (age <= 32) return -0.04;
-  return -0.09;
+  if (age <= 18) return 0.28;
+  if (age <= 20) return 0.24;
+  if (age <= 23) return 0.16;
+  if (age <= 26) return 0.07;
+  if (age <= 29) return 0.015;
+  if (age <= 32) return -0.05;
+  return -0.11;
 }
+
+/** Growth a youngster banks for a match: ≥ 60 minutes earns 0.06 (0.09 up to age 20); nothing from 24 on. */
+export function playingTimeBonus(age: number, minutes: number): number {
+  if (minutes < 60 || age > 23) return 0;
+  return age <= 20 ? 0.09 : 0.06;
+}
+
+/** First-team training intensity multiplier on the development rate (injury and recovery pay for "high"). */
+export const INTENSITY_MULT: Record<TrainingIntensity, number> = { low: 0.7, normal: 1, high: 1.4 };
+
+/** A youngster (≤ 23) who did not play at all this week develops at this fraction of his rate. */
+export const BENCHED_FACTOR = 0.8;
 
 export interface Development { player: SquadPlayer; attr: Attr; delta: 1 | -1 }
 
@@ -60,22 +73,25 @@ export function spendGrowth(p: Grower, focus: Attr[], rng: { next(): number }): 
 
 /**
  * One week of training for a club: every player's growth accumulator moves by the age rate
- * (scaled by intensity and capped by potential); whole points are spent on attributes, biased
- * toward the training focus. Declines hit physical attributes first, as in life.
+ * (scaled by intensity, dampened for a youngster who sat out the week, capped by potential); whole
+ * points are spent on attributes, biased toward the training focus. Declines hit physical attributes
+ * first, as in life. The week's minutes are consumed here (reset to 0).
  */
 export function trainWeek(club: Club, rng: { next(): number }): Development[] {
   const out: Development[] = [];
-  const mult = club.training.intensity === "high" ? 1.3 : club.training.intensity === "low" ? 0.7 : 1;
+  const mult = INTENSITY_MULT[club.training.intensity] ?? 1;
   const focus = FOCUS_ATTRS[club.training.focus];
   for (const p of club.squad) {
     let rate = weeklyRate(p.age);
     if (rate > 0) {
       rate *= mult;
+      if (p.age <= 23 && !p.onLoan && !(p.lastMinutes ?? 0)) rate *= BENCHED_FACTOR;
       const headroom = p.potential - overall(p.attrs, p.role);
       if (headroom <= 0) rate = 0;
       else if (headroom < 1.5) rate *= 0.4;
     }
     p.growth += rate;
+    p.lastMinutes = 0;
     for (const ch of spendGrowth(p, focus, rng)) out.push({ player: p, ...ch });
   }
   return out;

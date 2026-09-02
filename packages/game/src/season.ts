@@ -4,10 +4,11 @@ import { buildClubs } from "./world";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
 import { repairSelection, autoSelect } from "./selection";
 import { expireOffers, freeAgentRollover, incomingOffers, returnLoans, seasonBudget, transferWeek } from "./transfers";
-import { trainWeek, ATTR_LABEL } from "./training";
-import { payWages, settleContracts } from "./contracts";
+import { trainWeek, ATTR_LABEL, playingTimeBonus } from "./training";
+import { payWages, settleContracts, wageBill, weeklyRevenue } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
-import { cupDayDue, newCup } from "./cup";
+import { cupDayDue, cupPrize, newCup } from "./cup";
+import { overall } from "./rating";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -19,12 +20,29 @@ export const DEFAULT_MANAGER_NAME = "감독";
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [] };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [] };
   newCup(s);
-  for (const c of clubs) c.seasonStartBudget = c.budget;
+  for (const c of clubs) resetSeasonCounters(c);
   youthIntake(s, new Rng(seed * 29 + 3));
   incomingOffers(s, new Rng(seed * 37 + 5));
   return s;
+}
+
+/** A fresh season's books for a club: start budget, injury / wage / revenue counters. */
+function resetSeasonCounters(c: Club): void {
+  c.seasonStartBudget = c.budget;
+  c.seasonInjuries = 0;
+  c.seasonWages = 0;
+  c.seasonRevenue = 0;
+}
+
+/**
+ * League ban for reaching a yellow-card total: every fifth card sits the player out — one match at 5 and 10,
+ * two from 15 on. 0 when the total is not a threshold.
+ */
+export function yellowBan(seasonYellows: number): number {
+  if (seasonYellows <= 0 || seasonYellows % 5 !== 0) return 0;
+  return seasonYellows >= 15 ? 2 : 1;
 }
 
 export const clubOf = (s: GameState, id: number): Club => s.clubs[id]!;
@@ -88,13 +106,18 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
     for (const ps of played) {
       const p = playerOf(c, ps.id);
       p.stats.apps++;
-      p.stats.minutes += Math.round(90 * Math.min(1, ps.distance / 9000));
+      const minutes = Math.round(90 * Math.min(1, ps.distance / 9000));
+      p.stats.minutes += minutes;
+      p.lastMinutes = (p.lastMinutes ?? 0) + minutes;
+      // Match minutes are the best teacher: a youngster who played most of the game banks growth.
+      if (overall(p.attrs, p.role) < p.potential) p.growth += playingTimeBonus(p.age, minutes);
       p.condition = Math.max(0.2, 1 - ps.fatigue * 0.9);
       // Injuries: roughly one per club every 2-3 matches, more likely on tired legs. Mostly short.
       const intensity = c.training.intensity === "high" ? 1.3 : c.training.intensity === "low" ? 0.85 : 1;
       if (rng.chance(0.022 * (0.6 + ps.fatigue) * intensity)) {
         const days = Math.min(90, Math.round(3 + Math.pow(rng.next(), 2.2) * 60));
         p.injuryDays = days;
+        c.seasonInjuries = (c.seasonInjuries ?? 0) + 1;
         s.news.unshift(`${c.shortName}: ${p.name} 부상, 약 ${days}일 결장.`);
       }
     }
@@ -105,15 +128,17 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
       if (e.type === "INJURY" && p.injuryDays === 0) {
         const days = Math.min(90, Math.round(5 + Math.pow(rng.next(), 1.8) * 50));
         p.injuryDays = days;
+        c.seasonInjuries = (c.seasonInjuries ?? 0) + 1;
         s.news.unshift(`${c.shortName}: ${p.name} 경기 중 부상, 약 ${days}일 결장.`);
       }
       if (e.type === "YELLOW_CARD") {
         p.stats.yellows++;
         if (cup) continue;
         p.seasonYellows++;
-        if (p.seasonYellows % 5 === 0) {
-          p.ban = Math.max(p.ban, 1);
-          s.news.unshift(`${c.shortName}: ${p.name} 경고 누적 5장으로 1경기 출장 정지.`);
+        const ban = yellowBan(p.seasonYellows);
+        if (ban > 0) {
+          p.ban = Math.max(p.ban, ban);
+          s.news.unshift(`${c.shortName}: ${p.name} 경고 누적 ${p.seasonYellows}장으로 ${ban}경기 출장 정지.`);
         }
       }
       if (e.type === "RED_CARD") {
@@ -174,6 +199,8 @@ export function startNextSeason(s: GameState): void {
   if (!seasonOver(s)) throw new Error("season still running");
   const rng = new Rng(s.seed * 13 + s.season * 977);
   const finalTable = table(s);
+  const userRow = finalTable.findIndex((r) => r.club === s.userClub);
+  s.seasonHistory.push({ season: s.season, champion: finalTable[0]!.club, cupWinner: s.cup.holder ?? null, userPosition: userRow + 1, userPts: finalTable[userRow]!.pts });
   for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1);
   expireOffers(s, true);
   returnLoans(s);
@@ -187,6 +214,7 @@ export function startNextSeason(s: GameState): void {
     p.ban = 0;
     p.injuryDays = 0;
     p.condition = 1;
+    p.lastMinutes = 0;
     p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 };
   }
   s.season++;
@@ -198,8 +226,52 @@ export function startNextSeason(s: GameState): void {
   youthRollover(s, rng);
   youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 3));
   transferWeek(s, rng);
-  for (const c of s.clubs) c.seasonStartBudget = c.budget;
+  for (const c of s.clubs) resetSeasonCounters(c);
   prepareRound(s);
+}
+
+export interface HomeAwayRecord { home: { won: number; drawn: number; lost: number }; away: { won: number; drawn: number; lost: number } }
+
+/** A club's league record split by venue. */
+export function homeAwayRecord(s: GameState, clubId: number): HomeAwayRecord {
+  const out: HomeAwayRecord = { home: { won: 0, drawn: 0, lost: 0 }, away: { won: 0, drawn: 0, lost: 0 } };
+  for (const f of s.fixtures) {
+    if (!f.score || (f.home !== clubId && f.away !== clubId)) continue;
+    const atHome = f.home === clubId;
+    const [gf, ga] = atHome ? f.score : [f.score[1], f.score[0]];
+    const rec = atHome ? out.home : out.away;
+    if (gf > ga) rec.won++; else if (gf < ga) rec.lost++; else rec.drawn++;
+  }
+  return out;
+}
+
+export interface FinanceSummary {
+  start: number;
+  end: number;
+  /** wages paid this season (the running counter, or the season bill for saves without one) */
+  wages: number;
+  /** income banked this season (the running counter, or weekly revenue × rounds for saves without one) */
+  revenue: number;
+  cupPrize: number;
+  /** league prize money due at the rollover for the current position */
+  leaguePrize: number;
+}
+
+/** The season's money story for the review screen. */
+export function financeSummary(s: GameState, clubId: number): FinanceSummary {
+  const c = clubOf(s, clubId);
+  const rows = table(s);
+  const pos = rows.findIndex((r) => r.club === clubId) + 1;
+  const rounds = roundsPerSeason(s.clubs.length);
+  const r1 = (x: number): number => Math.round(x * 10) / 10;
+  return {
+    start: c.seasonStartBudget,
+    end: c.budget,
+    wages: c.seasonWages ? r1(c.seasonWages) : wageBill(c),
+    revenue: c.seasonRevenue ? r1(c.seasonRevenue) : r1(weeklyRevenue(c, pos) * rounds),
+    cupPrize: cupPrize(s, clubId),
+    leaguePrize: seasonBudget(c.reputation, pos) - seasonBudget(c.reputation, null),
+  };
 }
 
 export function table(s: GameState): TableRow[] {

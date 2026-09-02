@@ -11,6 +11,7 @@ import {
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userCupTie, type CupTie,
+  marketSummary, homeAwayRecord, financeSummary,
 } from "@3sec/game";
 import { MatchScreen } from "./match-screen";
 
@@ -539,7 +540,7 @@ export class Game {
         <label>초점 <select id="trFocus">${(Object.keys(FOCUS_LABEL) as TrainingFocus[]).map((f) => `<option value="${f}" ${f === tr.focus ? "selected" : ""}>${FOCUS_LABEL[f]}</option>`).join("")}</select></label>
         <label>강도 <select id="trIntensity">${(Object.keys(INTENSITY_LABEL) as TrainingIntensity[]).map((i) => `<option value="${i}" ${i === tr.intensity ? "selected" : ""}>${INTENSITY_LABEL[i]}</option>`).join("")}</select></label>
       </div>
-      <div class="hint">어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만 회복이 느리고 부상이 잦아집니다.</div></div>`);
+      <div class="hint">어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만(강하게 ×1.4, 가볍게 ×0.7) 회복이 느리고 부상이 잦아집니다. 23세 이하는 경기에 60분 이상 뛰면 추가로 성장하고, 한 주 내내 결장하면 성장이 20% 느려집니다.</div></div>`);
     h.push(`<div class="card"><h3>기본 전술 <span>경기 중에도 변경 가능</span></h3>
       <div class="actions">${Object.keys(TACTIC_PRESETS).map((n) => `<button data-preset="${n}" ${locked ? "disabled" : ""}>${n}</button>`).join("")}<button data-autoroles ${locked ? "disabled" : ""}>역할 자동</button></div>
       <label style="margin:4px 0"><input type="checkbox" id="sqTrap" ${me.tactics.offsideTrap ? "checked" : ""} ${locked ? "disabled" : ""}> 오프사이드 트랩 (라인을 평평하게 유지해 침투를 잡되, 뚫리면 위험)</label>
@@ -1061,6 +1062,43 @@ export class Game {
     h.push(`<div class="card"><h3>리그 득점 TOP 3</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th></tr></thead><tbody>${scorers
       .map((x, i) => `<tr class="${x.club.id === me.id ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`).join("")}</tbody></table>` : '<div class="hint">득점 기록이 없습니다.</div>'}
       <h3 style="margin-top:10px">시즌 소식 하이라이트</h3><div class="news">${highlights.map((x) => `<div>${x}</div>`).join("") || "<div>특별한 소식이 없었습니다.</div>"}</div></div>`);
+    h.push(`</div>`);
+    // --- market, venue split, finances, injuries, history
+    const mk = marketSummary(s, s.season);
+    const ha = homeAwayRecord(s, me.id);
+    const fin = financeSummary(s, me.id);
+    const injuries = me.seasonInjuries ?? 0;
+    const money = (x: number) => `${Math.round(x * 10) / 10}억`;
+    const signed = (x: number) => `<span style="color:${x >= 0 ? "var(--good)" : "var(--bad)"}">${x >= 0 ? "+" : ""}${money(x)}</span>`;
+    const dealList = (rows: typeof mk.userIn) => rows.length ? rows.map((e) => `<div>${e.text}</div>`).join("") : "<div>없음</div>";
+    h.push(`<div class="grid2">`);
+    h.push(`<div class="card review"><h3>이적 시장 요약 <span>시즌 ${s.season} 리그 전체</span></h3>
+      <div class="stats">
+        ${stat("이적", `${mk.transfers}건`)}
+        ${stat("임대", `${mk.loans}건`)}
+        ${stat("자유계약", `${mk.frees}건`)}
+        ${stat("최고 이적료", mk.biggest ? `${mk.biggest.playerName} ${mk.biggest.fee}억` : "—")}
+      </div>
+      ${mk.biggest ? `<div class="hint">최대 거래: ${mk.biggest.text}</div>` : ""}
+      <h3 style="margin-top:10px">우리 팀 영입 <span>${mk.userIn.length}명</span></h3><div class="news">${dealList(mk.userIn)}</div>
+      <h3 style="margin-top:10px">우리 팀 방출·판매·임대 <span>${mk.userOut.length}명</span></h3><div class="news">${dealList(mk.userOut)}</div></div>`);
+    h.push(`<div class="card review"><h3>홈/원정 성적 <span>승-무-패</span></h3>
+      <div class="stats">
+        ${stat("홈", `${ha.home.won}승 ${ha.home.drawn}무 ${ha.home.lost}패`)}
+        ${stat("원정", `${ha.away.won}승 ${ha.away.drawn}무 ${ha.away.lost}패`)}
+        ${stat("부상", `${injuries}건`)}
+      </div>
+      <h3 style="margin-top:10px">재정 요약 <span>억원</span></h3>
+      <div class="stats">
+        ${stat("시즌 시작 → 종료", `${money(fin.start)} → ${money(fin.end)} ${signed(fin.end - fin.start)}`)}
+        ${stat("지급 연봉", `−${money(fin.wages)}`)}
+        ${stat("수입 (입장·중계·후원)", `+${money(fin.revenue)}`)}
+        ${stat("컵 상금", fin.cupPrize ? `+${money(fin.cupPrize)}` : "—")}
+        ${stat("순위 상금 (다음 시즌 지급)", `+${money(fin.leaguePrize)}`)}
+      </div>
+      <div class="hint">순위 상금은 다음 시즌 시작 시 예산에 더해집니다. 이적료와 계약금은 시작 → 종료 차이에 이미 반영되어 있습니다.</div>
+      ${s.seasonHistory.length ? `<h3 style="margin-top:10px">역대 시즌</h3><table class="std"><thead><tr><th>시즌</th><th class="l">리그 우승</th><th class="l">${CUP_NAME}</th><th>내 순위</th><th>승점</th></tr></thead><tbody>${[...s.seasonHistory].reverse()
+        .map((r) => `<tr><td>S${r.season}</td><td class="l">${clubOf(s, r.champion).shortName}</td><td class="l">${r.cupWinner === null ? "—" : clubOf(s, r.cupWinner).shortName}</td><td>${r.userPosition}위</td><td>${r.userPts}</td></tr>`).join("")}</tbody></table>` : ""}</div>`);
     h.push(`</div>`);
     h.push(this.cupHtml());
     this.el.review.innerHTML = h.join("");

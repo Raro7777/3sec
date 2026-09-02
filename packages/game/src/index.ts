@@ -5,7 +5,8 @@ export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
   DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
-  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, type RecordOptions,
+  prepareRound, teamDef, createMatch, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, yellowBan, homeAwayRecord, financeSummary,
+  type RecordOptions, type HomeAwayRecord, type FinanceSummary,
 } from "./season";
 export {
   CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_PRIZE, cupByes, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
@@ -19,8 +20,9 @@ export {
   openOffers, expireOffers, incomingOffers, acceptOffer, rejectOffer, respondToCounter,
   releaseToMarket, freeAgentTerms, signFreeAgent, freeAgentRollover,
   loanableOut, loanDestination, loanOut, loanTargets, loanIn, returnLoans,
-  aiTransfers, aiSignFreeAgents, loanWeek, transferWeek, type TransferTarget, type BidResult, type NegotiationResult, type LoanTarget,
+  aiTransfers, aiSignFreeAgents, aiLoans, loanWeek, transferWeek, marketSummary, AI_DEALS_PER_WINDOW, MARKET_LOG_MAX,
+  type TransferTarget, type BidResult, type NegotiationResult, type LoanTarget, type MarketSummary,
 } from "./transfers";
-export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, ATTR_LABEL, weeklyRate, trainWeek, spendGrowth, type Development, type Grower } from "./training";
+export { FOCUS_ATTRS, FOCUS_LABEL, INTENSITY_LABEL, INTENSITY_MULT, BENCHED_FACTOR, ATTR_LABEL, weeklyRate, playingTimeBonus, trainWeek, spendGrowth, type Development, type Grower } from "./training";
 export { MAX_PROSPECTS, MIN_PROMOTE_AGE, LEAVE_AGE, SCOUTING, COACHING, youthWeeklyCost, prospectOverall, youthIntake, youthWeek, youthRollover, promoteProspect, releaseProspect } from "./youth";
 export { weeklyRevenue, wageFor, wageBill, loanWageBill, expiringContracts, renewalTerms, renewContract, payWages, settleContracts } from "./contracts";

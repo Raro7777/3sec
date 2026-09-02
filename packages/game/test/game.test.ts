@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FORMATIONS } from "@3sec/engine";
 import {
   advanceRound, autoSelect, buildFixtures, createMatch, currentFixtures, deserialize, newGame, playerOf, recordResult,
-  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection,
-} from "../src/index";
+  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection, yellowBan, homeAwayRecord, financeSummary, cupPrize, seasonBudget, weeklyRevenue, wageBill } from "../src/index";
 
 const SHORT = { halfLength: 4 * 60 };
 
@@ -109,9 +108,13 @@ describe("season progression", () => {
     expect(deserialize("garbage")).toBeNull();
   });
 
-  it("rolls into a new season with ages and fresh fixtures", () => {
+  it("rolls into a new season with ages and fresh fixtures, and files the season in the history", () => {
     const s = newGame(10);
     const age = s.clubs[0]!.squad[0]!.age;
+    simulateRound(s, SHORT);
+    const rows = table(s);
+    const me = s.clubs[s.userClub]!;
+    me.seasonInjuries = 4;
     s.round = roundsPerSeason(12);
     startNextSeason(s);
     expect(s.season).toBe(2);
@@ -119,6 +122,47 @@ describe("season progression", () => {
     expect(s.clubs[0]!.squad[0]!.age).toBe(age + 1);
     expect(s.fixtures.every((f) => !f.score)).toBe(true);
     expect(s.clubs.every((c) => selectionProblem(c) === null)).toBe(true);
+    expect(s.seasonHistory).toEqual([{ season: 1, champion: rows[0]!.club, cupWinner: null, userPosition: rows.findIndex((r) => r.club === s.userClub) + 1, userPts: rows.find((r) => r.club === s.userClub)!.pts }]);
+    for (const c of s.clubs) { expect(c.seasonInjuries).toBe(0); expect(c.seasonWages).toBe(0); expect(c.seasonRevenue).toBe(0); expect(c.seasonStartBudget).toBe(c.budget); }
+  });
+
+  it("splits the league record by venue and summarises the season's money", () => {
+    const s = newGame(11);
+    simulateRound(s, SHORT);
+    advanceRound(s);
+    simulateRound(s, SHORT);
+    advanceRound(s);
+    const me = s.clubs[s.userClub]!;
+    const rec = homeAwayRecord(s, me.id);
+    const row = table(s).find((r) => r.club === me.id)!;
+    expect(rec.home.won + rec.home.drawn + rec.home.lost).toBe(1);
+    expect(rec.away.won + rec.away.drawn + rec.away.lost).toBe(1);
+    expect(rec.home.won + rec.away.won).toBe(row.won);
+    expect(rec.home.lost + rec.away.lost).toBe(row.lost);
+    const fin = financeSummary(s, me.id);
+    expect(fin.start).toBe(me.seasonStartBudget);
+    expect(fin.end).toBe(me.budget);
+    expect(fin.wages).toBeGreaterThan(0);
+    expect(fin.revenue).toBeGreaterThan(0);
+    expect(fin.cupPrize).toBe(cupPrize(s, me.id));
+    const pos = table(s).findIndex((r) => r.club === me.id) + 1;
+    expect(fin.leaguePrize).toBe(seasonBudget(me.reputation, pos) - seasonBudget(me.reputation, null));
+    // a save without the counters falls back to the estimates
+    me.seasonWages = 0; me.seasonRevenue = 0;
+    const est = financeSummary(s, me.id);
+    expect(est.wages).toBe(wageBill(me));
+    expect(est.revenue).toBeCloseTo(weeklyRevenue(me, pos) * roundsPerSeason(12), 1);
+  });
+});
+
+describe("discipline", () => {
+  it("yellow cards suspend at 5 (1 match), 10 (1 match) and 15 (2 matches) — nothing in between", () => {
+    const bans = Array.from({ length: 21 }, (_, n) => yellowBan(n));
+    expect(bans[5]).toBe(1);
+    expect(bans[10]).toBe(1);
+    expect(bans[15]).toBe(2);
+    expect(bans[20]).toBe(2);
+    for (const n of [0, 1, 4, 6, 9, 11, 14, 16]) expect(bans[n]).toBe(0);
   });
 });
 

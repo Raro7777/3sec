@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Rng } from "@3sec/engine";
 import {
-  MAX_SQUAD, MIN_SQUAD, acceptOffer, askingPrice, autoSelect, deserialize, expireOffers, freeAgentTerms, incomingOffers, isAvailable, loanIn, loanOut, loanTargets,
+  AI_DEALS_PER_WINDOW, MARKET_LOG_MAX, MAX_SQUAD, MIN_SQUAD, acceptOffer, aiLoans, marketSummary, askingPrice, autoSelect, deserialize, expireOffers, freeAgentTerms, incomingOffers, isAvailable, loanIn, loanOut, loanTargets,
   loanWageBill, loanableOut, makeBid, newGame, openOffers, overall, playerValue, refusalChance, rejectOffer, releaseToMarket, respondToCounter, roundsPerSeason,
   selectionProblem, serialize, signFreeAgent, startNextSeason, transferTargets, transferWeek, wageBill, wageFor, windowOpen, type GameState, type SquadPlayer,
 } from "../src/index";
@@ -221,7 +221,8 @@ describe("loans", () => {
     s.round = roundsPerSeason(12);
     startNextSeason(s);
     expect(p.onLoan).toBeUndefined();
-    expect(s.loans.length).toBe(0);
+    // last season's loans are all gone; anything left is an AI loan struck in the new pre-season window
+    expect(s.loans.every((l) => l.until === s.season && l.playerId !== p.id)).toBe(true);
     expect(me.squad.includes(p)).toBe(true);
   });
 
@@ -244,7 +245,42 @@ describe("loans", () => {
     expect(me.squad.includes(t.player)).toBe(false);
     expect(origin.squad.includes(t.player)).toBe(true);
     expect(t.player.loanFrom).toBeUndefined();
-    expect(s.loans.length).toBe(0);
+    expect(s.loans.every((l) => l.until === s.season && l.playerId !== t.player.id)).toBe(true);
+  });
+
+  it("AI clubs loan a surplus youngster to a club that needs him, once a season, and the log records it", () => {
+    const s = newGame(43);
+    s.marketLog = [];
+    for (const c of s.clubs) for (const q of c.squad) q.contractUntil = 9;
+    // a deep squad (24) with a young non-starter on the bench
+    const lender = s.clubs[(s.userClub + 2) % 12]!;
+    const donor = s.clubs[(s.userClub + 3) % 12]!;
+    lender.squad.push(...donor.squad.splice(12, 4));
+    for (const c of [lender, donor]) c.selection = autoSelect(c, c.selection.formation);
+    const young = lender.squad.find((p) => !lender.selection.starters.includes(p.id) && p.age > 22) ?? lender.squad.find((p) => !lender.selection.starters.includes(p.id))!;
+    young.age = 21;
+    const total = countPlayers(s);
+    for (let i = 0; i < 30 && !s.loans.some((l) => l.from === lender.id); i++) aiLoans(s, new Rng(100 + i));
+    const loan = s.loans.find((l) => l.from === lender.id)!;
+    expect(loan).toBeDefined();
+    const borrowed = s.clubs[loan.to]!.squad.find((p) => p.id === loan.playerId)!;
+    expect(borrowed.loanFrom).toBe(lender.id);
+    expect(borrowed.age).toBeLessThanOrEqual(22);
+    expect(loan.to).not.toBe(s.userClub);
+    expect(countPlayers(s)).toBe(total);
+    for (const c of s.clubs) if (c.id !== s.userClub) expect(selectionProblem(c)).toBeNull();
+    // one outgoing loan per club per season
+    for (let i = 0; i < 30; i++) aiLoans(s, new Rng(200 + i));
+    expect(s.loans.filter((l) => l.from === lender.id).length).toBe(1);
+    const sum = marketSummary(s, s.season);
+    expect(sum.loans).toBe(s.loans.length);
+    expect(s.marketLog.some((e) => e.kind === "loan" && e.playerId === loan.playerId && e.from === lender.id && e.to === loan.to)).toBe(true);
+    s.round = roundsPerSeason(12);
+    startNextSeason(s);
+    // home at the rollover — unless the new pre-season window moved him again (logged under season 2)
+    const movedAgain = s.marketLog.some((e) => e.season === 2 && e.playerId === loan.playerId);
+    expect(s.clubs[lender.id]!.squad.some((p) => p.id === loan.playerId) || movedAgain).toBe(true);
+    expect(s.loans.some((l) => l.playerId === loan.playerId && l.until === 1)).toBe(false);
   });
 });
 
@@ -269,9 +305,57 @@ describe("AI market weeks", () => {
     }
     expect(countPlayers(s)).toBe(total);
     expect(deals).toBeGreaterThan(0);
-    // one purchase per club per window: the bloated club never bought twice in the same window
+    // at most AI_DEALS_PER_WINDOW purchases per club per window (three windows were visited)
     const buys = s.news.filter((n) => /영입 \(/.test(n) && !n.includes("자유계약"));
-    expect(buys.length).toBeLessThanOrEqual(11 * 3);
+    expect(buys.length).toBeLessThanOrEqual(11 * 3 * AI_DEALS_PER_WINDOW);
+    for (const key of new Set(s.aiDeals)) expect(s.aiDeals.filter((k) => k === key).length).toBeLessThanOrEqual(AI_DEALS_PER_WINDOW);
+  });
+
+  it("an AI club may buy twice in one window but not three times", () => {
+    const s = newGame(44);
+    const buyer = s.clubs[(s.userClub + 1) % 12]!;
+    buyer.budget = 100000;
+    for (const c of s.clubs) if (c !== buyer) c.budget = 0;
+    for (let i = 0; i < 12; i++) transferWeek(s, new Rng(i + 3));
+    const bought = s.marketLog.filter((e) => e.kind === "transfer" && e.to === buyer.id).length;
+    expect(bought).toBeGreaterThanOrEqual(1);
+    expect(bought).toBeLessThanOrEqual(AI_DEALS_PER_WINDOW);
+    expect(s.aiDeals.filter((k) => k === `1:pre:${buyer.id}`).length).toBe(bought);
+  });
+});
+
+describe("market log", () => {
+  it("records every transfer, loan and free signing league-wide, caps at 80 lines and summarises the user's ins/outs", () => {
+    const s = newGame(45);
+    s.marketLog = [];
+    const me = s.clubs[s.userClub]!;
+    me.budget = 100000;
+    const t = transferTargets(s).find((x) => x.price !== null)!;
+    expect(makeBid(s, t.club.id, t.player.id, t.price! * 2, fixed(0.99))).toMatchObject({ status: "accepted" });
+    const fa = s.clubs[1]!.squad.pop()!;
+    releaseToMarket(s, fa, 1);
+    expect(signFreeAgent(s, fa.id)).toBeNull();
+    const out = loanableOut(s).find((p) => p !== t.player && p !== fa)!;
+    expect(loanOut(s, out.id)).toBeNull();
+    const kinds = s.marketLog.map((e) => e.kind);
+    expect(kinds).toEqual(["loan", "free", "transfer"]); // newest first
+    const sum = marketSummary(s, 1);
+    expect(sum.transfers).toBe(1);
+    expect(sum.frees).toBe(1);
+    expect(sum.loans).toBe(1);
+    expect(sum.biggest!.fee).toBe(t.price! * 2);
+    expect(sum.userIn.map((e) => e.playerId).sort()).toEqual([t.player.id, fa.id].sort());
+    expect(sum.userOut.map((e) => e.playerId)).toEqual([out.id]);
+    expect(marketSummary(s, 7).transfers).toBe(0);
+    // AI deals land in the log too, and it never grows past the cap
+    for (let i = 0; i < 6; i++) { s.round = [0, 10, 11, 22][i % 4]!; transferWeek(s, new Rng(i + 9)); }
+    for (let i = 0; i < 100; i++) s.marketLog.unshift({ season: 1, text: "x", kind: "transfer", fee: 1, to: 2, playerId: `x${i}`, playerName: "x" });
+    transferWeek(s, new Rng(77));
+    expect(s.marketLog.length).toBeLessThanOrEqual(MARKET_LOG_MAX + 100);
+    s.round = 0;
+    const before = s.marketLog.length;
+    for (let i = 0; i < 20 && s.marketLog.length === before; i++) transferWeek(s, new Rng(500 + i));
+    if (s.marketLog.length !== before) expect(s.marketLog.length).toBe(MARKET_LOG_MAX);
   });
 });
 
@@ -290,11 +374,15 @@ describe("persistence", () => {
     expect(back.loans).toEqual(s.loans);
     expect(back.clubs[s.userClub]!.squad.find((p) => p.id === s.loans[0]!.playerId)!.onLoan).toBe(true);
     const old = JSON.parse(serialize(newGame(42))) as Record<string, unknown>;
-    delete old.offers; delete old.freeAgents; delete old.loans; delete old.aiDeals;
+    delete old.offers; delete old.freeAgents; delete old.loans; delete old.aiDeals; delete old.marketLog; delete old.seasonHistory;
+    for (const c of old.clubs as Record<string, unknown>[]) { delete c.seasonInjuries; delete c.seasonWages; delete c.seasonRevenue; for (const p of c.squad as Record<string, unknown>[]) delete p.lastMinutes; }
     const mig = deserialize(JSON.stringify(old))!;
     expect(mig.offers).toEqual([]);
     expect(mig.freeAgents).toEqual([]);
     expect(mig.loans).toEqual([]);
     expect(mig.aiDeals).toEqual([]);
+    expect(mig.marketLog).toEqual([]);
+    expect(mig.seasonHistory).toEqual([]);
+    for (const c of mig.clubs) { expect(c.seasonInjuries).toBe(0); expect(c.seasonWages).toBe(0); expect(c.seasonRevenue).toBe(0); for (const p of c.squad) expect(p.lastMinutes).toBe(0); }
   });
 });
