@@ -296,6 +296,8 @@ var view = 'home';
 var ses = null;               // 진행 중 육성 세션
 var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null, lastPulls = null;
+var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
+var lastSettle = null;
 var trainPick = null, supPick = null;
 // 자동 진행은 수동으로 캠프를 1회 완주해야 열린다(처음부터 자동을 누르면 게임을 이해할 수 없다).
 var AUTO_KEY = 'bloom-auto-unlocked-v1';
@@ -574,7 +576,7 @@ var TABS = [
   { id:'scout', ic:'🔍', label:'스카우트' },
   { id:'train', ic:'🏐', label:'육성' },
   { id:'roster',ic:'📋', label:'로스터' },
-  { id:'match', ic:'⚔️', label:'경기' }
+  { id:'match', ic:'🏆', label:'리그' }
 ];
 function renderNav(){
   var inCamp = !!ses;
@@ -600,7 +602,8 @@ function render(){
   var fn = ({
     home:vHome, scout:vScout, train:vTrain, trainSup:vTrainSup, trainTurn:vTrainTurn,
     trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
-    matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions
+    matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions,
+    league:vLeague, playoff:vPlayoff, settle:vSettle
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') paintLive();
@@ -842,6 +845,13 @@ function vTrainTurn(){
         return '<button class="act" data-choice="'+c.id+'"><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+'</span>'+
           '<span class="right"><span class="tiny">'+esc(c.effect||'')+(c.isBranch?' · 성공 '+Math.round(c.successRate*100)+'%':'')+'</span></span></button>';
       }).join('');
+  } else if (o.treating) {
+    // 부상 치료 턴 — 훈련 선택지가 모두 잠긴다. 넘길 수단이 없으면 화면이 막히므로 전용 버튼을 둔다.
+    body = '<div class="evbox" style="border-color:var(--bad)">'+
+      '<div class="evtitle" style="color:var(--bad)">부상 치료 중</div>'+
+      '<div class="evtext">이번 턴은 훈련할 수 없습니다. 남은 치료 '+o.treatmentTurnsLeft+'턴. '+
+        '피로는 회복되지만 캠프 기간을 그만큼 잃습니다.</div></div>'+
+      '<button class="btn" data-choice="rest">치료하고 다음 턴으로</button>';
   } else {
     body = o.options.map(function(op){
       if (!op.available) return '';
@@ -936,11 +946,143 @@ function vLineup(){
     '<button class="btn ghost" data-act="autolineup">자동 편성 다시</button>');
 }
 
-// ---------- 경기
+// ---------- 리그 (시즌)
+function vLeague(){
+  var sv = G.league ? E.seasonView(G) : null;
+  if (!sv) {
+    return h('<h2>리그</h2><p class="sub">블룸 리그는 7팀이 14매치데이 동안 맞붙습니다. 매치데이마다 육성을 한 번 하고 경기를 치르며, 상위 4팀이 포스트시즌에 갑니다.</p>'+
+      '<div class="card"><div class="legend">'+
+        '<b>정규 시즌</b><span>팀당 12경기. 3-0·3-1 승리는 승점 3, 3-2 승리는 2, 2-3 패배는 1점.</span>'+
+        '<b>포스트시즌</b><span>4위와 3위가 단판, 승자가 2위와 3전2선승, 그 승자가 1위와 5전3선승. 정규 1위는 1승을 안고 시작합니다.</span>'+
+        '<b>다음 시즌</b><span>여섯 구단도 함께 성장합니다. 로스터를 계속 키우지 않으면 순위가 밀립니다.</span>'+
+      '</div></div>'+
+      '<button class="btn" data-act="startseason">시즌 1 시작</button>'+
+      '<div class="tiny" style="margin-top:14px">연습 삼아 한 경기만 해보려면 아래에서 상대를 고르세요.</div>'+
+      friendlyList());
+  }
+  if (sv.phase === 'offseason') return vSettle();
+  if (sv.phase === 'playoff') return vPlayoff();
+
+  var nx = sv.myNext;
+  var me = sv.standings.filter(function(r){ return r.isMe; })[0];
+  var opp = nx && nx.opponentId ? E.CLUBS.filter(function(c){ return c.id===nx.opponentId; })[0] : null;
+
+  return h(
+   '<div class="card" style="background:linear-gradient(160deg,var(--court-bg),var(--panel));border-color:var(--line2)">'+
+     '<div class="spread"><div class="eyebrow" style="font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.14em;color:var(--court);font-size:12px">SEASON '+sv.season+'</div>'+
+       '<div class="tiny">매치데이 '+sv.matchday+' / '+sv.totalMatchdays+'</div></div>'+
+     '<div class="stat3" style="margin-top:10px">'+
+       '<div><div class="v num">'+(me?me.rank:'-')+'위</div><div class="k">현재 순위</div></div>'+
+       '<div><div class="v num">'+(me?me.wins+'-'+me.losses:'0-0')+'</div><div class="k">승패</div></div>'+
+       '<div><div class="v num">'+(me?me.points:0)+'</div><div class="k">승점</div></div>'+
+     '</div>'+
+   '</div>'+
+   (nx ? (nx.isBye
+     ? '<div class="card"><b>이번 매치데이는 휴식일입니다</b><div class="tiny" style="margin-top:4px">다른 팀들의 경기만 진행됩니다.</div>'+
+       '<button class="btn" style="margin-top:11px" data-act="advance">매치데이 '+nx.matchday+' 진행</button></div>'
+     : '<div class="card">'+
+       '<div class="spread" style="margin-bottom:10px"><div class="muted">매치데이 '+nx.matchday+' · '+(nx.isHome?'홈':'원정')+'</div>'+
+         '<div class="tiny">우리 OVR '+sv.lineupOvr.toFixed(1)+'</div></div>'+
+       '<div style="display:flex;align-items:center;gap:12px">'+
+         '<span class="emb" style="width:52px;height:52px">'+emblemSvg(nx.opponentId,52)+'</span>'+
+         '<div style="flex:1;min-width:0"><div class="pname">'+esc(nx.opponentName)+'</div>'+
+           '<div class="tiny">'+esc(opp?opp.identity.split('.')[0]:'')+'</div></div>'+
+       '</div>'+
+       (sv.canTrain
+         ? '<div class="tiny" style="margin:11px 0 7px;color:var(--hot)">이번 매치데이에 육성 기회가 '+sv.trainingsLeft+'번 남았습니다. 경기 전에 키우면 바로 전력이 됩니다.</div>'+
+           '<button class="btn ghost" data-go="train">먼저 육성하기</button>'+
+           '<button class="btn" data-act="advance">그냥 경기 진행</button>'
+         : '<button class="btn" style="margin-top:11px" data-act="advance">경기 진행</button>')+
+     '</div>')
+    : '<div class="card"><b>정규 시즌이 끝났습니다</b><button class="btn" style="margin-top:11px" data-act="advance">포스트시즌으로</button></div>')+
+   standingsTable(sv.standings)+
+   '<details><summary>친선 경기</summary><div style="padding:0 12px 12px">'+friendlyList()+'</div></details>'
+  );
+}
+
+function standingsTable(rows){
+  return '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">순위표</div>'+
+    rows.map(function(r){
+      return '<div class="bx"'+(r.isMe?' style="background:var(--court-bg)"':'')+'>'+
+        '<span class="pt" style="width:20px;color:'+(r.isMe?'var(--court)':'var(--ink3)')+'">'+r.rank+'</span>'+
+        '<span class="emb" style="width:24px;height:24px">'+(r.isMe?myEmblemSvg(24):emblemSvg(r.teamId,24))+'</span>'+
+        '<span class="nm"'+(r.isMe?' style="color:var(--court)"':'')+'>'+esc(r.name)+'</span>'+
+        '<span class="st2">'+r.wins+'승 '+r.losses+'패</span>'+
+        '<span class="pt">'+r.points+'</span></div>';
+    }).join('')+'</div>';
+}
+
+function friendlyList(){
+  var list = E.clubList(G), mine = E.lineupOvr(G);
+  return list.map(function(c){
+    var gap = c.lineupOvr - mine;
+    var tone = gap > 6 ? 'var(--bad)' : (gap < -3 ? 'var(--good)' : 'var(--ink2)');
+    return '<button class="pcard tap" data-play="'+c.id+'"><span class="emb">'+emblemSvg(c.id,42)+'</span>'+
+      '<div style="flex:1;min-width:0"><div class="pname" style="font-size:15px">'+esc(c.name)+'</div>'+
+      '<div class="tiny" style="margin-top:2px">전적 '+c.wins+'승 '+c.losses+'패</div></div>'+
+      '<div class="povr num" style="color:'+tone+'">'+c.lineupOvr.toFixed(1)+'<small>OVR</small></div></button>';
+  }).join('');
+}
+
+// ---------- 포스트시즌
+function vPlayoff(){
+  var po = E.playoffState(G);
+  if (!po) return '<div class="empty">…</div>';
+  return h('<h2>포스트시즌</h2><p class="sub">정규 상위 4팀. 준PO 단판 → PO 3전2선승 → 챔프전 5전3선승(정규 1위 1승 어드밴티지).</p>'+
+    po.rounds.map(function(s){
+      var live = !s.winner && s.low;
+      return '<div class="card"'+(s.mine?' style="border-color:var(--court)"':'')+'>'+
+        '<div class="spread"><b>'+esc(s.name)+'</b><span class="tiny">'+s.bestOf+'전 '+s.need+'선승'+(s.advantage?' · 1승 선취':'')+'</span></div>'+
+        '<div class="spread" style="margin-top:8px">'+
+          '<div style="flex:1"><div class="pname" style="font-size:14px">'+esc(s.highName||'—')+'</div></div>'+
+          '<div class="num" style="font-size:20px">'+s.highWins+' : '+s.lowWins+'</div>'+
+          '<div style="flex:1;text-align:right"><div class="pname" style="font-size:14px">'+esc(s.lowName||'미정')+'</div></div>'+
+        '</div>'+
+        (s.winner ? '<div class="tiny" style="margin-top:7px;color:var(--good)">'+esc(s.winnerName)+' 진출</div>' : '')+
+        (live ? '<button class="btn" style="margin-top:11px" data-act="po">'+(s.mine?'경기 진행':'다음 경기 보기')+'</button>' : '')+
+      '</div>';
+    }).join('')+
+    (po.done ? '<div class="card" style="text-align:center;border-color:var(--ssr)">'+
+        '<div class="eyebrow" style="color:var(--ssr);font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.14em">CHAMPION</div>'+
+        '<div style="font-size:22px;font-weight:800;margin:5px 0">'+esc(po.championName)+'</div>'+
+      '</div>'+
+      '<button class="btn" data-act="settle">시즌 결산 보기</button>' : ''));
+}
+
+// ---------- 시즌 결산
+function vSettle(){
+  var st = lastSettle || (G.league && G.league.settlement);
+  if (!st) return '<div class="empty">…</div>';
+  return h('<h2>시즌 '+st.season+' 결산</h2>'+
+    '<div class="card" style="text-align:center;border-color:'+(st.champion?'var(--ssr)':'var(--line2)')+'">'+
+      '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:46px;font-weight:700;line-height:1">'+st.rank+'위</div>'+
+      '<div class="muted">'+st.myStats.wins+'승 '+st.myStats.losses+'패 · 승점 '+st.myStats.points+'</div>'+
+      (st.champion?'<div style="margin-top:8px;color:var(--ssr);font-weight:800">우승!</div>':'')+
+    '</div>'+
+    '<div class="card"><div class="muted" style="margin-bottom:7px">보상</div>'+
+      st.rewards.breakdown.map(function(b){
+        return '<div class="bx"><span class="nm">'+esc(b.label)+'</span>'+
+          '<span class="st2">'+(b.gold?'골드 '+b.gold:'')+'</span>'+
+          '<span class="pt">+'+b.tickets+'</span></div>';
+      }).join('')+
+      '<div class="spread" style="padding:9px 11px 3px"><b>합계</b><b class="num">티켓 +'+st.rewards.tickets+' · 골드 +'+st.rewards.gold+'</b></div>'+
+    '</div>'+
+    (st.mvp ? '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(st.mvp.teamName||'')+'</div></div>'+
+      '<div class="pname" style="margin-top:4px">'+esc(st.mvp.playerName)+'</div></div>' : '')+
+    '<div class="card"><div class="legend">'+
+      '<b>다음 시즌</b><span>여섯 구단이 잠재력의 '+Math.round(st.nextSeasonGrowth*100)+'%까지 성장합니다 (이번 시즌 '+Math.round(st.growth*100)+'%). 로스터를 더 키워야 따라잡습니다.</span>'+
+    '</div></div>'+
+    '<button class="btn" data-act="nextseason">시즌 '+(st.season+1)+' 시작</button>');
+}
+
+// ---------- 친선 경기 (리그 밖)
 function vMatch(){
+  if (G.league) return vLeague();
   var list = E.clubList(G);
   var mine = E.lineupOvr(G);
   return h('<h2>경기</h2><p class="sub">상대를 고르면 5세트 3선승 경기를 시뮬레이션합니다. 우리 라인업 OVR <b class="num">'+mine.toFixed(1)+'</b>. 승리하면 티켓 1장, 패배해도 조각 1개.</p>'+
+    '<div class="card"><b>리그를 시작할 수 있습니다</b><div class="tiny" style="margin-top:4px">14매치데이 정규 시즌과 포스트시즌이 열립니다.</div>'+
+    '<button class="btn" style="margin-top:11px" data-act="startseason">시즌 시작</button></div>'+
     list.map(function(c){
       var gap = c.lineupOvr - mine;
       var tone = gap > 6 ? 'var(--bad)' : (gap < -3 ? 'var(--good)' : 'var(--ink2)');
@@ -1064,12 +1206,12 @@ function paintLive(){
   var court = document.getElementById('lvCourt');
   if (court) {
     var spots = court.querySelectorAll('.spot');
-    for (var i=0;i<spots.length;i++) spots[i].className = 'spot' + (spots[i].dataset.side==='0'?' home':'');
+    for (var i=0;i<spots.length;i++) spots[i].className = 'spot' + (+spots[i].dataset.side===mySide?' home':'');
     if (last) {
       var key = last.side + '-' + last.pos;
       var sp = court.querySelector('.spot[data-key="'+key+'"]');
       if (sp) {
-        sp.className = 'spot on' + (last.side===0?' home':'');
+        sp.className = 'spot on' + (last.side===mySide?' home':'');
         var who = sp.querySelector('.who');
         if (who) who.textContent = last.name;
       }
@@ -1080,8 +1222,8 @@ function paintLive(){
     var fl = document.getElementById('lvFlash');
     if (fl) {
       if (mv.ti >= r.touches.length && r.point) {
-        fl.textContent = (r.point.side===0 ? '득점' : '실점') + (r.point.clutch ? ' !' : '');
-        fl.className = 'flash show ' + (r.point.side===0?'home':'away');
+        fl.textContent = (r.point.side===mySide ? '득점' : '실점') + (r.point.clutch ? ' !' : '');
+        fl.className = 'flash show ' + (r.point.side===mySide?'home':'away');
       } else fl.className = 'flash';
     }
   }
@@ -1093,7 +1235,7 @@ function paintLive(){
 
 function rallyStrip(r, shown, ended){
   var chips = shown.map(function(t, i){
-    var cls = 'tch' + (t.side===0?' me':'');
+    var cls = 'tch' + (t.side===mySide?' me':'');
     if (t.outcome===3 || t.outcome===2 || t.outcome===5 || t.outcome===7) cls += ' ok';
     if (t.outcome===4 || t.quality===4) cls += ' bad';
     var act = EVN[t.type] || '';
@@ -1106,8 +1248,8 @@ function rallyStrip(r, shown, ended){
   if (ended && r.point) {
     var last = shown[shown.length-1];
     var why = OUTN[last?last.outcome:0] || (r.point.side===0?'득점':'실점');
-    res = '<div class="rres '+(r.point.side===0?'h':'a')+'">'+
-      (r.point.side===0 ? '우리 득점' : '상대 득점') + ' — ' + why +
+    res = '<div class="rres '+(r.point.side===mySide?'h':'a')+'">'+
+      (r.point.side===mySide ? '우리 득점' : '상대 득점') + ' — ' + why +
       ' <span style="color:var(--ink3);font-weight:400">('+r.point.home+':'+r.point.away+')</span></div>';
   }
   return '<div class="rlabel">랠리 진행</div><div class="touches">'+chips+'</div>'+res;
@@ -1126,15 +1268,15 @@ function vMatchLive(){
   return h(
    '<div class="board">'+
      '<div class="bteams">'+
-       '<div class="bteam"><span class="bserve" id="lvSvH"></span>'+esc(G.clubName)+'</div>'+
+       '<div class="bteam"><span class="bserve" id="lvSvH"></span>'+esc(m.ctx.homeName)+(mySide===0?' <span class="tiny" style="color:var(--court)">우리</span>':'')+'</div>'+
        '<div class="bscore" id="lvScore">0 : 0</div>'+
-       '<div class="bteam away">'+esc(m.opponent.name)+'<span class="bserve off" id="lvSvA" style="margin:0 0 0 5px"></span></div>'+
+       '<div class="bteam away">'+esc(m.ctx.awayName)+(mySide===1?' <span class="tiny" style="color:var(--court)">우리</span>':'')+'<span class="bserve off" id="lvSvA" style="margin:0 0 0 5px"></span></div>'+
      '</div>'+
      '<div class="bsets" id="lvSet"><b>1세트</b></div>'+
    '</div>'+
    '<div class="court" id="lvCourt">'+
-     '<div class="half top">'+esc(m.opponent.name)+'</div>'+
-     '<div class="half bot">'+esc(G.clubName)+'</div>'+
+     '<div class="half top">'+esc(m.ctx.awayName)+'</div>'+
+     '<div class="half bot">'+esc(m.ctx.homeName)+'</div>'+
      '<div class="atk" style="top:33.3%"></div><div class="atk" style="top:66.6%"></div>'+
      '<div class="net"></div>'+
      spots.join('')+
@@ -1165,16 +1307,16 @@ function vMatchResult(){
   return h(
    '<div class="score">'+
      '<div class="teams">'+
-       '<div class="tn">'+esc(G.clubName)+'</div>'+
+       '<div class="tn">'+esc(m.ctx.homeName)+'</div>'+
        '<div class="sets num">'+m.sets.home+' : '+m.sets.away+'</div>'+
-       '<div class="tn">'+esc(m.opponent.name)+'</div>'+
+       '<div class="tn">'+esc(m.ctx.awayName)+'</div>'+
      '</div>'+
      '<div class="setline">'+m.setScores.map(function(s){ return s.home+'-'+s.away; }).join(' · ')+'</div>'+
      '<div class="verdict '+(m.won?'w':'l')+'">'+(m.won?'승리':'패배')+'</div>'+
      '<div class="tiny" style="margin-top:4px">'+esc(m.reward)+'</div>'+
    '</div>'+
    '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">우리 팀 기록</div>'+
-     m.box.home.map(function(b){
+     (m.box.mine || m.box.home).map(function(b){
        return '<div class="bx"><span class="pill pos">'+b.positionCode+'</span><span class="nm">'+esc(b.name)+'</span>'+
          '<span class="st2">공 '+b.kills+'/'+b.attacks+' · 리시 '+b.receptions+' · 디그 '+b.digs+'</span>'+
          '<span class="pt">'+b.points+'</span></div>';
@@ -1187,7 +1329,8 @@ function vMatchResult(){
        var cls = l.indexOf('▶')>=0 ? 'pt' : (l.indexOf('↻')>=0||l.indexOf('⇄')>=0 ? 'rot' : '');
        return '<p class="'+cls+'">'+esc(l)+'</p>';
      }).join('')+'</div></details>'+
-   '<button class="btn" data-go="match">다른 상대와 경기</button>'+
+   (G.league ? '<button class="btn" data-go="match">리그로 돌아가기</button>'
+             : '<button class="btn" data-go="match">다른 상대와 경기</button>')+
    '<button class="btn ghost" data-go="train">선수 키우러 가기</button>'
   );
 }
@@ -1273,10 +1416,39 @@ function autoRun(kind){
 
 function doMatch(clubId){
   if (!E.lineupValid(G)) E.autoLineup(G);
+  mySide = 0;
   lastMatch = E.playMatch(G, clubId, { collectEvents:true });
   save();
   window.scrollTo(0,0);
   startViewer();
+}
+
+function doAdvance(){
+  if (!E.lineupValid(G)) E.autoLineup(G);
+  var sv = E.seasonView(G);
+  if (sv && sv.phase === 'matchday' && !sv.nextMatchday) { save(); go('match'); return; }
+  var res = E.advanceMatchday(G, { collectEvents:true });
+  save(); checkMissions();
+  if (res.myMatch) {
+    mySide = res.myMatch.isHome === false ? 1 : 0;
+    lastMatch = res.myMatch;
+    window.scrollTo(0,0);
+    startViewer();
+  } else {
+    toast('매치데이 ' + res.matchday + ' 종료 · 휴식일');
+    go('match');
+  }
+}
+function doPlayoff(){
+  if (!E.lineupValid(G)) E.autoLineup(G);
+  var res = E.advancePlayoff(G, { collectEvents:true });
+  save(); checkMissions();
+  if (res.myMatch) {
+    mySide = res.myMatch.isHome === false ? 1 : 0;
+    lastMatch = res.myMatch;
+    window.scrollTo(0,0);
+    startViewer();
+  } else { go('playoff'); }
 }
 
 // ---------- 도움말: 코트에서 무슨 일이 일어나는가
@@ -1338,6 +1510,13 @@ document.addEventListener('click', function(e){
   if (d.choice) return applyChoice(d.choice);
   if (d.auto) return autoRun(d.auto);
   if (d.play) return doMatch(d.play);
+  if (d.act === 'startseason') {
+    E.startSeason(G); save(); toast('시즌이 시작됐습니다'); go('match'); return;
+  }
+  if (d.act === 'advance') return doAdvance();
+  if (d.act === 'po') return doPlayoff();
+  if (d.act === 'settle') { lastSettle = E.finishSeason(G); save(); checkMissions(); go('settle'); return; }
+  if (d.act === 'nextseason') { E.startSeason(G); lastSettle = null; save(); toast('새 시즌이 시작됐습니다'); go('match'); return; }
   if (d.mv) {
     if (d.mv === 'play') {
       mv.playing = !mv.playing;
