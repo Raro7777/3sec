@@ -112,6 +112,14 @@ h2{margin:0 0 3px;font-size:20px;font-weight:800;letter-spacing:-.02em}
 .pcard.tap{min-height:var(--tap)}
 .pcard.sel{border-color:var(--court);background:var(--court-bg)}
 .chip{width:5px;align-self:stretch;border-radius:3px;flex:none;min-height:38px}
+.ava{flex:none;width:44px;height:44px;border-radius:50%;overflow:hidden;display:block;
+  border:2px solid var(--line2);background:var(--panel2);line-height:0}
+.ava.sm{width:28px;height:28px;border-width:1.5px}
+.ava svg{display:block;width:100%;height:100%}
+.emb{flex:none;width:42px;height:42px;display:block;line-height:0}
+.emb svg{display:block;width:100%;height:100%}
+.cardart{flex:none;line-height:0;border-radius:9px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.cardart svg{display:block}
 .pname{font-weight:700;font-size:15.5px;letter-spacing:-.01em}
 .pmeta{font-size:12px;color:var(--ink3);margin-top:1px}
 .povr{font-family:"Barlow Condensed",sans-serif;font-size:20px;font-weight:700;line-height:1;text-align:right}
@@ -357,8 +365,179 @@ var STATK = ['서브','리시','토스','스파','블로','디그','스피','파
 var CORE = {0:[2,9,6],1:[3,1,7],2:[3,7,0],3:[4,3,6],4:[1,5,6]}; // 포지션별 핵심 3스탯(표시용)
 var clubColor = {};
 
+// ================================================================ 플레이스홀더 아트
+// 정식 일러스트가 들어갈 자리를 SVG로 채운다. 선수 데이터의 외형 필드(헤어스타일·머리색·
+// 눈색·체형)에서 결정적으로 그리므로 42명이 서로 다른 그림을 갖는다.
+var APPEAR = {}, CLUBC = {};
+var HAIRC = {
+  '플래티넘 블론드':'#EADFBC','와인 레드':'#7C2434','다크 브라운':'#3A2A22','애쉬 그레이':'#9BA3AB',
+  '블랙':'#211E1D','민트 그린':'#8FD8C2','체스트넛 브라운':'#6A4128','화이트 실버':'#DFE6EC',
+  '허니 블론드':'#D8A94F','네이비 블루':'#2A3A63','오번':'#8C4426','라이트 브라운':'#A9764A',
+  '화이트':'#EDF1F5','애쉬 브라운':'#7A6656','코랄 핑크':'#E88E90','크림슨 레드':'#A62A28',
+  '선셋 오렌지':'#D9702F','라벤더 퍼플':'#A88BD1','로즈 브라운':'#9A6A63','밀크티 베이지':'#C8A981',
+  '차콜 그레이':'#4A4F55','스카이 블루':'#79B4DE','골든 브라운':'#8A5E2C','피치 핑크':'#EFA98C'
+};
+var EYEC = {
+  '바이올렛':'#9B6FD4','다크 그레이':'#4C535A','헤이즐':'#A07A3C','그레이 블루':'#6E8AA6',
+  '다크 브라운':'#4A3223','골드':'#D9A82C','앰버':'#C98A2A','딥 블루':'#2E5A96','그린':'#3E8E5A',
+  '그레이':'#7C858D','브라운':'#6B452A','라이트 블루':'#7FB6DE','아이스 블루':'#A8CFE4',
+  '다크 그린':'#2F6B49','마젠타':'#B94A86','오렌지 앰버':'#D07A2A','레드 브라운':'#7E3A2C',
+  '실버 그레이':'#9EA9B2','딥 그린':'#27604A','블루':'#3A6FB0'
+};
+function hashId(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0); }
+// 헤어스타일 문자열 → 그리기 지시(밑머리 형태 + 장식)
+function hairShape(style){
+  var s = style || '';
+  var base = /숏|픽시|크롭|컬리 숏/.test(s) ? 'short'
+           : /보브|단발/.test(s) ? 'bob'
+           : /웨이브/.test(s) ? 'wave' : 'long';
+  var acc = /트윈테일/.test(s) ? 'twin'
+          : /트윈 번/.test(s) ? 'twinbun'
+          : /번/.test(s) ? 'bun'
+          : /브레이드/.test(s) ? 'braid'
+          : /포니테일/.test(s) ? (/로우/.test(s) ? 'lowpony' : 'pony')
+          : /하프업/.test(s) ? 'halfup' : '';
+  return { base:base, acc:acc, band:/헤어밴드/.test(s), hime:/히메컷/.test(s), bangs:/뱅|커튼|시스루/.test(s) };
+}
+function appearOf(id){
+  if (APPEAR[id]) return APPEAR[id];
+  var n = hashId(id);
+  var hk = Object.keys(HAIRC), ek = Object.keys(EYEC);
+  return { hairStyle:'숏 보브', hairColor:hk[n % hk.length], eyeColor:ek[(n>>3) % ek.length], filler:true };
+}
+
+/** 인물 그리기(클리핑 없음) — 원형 초상과 카드 아트가 공유한다. */
+function personG(p, uid){
+  var cardId = p.cardId || p.id || '';
+  var a = appearOf(cardId);
+  var hair = HAIRC[a.hairColor] || '#4A4F55';
+  var eye = EYEC[a.eyeColor] || '#4C535A';
+  var sh = hairShape(a.hairStyle);
+  var club = CLUBC[p.clubId || p.teamId] || { primary:'#3E8FE0', secondary:'#E9F0F7' };
+  var uid = 'p' + hashId(cardId + (p.instanceId||'')) .toString(36);
+  var skin = a.filler ? '#C7B9AE' : '#F0D6C2';
+  var dark = shade(hair, -18);
+
+  var back = sh.base==='short' ? '<path d="M22 44c0-16 10-25 28-25s28 9 28 25v16c-4-6-6-12-6-18-8 5-36 5-44 0 0 6-2 12-6 18z" fill="'+hair+'"/>'
+    : sh.base==='bob' ? '<path d="M20 46c0-18 12-27 30-27s30 9 30 27v26c0 5-4 8-8 6-3-10-4-22-4-30-10 6-36 6-46 0 0 8-1 20-4 30-4 2-8-1-8-6z" fill="'+hair+'"/>'
+    : sh.base==='wave' ? '<path d="M19 48c0-19 13-29 31-29s31 10 31 29v34c0 6-5 9-9 5-2-4-1-9-3-13-2 5-6 7-5 13-9 3-21 3-30 0 1-6-3-8-5-13-2 4-1 9-3 13-4 4-7 1-7-5z" fill="'+hair+'"/>'
+    : '<path d="M19 48c0-19 13-29 31-29s31 10 31 29v40c0 4-4 6-8 5-2-14-3-30-3-40-11 7-37 7-48 0 0 10-1 26-3 40-4 1-8-1-8-5z" fill="'+hair+'"/>';
+
+  var acc = '';
+  if (sh.acc==='pony') acc = '<path d="M76 34c11 2 16 12 14 24-2 11-7 18-13 22-3 2-6-1-4-4 5-8 7-16 6-24-1-7-4-12-7-15z" fill="'+dark+'"/>';
+  else if (sh.acc==='lowpony') acc = '<path d="M74 58c10 4 14 14 12 26-1 8-5 14-9 17-3 2-6-1-4-4 4-6 5-13 4-20-1-8-3-14-7-17z" fill="'+dark+'"/>';
+  else if (sh.acc==='twin') acc = '<path d="M20 44c-9 4-12 14-10 25 1 7 4 12 7 15 3 2 6-1 4-4-3-5-4-11-3-17 1-7 3-13 6-16z" fill="'+dark+'"/>'+
+    '<path d="M80 44c9 4 12 14 10 25-1 7-4 12-7 15-3 2-6-1-4-4 3-5 4-11 3-17-1-7-3-13-6-16z" fill="'+dark+'"/>';
+  else if (sh.acc==='bun') acc = '<circle cx="50" cy="15" r="10" fill="'+dark+'"/><circle cx="50" cy="15" r="5" fill="'+hair+'" opacity=".55"/>';
+  else if (sh.acc==='twinbun') acc = '<circle cx="27" cy="26" r="8" fill="'+dark+'"/><circle cx="73" cy="26" r="8" fill="'+dark+'"/>';
+  else if (sh.acc==='braid') acc = '<path d="M78 50c7 6 9 16 7 27" stroke="'+dark+'" stroke-width="7" fill="none" stroke-linecap="round"/>'+
+    '<path d="M79 56h7M81 64h7M82 72h6" stroke="'+shade(hair,14)+'" stroke-width="2" opacity=".7"/>';
+  else if (sh.acc==='halfup') acc = '<path d="M36 26c8-4 20-4 28 0-6 6-22 6-28 0z" fill="'+dark+'"/>';
+
+  var bangs = sh.bangs
+    ? '<path d="M28 42c2-13 11-20 22-20s20 7 22 20c-4-5-9-8-13-8-3 4-5 6-9 6s-6-2-9-6c-4 0-9 3-13 8z" fill="'+hair+'"/>'
+    : sh.base==='short'
+      ? '<path d="M27 43c1-14 11-21 23-21s22 7 23 21c-6-9-14-12-23-12s-17 3-23 12z" fill="'+hair+'"/>'
+      : '<path d="M27 44c0-14 10-22 23-22s23 8 23 22c-5-8-9-11-13-11-5 0-6 4-10 4s-5-4-10-4c-4 0-8 3-13 11z" fill="'+hair+'"/>';
+
+  var hime = sh.hime ? '<rect x="24" y="40" width="5" height="34" rx="2.5" fill="'+hair+'"/><rect x="71" y="40" width="5" height="34" rx="2.5" fill="'+hair+'"/>' : '';
+  var band = sh.band ? '<path d="M27 40c6-7 40-7 46 0" stroke="'+club.secondary+'" stroke-width="4" fill="none" stroke-linecap="round"/>' : '';
+
+  return { bg:'<linearGradient id="g'+uid+'" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0" stop-color="'+club.primary+'" stop-opacity=".55"/>'+
+      '<stop offset="1" stop-color="#0A1017" stop-opacity=".9"/></linearGradient>',
+    body:
+      back + acc +
+      '<path d="M32 84c3-9 9-13 18-13s15 4 18 13v16H32z" fill="'+club.primary+'"/>'+
+      '<path d="M43 71h14l-7 10z" fill="'+club.secondary+'" opacity=".85"/>'+
+      '<rect x="44" y="66" width="12" height="10" fill="'+skin+'"/>'+
+      '<ellipse cx="50" cy="50" rx="19" ry="22" fill="'+skin+'"/>'+
+      hime + bangs + band +
+      '<ellipse cx="42" cy="52" rx="4" ry="5" fill="'+eye+'"/><ellipse cx="58" cy="52" rx="4" ry="5" fill="'+eye+'"/>'+
+      '<circle cx="43.4" cy="50" r="1.5" fill="#fff" opacity=".95"/><circle cx="59.4" cy="50" r="1.5" fill="#fff" opacity=".95"/>'+
+      '<path d="M38 45c2-2 6-2 8 0M54 45c2-2 6-2 8 0" stroke="'+dark+'" stroke-width="1.6" fill="none" stroke-linecap="round"/>'+
+      '<path d="M47 61c2 1.5 4 1.5 6 0" stroke="#B0705E" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
+  };
+}
+
+/** 원형 흉상 초상. */
+function portraitSvg(p, size){
+  var uid = 'p' + hashId((p.cardId||p.id||'') + (p.instanceId||'')).toString(36);
+  var g = personG(p, uid);
+  return '<svg viewBox="0 0 100 100" width="'+size+'" height="'+size+'" aria-hidden="true">'+
+    '<defs><clipPath id="c'+uid+'"><circle cx="50" cy="50" r="49"/></clipPath>'+g.bg+'</defs>'+
+    '<g clip-path="url(#c'+uid+')"><rect width="100" height="100" fill="url(#g'+uid+')"/>'+g.body+'</g>'+
+  '</svg>';
+}
+function shade(hex, amt){
+  var n = parseInt(hex.slice(1),16), r=(n>>16)+amt, g=((n>>8)&255)+amt, b=(n&255)+amt;
+  var cl=function(v){ return Math.max(0,Math.min(255,v)); };
+  return '#'+((1<<24)+(cl(r)<<16)+(cl(g)<<8)+cl(b)).toString(16).slice(1);
+}
+
+/** 세로 카드 아트(3:4). 등급 프레임 + 배경 + 초상 + 등번호. */
+function cardArtSvg(p, rarityCode, w){
+  var club = CLUBC[p.clubId || p.teamId] || { primary:'#3E8FE0', secondary:'#E9F0F7' };
+  var uid = 'k' + hashId((p.cardId||p.id||'') + rarityCode).toString(36);
+  var frame = { N:'#6A7C8E', R:'#5B9BE0', SR:'#A97BE8', SSR:'#E9B949' }[rarityCode] || '#5B9BE0';
+  var rays = rarityCode==='SSR'
+    ? '<g opacity=".33"><path d="M60 20 L30 108 L90 108 Z" fill="'+frame+'"/><path d="M60 20 L6 90 L114 90 Z" fill="'+frame+'" opacity=".5"/></g>' : '';
+  return '<svg viewBox="0 0 120 160" width="'+w+'" height="'+(w*4/3)+'" aria-hidden="true">'+
+    '<defs><linearGradient id="b'+uid+'" x1="0" y1="0" x2="0.3" y2="1">'+
+      '<stop offset="0" stop-color="'+club.primary+'"/><stop offset="1" stop-color="#0A1017"/></linearGradient>'+
+      '<clipPath id="f'+uid+'"><rect x="2" y="2" width="116" height="156" rx="9"/></clipPath></defs>'+
+    '<g clip-path="url(#f'+uid+')">'+
+      '<rect width="120" height="160" fill="url(#b'+uid+')"/>'+ rays +
+      '<text x="60" y="126" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="92" font-weight="700" fill="#fff" opacity=".13">'+(p.jersey||0)+'</text>'+
+      '<g transform="translate(10,20) scale(1)">'+ personG(p, uid).body +'</g>'+
+      '<rect y="128" width="120" height="32" fill="#0A1017" opacity=".45"/>'+
+    '</g>'+
+    '<rect x="2" y="2" width="116" height="156" rx="9" fill="none" stroke="'+frame+'" stroke-width="2.5"/>'+
+  '</svg>';
+}
+
+/** 구단 엠블럼 — world.md 의 엠블럼 컨셉을 단순 도형으로. */
+function emblemSvg(clubId, size){
+  var c = CLUBC[clubId] || { primary:'#3E8FE0', secondary:'#E9F0F7' };
+  var P = c.primary, S = c.secondary;
+  var body = ({
+    t01: '<path d="M50 18 L78 70 H22 Z" fill="none" stroke="'+P+'" stroke-width="7"/>'+
+         '<path d="M30 62 L64 30" stroke="#fff" stroke-width="4"/>'+
+         '<path d="M64 30 L86 22M64 34 L88 32M64 38 L86 42" stroke="'+S+'" stroke-width="3.5" stroke-linecap="round"/>',
+    t02: '<circle cx="50" cy="50" r="32" fill="none" stroke="'+S+'" stroke-width="4"/>'+
+         '<path d="M50 26v42M38 38h24M32 60c4 12 14 16 18 8M68 60c-4 12-14 16-18 8" stroke="'+S+'" stroke-width="5" fill="none" stroke-linecap="round"/>'+
+         '<circle cx="50" cy="24" r="5" fill="none" stroke="'+S+'" stroke-width="4"/>',
+    t03: '<path d="M14 74 L34 42 L46 60 L60 30 L86 74 Z" fill="'+P+'"/>'+
+         '<path d="M60 30 L70 46 H50 Z M34 42 L42 54 H26 Z" fill="'+S+'"/>'+
+         '<circle cx="50" cy="22" r="9" fill="'+S+'"/><path d="M41 22h18M50 13v18" stroke="'+P+'" stroke-width="2"/>',
+    t04: '<path d="M24 46h52l-8 12H32z" fill="'+P+'"/><path d="M44 58h12v18H38c4-8 6-12 6-18z" fill="'+P+'"/>'+
+         '<path d="M34 40l-6-12M50 38l0-14M66 40l6-12" stroke="'+S+'" stroke-width="4" stroke-linecap="round"/>'+
+         '<circle cx="50" cy="20" r="5" fill="'+S+'"/>',
+    t05: '<path d="M26 62c10-6 16-18 24-18 10 0 12 8 22 6-6 10-16 16-24 16-8 0-14-2-22-4z" fill="'+S+'"/>'+
+         '<path d="M50 44c-4-8-2-16 6-20-2 8 0 14 6 18" fill="'+S+'"/>'+
+         '<circle cx="50" cy="50" r="34" fill="none" stroke="'+P+'" stroke-width="2"/>'+
+         '<circle cx="50" cy="50" r="29" fill="none" stroke="'+P+'" stroke-width="1"/>'+
+         '<path d="M50 70c-6 0-10 4-10 8h20c0-4-4-8-10-8z" fill="'+P+'"/>',
+    t06: '<path d="M18 62a32 32 0 0 1 64 0z" fill="'+P+'"/>'+
+         '<path d="M14 70h58M20 78h44M28 86h26" stroke="'+S+'" stroke-width="4" stroke-linecap="round"/>'+
+         '<path d="M30 56c-6-14 2-26 14-30-8 10-8 20-6 30z" fill="'+S+'" opacity=".85"/>'
+  })[clubId] || '<circle cx="50" cy="50" r="30" fill="'+P+'"/>';
+  return '<svg viewBox="0 0 100 100" width="'+size+'" height="'+size+'" aria-hidden="true">'+body+'</svg>';
+}
+
+function myEmblemSvg(size){
+  return '<svg viewBox="0 0 100 100" width="'+size+'" height="'+size+'" aria-hidden="true">'+
+    '<circle cx="50" cy="52" r="30" fill="none" stroke="#4FBF95" stroke-width="4"/>'+
+    '<path d="M50 66V42" stroke="#4FBF95" stroke-width="5" stroke-linecap="round"/>'+
+    '<path d="M50 46c-2-10-10-14-18-13 1 9 8 15 18 13z" fill="#4FBF95"/>'+
+    '<path d="M50 40c2-9 9-13 17-12-1 8-8 14-17 12z" fill="#8FD8C2"/>'+
+    '<path d="M34 74c10 5 22 5 32 0" stroke="#8FD8C2" stroke-width="3.5" fill="none" stroke-linecap="round"/>'+
+  '</svg>';
+}
+
 function boot(){
-  E.CLUBS.forEach(function(c){ clubColor[c.id] = c.colors.primary; });
+  E.CLUBS.forEach(function(c){ clubColor[c.id] = c.colors.primary; CLUBC[c.id] = c.colors; });
+  E.PLAYERS.forEach(function(p){ APPEAR[p.id] = p.appearance; });
   var raw = null;
   try {
     raw = localStorage.getItem(SAVE_KEY);
@@ -435,8 +614,10 @@ function vHome(){
   var best = reps.slice().sort(function(a,b){ return b.ovr-a.ovr; })[0];
   return h(
    '<div class="hero">'+
-     '<div class="eyebrow">BLOOM LEAGUE · SEASON 1</div>'+
-     '<h1>'+esc(G.clubName)+'</h1>'+
+     '<div style="display:flex;align-items:center;gap:11px;margin-bottom:2px">'+
+       '<span class="emb" style="width:46px;height:46px">'+myEmblemSvg(46)+'</span>'+
+       '<div><div class="eyebrow">BLOOM LEAGUE · SEASON 1</div>'+
+     '<h1 style="margin:0">'+esc(G.clubName)+'</h1></div></div>'+
      '<div class="muted">여섯 구단의 공개 스카우트 명단에서 원석을 데려와 키우고, 리그 정상에 도전합니다.</div>'+
      '<div class="stat3">'+
        '<div><div class="v num">'+ovr.toFixed(1)+'</div><div class="k">라인업 OVR</div></div>'+
@@ -487,7 +668,7 @@ function pcard(inst, plain){
   if (!inst) return '';
   var col = clubColor[inst.clubId] || '#3E8FE0';
   var rar = E.RARITIES ? (typeof inst.rarity==='number' ? ['N','R','SR','SSR'][inst.rarity] : inst.rarity) : 'R';
-  return '<div class="pcard"><div class="chip" style="background:'+col+'"></div>'+
+  return '<div class="pcard"><span class="ava" style="border-color:'+col+'">'+portraitSvg(inst,44)+'</span>'+
     '<div style="flex:1;min-width:0">'+
       '<div class="pname">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
       '<div class="pmeta">'+(inst.grade!==undefined?'등급 <span class="grade g-'+['S','A','B','C','D'][inst.grade]+'">'+['S','A','B','C','D'][inst.grade]+'</span> · ':'')+
@@ -525,7 +706,7 @@ function pullResults(list){
     list.map(function(r){
       var c = r.card, col = clubColor[c.teamId]||'#3E8FE0';
       var ovr = 0; for (var i=0;i<10;i++) ovr += c.stats[i]; ovr /= 10;
-      return '<div class="bx"><span class="chip" style="width:4px;height:24px;background:'+col+';border-radius:2px"></span>'+
+      return '<div class="bx"><span class="ava sm" style="border-color:'+col+'">'+portraitSvg(c,28)+'</span>'+
         '<span class="pill rar-'+r.rarity+'">'+r.rarity+'</span>'+
         '<span class="nm">'+esc(c.name)+'</span>'+
         '<span class="st2">'+POSK[c.pos]+(r.isDuplicate?' · 중복':'')+'</span>'+
@@ -559,9 +740,13 @@ function scoutResult(r){
   var club = E.CLUBS.filter(function(x){ return x.id===c.teamId; })[0];
   var ovr = 0; for (var i=0;i<10;i++) ovr += c.stats[i]; ovr /= 10;
   return '<div class="card" style="border-color:'+col+';background:linear-gradient(160deg,'+col+'22,var(--panel))">'+
+    '<div style="display:flex;gap:13px;align-items:flex-start">'+
+    '<span class="cardart">'+cardArtSvg(c, r.rarity, 96)+'</span>'+
+    '<div style="flex:1;min-width:0">'+
     '<div class="spread"><div class="pname" style="font-size:18px">'+esc(c.name)+'</div>'+
     '<span class="pill rar-'+r.rarity+'">'+r.rarity+'</span></div>'+
-    '<div class="pmeta">'+POSK[c.pos]+' · '+esc(club?club.name:'')+' · #'+c.jersey+' · '+c.heightCm+'cm</div>'+
+    '<div class="pmeta">'+POSK[c.pos]+' · '+esc(club?club.name:'')+'<br>#'+c.jersey+' · '+c.heightCm+'cm</div>'+
+    '</div></div>'+
     (c.skillName?'<div class="tiny" style="margin-top:6px;color:var(--ssr)">고유 스킬 · '+esc(c.skillName)+'</div>':'')+
     '<div class="stats">'+c.stats.map(function(v,i){
       return '<div class="st"><span class="n">'+STATK[i]+'</span><span class="b"><i style="width:'+v+'%"></i></span><span class="v num">'+v+'</span></div>';
@@ -584,7 +769,7 @@ function vTrain(){
       var ovr = 0; for (var i=0;i<10;i++) ovr += c.stats[i]; ovr /= 10;
       var col = clubColor[c.teamId]||'#3E8FE0';
       var rar = ['N','R','SR','SSR'][c.rarity];
-      return '<button class="pcard tap" data-pick="'+cid+'"><div class="chip" style="background:'+col+'"></div>'+
+      return '<button class="pcard tap" data-pick="'+cid+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(c,44)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
         '<div class="pmeta">'+(rep?'대표 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]:'미육성')+
         ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+'</div></div>'+
@@ -603,7 +788,7 @@ function vTrainSup(){
     cands.map(function(s){
       var on = supPick.indexOf(s.id)>=0;
       var col = clubColor[s.clubId]||'#3E8FE0';
-      return '<button class="pcard tap'+(on?' sel':'')+'" data-sup="'+s.id+'"><div class="chip" style="background:'+col+'"></div>'+
+      return '<button class="pcard tap'+(on?' sel':'')+'" data-sup="'+s.id+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(s,44)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(s.name)+' <span class="pill pos">'+POSK[s.pos]+'</span></div>'+
         '<div class="pmeta">'+(on?'편성됨':'탭해서 편성')+'</div></div>'+
         '<div class="povr num">'+(on?'✓':'')+'</div></button>';
@@ -629,7 +814,9 @@ function vTrainTurn(){
 
   var head =
    '<div class="camp-head">'+
-     '<div class="spread"><div><b style="font-size:16px">'+esc(card.name)+'</b> <span class="pill pos">'+POSK[card.pos]+'</span></div>'+
+     '<div class="spread"><div style="display:flex;align-items:center;gap:9px">'+
+       '<span class="ava" style="width:36px;height:36px">'+portraitSvg(card,36)+'</span>'+
+       '<div><b style="font-size:16px">'+esc(card.name)+'</b> <span class="pill pos">'+POSK[card.pos]+'</span></div></div>'+
        '<div class="num" style="font-size:19px">'+o.ovr.toFixed(1)+' <span style="font-size:12px;color:var(--good)">+'+(o.ovr-o.initialOvr).toFixed(1)+'</span></div></div>'+
      '<div class="turnbar">'+Array.from({length:o.totalTurns},function(_,i){
         var n=i+1, cls = n<o.turn?'done':(n===o.turn?'now':((n%4===0)?'eval':''));
@@ -697,6 +884,7 @@ function vTrainGrad(){
   var gc = ['S','A','B','C','D'][inst.grade];
   return h('<h2>졸업</h2>'+
     '<div class="card" style="text-align:center;border-color:var(--line2)">'+
+      '<span class="ava" style="width:88px;height:88px;margin:0 auto 8px;border-color:'+(clubColor[inst.clubId]||'var(--court)')+'">'+portraitSvg(inst,88)+'</span>'+
       '<div class="pname" style="font-size:19px">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span></div>'+
       '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:52px;font-weight:700;line-height:1.05;margin:6px 0" class="g-'+gc+'">'+gc+'</div>'+
       '<div class="num" style="font-size:20px">OVR '+g.ovr.toFixed(1)+'</div>'+
@@ -723,7 +911,7 @@ function vRoster(){
     (fillers.length ? '<div class="muted" style="margin:16px 0 8px">연습생 '+fillers.length+'명</div>'+
       fillers.map(function(p){
         var ovr = 0; for (var k=0;k<10;k++) ovr += p.stats[k]; ovr/=10;
-        return '<div class="pcard"><div class="chip" style="background:var(--n)"></div>'+
+        return '<div class="pcard"><span class="ava" style="border-color:var(--n)">'+portraitSvg(p,40)+'</span>'+
           '<div style="flex:1"><div class="pname" style="font-size:14px;color:var(--ink2)">'+esc(p.name)+' <span class="pill pos">'+POSK[p.pos]+'</span></div></div>'+
           '<div class="povr num" style="color:var(--ink3)">'+ovr.toFixed(1)+'<small>OVR</small></div></div>';
       }).join('') : '')+
@@ -737,12 +925,12 @@ function vLineup(){
   var lib = ts.index.get(ts.lineup.liberoId);
   return h('<h2>라인업</h2><p class="sub">표준 5-1 자동 편성입니다. 로테이션 순서대로 코트에 섭니다. 라인업 OVR '+E.lineupOvr(G).toFixed(1)+'.</p>'+
     starters.map(function(p,i){
-      return '<div class="pcard"><div class="chip" style="background:'+(clubColor[p.teamId]||'var(--n)')+'"></div>'+
+      return '<div class="pcard"><span class="ava" style="border-color:'+(clubColor[p.teamId]||'var(--n)')+'">'+portraitSvg(p,40)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname" style="font-size:14.5px">'+esc(p.name)+'</div>'+
         '<div class="pmeta">'+slots[i]+'</div></div>'+
         '<div class="povr num" style="font-size:15px">'+POSK[p.pos]+'</div></div>';
     }).join('')+
-    (lib?'<div class="pcard"><div class="chip" style="background:'+(clubColor[lib.teamId]||'var(--n)')+'"></div>'+
+    (lib?'<div class="pcard"><span class="ava" style="border-color:'+(clubColor[lib.teamId]||'var(--n)')+'">'+portraitSvg(lib,40)+'</span>'+
       '<div style="flex:1"><div class="pname" style="font-size:14.5px">'+esc(lib.name)+'</div><div class="pmeta">리베로 (후위 전담)</div></div>'+
       '<div class="povr num" style="font-size:15px">L</div></div>':'')+
     '<button class="btn ghost" data-act="autolineup">자동 편성 다시</button>');
@@ -756,7 +944,7 @@ function vMatch(){
     list.map(function(c){
       var gap = c.lineupOvr - mine;
       var tone = gap > 6 ? 'var(--bad)' : (gap < -3 ? 'var(--good)' : 'var(--ink2)');
-      return '<button class="pcard tap" data-play="'+c.id+'"><div class="chip" style="background:'+c.colors.primary+'"></div>'+
+      return '<button class="pcard tap" data-play="'+c.id+'"><span class="emb">'+emblemSvg(c.id,42)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname" style="font-size:15px">'+esc(c.name)+'</div>'+
         '<div class="pmeta">'+esc(c.identity.split('.')[0])+'</div>'+
         '<div class="tiny" style="margin-top:2px">상대 전적 '+c.wins+'승 '+c.losses+'패'+(c.substitutes?' · 결원 '+c.substitutes+'명':'')+'</div></div>'+
