@@ -187,6 +187,69 @@ details[open] summary::after{content:"▴"}
 .cast .pt{color:var(--hot);font-weight:700}
 .cast .rot{color:var(--ink3);font-size:12px}
 
+/* ---------- live match viewer ---------- */
+.board{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:12px 14px;margin-bottom:11px}
+.bteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.bteam{font-size:12.5px;font-weight:700;line-height:1.25;min-width:0}
+.bteam.away{text-align:right}
+.bserve{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--hot);margin-right:5px;vertical-align:1px}
+.bserve.off{background:transparent}
+.bscore{font-family:"Barlow Condensed",sans-serif;font-size:40px;font-weight:700;line-height:1;letter-spacing:.02em;white-space:nowrap}
+.bsets{display:flex;justify-content:center;gap:6px;margin-top:7px;font-family:"Barlow Condensed",sans-serif;font-size:13px;color:var(--ink3)}
+.bsets b{color:var(--ink);font-weight:700}
+.bsets .cur{color:var(--court)}
+
+.court{position:relative;width:100%;aspect-ratio:3/4;max-height:44vh;margin:0 auto 10px;
+  background:linear-gradient(180deg,#123049,#0F2437);border:2px solid #2E4A63;border-radius:8px;overflow:hidden}
+.court .net{position:absolute;left:0;right:0;top:50%;height:0;border-top:3px dashed rgba(233,240,247,.55)}
+.court .atk{position:absolute;left:0;right:0;height:0;border-top:1px solid rgba(233,240,247,.18)}
+.court .half{position:absolute;left:0;right:0;height:50%;font-family:"Barlow Condensed",sans-serif;
+  font-size:11px;letter-spacing:.1em;color:rgba(233,240,247,.3);padding:5px 7px}
+.court .half.top{top:0} .court .half.bot{bottom:0;display:flex;align-items:flex-end}
+.spot{position:absolute;transform:translate(-50%,-50%);width:44px;text-align:center;pointer-events:none;
+  transition:opacity .18s}
+.spot .num{font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;color:rgba(233,240,247,.45);
+  border:1px solid rgba(233,240,247,.18);border-radius:50%;width:22px;height:22px;line-height:20px;margin:0 auto;background:rgba(10,16,23,.4)}
+.spot.on .num{color:#06121F;background:var(--ink);border-color:var(--ink)}
+.spot.on.home .num{background:var(--court);border-color:var(--court);color:#06121F}
+.spot .who{font-size:10px;color:rgba(233,240,247,.75);margin-top:2px;line-height:1.15;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0}
+.spot.on .who{opacity:1}
+.ball{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
+  background:radial-gradient(circle at 34% 32%,#FFF,#E9B949 62%,#C98B1E);
+  box-shadow:0 0 10px rgba(233,185,73,.5);transition:left .38s cubic-bezier(.4,.05,.35,1),top .38s cubic-bezier(.4,.05,.35,1)}
+.ball.fast{transition-duration:.16s}
+.flash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-family:"Barlow Condensed",sans-serif;font-size:30px;font-weight:700;letter-spacing:.04em;
+  padding:5px 16px;border-radius:8px;background:rgba(10,16,23,.86);opacity:0;transition:opacity .16s}
+.flash.show{opacity:1}
+.flash.home{color:var(--court);border:1px solid var(--court)}
+.flash.away{color:var(--bad);border:1px solid var(--bad)}
+
+.rally{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:10px;min-height:92px}
+.rlabel{font-size:11.5px;color:var(--ink3);margin-bottom:7px;font-family:"Barlow Condensed",sans-serif;letter-spacing:.08em}
+.touches{display:flex;flex-wrap:wrap;gap:5px}
+.tch{display:flex;flex-direction:column;padding:5px 8px;border-radius:7px;background:var(--panel2);
+  border:1px solid var(--line);min-width:0}
+.tch .act{font-size:11px;font-weight:700;color:var(--ink2);font-family:"Barlow Condensed",sans-serif;letter-spacing:.03em}
+.tch .who2{font-size:12px;font-weight:600;margin-top:1px;white-space:nowrap}
+.tch.me{border-color:var(--court);background:var(--court-bg)}
+.tch.ok .act{color:var(--good)} .tch.bad .act{color:var(--bad)}
+.tch.arrow{align-self:center;background:none;border:none;color:var(--ink3);padding:0 1px;font-size:12px;justify-content:center}
+.rres{margin-top:8px;font-size:13px;font-weight:700}
+.rres.h{color:var(--court)} .rres.a{color:var(--bad)}
+
+.ctrl{display:grid;grid-template-columns:1.05fr 1fr 1.25fr .85fr;gap:6px;margin-bottom:11px}
+.ctrl button{min-height:46px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);
+  font-weight:700;font-size:13px;padding:0 6px;white-space:nowrap}
+.ctrl button.pri{background:var(--court);color:#06121F;border-color:transparent}
+.ctrl button:active{transform:translateY(1px)}
+
+.legend{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:12.5px;color:var(--ink2);line-height:1.5}
+.legend b{color:var(--ink);font-weight:700;white-space:nowrap}
+.help-open{width:100%;min-height:40px;border-radius:9px;border:1px dashed var(--line2);color:var(--ink2);
+  font-size:13px;font-weight:600;margin-bottom:11px}
+
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:50;
   background:var(--panel3);border:1px solid var(--line2);border-radius:10px;
   padding:10px 16px;font-size:13.5px;font-weight:600;max-width:88%;text-align:center;
@@ -243,7 +306,7 @@ function boot(){
 function save(){
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(E.saveGame(G))); } catch(e){}
 }
-function go(v){ view = v; window.scrollTo(0,0); render(); }
+function go(v){ if (v !== 'matchLive') stopViewer(); view = v; window.scrollTo(0,0); render(); }
 function toast(msg){
   var t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg;
@@ -265,7 +328,7 @@ function renderNav(){
   var inCamp = !!ses;
   document.getElementById('nav').innerHTML = TABS.map(function(t){
     var cur = (view===t.id || (t.id==='train' && (view==='trainTurn'||view==='trainSup'||view==='trainGrad'))
-              || (t.id==='match' && view==='matchResult') || (t.id==='roster' && view==='lineup'));
+              || (t.id==='match' && (view==='matchResult'||view==='matchLive')) || (t.id==='roster' && view==='lineup'));
     var dis = inCamp && t.id!=='train';
     return '<button data-tab="'+t.id+'"'+(cur?' aria-current="page"':'')+(dis?' disabled':'')+
            '><span class="ic">'+t.ic+'</span>'+t.label+'</button>';
@@ -284,9 +347,11 @@ function render(){
   var el = document.getElementById('view');
   var fn = ({
     home:vHome, scout:vScout, train:vTrain, trainSup:vTrainSup, trainTurn:vTrainTurn,
-    trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch, matchResult:vMatchResult
+    trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
+    matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp
   })[view] || vHome;
   el.innerHTML = fn();
+  if (view === 'matchLive') paintLive();
 }
 
 function vHome(){
@@ -315,6 +380,7 @@ function vHome(){
          '<button class="btn ghost" data-go="train">육성하기</button>'+
          '<button class="btn" data-go="match">경기하기</button>'+
        '</div></div>')+
+   '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
    (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
       hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
    '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
@@ -556,6 +622,196 @@ function vMatch(){
     }).join(''));
 }
 
+// ---------- 라이브 경기 뷰어 ----------
+// 이벤트 로그를 랠리 단위로 묶어, 코트 위에서 공이 오가는 것을 보여준다.
+var EVN = { 3:'서브', 4:'리시브', 5:'토스', 6:'공격', 7:'블로킹', 8:'디그', 9:'커버', 10:'프리볼' };
+var ATKN = { 1:'속공', 2:'오픈', 3:'후위공격', 4:'시간차', 5:'세터 덤프', 6:'프리볼' };
+var QN = { 1:'정확', 2:'무난', 3:'흔들림', 4:'실패' };
+var OUTN = { 2:'서브 에이스', 3:'강타 득점', 4:'범실', 5:'블로킹 득점', 6:'블록 터치', 7:'블록 아웃 득점', 8:'디그로 살림' };
+
+// 코트 좌표: 홈(내 팀)은 아래, 원정은 위. 로테이션 번호 1~6.
+function spotXY(side, pos, isServe){
+  var home = (side === 0);
+  var x = (pos===4||pos===5) ? 0.22 : (pos===3||pos===6) ? 0.5 : 0.78;
+  var front = (pos===2||pos===3||pos===4);
+  var y;
+  if (isServe) y = home ? 0.955 : 0.045;
+  else if (home) y = front ? 0.615 : 0.845;
+  else y = front ? 0.385 : 0.155;
+  return { x:x*100, y:y*100 };
+}
+
+function buildRallies(m){
+  var rallies = [], cur = null;
+  var hs = 0, as = 0;
+  m.events.forEach(function(e){
+    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as] }; rallies.push(cur); return; }
+    if (!cur) return;
+    if (e.type === 11) {
+      cur.point = { side:e.side, reason:e.reason, clutch:e.clutch, home:e.homeScore, away:e.awayScore };
+      hs = e.homeScore; as = e.awayScore; cur = null; return;
+    }
+    if (e.type >= 3 && e.type <= 10) {
+      var p = m.ctx.players[e.playerId];
+      cur.touches.push({
+        side:e.side, type:e.type, pos:e.courtPosition || 3,
+        name: p ? p.name : '', jersey: p ? p.jersey : 0,
+        quality:e.quality, outcome:e.outcome, attackType:e.attackType,
+        isServe: e.type === 3
+      });
+    }
+  });
+  return rallies.filter(function(r){ return r.touches.length && r.point; });
+}
+
+var mv = null; // { rallies, ri, ti, playing, speed, timer }
+
+function startViewer(){
+  mv = { rallies: buildRallies(lastMatch), ri:0, ti:-1, playing:true, speed:1, timer:null, done:false };
+  view = 'matchLive'; render();
+  tick();
+}
+function stopViewer(){ if (mv && mv.timer) { clearTimeout(mv.timer); mv.timer = null; } }
+function tick(){
+  if (!mv || !mv.playing) return;
+  stopViewer();
+  var r = mv.rallies[mv.ri];
+  if (!r) { finishViewer(); return; }
+  mv.ti++;
+  var atEnd = mv.ti >= r.touches.length;
+  paintLive();
+  var base = mv.speed === 2 ? 190 : 420;
+  var wait = atEnd ? base + 260 : base;
+  if (atEnd) { mv.ri++; mv.ti = -1; if (mv.ri >= mv.rallies.length) { mv.timer = setTimeout(finishViewer, wait); return; } }
+  mv.timer = setTimeout(tick, wait);
+}
+function finishViewer(){ stopViewer(); if (mv) mv.done = true; view = 'matchResult'; render(); window.scrollTo(0,0); }
+
+function skipSet(){
+  if (!mv) return;
+  var s = mv.rallies[mv.ri] ? mv.rallies[mv.ri].set : 99;
+  while (mv.ri < mv.rallies.length && mv.rallies[mv.ri].set === s) mv.ri++;
+  mv.ti = -1;
+  if (mv.ri >= mv.rallies.length) return finishViewer();
+  paintLive(); if (mv.playing) { stopViewer(); mv.timer = setTimeout(tick, 260); }
+}
+
+// 코트·스코어보드·랠리 흐름을 부분 갱신(전체 리렌더 없이)
+function paintLive(){
+  if (!mv) return;
+  var r = mv.rallies[mv.ri]; if (!r) return;
+  var shown = r.touches.slice(0, Math.max(0, mv.ti + 1));
+  var last = shown[shown.length-1];
+  var m = lastMatch;
+
+  // 점수: 랠리 시작 시점 점수 + (랠리가 끝났으면 결과 반영)
+  var sc = (mv.ti >= r.touches.length && r.point) ? [r.point.home, r.point.away] : r.before;
+  var setNo = r.set;
+  var el;
+
+  el = document.getElementById('lvScore');
+  if (el) el.textContent = sc[0] + ' : ' + sc[1];
+  el = document.getElementById('lvSet');
+  if (el) {
+    var done = m.setScores.filter(function(s){ return s.set < setNo; });
+    el.innerHTML = '<b>' + setNo + '세트</b>' + (done.length ? ' · ' + done.map(function(s){ return s.home+'-'+s.away; }).join(' · ') : '');
+  }
+  var serving = r.touches[0] ? r.touches[0].side : 0;
+  el = document.getElementById('lvSvH'); if (el) el.className = 'bserve' + (serving===0?'':' off');
+  el = document.getElementById('lvSvA'); if (el) el.className = 'bserve' + (serving===1?'':' off');
+
+  // 코트 위 선수 표시 + 공 위치
+  var court = document.getElementById('lvCourt');
+  if (court) {
+    var spots = court.querySelectorAll('.spot');
+    for (var i=0;i<spots.length;i++) spots[i].className = 'spot' + (spots[i].dataset.side==='0'?' home':'');
+    if (last) {
+      var key = last.side + '-' + last.pos;
+      var sp = court.querySelector('.spot[data-key="'+key+'"]');
+      if (sp) {
+        sp.className = 'spot on' + (last.side===0?' home':'');
+        var who = sp.querySelector('.who');
+        if (who) who.textContent = last.name;
+      }
+      var xy = spotXY(last.side, last.pos, last.isServe);
+      var ball = document.getElementById('lvBall');
+      if (ball) { ball.style.left = xy.x+'%'; ball.style.top = xy.y+'%'; ball.className = 'ball' + (mv.speed===2?' fast':''); }
+    }
+    var fl = document.getElementById('lvFlash');
+    if (fl) {
+      if (mv.ti >= r.touches.length && r.point) {
+        fl.textContent = (r.point.side===0 ? '득점' : '실점') + (r.point.clutch ? ' !' : '');
+        fl.className = 'flash show ' + (r.point.side===0?'home':'away');
+      } else fl.className = 'flash';
+    }
+  }
+
+  // 랠리 흐름
+  el = document.getElementById('lvRally');
+  if (el) el.innerHTML = rallyStrip(r, shown, mv.ti >= r.touches.length);
+}
+
+function rallyStrip(r, shown, ended){
+  var chips = shown.map(function(t, i){
+    var cls = 'tch' + (t.side===0?' me':'');
+    if (t.outcome===3 || t.outcome===2 || t.outcome===5 || t.outcome===7) cls += ' ok';
+    if (t.outcome===4 || t.quality===4) cls += ' bad';
+    var act = EVN[t.type] || '';
+    if (t.type===6 && ATKN[t.attackType]) act = ATKN[t.attackType];
+    var note = t.type===4 && QN[t.quality] ? ' ' + QN[t.quality] : '';
+    return (i? '<span class="tch arrow">›</span>' : '') +
+      '<span class="'+cls+'"><span class="act">'+act+note+'</span><span class="who2">'+esc(t.name)+'</span></span>';
+  }).join('');
+  var res = '';
+  if (ended && r.point) {
+    var last = shown[shown.length-1];
+    var why = OUTN[last?last.outcome:0] || (r.point.side===0?'득점':'실점');
+    res = '<div class="rres '+(r.point.side===0?'h':'a')+'">'+
+      (r.point.side===0 ? '우리 득점' : '상대 득점') + ' — ' + why +
+      ' <span style="color:var(--ink3);font-weight:400">('+r.point.home+':'+r.point.away+')</span></div>';
+  }
+  return '<div class="rlabel">랠리 진행</div><div class="touches">'+chips+'</div>'+res;
+}
+
+function vMatchLive(){
+  var m = lastMatch;
+  var spots = [];
+  [0,1].forEach(function(side){
+    [1,2,3,4,5,6].forEach(function(pos){
+      var xy = spotXY(side, pos, false);
+      spots.push('<div class="spot'+(side===0?' home':'')+'" data-side="'+side+'" data-key="'+side+'-'+pos+'" '+
+        'style="left:'+xy.x+'%;top:'+xy.y+'%"><div class="num">'+pos+'</div><div class="who"></div></div>');
+    });
+  });
+  return h(
+   '<div class="board">'+
+     '<div class="bteams">'+
+       '<div class="bteam"><span class="bserve" id="lvSvH"></span>'+esc(G.clubName)+'</div>'+
+       '<div class="bscore" id="lvScore">0 : 0</div>'+
+       '<div class="bteam away">'+esc(m.opponent.name)+'<span class="bserve off" id="lvSvA" style="margin:0 0 0 5px"></span></div>'+
+     '</div>'+
+     '<div class="bsets" id="lvSet"><b>1세트</b></div>'+
+   '</div>'+
+   '<div class="court" id="lvCourt">'+
+     '<div class="half top">'+esc(m.opponent.name)+'</div>'+
+     '<div class="half bot">'+esc(G.clubName)+'</div>'+
+     '<div class="atk" style="top:33.3%"></div><div class="atk" style="top:66.6%"></div>'+
+     '<div class="net"></div>'+
+     spots.join('')+
+     '<div class="ball" id="lvBall" style="left:50%;top:50%"></div>'+
+     '<div class="flash" id="lvFlash"></div>'+
+   '</div>'+
+   '<div class="rally" id="lvRally"><div class="rlabel">랠리 진행</div></div>'+
+   '<div class="ctrl">'+
+     '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
+     '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
+     '<button data-mv="skipset">세트 건너뛰기</button>'+
+     '<button data-mv="end">결과</button>'+
+   '</div>'+
+   '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'
+  );
+}
+
 function vMatchResult(){
   var m = lastMatch;
   if (!m) return '<div class="empty">…</div>';
@@ -653,12 +909,48 @@ function autoRun(kind){
 function doMatch(clubId){
   if (!E.lineupValid(G)) E.autoLineup(G);
   lastMatch = E.playMatch(G, clubId, { collectEvents:true });
-  save(); view='matchResult'; render(); window.scrollTo(0,0);
+  save();
+  window.scrollTo(0,0);
+  startViewer();
+}
+
+// ---------- 도움말: 코트에서 무슨 일이 일어나는가
+function vHelp(){
+  return h('<h2>배구는 이렇게 돌아갑니다</h2>'+
+   '<p class="sub">한 점은 항상 이 순서로 납니다. 우리 선수들이 하는 일이 바로 이 단계들입니다.</p>'+
+   '<div class="card"><div class="legend">'+
+     '<b>1 · 서브</b><span>한 명이 공을 넘깁니다. 세면 바로 득점(에이스)이지만 실패하면 그대로 실점.</span>'+
+     '<b>2 · 리시브</b><span>넘어온 서브를 받습니다. 정확히 받아야 다음 공격이 살고, 흔들리면 공격 선택지가 줄어듭니다.</span>'+
+     '<b>3 · 토스</b><span>세터가 공격수에게 공을 올립니다. 누구에게 올릴지가 세터의 판단입니다.</span>'+
+     '<b>4 · 공격</b><span>스파이크로 상대 코트에 내리꽂습니다. 성공하면 득점.</span>'+
+     '<b>5 · 블로킹</b><span>상대 공격을 네트 앞에서 막습니다. 막으면 득점, 손끝에 걸리면 랠리가 이어집니다.</span>'+
+     '<b>6 · 디그</b><span>블로킹을 뚫고 온 공을 바닥에 닿기 전에 걷어 올립니다. 성공하면 다시 우리 공격으로.</span>'+
+   '</div></div>'+
+   '<h2 style="margin-top:20px">포지션 6자리</h2>'+
+   '<p class="sub">코트에 여섯 명이 섭니다. 한 점을 딸 때마다 시계 방향으로 한 칸씩 돌고, 1번 자리에 온 사람이 서브를 넣습니다.</p>'+
+   '<div class="card"><div class="legend">'+
+     '<b>S · 세터</b><span>토스 전담. 공격 성공률 전체를 좌우하는 자리라 토스 능력이 팀 화력의 배수로 작용합니다.</span>'+
+     '<b>OH · 아웃사이드</b><span>주공격수이면서 리시브도 합니다. 공격과 리시브를 다 해야 해서 가장 바쁩니다.</span>'+
+     '<b>OP · 아포짓</b><span>공격 전담. 리시브 부담이 없는 대신 화력으로 승부합니다.</span>'+
+     '<b>MB · 미들블로커</b><span>속공과 블로킹. 키가 크고 네트 앞에서 벽을 만듭니다.</span>'+
+     '<b>L · 리베로</b><span>수비 전담. 서브와 공격을 할 수 없고 후위에만 섭니다. 유니폼 색이 다릅니다.</span>'+
+   '</div></div>'+
+   '<h2 style="margin-top:20px">훈련이 경기에 미치는 것</h2>'+
+   '<div class="card"><div class="legend">'+
+     '<b>서브</b><span>에이스 확률 ↑ (대신 범실도 함께 오릅니다)</span>'+
+     '<b>리시브</b><span>서브를 정확히 받을 확률 ↑ → 공격 선택지가 넓어짐</span>'+
+     '<b>토스</b><span>세터의 배급 품질 ↑ → 팀 전체 공격 성공률 ↑</span>'+
+     '<b>스파이크</b><span>공격 성공률 ↑ (파워가 붙으면 블로킹을 뚫습니다)</span>'+
+     '<b>블로킹</b><span>상대 공격을 막을 확률 ↑</span>'+
+     '<b>멘탈</b><span>20점 이후 접전(클러치)에서 성공률 보정</span>'+
+     '<b>스태미나</b><span>세트가 길어져도 능력치가 덜 떨어짐</span>'+
+   '</div></div>'+
+   '<button class="btn" data-go="home">알겠습니다</button>');
 }
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv]');
   if (!t) return;
   var d = t.dataset;
 
@@ -680,6 +972,18 @@ document.addEventListener('click', function(e){
   if (d.choice) return applyChoice(d.choice);
   if (d.auto) return autoRun(d.auto);
   if (d.play) return doMatch(d.play);
+  if (d.mv) {
+    if (d.mv === 'play') {
+      mv.playing = !mv.playing;
+      document.getElementById('lvPlay').textContent = mv.playing ? '일시정지' : '재생';
+      if (mv.playing) tick(); else stopViewer();
+    } else if (d.mv === 'speed') {
+      mv.speed = mv.speed === 2 ? 1 : 2; t.textContent = '속도 ' + (mv.speed===2?'2배':'1배');
+    } else if (d.mv === 'skipset') skipSet();
+    else if (d.mv === 'end') finishViewer();
+    return;
+  }
+  if (d.act === 'help') { stopViewer(); go('help'); return; }
   if (d.act === 'autolineup') { E.autoLineup(G); save(); render(); toast('자동 편성했습니다'); return; }
   if (d.act === 'reset') {
     if (!confirm('저장된 진행을 지우고 처음부터 시작할까요?')) return;
