@@ -289,6 +289,10 @@ var ses = null;               // 진행 중 육성 세션
 var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null;
 var trainPick = null, supPick = null;
+// 자동 진행은 수동으로 캠프를 1회 완주해야 열린다(처음부터 자동을 누르면 게임을 이해할 수 없다).
+var AUTO_KEY = 'bloom-auto-unlocked-v1';
+var SKIP_KEY = 'bloom-skip-unlocked-v1';
+var autoUnlocked = false, usedAutoThisCamp = false, skipUnlocked = false;
 
 var POSK = ['S','OH','OP','MB','L'];
 var STATK = ['서브','리시','토스','스파','블로','디그','스피','파워','스태','멘탈'];
@@ -298,7 +302,11 @@ var clubColor = {};
 function boot(){
   E.CLUBS.forEach(function(c){ clubColor[c.id] = c.colors.primary; });
   var raw = null;
-  try { raw = localStorage.getItem(SAVE_KEY); } catch(e){}
+  try {
+    raw = localStorage.getItem(SAVE_KEY);
+    autoUnlocked = localStorage.getItem(AUTO_KEY) === '1';
+    skipUnlocked = localStorage.getItem(SKIP_KEY) === '1';
+  } catch(e){}
   if (raw) { try { G = E.loadGame(JSON.parse(raw)); } catch(e){ G = null; } }
   if (!G) G = E.createGame({ seed: (Date.now() % 100000) | 0, clubName: '새록 스프라우츠' });
   render();
@@ -478,6 +486,7 @@ function vTrainSup(){
 function startCamp(ids){
   ses = E.startTraining(G, trainPick, ids || supPick || []);
   feed = [];
+  usedAutoThisCamp = false;
   view = 'trainTurn';
 }
 
@@ -536,10 +545,15 @@ function vTrainTurn(){
     }).join('');
   }
 
-  var auto = '<div class="btn-row" style="margin-top:12px">'+
-      '<button class="btn ghost" data-auto="safe">자동 (안전)</button>'+
-      '<button class="btn ghost" data-auto="optimal">자동 (최적)</button>'+
-    '</div>';
+  var auto = autoUnlocked
+    ? '<div class="btn-row" style="margin-top:12px">'+
+        '<button class="btn ghost" data-auto="safe">자동 (안전)</button>'+
+        '<button class="btn ghost" data-auto="optimal">자동 (최적)</button>'+
+      '</div>'
+    : '<div class="card flat" style="margin-top:12px"><div class="tiny">'+
+        '첫 캠프는 12턴을 직접 진행합니다. 한 번 완주하면 다음부터 <b style="color:var(--ink2)">자동 진행</b>이 열립니다. '+
+        '피로가 45를 넘으면 훈련 효율이 1.5배가 되는 대신 부상 위험이 생깁니다 — 각 버튼 오른쪽 숫자를 보세요.'+
+      '</div></div>';
 
   var fd = feed.length ? '<ul class="feed">'+feed.slice(-5).reverse().map(function(f){
       return '<li class="'+(f.cls||'')+'">'+f.html+'</li>'; }).join('')+'</ul>' : '';
@@ -685,7 +699,16 @@ function tick(){
   if (atEnd) { mv.ri++; mv.ti = -1; if (mv.ri >= mv.rallies.length) { mv.timer = setTimeout(finishViewer, wait); return; } }
   mv.timer = setTimeout(tick, wait);
 }
-function finishViewer(){ stopViewer(); if (mv) mv.done = true; view = 'matchResult'; render(); window.scrollTo(0,0); }
+function finishViewer(){
+  stopViewer();
+  if (mv) mv.done = true;
+  if (!skipUnlocked) {
+    skipUnlocked = true;
+    try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){}
+    setTimeout(function(){ toast('경기 건너뛰기가 열렸습니다'); }, 700);
+  }
+  view = 'matchResult'; render(); window.scrollTo(0,0);
+}
 
 function skipSet(){
   if (!mv) return;
@@ -802,12 +825,18 @@ function vMatchLive(){
      '<div class="flash" id="lvFlash"></div>'+
    '</div>'+
    '<div class="rally" id="lvRally"><div class="rlabel">랠리 진행</div></div>'+
-   '<div class="ctrl">'+
-     '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
-     '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
-     '<button data-mv="skipset">세트 건너뛰기</button>'+
-     '<button data-mv="end">결과</button>'+
-   '</div>'+
+   (skipUnlocked
+     ? '<div class="ctrl">'+
+         '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
+         '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
+         '<button data-mv="skipset">세트 건너뛰기</button>'+
+         '<button data-mv="end">결과</button>'+
+       '</div>'
+     : '<div class="ctrl" style="grid-template-columns:1fr 1fr">'+
+         '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
+         '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
+       '</div>'+
+       '<div class="card flat"><div class="tiny">첫 경기는 끝까지 봅니다. 한 경기를 다 보고 나면 건너뛰기가 열립니다.</div></div>')+
    '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'
   );
 }
@@ -886,11 +915,19 @@ function pushFeed(ev){
 
 function finishCamp(){
   lastGrad = E.graduate(ses, 0);
+  var earned = !autoUnlocked && !usedAutoThisCamp;
+  if (earned) {
+    autoUnlocked = true;
+    try { localStorage.setItem(AUTO_KEY, '1'); } catch(e){}
+  }
   ses = null; trainPick = null; supPick = null;
   save(); view = 'trainGrad'; render(); window.scrollTo(0,0);
+  if (earned) setTimeout(function(){ toast('자동 진행이 열렸습니다'); }, 600);
 }
 
 function autoRun(kind){
+  if (!autoUnlocked) { toast('첫 캠프는 직접 진행해야 합니다'); return; }
+  usedAutoThisCamp = true;
   var pol = kind==='safe' ? E.POLICIES.safe : E.POLICIES.optimal;
   var guard = 0;
   while (guard++ < 60) {
