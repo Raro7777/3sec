@@ -285,8 +285,8 @@ const SEC4 = '규칙 불변식';
 const SEC5 = '의도적 차이 (PARITY.md 참조)';
 {
   const g = G.createGame({ seed: 11 });
-  const ovrs = G.CLUBS.map(c => {
-    const ts = G.clubTeamState(g, c.id);
+  const clubOvrs = (growth) => G.CLUBS.map(c => {
+    const ts = G.clubTeamState(g, c.id, growth === undefined ? {} : { growth });
     let s = 0, n = 0;
     for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
       const p = ts.index.get(id);
@@ -295,11 +295,24 @@ const SEC5 = '의도적 차이 (PARITY.md 참조)';
     }
     return s / n;
   });
-  const avg = ovrs.reduce((a, b) => a + b, 0) / ovrs.length;
-  // league-and-economy.md A.3.1 시즌 1: 평균 65.3 / 최약 62.9 / 최강 67.0
-  check(SEC5, '① AI 구단 성장 35% — 평균 OVR', avg, 65.3, 0.5, v => v.toFixed(2));
-  check(SEC5, '① AI 구단 성장 35% — 최약', Math.min(...ovrs), 62.9, 0.5, v => v.toFixed(2));
-  check(SEC5, '① AI 구단 성장 35% — 최강', Math.max(...ovrs), 67.0, 0.5, v => v.toFixed(2));
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+
+  // ①-a 성장 수식 오라클: g 를 문서 값으로 고정하면 A.3.1 표를 그대로 재현해야 한다.
+  //     (사다리 상수 SEASON_GROWTH 의 튜닝과 무관하게 수식 자체를 검증한다)
+  const o35 = clubOvrs(0.35), o58 = clubOvrs(0.58), o80 = clubOvrs(0.80);
+  check(SEC5, '①-a 성장 수식 g=35% — 평균 OVR (문서 A.3.1)', mean(o35), 65.3, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-a 성장 수식 g=35% — 최약', Math.min(...o35), 62.9, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-a 성장 수식 g=35% — 최강', Math.max(...o35), 67.0, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-a 성장 수식 g=58% — 평균 OVR (문서 A.3.1 시즌 3)', mean(o58), 70.2, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-a 성장 수식 g=80%(상한) — 평균 OVR (문서 A.3.1 시즌 7+)', mean(o80), 74.9, 0.5, v => v.toFixed(2));
+
+  // ①-b 실제 사다리(SEASON_GROWTH): 시즌 1 = 52%. 문서 초기값 35% 에서 재캘리브레이션한 값이다.
+  //     근거·변경 전후는 PARITY.md "6. 리그 시즌 계층" 절, 재측정은 web/season-check.mjs.
+  const ladder = clubOvrs();
+  must(SEC5, '①-b 시즌 1 사다리 g = 52% (문서 초기값 35% 에서 튜닝)', G.growthFor(1) === 0.52, `g=${G.growthFor(1)}`);
+  check(SEC5, '①-b 시즌 1 AI 구단 평균 OVR', mean(ladder), 68.7, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-b 시즌 1 AI 구단 최약', Math.min(...ladder), 66.6, 0.5, v => v.toFixed(2));
+  check(SEC5, '①-b 시즌 1 AI 구단 최강', Math.max(...ladder), 70.3, 0.5, v => v.toFixed(2));
 
   // ② 졸업시킨 선수는 원소속 구단에서 빠지고 대체 선수가 들어간다
   const card = G.CARD_POOL.find(p => p.teamId === 't05' && p.rarity === RARITY.SSR);

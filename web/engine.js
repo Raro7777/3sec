@@ -18,9 +18,21 @@ export {
   autoLineup, setLineupSlot, lineupValid, lineupOvr, myRoster, myTeamState, myTeam,
   playMatch, clubTeamState, clubList,
   representatives, representativeOf, promoteInstance, releaseInstance,
-  canScout, departedCardIds, growthFor,
-  CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, SCOUT_RATES, SEASON_GROWTH,
+  canScout, scoutCost, departedCardIds, growthFor,
+  addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
+  CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
 } from './engine/game.js';
+
+// ---------------------------------------------------------------- 리그 시즌 계층
+// docs/league-and-economy.md A(시즌)·B(경제) — 사용 흐름:
+//   startSeason(g) → [scout/startTraining/graduate ...] → advanceMatchday(g) × 14
+//   → advancePlayoff(g) 반복 → finishSeason(g) → startSeason(g)
+export {
+  startSeason, seasonView, standings, schedule, advanceMatchday, skipTrainingSlot,
+  playoffState, advancePlayoff, autoFinishPlayoff, finishSeason, seasonHistory,
+  seasonAwards, canTrain, myRank, matchPoints, buildSchedule,
+  SEASON_CONFIG, PHASE as SEASON_PHASE,
+} from './engine/season.js';
 
 export { renderCommentary, ga } from './engine/commentary.js';
 

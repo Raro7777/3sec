@@ -7,7 +7,7 @@ import {
   playerFromJson, makePlayer, clonePlayer, clampStat, statAverage,
   makeTeamState, autoLineupFromRoster, validateTeamState, defaultTactics, FORMATION,
 } from './domain.js';
-import { Rng, derivedSeed } from './rng.js';
+import { Rng, derivedSeed, mixSeed } from './rng.js';
 import { roundHalfEven } from './mathx.js';
 import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
@@ -49,25 +49,65 @@ export const CLUB_TACTICS = {
 
 // ---------------------------------------------------------------- 상수
 export const ECONOMY = {
-  initialTickets: 5,          // GameState.cs:37
-  fragmentsPerTicket: 3,      // GameState.cs:38
+  initialTickets: 5,          // GameState.cs:37 · league-and-economy.md 부록 start:
+  initialGold: 1200,          // league-and-economy.md 부록 start: 초기 골드 1,200
+  fragmentsPerTicket: 12,     // league-and-economy.md B.1 조각 12 = 티켓 1 (구 프로토타입 눈금 3)
   scoutR: 0.80, scoutSR: 0.17, scoutSSR: 0.03, // GameState.cs:39
   limitBreakPotential: 3,     // GameState.cs:40
   maxLimitBreak: 5,
-  fillerOverall: 44.0,        // GameState.cs:41
+  fillerOverall: 44.0,        // GameState.cs:41 · league-and-economy.md A.5.3 연습생 44
+  fillerPerSeason: 1.0,       // A.5.3 시즌당 +1
+  fillerCap: 48.0,            // A.5.3 상한 48
   pitySR: 10,                 // league-and-economy.md B.2.2
   pitySSR: 60,
-  duplicateFragments: 1,      // 중복 → 조각(문서 B.4 방향, 프로토타입 눈금 3조각=티켓1 에 맞춘 값)
+  duplicateFragments: 0,      // 중복 = 한계돌파 1단계(기존 game.js 규칙). 조각까지 주면 티켓이 폭주한다 — PARITY.md 시즌 계층 절
+  positionScoutGold: 1200,    // league-and-economy.md B.2.1 포지션 지정 = 티켓 1 + 골드 1,200
+  ticketCap: 999,             // B.1 재화 정의표
+  goldCap: 9999999,
 };
 
-/** 시즌 사다리 g(n). league-and-economy.md A.3.1 */
-export const SEASON_GROWTH = [0.35, 0.48, 0.58, 0.66, 0.72, 0.76, 0.80];
+/**
+ * 시즌·육성 보상표. league-and-economy.md A.5.1 (부록 reward: 와 1:1).
+ * 리그 계층(season.js)과 육성 졸업(graduate)이 공유한다.
+ */
+export const REWARDS = {
+  matchShards: 2,             // 경기 참가 (승패 무관)
+  winShards: 4,               // 경기 승리 (+4)
+  matchGold: 100,             // 경기 참가 골드
+  homeGold: 50,               // 홈 경기 +50
+  winGold: 180,               // 승리 +180
+  setGold: 25,                // 획득 세트당 +25
+  rankTickets: [8, 7, 6, 5, 4, 4, 3],
+  rankGold: [2600, 2200, 1800, 1500, 1200, 900, 700],
+  playoffEntryTicket: 1, playoffEntryGold: 500,
+  playoffWinTicket: 1, playoffWinGold: 300,
+  championTicket: 3, championGold: 2000,
+  firstGraduationTicket: 1,   // 육성 첫 완주 (계정 1회)
+  trainingMilestones: { 5: 2, 10: 2, 20: 3, 40: 4, 70: 5, 100: 6 },
+  graduationGold: { S: 700, A: 500, B: 350, C: 220, D: 130 },
+  mvpTicket: 2, mvpGold: 1000,
+  titleTicket: 1, titleGold: 500,   // 부문 1위 · 신인상
+};
+
+/**
+ * 시즌 사다리 g(n). league-and-economy.md A.3.1
+ * 문서 초기값은 [0.35, 0.48, 0.58, 0.66, 0.72, 0.76, 0.80] 이지만 그 값은
+ *   ① 승률 로지스틱 근사(실제 MatchSimulator 아님) ② A.3.5(스카우트된 선수의 구단 결원) 미반영
+ * 을 전제로 캘리브레이션된 것이라, 둘 다 실제로 구현된 web 엔진에서는 사다리가 너무 낮았다.
+ * web/season-check.mjs 로 재캘리브레이션한 값(조정 근거는 web/PARITY.md "시즌 계층" 절).
+ */
+export const SEASON_GROWTH = [0.52, 0.63, 0.74, 0.80, 0.80, 0.80, 0.80];
 export function growthFor(season) {
   const i = Math.max(1, season | 0) - 1;
   return SEASON_GROWTH[Math.min(i, SEASON_GROWTH.length - 1)];
 }
-/** 결원 보충 선수의 강도 = 구단 평균 − 8. league-and-economy.md A.3.5 */
-const VACANCY_OVERALL_DELTA = -8;
+/**
+ * 결원 보충 선수의 강도 = 구단 평균 + vacancyOverallDelta. league-and-economy.md A.3.5
+ * 문서 초기값은 −8 이지만 그 값은 A.3.5 미구현 전제의 추정이라 실제 시뮬에서 재캘리브레이션했다
+ * (web/PARITY.md "시즌 계층" 절 · 문서 D.2 "A.3.5 구현 시 사다리 재캘리브레이션" 항목).
+ */
+const VACANCY = { overallDelta: -4 };
+export const VACANCY_TUNING = VACANCY;
 
 const TRAINING_CFG = DEFAULT_TRAINING_CONFIG;
 
@@ -86,12 +126,18 @@ function hashString(s) {
 
 const FILLER_PLAN = [POS.S, POS.OH, POS.OH, POS.MB, POS.MB, POS.OP, POS.L]; // GameState.cs:73
 
-/** 연습생 7명(N 카드 수준). 시드에서 항상 같은 결과가 나오므로 저장하지 않고 재생성한다. GameState.cs:71 */
-function createFillers(state) {
-  const rng = new Rng(derivedSeed(state.seed, 0));
+/**
+ * 연습생 7명(N 카드 수준). 시드에서 항상 같은 결과가 나오므로 저장하지 않고 재생성한다. GameState.cs:71
+ * league-and-economy.md A.5.3: 시즌마다 신규 세대로 교체. overall 44 → 시즌당 +1, 상한 48.
+ * 시즌 1 은 기존 시드 규칙(derivedSeed(seed,0))을 그대로 써서 기존 세이브·파리티와 값이 같다.
+ */
+export function createFillers(state) {
+  const season = Math.max(1, state.season | 0);
+  const rng = new Rng(season === 1 ? derivedSeed(state.seed, 0) : mixSeed(state.seed, 0x1F11, season));
+  const overall = Math.min(ECONOMY.fillerCap, ECONOMY.fillerOverall + (season - 1) * ECONOMY.fillerPerSeason);
   const list = [];
   for (let i = 0; i < FILLER_PLAN.length; i++) {
-    const p = generatePlayer(rng, `${state.clubId}-t${String(i + 1).padStart(2, '0')}`, state.clubId, FILLER_PLAN[i], 90 + i, ECONOMY.fillerOverall, 3.0);
+    const p = generatePlayer(rng, `${state.clubId}-t${String(i + 1).padStart(2, '0')}`, state.clubId, FILLER_PLAN[i], 90 + i, overall, 3.0);
     p.rarity = RARITY.N;
     p.name = '연습생 ' + p.name;
     p.skillName = '';
@@ -112,6 +158,7 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     clubCity: clubCity || '새록시',
     season: 1,
     tickets: ECONOMY.initialTickets,
+    gold: ECONOMY.initialGold,   // league-and-economy.md B.1 골드(신설)
     fragments: 0,
     wins: 0,
     losses: 0,
@@ -131,9 +178,47 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     lossesByClub: {},
     useClubTactics,
     evaluationMode: evaluation, // 'sim' | 'stub'
+    // 리그 시즌 계층(season.js). null = 아직 시즌을 시작하지 않음(친선경기 모드).
+    league: null,
+    leagueHistory: [],          // 지난 시즌 결산 목록 (A.5.2)
+    clubRecords: newClubRecords(), // 통산 기록 (A.5.1 "구단 기록")
+    milestonesGiven: [],        // 육성 누적 마일스톤 중복 지급 방지 (C.3)
   };
   state.fillers = createFillers(state);
   return state;
+}
+
+/** 통산 구단 기록(영구 보존). league-and-economy.md A.5.1 */
+function newClubRecords() {
+  return { titles: 0, bestRank: 0, seasons: 0, mostPoints: 0, longestWinStreak: 0, totalWins: 0, totalLosses: 0, ranks: [] };
+}
+
+// ---------------------------------------------------------------- 지갑 (league-and-economy.md B.1)
+/** 티켓 지급(상한 999). */
+export function addTickets(state, n) {
+  if (!n) return 0;
+  const before = state.tickets;
+  state.tickets = Math.min(ECONOMY.ticketCap, state.tickets + n);
+  return state.tickets - before;
+}
+/** 골드 지급(상한 9,999,999). */
+export function addGold(state, n) {
+  if (!n) return 0;
+  const before = state.gold | 0;
+  state.gold = Math.min(ECONOMY.goldCap, before + n);
+  return state.gold - before;
+}
+/** 골드 차감. 부족하면 false, 상태 불변. */
+export function spendGold(state, n) {
+  if ((state.gold | 0) < n) return false;
+  state.gold -= n;
+  return true;
+}
+/** 조각 n 개 지급 → 12개마다 티켓 1. 변환된 티켓 수를 돌려준다. */
+export function addFragments(state, n) {
+  let converted = 0;
+  for (let i = 0; i < n; i++) if (addFragment(state)) converted++;
+  return converted;
 }
 
 const HISTORY_CAP = 60;
@@ -153,7 +238,8 @@ export function saveGame(state) {
     seed: state.seed, si: state.seedIndex,
     club: [state.clubId, state.clubName, state.clubCity],
     season: state.season,
-    tk: state.tickets, fr: state.fragments,
+    tk: state.tickets, gd: state.gold | 0, fr: state.fragments,
+    ms: state.milestonesGiven || [],
     w: state.wins, l: state.losses,
     tc: state.trainingCount, ic: state.instanceCounter,
     ut: state.unlimitedTickets ? 1 : 0,
@@ -175,6 +261,61 @@ export function saveGame(state) {
     wc: state.winsByClub, lc: state.lossesByClub,
     ct: state.useClubTactics ? 1 : 0,
     em: state.evaluationMode,
+    // 리그 시즌 계층 (league-and-economy.md C.3 LeagueState)
+    lg: state.league ? packLeague(state.league) : null,
+    lh: state.leagueHistory || [],
+    cr: state.clubRecords || newClubRecords(),
+  };
+}
+
+/**
+ * 시즌 상태 압축. 대진·경기 결과·개인 기록만 남기고 순위표는 불러올 때 결과에서 재계산한다
+ * (저장 용량 절약 + 순위표와 결과의 불일치 원천 차단). league-and-economy.md C.3
+ */
+function packLeague(L) {
+  return {
+    n: L.number, ph: L.phase, md: L.matchday, tl: L.trainingsLeft,
+    ss: L.seasonSeed, tm: L.teams,
+    sc: L.schedule.map(rd => rd.map(f => [f.h, f.a])),
+    rs: L.results.map(rd => rd.map(r => (r ? [r.hs, r.as, r.hp, r.ap] : null))),
+    ps: packPlayerStats(L.playerStats),
+    bk: L.bracket,
+    tr: L.trainingBase | 0,
+    st: L.settlement || null,
+  };
+}
+const PSTAT_KEYS = ['matches', 'points', 'kills', 'attacks', 'attackErrors', 'blockKills', 'aces', 'digs', 'receptions', 'receptionPerfect'];
+function packPlayerStats(ps) {
+  const out = {};
+  for (const id of Object.keys(ps)) {
+    const v = ps[id];
+    out[id] = [v.teamId, v.name, v.positionCode].concat(PSTAT_KEYS.map(k => v[k] | 0));
+  }
+  return out;
+}
+function unpackPlayerStats(o) {
+  const out = {};
+  for (const id of Object.keys(o || {})) {
+    const a = o[id];
+    const v = { playerId: id, teamId: a[0], name: a[1], positionCode: a[2] };
+    for (let i = 0; i < PSTAT_KEYS.length; i++) v[PSTAT_KEYS[i]] = a[3 + i] | 0;
+    out[id] = v;
+  }
+  return out;
+}
+/** 저장본 → 시즌 상태(순위표 재계산은 season.js 가 맡는다). */
+export function unpackLeague(j) {
+  if (!j) return null;
+  return {
+    number: j.n, phase: j.ph, matchday: j.md | 0, trainingsLeft: j.tl | 0,
+    seasonSeed: j.ss, teams: j.tm,
+    schedule: j.sc.map(rd => rd.map(f => ({ h: f[0], a: f[1] }))),
+    results: j.rs.map(rd => rd.map(r => (r ? { hs: r[0], as: r[1], hp: r[2], ap: r[3] } : null))),
+    playerStats: unpackPlayerStats(j.ps),
+    bracket: j.bk || null,
+    trainingBase: j.tr | 0,
+    settlement: j.st || null,
+    table: null, // season.js standings() 가 results 에서 재계산
   };
 }
 
@@ -187,7 +328,9 @@ export function loadGame(json) {
   state.clubId = j.club[0];
   state.season = j.season || 1;
   state.tickets = j.tk | 0;
+  state.gold = j.gd === undefined ? ECONOMY.initialGold : (j.gd | 0); // 구 세이브 마이그레이션: 초기 골드 지급
   state.fragments = j.fr | 0;
+  state.milestonesGiven = j.ms || [];
   state.wins = j.w | 0;
   state.losses = j.l | 0;
   state.trainingCount = j.tc | 0;
@@ -206,6 +349,9 @@ export function loadGame(json) {
   state.lossesByClub = j.lc || {};
   state.useClubTactics = !!j.ct;
   state.evaluationMode = j.em || 'sim';
+  state.league = unpackLeague(j.lg);           // 구 세이브(시즌 없음)면 null
+  state.leagueHistory = j.lh || [];
+  state.clubRecords = j.cr || newClubRecords();
   state.fillers = createFillers(state);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
   return state;
@@ -245,7 +391,21 @@ function rehydrateInstance(s) {
 // ---------------------------------------------------------------- 스카우트
 export function representatives(state) { return state.instances.filter(i => i.isRepresentative); }
 export function representativeOf(state, cardId) { return state.instances.find(i => i.isRepresentative && i.cardId === cardId) || null; }
-export function canScout(state) { return state.unlimitedTickets || state.tickets > 0; }
+/**
+ * 스카우트 1회 비용. league-and-economy.md B.2.1
+ * 일반 = 티켓 1 / 포지션 지정 = 티켓 1 + 골드 1,200
+ */
+export function scoutCost(opts = {}) {
+  const targeted = opts.position !== undefined && opts.position !== null && opts.position !== '';
+  return { tickets: 1, gold: targeted ? ECONOMY.positionScoutGold : 0, targeted };
+}
+/** 지정 스카우트는 골드가 모자라면 막힌다(B.2.1). */
+export function canScout(state, opts = {}) {
+  const c = scoutCost(opts);
+  if (!state.unlimitedTickets && state.tickets < c.tickets) return false;
+  if (c.gold > 0 && (state.gold | 0) < c.gold) return false;
+  return true;
+}
 
 /** 스카우트 확률 표기용 상수(국내 확률형 아이템 표시 의무 전제, B.2.3). */
 export const SCOUT_RATES = { R: ECONOMY.scoutR, SR: ECONOMY.scoutSR, SSR: ECONOMY.scoutSSR };
@@ -258,8 +418,11 @@ export const SCOUT_RATES = { R: ECONOMY.scoutR, SR: ECONOMY.scoutSR, SSR: ECONOM
  * @returns {{card, isDuplicate, fragments, pity, limitBreak, rarity, tickets}}
  */
 export function scout(state, opts = {}) {
-  if (!canScout(state)) throw new Error('스카우트 티켓이 없습니다');
-  if (!state.unlimitedTickets) state.tickets--;
+  const cost = scoutCost(opts);
+  if (!state.unlimitedTickets && state.tickets < cost.tickets) throw new Error('스카우트 티켓이 없습니다');
+  if (cost.gold > 0 && (state.gold | 0) < cost.gold) throw new Error(`포지션 지정 스카우트는 골드 ${cost.gold} 이 필요합니다 (보유 ${state.gold | 0})`);
+  if (!state.unlimitedTickets) state.tickets -= cost.tickets;
+  if (cost.gold > 0) state.gold -= cost.gold;
   const rng = new Rng(nextSeed(state));
   state.scoutCount++;
   state.pitySR++;
@@ -308,6 +471,8 @@ export function scout(state, opts = {}) {
       srCounter: state.pitySR, ssrCounter: state.pitySSR,
     },
     tickets: state.tickets,
+    gold: state.gold | 0,
+    cost,
   };
 }
 
@@ -516,11 +681,27 @@ export function graduate(session, decision = 0) {
   } else {
     msg = '방출 (스카우트 조각 +1)' + (addFragment(state) ? ' → 조각 3개로 티켓 +1' : '');
   }
+  // league-and-economy.md A.5.1 육성 졸업 보상: 등급별 골드 · 첫 완주 · 누적 마일스톤
+  const gradeName = GRADE_NAMES[inst.grade];
+  const gradGold = REWARDS.graduationGold[gradeName] || 0;
+  if (gradGold > 0) { addGold(state, gradGold); msg += ` · 졸업 보상 골드 +${gradGold}`; }
   if (!state.firstRunRewardGiven) {
     state.firstRunRewardGiven = true;
-    state.tickets += 1;
-    msg += ' · 첫 완주 보상 티켓 +1';
+    addTickets(state, REWARDS.firstGraduationTicket);
+    msg += ` · 첫 완주 보상 티켓 +${REWARDS.firstGraduationTicket}`;
   }
+  if (!state.milestonesGiven) state.milestonesGiven = [];
+  for (const key of Object.keys(REWARDS.trainingMilestones)) {
+    const need = key | 0;
+    if (state.trainingCount >= need && state.milestonesGiven.indexOf(need) < 0) {
+      state.milestonesGiven.push(need);
+      const n = REWARDS.trainingMilestones[key];
+      addTickets(state, n);
+      msg += ` · 육성 ${need}회 마일스톤 티켓 +${n}`;
+    }
+  }
+  // 시즌 진행 중이면 이번 매치데이의 육성 슬롯 1개를 소비한다(league-and-economy.md A.2.1)
+  if (state.league && state.league.trainingsLeft > 0) state.league.trainingsLeft--;
   addHistory(state, `졸업 #${state.trainingCount}: ${inst.name} ${POS_CODES[inst.pos]} OVR ${inst.ovr.toFixed(1)} ${GRADE_NAMES[inst.grade]} (${msg})`);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
 
@@ -595,15 +776,20 @@ export function lineupValid(state) {
   } catch { return false; }
 }
 
-/** 내 팀 상태(수동 라인업이 유효하면 그것, 아니면 자동). Game.cs:159 MyTeamState */
+/**
+ * 내 팀 상태(수동 라인업이 유효하면 그것, 아니면 자동). Game.cs:159 MyTeamState
+ * 리그는 매치데이마다 이 함수를 여러 번 부르므로 로스터·TeamState 를 한 번만 만든다
+ * (validateTeamState 는 선발 6 + 리베로만 보므로 벤치를 채운 채 검증해도 결과가 같다).
+ */
 export function myTeamState(state) {
   const roster = myRoster(state);
-  let lineup;
-  if (lineupValid(state)) {
-    lineup = { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero, benchIds: [] };
+  if (state.lineupStarters) {
+    const lineup = { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero, benchIds: [] };
     for (const p of roster) if (lineup.startingIds.indexOf(p.id) < 0 && p.id !== state.lineupLibero) lineup.benchIds.push(p.id);
-  } else lineup = autoLineupFromRoster(roster);
-  return makeTeamState(myTeam(state), roster, lineup, { tactics: defaultTactics() });
+    const ts = makeTeamState(myTeam(state), roster, lineup, { tactics: defaultTactics() });
+    try { validateTeamState(ts); return ts; } catch { /* 무효 → 자동 편성 */ }
+  }
+  return makeTeamState(myTeam(state), roster, autoLineupFromRoster(roster), { tactics: defaultTactics() });
 }
 
 /** 자동 편성. Game.cs:175 AutoLineup */
@@ -690,7 +876,7 @@ export function clubTeamState(state, clubId, opts = {}) {
   let avg = 0;
   for (const p of pool) avg += statAverage(grownPlayer(p, g).stats);
   avg = pool.length > 0 ? avg / pool.length : 60;
-  const subOverall = avg + VACANCY_OVERALL_DELTA;
+  const subOverall = avg + VACANCY.overallDelta;
 
   const roster = [];
   for (const p of pool) {
@@ -722,7 +908,7 @@ export function playMatch(state, opponentTeamId, opts = {}) {
   const away = clubTeamState(state, opponentTeamId, opts);
   const collectEvents = opts.collectEvents !== false;
   const seed = opts.seed !== undefined ? opts.seed : nextSeed(state);
-  const result = simulateMatch(home, away, seed, null, collectEvents);
+  const result = simulateMatch(home, away, seed, opts.config || null, collectEvents);
   const won = result.winner === SIDE.HOME;
 
   let reward = '';
@@ -737,11 +923,23 @@ export function playMatch(state, opponentTeamId, opts = {}) {
       state.lossesByClub[club.id] = (state.lossesByClub[club.id] || 0) + 1;
       const converted = addFragment(state);
       reward = `참가 보상: 스카우트 조각 +1 (${state.fragments}/${ECONOMY.fragmentsPerTicket})`;
-      if (converted) reward += ' → 조각 3개로 티켓 +1';
+      if (converted) reward += ` → 조각 ${ECONOMY.fragmentsPerTicket}개로 티켓 +1`;
     }
     addHistory(state, `경기 vs ${club.name}: ${won ? '승' : '패'} ${result.homeSets}-${result.awaySets} (${result.sets.map(s => `${s.home}-${s.away}`).join(', ')})`);
   }
 
+  const view = formatMatchResult(result, home, away, SIDE.HOME, seed);
+  view.reward = reward;
+  view.opponent = { id: club.id, name: club.name };
+  return view;
+}
+
+/**
+ * simulateMatch 결과 → UI 표현(박스스코어·하이라이트·중계 컨텍스트).
+ * 리그 경기는 내 팀이 원정일 수 있으므로 mySide 로 관점을 넘긴다.
+ * `box.home`/`setScores`/`sets` 는 실제 홈·원정 기준(중계 ctx 와 일치), `box.mine`/`myScore` 가 내 관점이다.
+ */
+export function formatMatchResult(result, home, away, mySide, seed) {
   const homeIds = new Set(home.roster.map(p => p.id));
   const box = { home: [], away: [] };
   for (const b of result.boxScores.values()) {
@@ -751,39 +949,49 @@ export function playMatch(state, opponentTeamId, opts = {}) {
   }
   box.home.sort((a, b) => b.points - a.points);
   box.away.sort((a, b) => b.points - a.points);
+  const isHome = mySide === SIDE.HOME;
+  box.mine = isHome ? box.home : box.away;
+  box.opponent = isHome ? box.away : box.home;
 
   const players = {};
   for (const p of home.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
   for (const p of away.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
   const ctx = { players, homeName: home.team.name, awayName: away.team.name };
+  const won = (result.winner === SIDE.HOME) === isHome;
 
   return {
     setScores: result.sets.map(s => ({ set: s.setIndex, home: s.home, away: s.away, rallies: s.rallies })),
     sets: { home: result.homeSets, away: result.awaySets },
+    myScore: isHome ? result.homeSets : result.awaySets,
+    oppScore: isHome ? result.awaySets : result.homeSets,
+    isHome,
     won,
     box,
     events: result.events,
     eventCount: result.eventCount,
-    highlights: buildHighlights(result, box, home, away, won),
+    highlights: buildHighlights(result, box, home, away, won, isHome),
     ctx,
-    reward,
-    opponent: { id: club.id, name: club.name },
+    reward: '',
+    opponent: { id: (isHome ? away : home).team.id, name: (isHome ? away : home).team.name },
     seed,
+    homeTeam: { id: home.team.id, name: home.team.name },
+    awayTeam: { id: away.team.id, name: away.team.name },
   };
 }
 
-function buildHighlights(result, box, home, away, won) {
+function buildHighlights(result, box, home, away, won, isHome = true) {
   const h = [];
   const line = result.sets.map(s => `${s.home}-${s.away}`).join(', ');
   h.push(`${home.team.name} ${result.homeSets}-${result.awaySets} ${away.team.name} (${line})`);
-  const top = box.home[0];
+  const mine = box.mine || box.home, theirs = box.opponent || box.away;
+  const top = mine[0];
   if (top && top.points > 0) h.push(`${top.name} ${top.points}득점 (공격 ${top.kills}/${top.attacks}, 블로킹 ${top.blockKills}, 서브 ${top.aces})`);
-  const oppTop = box.away[0];
+  const oppTop = theirs[0];
   if (oppTop && oppTop.points > 0) h.push(`상대 최다 득점: ${oppTop.name} ${oppTop.points}점`);
   let bestRecv = null;
-  for (const b of box.home) if (b.receptions >= 8 && (!bestRecv || b.receptionPerfect / b.receptions > bestRecv.receptionPerfect / bestRecv.receptions)) bestRecv = b;
+  for (const b of mine) if (b.receptions >= 8 && (!bestRecv || b.receptionPerfect / b.receptions > bestRecv.receptionPerfect / bestRecv.receptions)) bestRecv = b;
   if (bestRecv) h.push(`리시브: ${bestRecv.name} ${bestRecv.receptions}회 중 정확 ${bestRecv.receptionPerfect}회`);
-  const hs = result.homeStats;
+  const hs = isHome ? result.homeStats : result.awayStats;
   h.push(`팀 공격 성공률 ${(hs.attacks > 0 ? hs.kills / hs.attacks * 100 : 0).toFixed(1)}% · 사이드아웃 ${(hs.receiveRallies > 0 ? hs.receiveRalliesWon / hs.receiveRallies * 100 : 0).toFixed(1)}%`);
   h.push(won ? '승리했습니다.' : '패배했습니다.');
   return h;
@@ -808,4 +1016,5 @@ export function clubList(state) {
   });
 }
 
-export { CARD_BY_ID, CLUB_BY_ID };
+// season.js 가 쓰는 내부 헬퍼(리그 계층 전용 — UI 는 season.js 의 공개 API 를 쓴다)
+export { CARD_BY_ID, CLUB_BY_ID, nextSeed, addHistory, addFragment, newClubRecords, TRAINING_CFG };
