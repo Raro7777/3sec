@@ -108,18 +108,45 @@ function solveFlight(p0, p1, T) {
   return { v:v, path:r.path, T:T, steps:steps };
 }
 
-// ---------------------------------------------------------------- 카메라(핀홀 투영)
+// ---------------------------------------------------------------- 카메라(등각 쿼터뷰)
+// 직교(orthographic) 투영이라 원근 축소가 없다 → 양 팀이 같은 크기로 보인다.
+//   theta: 코트를 비스듬히 돌리는 방위각, phi: 올려다보는 각(90°면 완전 평면도)
+//   지면은 sin(phi) 만큼 눌리고, 높이(z)는 cos(phi) 만큼 화면 위로 올라간다.
+var VIEW = { theta: 28 * Math.PI / 180, phi: 45 * Math.PI / 180, headroom: 5.0 };
+// 가독성 보정: 궤적은 실제 물리 그대로이고, 사람과 공만 화면에서 알아보기 쉽게 키운다.
+var STYLE = { figure: 1.35, ball: 1.9 };
+
 function makeCamera(w, h) {
-  // 방송 카메라처럼 멀리·높이 두면 양 진영의 크기 차이가 줄어 코트가 고르게 읽힌다.
-  var cam = { y: -26, z: 11, f: 2.8 * w, hz: 0 };
-  cam.hz = 0.88 * h - cam.z * cam.f / (0 - cam.y);   // 홈 엔드라인이 화면 아래 88%
-  cam.w = w; cam.h = h;
-  return cam;
+  var ct = Math.cos(VIEW.theta), st = Math.sin(VIEW.theta);
+  var sp = Math.sin(VIEW.phi), cp = Math.cos(VIEW.phi);
+  var hw = COURT.width / 2, hl = COURT.length / 2;
+  // 회전한 코트의 화면상 크기로 배율을 맞춘다(여백 포함).
+  var extX = hw * ct + hl * st;                 // 가로 반폭(m)
+  var extY = (hw * st + hl * ct) * sp;          // 세로 반폭(m, 눌린 뒤)
+  var sX = (w - 18) / (2 * extX);
+  var sY = (h - 24) / (2 * extY + VIEW.headroom * cp);   // 공이 뜰 여유까지
+  var s = Math.min(sX, sY);
+  return {
+    w: w, h: h, s: s, ct: ct, st: st, sp: sp, cp: cp,
+    cx: w / 2,
+    cy: (h - 12) - extY * s          // 코트 중심을 아래쪽에 두고 위를 공 궤적에 내준다
+  };
 }
+/** 월드(m) → 화면(px). 직교 투영이라 s 는 거리와 무관하게 일정하다. */
 function project(cam, x, y, z) {
-  var d = y - cam.y;                 // 카메라로부터의 깊이(항상 양수)
-  var s = cam.f / d;
-  return { sx: cam.w / 2 + (x - COURT.width / 2) * s, sy: cam.hz + (cam.z - z) * s, s: s };
+  var dx = x - COURT.width / 2, dy = y - COURT.length / 2;
+  var rx = dx * cam.ct - dy * cam.st;
+  var ry = dx * cam.st + dy * cam.ct;
+  return {
+    sx: cam.cx + rx * cam.s,
+    sy: cam.cy - (ry * cam.sp + z * cam.cp) * cam.s,
+    s: cam.s,
+    depth: ry                          // 클수록 화면 위쪽(=멀리)
+  };
+}
+function depthOf(cam, x, y) {
+  var dx = x - COURT.width / 2, dy = y - COURT.length / 2;
+  return dx * cam.st + dy * cam.ct;
 }
 
 // ---------------------------------------------------------------- 렌더러
@@ -220,13 +247,15 @@ function create(canvas, opts) {
     drawLines(c, cam);
 
     var ball = ballAt();
-    var far = [], near = [];
-    // 네트보다 먼 선수 먼저(원정), 가까운 선수 나중(홈) — 깊이 순서
-    collectPlayers().forEach(function (p) { (p.side === 1 ? far : near).push(p); });
-    far.forEach(function (p) { drawPlayer(c, cam, p, ball); });
+    // 쿼터뷰에서는 회전 깊이 순으로 그린다(먼 쪽 먼저).
+    var ps = collectPlayers();
+    ps.forEach(function (p) { p.d = depthOf(cam, p.x, p.y); });
+    ps.sort(function (a, b) { return b.d - a.d; });
+    var netD = depthOf(cam, COURT.width / 2, COURT.net);
+    ps.filter(function (p) { return p.d >= netD; }).forEach(function (p) { drawPlayer(c, cam, p, ball); });
     drawNet(c, cam);
     drawShadow(c, cam, ball);
-    near.forEach(function (p) { drawPlayer(c, cam, p, ball); });
+    ps.filter(function (p) { return p.d < netD; }).forEach(function (p) { drawPlayer(c, cam, p, ball); });
     drawTrail(c, cam);
     drawBall(c, cam, ball);
     c.restore();
@@ -234,10 +263,10 @@ function create(canvas, opts) {
 
   function drawFloor(c, cam) {
     // 코트 바닥(원근 사다리꼴) + 주변 여유 공간
-    var out = quad(cam, -2.2, -3.2, COURT.width+2.2, COURT.length+3.2);
-    c.fillStyle = '#123049'; fillPoly(c, out);
+    var out = quad(cam, -1.8, -2.4, COURT.width+1.8, COURT.length+2.4);
+    c.fillStyle = 'rgba(18,48,73,.55)'; fillPoly(c, out);
     var inn = quad(cam, 0, 0, COURT.width, COURT.length);
-    var g = c.createLinearGradient(0, project(cam,0,COURT.length,0).sy, 0, project(cam,0,0,0).sy);
+    var g = c.createLinearGradient(0, project(cam,4.5,COURT.length,0).sy, 0, project(cam,4.5,0,0).sy);
     g.addColorStop(0, '#1B4B76'); g.addColorStop(1, '#20608F');
     c.fillStyle = g; fillPoly(c, inn);
   }
@@ -251,7 +280,7 @@ function create(canvas, opts) {
   }
   function line3(c, cam, x0,y0,x1,y1, width, color) {
     var a = project(cam,x0,y0,0), b = project(cam,x1,y1,0);
-    c.strokeStyle = color; c.lineWidth = width * (a.s + b.s) / 2 * 0.02;
+    c.strokeStyle = color; c.lineWidth = Math.max(1, width * cam.s * 0.055);
     c.beginPath(); c.moveTo(a.sx,a.sy); c.lineTo(b.sx,b.sy); c.stroke();
   }
   function drawLines(c, cam) {
@@ -311,14 +340,15 @@ function create(canvas, opts) {
     // 스파이크·블로킹 순간에는 점프 — 공 높이를 따라 뜬다
     var jump = 0;
     if (p.active && (p.type === EV.Attack || p.type === EV.Block)) jump = Math.min(0.80, Math.max(0, ball.z - 2.1) * 0.55);
-    var HIP = 0.95, SHOULDER = 1.45, HEAD = 1.68;      // 인체 비율(m)
+    var F = STYLE.figure;
+    var HIP = 0.95 * F, SHOULDER = 1.45 * F, HEAD = 1.68 * F;   // 인체 비율(m) × 가독성 보정
     var base = project(cam, p.x, p.y, jump);
     var hip  = project(cam, p.x, p.y, HIP + jump);
     var sho  = project(cam, p.x, p.y, SHOULDER + jump);
     var head = project(cam, p.x, p.y, HEAD + jump);
     var s = base.s;
     var col = p.side === R.mySide ? R.colors.home : R.colors.away;
-    var lw = Math.max(1.6, 0.075 * s);
+    var lw = Math.max(2, 0.085 * s);
     c.globalAlpha = p.active ? 1 : (p.known ? 0.62 : 0.34);
     c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round';
 
@@ -336,7 +366,7 @@ function create(canvas, opts) {
     c.stroke();
 
     c.fillStyle = col;
-    c.beginPath(); c.arc(head.sx, head.sy, Math.max(1.8, 0.115 * s), 0, 6.284); c.fill();
+    c.beginPath(); c.arc(head.sx, head.sy, Math.max(2.6, 0.15 * s), 0, 6.284); c.fill();
 
     c.globalAlpha = 1;
     if (p.active && p.name) {
@@ -352,7 +382,8 @@ function create(canvas, opts) {
     var k = Math.max(0.25, 1 - b.z / 7);
     c.fillStyle = 'rgba(4,10,16,' + (0.42 * k) + ')';
     c.beginPath();
-    c.ellipse(g.sx, g.sy, Math.max(2, PHY.ballR * g.s * (1 + b.z*0.28)), Math.max(1, PHY.ballR * g.s * 0.42 * (1 + b.z*0.28)), 0, 0, 6.284);
+    var rs = PHY.ballR * STYLE.ball * g.s * (1 + b.z * 0.22);
+    c.ellipse(g.sx, g.sy, Math.max(3, rs), Math.max(1.6, rs * 0.5), 0, 0, 6.284);
     c.fill();
   }
   function drawTrail(c, cam) {
@@ -368,7 +399,7 @@ function create(canvas, opts) {
   function drawBall(c, cam, b) {
     R.trail.push({x:b.x,y:b.y,z:b.z}); if (R.trail.length > 14) R.trail.shift();
     var p = project(cam, b.x, b.y, b.z);
-    var r = Math.max(3, PHY.ballR * p.s);
+    var r = Math.max(4, PHY.ballR * STYLE.ball * p.s);
     var g = c.createRadialGradient(p.sx - r*0.35, p.sy - r*0.4, r*0.1, p.sx, p.sy, r);
     g.addColorStop(0, '#FFFFFF'); g.addColorStop(0.55, '#E9B949'); g.addColorStop(1, '#B9821C');
     c.fillStyle = g;
