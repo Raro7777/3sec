@@ -1,0 +1,811 @@
+// 게임 루프: 구단 상태 · 스카우트(확률·천장·중복 조각·한계돌파) · 육성 시작/졸업 · 라인업 · 경기.
+// Play/GameState.cs · Play/Game.cs 포팅 + docs/league-and-economy.md B.2(천장·포지션 지정)·A.3(시즌 사다리·결원 보충).
+
+import { PLAYERS, TEAMS } from '../data.js';
+import {
+  POS, POS_CODES, RARITY, RARITIES, SIDE,
+  playerFromJson, makePlayer, clonePlayer, clampStat, statAverage,
+  makeTeamState, autoLineupFromRoster, validateTeamState, defaultTactics, FORMATION,
+} from './domain.js';
+import { Rng, derivedSeed } from './rng.js';
+import { roundHalfEven } from './mathx.js';
+import { generatePlayer } from './generator.js';
+import { simulateMatch } from './match.js';
+import {
+  TrainingSession, PHASE, emptySupport, buildSupport, recommendSupporterList,
+  simEvaluationProvider, stubEvaluationProvider, campLine,
+} from './training.js';
+import {
+  DEFAULT_TRAINING_CONFIG, ACT, ACT_NAMES_KO, COND_NAMES_KO, COND_ARROWS,
+  ZONE_NAMES_KO, GRADE_NAMES, SPECIAL_NAMES_KO, INJURY,
+  ovrOf, gradeOf, skillLevelForHints, isEvalTurn,
+} from './training-config.js';
+import { effectBadge } from './training-events.js';
+
+// ---------------------------------------------------------------- 참조 데이터
+/** data.js 원본을 엔진 표현으로 1회만 변환(모든 게임이 공유하는 읽기 전용 풀). */
+export const CARD_POOL = PLAYERS.map(playerFromJson);
+const CARD_BY_ID = new Map(CARD_POOL.map(p => [p.id, p]));
+export const CLUBS = TEAMS.map(t => ({
+  id: t.id, name: t.name, city: t.city, colors: t.colors,
+  emblemConcept: t.emblemConcept, identity: t.identity, homeArena: t.homeArena,
+}));
+const CLUB_BY_ID = new Map(CLUBS.map(c => [c.id, c]));
+const POOL_BY_CLUB = new Map();
+for (const p of CARD_POOL) {
+  if (!POOL_BY_CLUB.has(p.teamId)) POOL_BY_CLUB.set(p.teamId, []);
+  POOL_BY_CLUB.get(p.teamId).push(p);
+}
+
+/** 구단 아이덴티티 → 전술(league-and-economy.md A.3.3). 기본은 미적용(C# 프로토타입과 동일), 옵션으로 켠다. */
+export const CLUB_TACTICS = {
+  t01: { quickWeight: 0.9, openWeight: 1.4, backRowWeight: 1.0, delayedWeight: 0.4, serveAggression: 0.75, formation: FORMATION.Spread },
+  t02: { quickWeight: 1.1, openWeight: 1.0, backRowWeight: 0.6, delayedWeight: 0.5, serveAggression: 0.25, formation: FORMATION.LiberoCentered },
+  t03: { quickWeight: 1.5, openWeight: 1.1, backRowWeight: 0.5, delayedWeight: 0.6, serveAggression: 0.5, formation: FORMATION.Standard },
+  t04: { quickWeight: 0.9, openWeight: 1.1, backRowWeight: 1.1, delayedWeight: 0.3, serveAggression: 0.9, formation: FORMATION.Spread },
+  t05: { quickWeight: 1.2, openWeight: 0.9, backRowWeight: 0.8, delayedWeight: 1.0, serveAggression: 0.4, formation: FORMATION.Standard },
+  t06: { quickWeight: 1.4, openWeight: 0.9, backRowWeight: 0.9, delayedWeight: 0.8, serveAggression: 0.8, formation: FORMATION.Spread },
+};
+
+// ---------------------------------------------------------------- 상수
+export const ECONOMY = {
+  initialTickets: 5,          // GameState.cs:37
+  fragmentsPerTicket: 3,      // GameState.cs:38
+  scoutR: 0.80, scoutSR: 0.17, scoutSSR: 0.03, // GameState.cs:39
+  limitBreakPotential: 3,     // GameState.cs:40
+  maxLimitBreak: 5,
+  fillerOverall: 44.0,        // GameState.cs:41
+  pitySR: 10,                 // league-and-economy.md B.2.2
+  pitySSR: 60,
+  duplicateFragments: 1,      // 중복 → 조각(문서 B.4 방향, 프로토타입 눈금 3조각=티켓1 에 맞춘 값)
+};
+
+/** 시즌 사다리 g(n). league-and-economy.md A.3.1 */
+export const SEASON_GROWTH = [0.35, 0.48, 0.58, 0.66, 0.72, 0.76, 0.80];
+export function growthFor(season) {
+  const i = Math.max(1, season | 0) - 1;
+  return SEASON_GROWTH[Math.min(i, SEASON_GROWTH.length - 1)];
+}
+/** 결원 보충 선수의 강도 = 구단 평균 − 8. league-and-economy.md A.3.5 */
+const VACANCY_OVERALL_DELTA = -8;
+
+const TRAINING_CFG = DEFAULT_TRAINING_CONFIG;
+
+// ---------------------------------------------------------------- 상태
+/** 결정적 시드 카운터. GameState.cs:47 NextSeed */
+function nextSeed(state) {
+  state.seedIndex++;
+  return derivedSeed(state.seed, state.seedIndex);
+}
+
+function hashString(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return (h & 0x7fffffff) | 0;
+}
+
+const FILLER_PLAN = [POS.S, POS.OH, POS.OH, POS.MB, POS.MB, POS.OP, POS.L]; // GameState.cs:73
+
+/** 연습생 7명(N 카드 수준). 시드에서 항상 같은 결과가 나오므로 저장하지 않고 재생성한다. GameState.cs:71 */
+function createFillers(state) {
+  const rng = new Rng(derivedSeed(state.seed, 0));
+  const list = [];
+  for (let i = 0; i < FILLER_PLAN.length; i++) {
+    const p = generatePlayer(rng, `${state.clubId}-t${String(i + 1).padStart(2, '0')}`, state.clubId, FILLER_PLAN[i], 90 + i, ECONOMY.fillerOverall, 3.0);
+    p.rarity = RARITY.N;
+    p.name = '연습생 ' + p.name;
+    p.skillName = '';
+    p.skillDesc = '';
+    list.push(p);
+  }
+  return list;
+}
+
+/** 새 게임. GameState.cs:60 NewGame */
+export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = false, useClubTactics = false, evaluation = 'sim' } = {}) {
+  const state = {
+    version: 2,
+    seed: seed | 0,
+    seedIndex: 0,
+    clubId: 'u01',
+    clubName: (clubName && String(clubName).trim()) || '새록 스프라우츠',
+    clubCity: clubCity || '새록시',
+    season: 1,
+    tickets: ECONOMY.initialTickets,
+    fragments: 0,
+    wins: 0,
+    losses: 0,
+    trainingCount: 0,
+    instanceCounter: 0,
+    unlimitedTickets,
+    firstRunRewardGiven: false,
+    pitySR: 0,
+    pitySSR: 0,
+    scoutCount: 0,
+    ownedCards: {},
+    instances: [],
+    lineupStarters: null,
+    lineupLibero: null,
+    history: [],
+    winsByClub: {},
+    lossesByClub: {},
+    useClubTactics,
+    evaluationMode: evaluation, // 'sim' | 'stub'
+  };
+  state.fillers = createFillers(state);
+  return state;
+}
+
+const HISTORY_CAP = 60;
+function addHistory(state, line) {
+  state.history.push(line);
+  if (state.history.length > HISTORY_CAP) state.history.splice(0, state.history.length - HISTORY_CAP);
+}
+
+// ---------------------------------------------------------------- 저장/불러오기
+/**
+ * 저장용 순수 객체. 파생 가능한 값(연습생 · 인스턴스의 이름/포지션/초기스탯/OVR/등급 등)은
+ * 저장하지 않고 불러올 때 카드 데이터에서 다시 계산한다 → localStorage 용량 절약.
+ */
+export function saveGame(state) {
+  return {
+    v: state.version,
+    seed: state.seed, si: state.seedIndex,
+    club: [state.clubId, state.clubName, state.clubCity],
+    season: state.season,
+    tk: state.tickets, fr: state.fragments,
+    w: state.wins, l: state.losses,
+    tc: state.trainingCount, ic: state.instanceCounter,
+    ut: state.unlimitedTickets ? 1 : 0,
+    fr1: state.firstRunRewardGiven ? 1 : 0,
+    pty: [state.pitySR, state.pitySSR, state.scoutCount],
+    own: state.ownedCards,
+    ins: state.instances.map(i => ({
+      i: i.instanceId, c: i.cardId,
+      f: i.finalStats, p: i.potential,
+      h: i.hints, r: i.runIndex, rep: i.isRepresentative ? 1 : 0,
+      cp: [i.camp.wins, i.camp.losses, i.camp.absent, i.camp.mvp, i.camp.injuries, i.camp.severeInjuries,
+        i.camp.hotTrains, i.camp.rests, i.camp.trains, i.camp.bestConditionTurns, i.camp.turnsLost],
+      cn: i.camp.supporterNames,
+      pn: i.camp.policyName,
+    })),
+    lu: state.lineupStarters,
+    lb: state.lineupLibero,
+    hi: state.history,
+    wc: state.winsByClub, lc: state.lossesByClub,
+    ct: state.useClubTactics ? 1 : 0,
+    em: state.evaluationMode,
+  };
+}
+
+/** 저장 JSON(또는 문자열) → GameState. */
+export function loadGame(json) {
+  const j = typeof json === 'string' ? JSON.parse(json) : json;
+  const state = createGame({ seed: j.seed, clubName: j.club[1], clubCity: j.club[2] });
+  state.version = j.v;
+  state.seedIndex = j.si | 0;
+  state.clubId = j.club[0];
+  state.season = j.season || 1;
+  state.tickets = j.tk | 0;
+  state.fragments = j.fr | 0;
+  state.wins = j.w | 0;
+  state.losses = j.l | 0;
+  state.trainingCount = j.tc | 0;
+  state.instanceCounter = j.ic | 0;
+  state.unlimitedTickets = !!j.ut;
+  state.firstRunRewardGiven = !!j.fr1;
+  state.pitySR = j.pty ? j.pty[0] : 0;
+  state.pitySSR = j.pty ? j.pty[1] : 0;
+  state.scoutCount = j.pty ? j.pty[2] : 0;
+  state.ownedCards = j.own || {};
+  state.instances = (j.ins || []).map(rehydrateInstance).filter(Boolean);
+  state.lineupStarters = j.lu || null;
+  state.lineupLibero = j.lb || null;
+  state.history = j.hi || [];
+  state.winsByClub = j.wc || {};
+  state.lossesByClub = j.lc || {};
+  state.useClubTactics = !!j.ct;
+  state.evaluationMode = j.em || 'sim';
+  state.fillers = createFillers(state);
+  if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
+  return state;
+}
+
+/** 저장된 최소 정보 + 카드 데이터 → 인스턴스 복원(OVR·등급·도달률·스킬 레벨 재계산). */
+function rehydrateInstance(s) {
+  const card = CARD_BY_ID.get(s.c);
+  if (!card) return null;
+  const finalStats = s.f.slice();
+  const potential = s.p.slice();
+  const initialStats = card.stats.slice();
+  const ovr = ovrOf(TRAINING_CFG, finalStats, card.pos);
+  const c3 = TRAINING_CFG.core3[card.pos];
+  let cn = 0, cd = 0, an = 0, ad = 0;
+  for (const k of c3) { cn += finalStats[k] - initialStats[k]; cd += potential[k] - initialStats[k]; }
+  for (let i = 0; i < 10; i++) if (potential[i] > initialStats[i]) { an += finalStats[i] - initialStats[i]; ad += potential[i] - initialStats[i]; }
+  const cp = s.cp || [];
+  return {
+    instanceId: s.i, cardId: s.c, name: card.name, pos: card.pos, rarity: card.rarity,
+    clubId: card.teamId, jersey: card.jersey, heightCm: card.heightCm, age: card.age,
+    skillName: card.skillName,
+    finalStats, initialStats, potential,
+    ovr, grade: gradeOf(TRAINING_CFG, ovr),
+    completion: cd > 0 ? cn / cd : 1, allReach: ad > 0 ? an / ad : 1,
+    hints: s.h | 0, skillLevel: skillLevelForHints(TRAINING_CFG, s.h | 0),
+    camp: {
+      wins: cp[0] | 0, losses: cp[1] | 0, absent: cp[2] | 0, mvp: cp[3] | 0,
+      injuries: cp[4] | 0, severeInjuries: cp[5] | 0, hotTrains: cp[6] | 0, rests: cp[7] | 0,
+      trains: cp[8] | 0, bestConditionTurns: cp[9] | 0, turnsLost: cp[10] | 0,
+      supporterNames: s.cn || [], policyName: s.pn || '',
+    },
+    runIndex: s.r | 0, isRepresentative: !!s.rep,
+  };
+}
+
+// ---------------------------------------------------------------- 스카우트
+export function representatives(state) { return state.instances.filter(i => i.isRepresentative); }
+export function representativeOf(state, cardId) { return state.instances.find(i => i.isRepresentative && i.cardId === cardId) || null; }
+export function canScout(state) { return state.unlimitedTickets || state.tickets > 0; }
+
+/** 스카우트 확률 표기용 상수(국내 확률형 아이템 표시 의무 전제, B.2.3). */
+export const SCOUT_RATES = { R: ECONOMY.scoutR, SR: ECONOMY.scoutSR, SSR: ECONOMY.scoutSSR };
+
+/**
+ * 스카우트 1회. R 80 / SR 17 / SSR 3%, 천장 SR+ 10 · SSR 60(공유 카운터).
+ * Game.cs:41 Scout + league-and-economy.md B.2.2
+ * @param {object} state
+ * @param {{position?: string}} [opts] position 지정 시 해당 포지션 풀만(포지션 지정 스카우트)
+ * @returns {{card, isDuplicate, fragments, pity, limitBreak, rarity, tickets}}
+ */
+export function scout(state, opts = {}) {
+  if (!canScout(state)) throw new Error('스카우트 티켓이 없습니다');
+  if (!state.unlimitedTickets) state.tickets--;
+  const rng = new Rng(nextSeed(state));
+  state.scoutCount++;
+  state.pitySR++;
+  state.pitySSR++;
+
+  let rarity, triggered = null;
+  if (state.pitySSR >= ECONOMY.pitySSR) { rarity = RARITY.SSR; triggered = 'ssr'; }
+  else if (state.pitySR >= ECONOMY.pitySR) {
+    // SSR 비중 = 3 / (3 + 17)
+    rarity = rng.nextDouble() < ECONOMY.scoutSSR / (ECONOMY.scoutSSR + ECONOMY.scoutSR) ? RARITY.SSR : RARITY.SR;
+    triggered = 'sr';
+  } else {
+    const r = rng.nextDouble();
+    rarity = r < ECONOMY.scoutR ? RARITY.R : (r < ECONOMY.scoutR + ECONOMY.scoutSR ? RARITY.SR : RARITY.SSR);
+  }
+  if (rarity >= RARITY.SR) state.pitySR = 0;
+  if (rarity === RARITY.SSR) state.pitySSR = 0;
+
+  const wantPos = opts.position != null ? (typeof opts.position === 'string' ? POS_CODES.indexOf(opts.position) : opts.position) : -1;
+  let cands = CARD_POOL.filter(p => p.rarity === rarity && (wantPos < 0 || p.pos === wantPos));
+  if (cands.length === 0) cands = CARD_POOL.filter(p => wantPos < 0 || p.pos === wantPos);
+  if (cands.length === 0) cands = CARD_POOL;
+  const card = cands[rng.nextInt(cands.length)];
+
+  const owned = Object.prototype.hasOwnProperty.call(state.ownedCards, card.id);
+  let gainedFragments = 0;
+  if (owned) {
+    state.ownedCards[card.id] = Math.min(ECONOMY.maxLimitBreak, state.ownedCards[card.id] + 1);
+    gainedFragments = ECONOMY.duplicateFragments;
+    for (let i = 0; i < gainedFragments; i++) addFragment(state);
+  } else {
+    state.ownedCards[card.id] = 0;
+  }
+  addHistory(state, `스카우트: ${card.name} ${POS_CODES[card.pos]} ${RARITIES[card.rarity]}${owned ? ' (중복 → 한계돌파)' : ''}${triggered ? ' [천장 보장]' : ''}`);
+
+  return {
+    card,
+    rarity: RARITIES[rarity],
+    isDuplicate: owned,
+    limitBreak: state.ownedCards[card.id],
+    fragments: { total: state.fragments, gained: gainedFragments, perTicket: ECONOMY.fragmentsPerTicket },
+    pity: {
+      triggered,
+      srIn: Math.max(0, ECONOMY.pitySR - state.pitySR),
+      ssrIn: Math.max(0, ECONOMY.pitySSR - state.pitySSR),
+      srCounter: state.pitySR, ssrCounter: state.pitySSR,
+    },
+    tickets: state.tickets,
+  };
+}
+
+/** 조각 +1. 3개면 티켓 1로 변환. Game.cs:136 AddFragment */
+function addFragment(state) {
+  state.fragments++;
+  if (state.fragments < ECONOMY.fragmentsPerTicket) return false;
+  state.fragments -= ECONOMY.fragmentsPerTicket;
+  state.tickets++;
+  return true;
+}
+
+/** 육성 시작용 카드(한계돌파 반영 잠재력). Game.cs:59 TrainingCard */
+export function trainingCard(state, cardId) {
+  const base = CARD_BY_ID.get(cardId);
+  if (!base) throw new Error('알 수 없는 카드: ' + cardId);
+  const c = clonePlayer(base);
+  const lb = state.ownedCards[cardId] || 0;
+  if (lb > 0) for (let i = 0; i < 10; i++) c.potential[i] = clampStat(c.potential[i] + lb * ECONOMY.limitBreakPotential);
+  return c;
+}
+
+// ---------------------------------------------------------------- 서포터
+export function supporterCandidates(state, traineeCardId) {
+  return representatives(state).filter(i => i.cardId !== traineeCardId).map(instanceToSupporter);
+}
+
+function instanceToSupporter(inst) {
+  return { id: inst.instanceId, name: inst.name, pos: inst.pos, clubId: inst.clubId, stats: inst.finalStats.slice() };
+}
+
+/** 추천 서포터 id 배열. Game.cs:72 RecommendSupporters */
+export function recommendSupporters(state, cardId) {
+  const card = CARD_BY_ID.get(cardId);
+  if (!card) throw new Error('알 수 없는 카드: ' + cardId);
+  const list = recommendSupporterList(card.pos, card.teamId, supporterCandidates(state, cardId), TRAINING_CFG, TRAINING_CFG.supporterSlots);
+  return list.map(s => s.id);
+}
+
+// ---------------------------------------------------------------- 육성
+function evaluationProvider(state) {
+  return state.evaluationMode === 'stub' ? stubEvaluationProvider : simEvaluationProvider;
+}
+
+/** 육성 세션 시작. Game.cs:80 NewSession */
+export function startTraining(state, cardId, supporterIds) {
+  const card = trainingCard(state, cardId);
+  const ids = new Set(supporterIds || []);
+  const sups = supporterCandidates(state, cardId).filter(s => ids.has(s.id));
+  const support = sups.length > 0 ? buildSupport(card.pos, card.teamId, sups, TRAINING_CFG) : emptySupport(TRAINING_CFG);
+  const session = new TrainingSession(card, support, TRAINING_CFG, evaluationProvider(state), nextSeed(state));
+  session.instanceId = `${card.id}#${++state.instanceCounter}`;
+  session.game = state;
+  return session;
+}
+
+const ACTION_IDS = ['serve', 'receive', 'set', 'spike', 'block', 'rest', 'special'];
+
+/** 현재 턴 선택지(예상 상승치·피로·부상 배지 포함). 이벤트 대기 중이면 이벤트 선택지. */
+export function trainingOptions(session) {
+  const tr = session.trainee, cfg = session.cfg;
+  const head = {
+    turn: session.turn, totalTurns: cfg.turns,
+    fatigue: Math.round(tr.fatigue * 10) / 10,
+    zone: session.zone, zoneLabel: ZONE_NAMES_KO[session.zone],
+    condition: tr.condition, conditionLabel: COND_NAMES_KO[tr.condition], conditionArrow: COND_ARROWS[tr.condition],
+    combo: tr.combo, hints: tr.hints,
+    ovr: Math.round(session.currentOvr * 10) / 10,
+    initialOvr: Math.round(session.initialOvr * 10) / 10,
+    stats: Array.from(tr.current, v => Math.round(v * 10) / 10),
+    potential: Array.from(tr.potential),
+    treating: session.isTreating, treatmentTurnsLeft: tr.treatmentTurnsLeft,
+    isEvalTurn: isEvalTurn(cfg, session.turn),
+    injuries: tr.injuries, severeInjuries: tr.severeInjuries,
+  };
+  if (session.phase === PHASE.Graduated) {
+    return { ...head, kind: 'graduated', options: [], event: null };
+  }
+  if (session.phase === PHASE.AwaitEventChoice) {
+    const ev = session.pendingEvent;
+    return {
+      ...head, kind: 'event',
+      event: { id: ev.id, kind: ev.kind, title: ev.title, text: ev.text, supporterName: ev.supporterName },
+      options: ev.choices.map((c, i) => ({
+        id: 'event:' + i, index: i, label: c.label,
+        isBranch: c.isBranch, successRate: c.successRate,
+        effect: effectBadge(c.onSuccess),
+        failEffect: c.onFail ? effectBadge(c.onFail) : null,
+        recommended: i === ev.oracleChoice,
+      })),
+    };
+  }
+  return { ...head, kind: 'action', event: null, options: session.getOptions() };
+}
+
+/**
+ * 선택 적용(행동 또는 이벤트 선택). choiceId 는 'spike' / 'rest' / 'special' / 'event:0' 등.
+ * @returns {{events: Array, nextState: object}}
+ */
+export function applyTrainingChoice(session, choiceId) {
+  const events = [];
+  if (session.phase === PHASE.Graduated) throw new Error('이미 졸업한 세션입니다');
+
+  if (session.phase === PHASE.AwaitEventChoice) {
+    const idx = typeof choiceId === 'number' ? choiceId : parseInt(String(choiceId).replace('event:', ''), 10) || 0;
+    const ev = session.pendingEvent;
+    const outcome = session.resolveEvent(idx);
+    events.push({
+      type: 'event', title: ev.title, text: ev.text,
+      choice: ev.choices[outcome.choiceIndex].label,
+      branch: ev.choices[outcome.choiceIndex].isBranch, success: outcome.success,
+      resultText: outcome.applied.resultText, badge: effectBadge(outcome.applied),
+    });
+  } else {
+    let action;
+    if (typeof choiceId === 'number') action = choiceId;
+    else {
+      action = ACTION_IDS.indexOf(String(choiceId));
+      if (action < 0) throw new Error('알 수 없는 선택: ' + choiceId);
+    }
+    const beforeTurn = session.turn;
+    const rec = session.apply(action);
+    events.push(turnEvent(session, rec, beforeTurn));
+    if (rec.event) {
+      const e = rec.event;
+      events.push({
+        type: 'event', title: e.event.title, text: e.event.text,
+        choice: e.event.choices[e.choiceIndex].label, branch: e.event.choices[e.choiceIndex].isBranch,
+        success: e.success, resultText: e.applied.resultText, badge: effectBadge(e.applied),
+      });
+    }
+  }
+
+  // 턴 처리 도중 발생한 평가전·졸업 알림
+  const last = session.log[session.log.length - 1];
+  if (last && last.eval && !last._evalReported) {
+    last._evalReported = true;
+    const o = last.eval;
+    events.push({
+      type: 'evaluation', round: o.round, turn: o.turn, absent: o.absent,
+      opponent: o.opponentName, strength: o.opponentStrength,
+      won: o.won, performance: Math.round(o.performance * 10) / 10, scoreLine: o.scoreLine,
+      mvp: o.mvp, coreGain: o.coreGain, hint: o.hint, highlights: o.highlights || [],
+      text: o.absent
+        ? `평가전 결장 (부상 치료 중)`
+        : `평가전 ${o.round + 1}차 vs ${o.opponentName}(강도 ${o.opponentStrength}) — ${o.won ? '승' : '패'} ${o.scoreLine} · 활약도 ${o.performance.toFixed(0)}${o.mvp ? ' MVP!' : ''}`,
+    });
+  }
+  if (session.phase === PHASE.Graduated) {
+    events.push({ type: 'graduated', text: '캠프 종료 — 졸업 심사로 넘어갑니다.' });
+  }
+  return { events, nextState: trainingOptions(session) };
+}
+
+function turnEvent(session, rec, turn) {
+  const gains = [];
+  for (const k of Object.keys(rec.gains)) {
+    const v = rec.gains[k];
+    if (v > 0.05) gains.push({ stat: k | 0, value: Math.round(v * 10) / 10 });
+  }
+  const losses = [];
+  for (const k of Object.keys(rec.losses)) losses.push({ stat: k | 0, value: rec.losses[k] });
+  return {
+    type: 'turn', turn,
+    action: rec.action, actionLabel: rec.action === ACT.Special ? SPECIAL_NAMES_KO[rec.specialKind] : ACT_NAMES_KO[rec.action],
+    zone: rec.zone, zoneLabel: ZONE_NAMES_KO[rec.zone], zoneMult: rec.zoneMult,
+    comboBefore: rec.comboBefore,
+    fatigue: [Math.round(rec.fatigueBefore * 10) / 10, Math.round(rec.fatigueAfter * 10) / 10],
+    condition: [rec.conditionBefore, rec.conditionAfter],
+    conditionLabel: COND_NAMES_KO[rec.conditionAfter],
+    injury: rec.injury, injuryLabel: rec.injury === INJURY.Severe ? '중상' : (rec.injury === INJURY.Light ? '경상' : null),
+    injuryP: rec.injuryP, gains, losses, flavor: rec.flavor,
+    shallowRest: rec.shallowRest,
+  };
+}
+
+/**
+ * 졸업 처리. decision: 0 대표 교체 / 1 보관 / 2 방출(대표가 이미 있을 때만 의미).
+ * Game.cs:104 Graduate
+ */
+export function graduate(session, decision = 0) {
+  if (session.phase !== PHASE.Graduated) throw new Error('아직 캠프가 끝나지 않았습니다');
+  const state = session.game;
+  const r = session.result;
+  const inst = r.instance;
+  if (!state) {
+    return { instance: inst, grade: GRADE_NAMES[inst.grade], ovr: inst.ovr, deltas: r.deltas, skillLevel: r.skillLevel, summary: r.comment };
+  }
+  state.trainingCount++;
+  inst.runIndex = state.trainingCount;
+  const rep = representativeOf(state, inst.cardId);
+  let msg;
+  if (rep === null) {
+    inst.isRepresentative = true;
+    state.instances.push(inst);
+    msg = '로스터에 편입';
+  } else if (decision === 0) {
+    rep.isRepresentative = false;
+    inst.isRepresentative = true;
+    state.instances.push(inst);
+    msg = `대표 교체 (기존 OVR ${rep.ovr.toFixed(1)} → 보관함)`;
+  } else if (decision === 1) {
+    inst.isRepresentative = false;
+    state.instances.push(inst);
+    msg = '보관함에 보관';
+  } else {
+    msg = '방출 (스카우트 조각 +1)' + (addFragment(state) ? ' → 조각 3개로 티켓 +1' : '');
+  }
+  if (!state.firstRunRewardGiven) {
+    state.firstRunRewardGiven = true;
+    state.tickets += 1;
+    msg += ' · 첫 완주 보상 티켓 +1';
+  }
+  addHistory(state, `졸업 #${state.trainingCount}: ${inst.name} ${POS_CODES[inst.pos]} OVR ${inst.ovr.toFixed(1)} ${GRADE_NAMES[inst.grade]} (${msg})`);
+  if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
+
+  return {
+    instance: inst,
+    grade: GRADE_NAMES[inst.grade],
+    ovr: Math.round(inst.ovr * 10) / 10,
+    deltas: r.deltas,
+    skillLevel: r.skillLevel,
+    unlockedSkills: r.unlockedSkills,
+    completion: r.coreReach,
+    allReach: r.allReach,
+    hints: r.hints,
+    evaluations: r.evaluations,
+    camp: campLine(r.camp),
+    roster: msg,
+    summary: `${inst.name} ${POS_CODES[inst.pos]} · OVR ${inst.ovr.toFixed(1)} ${GRADE_NAMES[inst.grade]} · 완성도 ${(r.coreReach * 100).toFixed(0)}% · ${campLine(r.camp)} — ${r.comment}`,
+  };
+}
+
+/** 인스턴스 보관함 관리(대표 승격 / 방출). Game.cs:129 */
+export function promoteInstance(state, instanceId) {
+  const inst = state.instances.find(i => i.instanceId === instanceId);
+  if (!inst) return false;
+  for (const i of state.instances) if (i.cardId === inst.cardId) i.isRepresentative = false;
+  inst.isRepresentative = true;
+  if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
+  return true;
+}
+
+export function releaseInstance(state, instanceId) {
+  const idx = state.instances.findIndex(i => i.instanceId === instanceId);
+  if (idx < 0) return false;
+  state.instances.splice(idx, 1);
+  addFragment(state);
+  if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
+  return true;
+}
+
+// ---------------------------------------------------------------- 라인업
+function instanceToPlayer(inst, teamId) {
+  return makePlayer({
+    id: inst.instanceId, name: inst.name, teamId, pos: inst.pos, rarity: inst.rarity,
+    jersey: inst.jersey, heightCm: inst.heightCm, age: inst.age,
+    stats: inst.finalStats.slice(), potential: inst.finalStats.slice(),
+    skillName: inst.skillName,
+  });
+}
+
+/** 내 로스터 = 대표 인스턴스 + 연습생. Game.cs:145 MyRoster */
+export function myRoster(state) {
+  const list = representatives(state).map(i => instanceToPlayer(i, state.clubId));
+  for (const f of state.fillers) list.push(f);
+  return list;
+}
+
+export function myTeam(state) {
+  return {
+    id: state.clubId, name: state.clubName, city: state.clubCity,
+    homeArena: state.clubCity + ' 신생 체육관',
+    colors: { primary: '#2E8B57', secondary: '#F5F5DC' },
+  };
+}
+
+export function lineupValid(state) {
+  if (!state.lineupStarters) return false;
+  try {
+    const roster = myRoster(state);
+    const ts = makeTeamState(myTeam(state), roster, { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero, benchIds: [] });
+    validateTeamState(ts);
+    return true;
+  } catch { return false; }
+}
+
+/** 내 팀 상태(수동 라인업이 유효하면 그것, 아니면 자동). Game.cs:159 MyTeamState */
+export function myTeamState(state) {
+  const roster = myRoster(state);
+  let lineup;
+  if (lineupValid(state)) {
+    lineup = { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero, benchIds: [] };
+    for (const p of roster) if (lineup.startingIds.indexOf(p.id) < 0 && p.id !== state.lineupLibero) lineup.benchIds.push(p.id);
+  } else lineup = autoLineupFromRoster(roster);
+  return makeTeamState(myTeam(state), roster, lineup, { tactics: defaultTactics() });
+}
+
+/** 자동 편성. Game.cs:175 AutoLineup */
+export function autoLineup(state) {
+  const l = autoLineupFromRoster(myRoster(state));
+  state.lineupStarters = l.startingIds.slice();
+  state.lineupLibero = l.liberoId;
+  return { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero };
+}
+
+/** 슬롯(0~5 선발, 6 리베로)에 선수 배치. 유효하지 않으면 false. Game.cs:182 SetLineupSlot */
+export function setLineupSlot(state, slot, playerId) {
+  if (!state.lineupStarters) autoLineup(state);
+  const starters = state.lineupStarters.slice();
+  let libero = state.lineupLibero;
+  const roster = myRoster(state);
+  const p = roster.find(x => x.id === playerId);
+  if (!p) return false;
+  if (slot === 6) {
+    if (!p.isLibero) return false;
+    libero = playerId;
+  } else {
+    if (slot < 0 || slot > 5) return false;
+    if (p.isLibero) return false;
+    const existing = starters.indexOf(playerId);
+    if (existing >= 0) starters[existing] = starters[slot];
+    starters[slot] = playerId;
+  }
+  try {
+    const ts = makeTeamState(myTeam(state), roster, { startingIds: starters, liberoId: libero, benchIds: [] });
+    validateTeamState(ts);
+  } catch { return false; }
+  state.lineupStarters = starters;
+  state.lineupLibero = libero;
+  return true;
+}
+
+/** 라인업 7명의 포지션 OVR 평균. Game.cs:225 LineupOvr */
+export function lineupOvr(state) {
+  const ts = myTeamState(state);
+  let sum = 0, n = 0;
+  for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+    const p = ts.index.get(id);
+    if (!p) continue;
+    sum += ovrOf(TRAINING_CFG, p.stats, p.pos);
+    n++;
+  }
+  return n === 0 ? 0 : sum / n;
+}
+
+// ---------------------------------------------------------------- AI 구단(개선 2건)
+/**
+ * [개선 A] AI 구단 선수는 초기치가 아니라 시즌 사다리로 성장한 버전으로 출전한다.
+ * 실효 스탯 = round(clamp(stats + g × (potential − stats), 0, 100)), 시즌 1 = 35%.
+ * league-and-economy.md A.3.1 (프로토타입 C# Game.ClubTeamState 는 OpponentGrowth 기본 0 = 초기치 그대로였다)
+ */
+function grownPlayer(p, g) {
+  if (g <= 0) return p;
+  const c = clonePlayer(p);
+  for (let i = 0; i < 10; i++) c.stats[i] = clampStat(roundHalfEven(p.stats[i] + g * (p.potential[i] - p.stats[i])));
+  return c;
+}
+
+/** 플레이어가 졸업시킨 카드 id 집합(= 원소속 구단에서 빠진 선수). */
+export function departedCardIds(state) {
+  const s = new Set();
+  for (const i of state.instances) s.add(i.cardId);
+  return s;
+}
+
+/**
+ * [개선 B] 스카우트해 졸업시킨 선수는 원소속 구단 라인업에서 빠지고,
+ * 같은 포지션의 연습생급 대체 선수(구단 평균 − 8)가 그 자리를 채운다.
+ * league-and-economy.md A.3.5 (C# 프로토타입은 미구현이라 원소속에서도 계속 뛰었다)
+ */
+export function clubTeamState(state, clubId, opts = {}) {
+  const club = CLUB_BY_ID.get(clubId);
+  if (!club) throw new Error('알 수 없는 구단: ' + clubId);
+  const pool = POOL_BY_CLUB.get(clubId) || [];
+  const g = opts.growth !== undefined ? opts.growth : growthFor(state.season);
+  const departed = opts.departed || departedCardIds(state);
+
+  // 구단 평균(전체 7명 성장 기준) — 결원이 늘어도 대체 선수 강도가 흔들리지 않게 원본 기준으로 고정
+  let avg = 0;
+  for (const p of pool) avg += statAverage(grownPlayer(p, g).stats);
+  avg = pool.length > 0 ? avg / pool.length : 60;
+  const subOverall = avg + VACANCY_OVERALL_DELTA;
+
+  const roster = [];
+  for (const p of pool) {
+    if (departed.has(p.id)) {
+      const sub = generatePlayer(new Rng(hashString(clubId + '/' + p.id)), `${clubId}-sub-${p.id}`, clubId, p.pos, 80 + roster.length, subOverall, 4.0);
+      sub.rarity = RARITY.N;
+      sub.name = sub.name + ' (육성 선수)';
+      sub.isSubstitute = true;
+      roster.push(sub);
+    } else {
+      roster.push(grownPlayer(p, g));
+    }
+  }
+  const tactics = (opts.useClubTactics ?? state.useClubTactics) && CLUB_TACTICS[clubId]
+    ? { ...defaultTactics(), ...CLUB_TACTICS[clubId] }
+    : defaultTactics();
+  return makeTeamState(club, roster, autoLineupFromRoster(roster), { tactics });
+}
+
+// ---------------------------------------------------------------- 경기
+/**
+ * 상대 구단과 1경기(3선승). Game.cs:266 PlayMatch
+ * @returns {{setScores, won, box, events, highlights, ctx, reward, sets, eventCount, seed}}
+ */
+export function playMatch(state, opponentTeamId, opts = {}) {
+  const club = CLUB_BY_ID.get(opponentTeamId);
+  if (!club) throw new Error('알 수 없는 구단: ' + opponentTeamId);
+  const home = myTeamState(state);
+  const away = clubTeamState(state, opponentTeamId, opts);
+  const collectEvents = opts.collectEvents !== false;
+  const seed = opts.seed !== undefined ? opts.seed : nextSeed(state);
+  const result = simulateMatch(home, away, seed, null, collectEvents);
+  const won = result.winner === SIDE.HOME;
+
+  let reward = '';
+  if (opts.record !== false) {
+    if (won) {
+      state.wins++;
+      state.winsByClub[club.id] = (state.winsByClub[club.id] || 0) + 1;
+      state.tickets++;
+      reward = '승리 보상: 스카우트 티켓 +1';
+    } else {
+      state.losses++;
+      state.lossesByClub[club.id] = (state.lossesByClub[club.id] || 0) + 1;
+      const converted = addFragment(state);
+      reward = `참가 보상: 스카우트 조각 +1 (${state.fragments}/${ECONOMY.fragmentsPerTicket})`;
+      if (converted) reward += ' → 조각 3개로 티켓 +1';
+    }
+    addHistory(state, `경기 vs ${club.name}: ${won ? '승' : '패'} ${result.homeSets}-${result.awaySets} (${result.sets.map(s => `${s.home}-${s.away}`).join(', ')})`);
+  }
+
+  const homeIds = new Set(home.roster.map(p => p.id));
+  const box = { home: [], away: [] };
+  for (const b of result.boxScores.values()) {
+    b.points = b.kills + b.blockKills + b.aces;
+    b.killRate = b.attacks > 0 ? b.kills / b.attacks : 0;
+    (homeIds.has(b.playerId) ? box.home : box.away).push(b);
+  }
+  box.home.sort((a, b) => b.points - a.points);
+  box.away.sort((a, b) => b.points - a.points);
+
+  const players = {};
+  for (const p of home.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
+  for (const p of away.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
+  const ctx = { players, homeName: home.team.name, awayName: away.team.name };
+
+  return {
+    setScores: result.sets.map(s => ({ set: s.setIndex, home: s.home, away: s.away, rallies: s.rallies })),
+    sets: { home: result.homeSets, away: result.awaySets },
+    won,
+    box,
+    events: result.events,
+    eventCount: result.eventCount,
+    highlights: buildHighlights(result, box, home, away, won),
+    ctx,
+    reward,
+    opponent: { id: club.id, name: club.name },
+    seed,
+  };
+}
+
+function buildHighlights(result, box, home, away, won) {
+  const h = [];
+  const line = result.sets.map(s => `${s.home}-${s.away}`).join(', ');
+  h.push(`${home.team.name} ${result.homeSets}-${result.awaySets} ${away.team.name} (${line})`);
+  const top = box.home[0];
+  if (top && top.points > 0) h.push(`${top.name} ${top.points}득점 (공격 ${top.kills}/${top.attacks}, 블로킹 ${top.blockKills}, 서브 ${top.aces})`);
+  const oppTop = box.away[0];
+  if (oppTop && oppTop.points > 0) h.push(`상대 최다 득점: ${oppTop.name} ${oppTop.points}점`);
+  let bestRecv = null;
+  for (const b of box.home) if (b.receptions >= 8 && (!bestRecv || b.receptionPerfect / b.receptions > bestRecv.receptionPerfect / bestRecv.receptions)) bestRecv = b;
+  if (bestRecv) h.push(`리시브: ${bestRecv.name} ${bestRecv.receptions}회 중 정확 ${bestRecv.receptionPerfect}회`);
+  const hs = result.homeStats;
+  h.push(`팀 공격 성공률 ${(hs.attacks > 0 ? hs.kills / hs.attacks * 100 : 0).toFixed(1)}% · 사이드아웃 ${(hs.receiveRallies > 0 ? hs.receiveRalliesWon / hs.receiveRallies * 100 : 0).toFixed(1)}%`);
+  h.push(won ? '승리했습니다.' : '패배했습니다.');
+  return h;
+}
+
+/** 구단 목록(라인업 OVR 포함) — UI 의 상대 선택 화면용. */
+export function clubList(state) {
+  return CLUBS.map(c => {
+    const ts = clubTeamState(state, c.id);
+    let sum = 0, n = 0;
+    for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+      const p = ts.index.get(id);
+      if (!p) continue;
+      sum += ovrOf(TRAINING_CFG, p.stats, p.pos); n++;
+    }
+    return {
+      id: c.id, name: c.name, city: c.city, identity: c.identity, colors: c.colors,
+      lineupOvr: n > 0 ? sum / n : 0,
+      wins: state.winsByClub[c.id] || 0, losses: state.lossesByClub[c.id] || 0,
+      substitutes: ts.roster.filter(p => p.isSubstitute).length,
+    };
+  });
+}
+
+export { CARD_BY_ID, CLUB_BY_ID };

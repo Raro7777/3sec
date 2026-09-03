@@ -1,0 +1,2181 @@
+// 자동 생성 파일 — 수정하지 말 것. 생성: node web/build-data.mjs
+// 원본: data/players.json (42명), data/teams.json (6구단)
+// 스키마는 sim/VolleySim.Core/Data/JsonDataLoader.cs 의 파서와 1:1.
+
+export const PLAYERS = [
+ {
+  "id": "p001",
+  "name": "서하율",
+  "teamId": "t01",
+  "position": "OH",
+  "rarity": "SSR",
+  "jerseyNumber": 10,
+  "heightCm": 183,
+  "age": 22,
+  "stats": {
+   "serve": 78,
+   "receive": 60,
+   "set": 50,
+   "spike": 80,
+   "block": 62,
+   "dig": 58,
+   "speed": 70,
+   "power": 74,
+   "stamina": 66,
+   "mental": 64
+  },
+  "potential": {
+   "serve": 96,
+   "receive": 82,
+   "set": 70,
+   "spike": 98,
+   "block": 82,
+   "dig": 80,
+   "speed": 90,
+   "power": 94,
+   "stamina": 90,
+   "mental": 90
+  },
+  "skill": {
+   "name": "스포트라이트",
+   "description": "세트 스코어 20점 이후 자신의 스파이크 성공률이 상승한다. 홈 경기에서는 상승 폭이 더 커진다."
+  },
+  "appearance": {
+   "hairStyle": "롱 하이 포니테일",
+   "hairColor": "플래티넘 블론드",
+   "eyeColor": "바이올렛",
+   "bodyType": "장신 슬림 애슬레틱"
+  },
+  "personality": [
+   "자신만만",
+   "카메라 체질",
+   "승부욕"
+  ],
+  "bio": "리그 최고 인기 구단 가온의 간판 에이스. 조명이 밝을수록 서브가 날카로워진다는 말을 스스로도 즐긴다."
+ },
+ {
+  "id": "p002",
+  "name": "탁세온",
+  "teamId": "t01",
+  "position": "OP",
+  "rarity": "SSR",
+  "jerseyNumber": 4,
+  "heightCm": 187,
+  "age": 23,
+  "stats": {
+   "serve": 72,
+   "receive": 46,
+   "set": 45,
+   "spike": 84,
+   "block": 66,
+   "dig": 50,
+   "speed": 60,
+   "power": 85,
+   "stamina": 68,
+   "mental": 58
+  },
+  "potential": {
+   "serve": 92,
+   "receive": 70,
+   "set": 65,
+   "spike": 99,
+   "block": 86,
+   "dig": 74,
+   "speed": 82,
+   "power": 100,
+   "stamina": 90,
+   "mental": 86
+  },
+  "skill": {
+   "name": "천둥 왼손",
+   "description": "후위 공격(백어택) 시 파워가 상승한다. 상대 블로커가 1인 이하일 때 결정률이 크게 오른다."
+  },
+  "appearance": {
+   "hairStyle": "픽시 숏컷",
+   "hairColor": "와인 레드",
+   "eyeColor": "다크 그레이",
+   "bodyType": "장신 근육질"
+  },
+  "personality": [
+   "과묵",
+   "단순명쾌",
+   "먹는 걸로 감정 표현"
+  ],
+  "bio": "왼손잡이 아포짓. 말수는 적지만 후위에서 때리는 한 방이 경기장의 공기를 바꾼다."
+ },
+ {
+  "id": "p003",
+  "name": "남여울",
+  "teamId": "t01",
+  "position": "S",
+  "rarity": "SR",
+  "jerseyNumber": 7,
+  "heightCm": 178,
+  "age": 24,
+  "stats": {
+   "serve": 55,
+   "receive": 52,
+   "set": 74,
+   "spike": 42,
+   "block": 48,
+   "dig": 56,
+   "speed": 58,
+   "power": 44,
+   "stamina": 60,
+   "mental": 70
+  },
+  "potential": {
+   "serve": 73,
+   "receive": 70,
+   "set": 94,
+   "spike": 57,
+   "block": 66,
+   "dig": 74,
+   "speed": 73,
+   "power": 60,
+   "stamina": 80,
+   "mental": 92
+  },
+  "skill": {
+   "name": "노련한 배급",
+   "description": "세트당 첫 로테이션 동안 팀 공격 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "로우 포니테일",
+   "hairColor": "다크 브라운",
+   "eyeColor": "헤이즐",
+   "bodyType": "표준 슬림"
+  },
+  "personality": [
+   "침착",
+   "현실적",
+   "언니 기질"
+  ],
+  "bio": "스타들 사이에서 묵묵히 공을 나눠 주는 베테랑 세터. 화려하지 않지만 실수도 없다."
+ },
+ {
+  "id": "p004",
+  "name": "구하람",
+  "teamId": "t01",
+  "position": "MB",
+  "rarity": "SR",
+  "jerseyNumber": 12,
+  "heightCm": 188,
+  "age": 21,
+  "stats": {
+   "serve": 48,
+   "receive": 38,
+   "set": 40,
+   "spike": 66,
+   "block": 70,
+   "dig": 40,
+   "speed": 60,
+   "power": 62,
+   "stamina": 58,
+   "mental": 52
+  },
+  "potential": {
+   "serve": 66,
+   "receive": 58,
+   "set": 58,
+   "spike": 86,
+   "block": 90,
+   "dig": 60,
+   "speed": 78,
+   "power": 80,
+   "stamina": 80,
+   "mental": 76
+  },
+  "skill": {
+   "name": "빠른 발",
+   "description": "속공(A퀵) 시도 시 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "숏 보브",
+   "hairColor": "애쉬 그레이",
+   "eyeColor": "그레이 블루",
+   "bodyType": "장신 슬림"
+  },
+  "personality": [
+   "과묵",
+   "성실",
+   "대식가"
+  ],
+  "bio": "말 대신 발이 먼저 움직이는 속공형 미들블로커. 경기 후 도시락 세 개가 기본이다."
+ },
+ {
+  "id": "p005",
+  "name": "노예서",
+  "teamId": "t01",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 15,
+  "heightCm": 178,
+  "age": 19,
+  "stats": {
+   "serve": 40,
+   "receive": 56,
+   "set": 42,
+   "spike": 48,
+   "block": 40,
+   "dig": 54,
+   "speed": 52,
+   "power": 42,
+   "stamina": 50,
+   "mental": 44
+  },
+  "potential": {
+   "serve": 64,
+   "receive": 78,
+   "set": 60,
+   "spike": 74,
+   "block": 60,
+   "dig": 76,
+   "speed": 72,
+   "power": 66,
+   "stamina": 74,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "일자 뱅 단발",
+   "hairColor": "블랙",
+   "eyeColor": "다크 브라운",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "성실",
+   "소심",
+   "메모광"
+  ],
+  "bio": "선배들의 플레이를 전부 수첩에 적어 두는 수비형 신인. 아직 공격은 서툴지만 리시브 자세만은 이미 프로급."
+ },
+ {
+  "id": "p006",
+  "name": "마시온",
+  "teamId": "t01",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 19,
+  "heightCm": 185,
+  "age": 18,
+  "stats": {
+   "serve": 36,
+   "receive": 30,
+   "set": 34,
+   "spike": 48,
+   "block": 58,
+   "dig": 32,
+   "speed": 46,
+   "power": 52,
+   "stamina": 48,
+   "mental": 40
+  },
+  "potential": {
+   "serve": 60,
+   "receive": 52,
+   "set": 54,
+   "spike": 76,
+   "block": 88,
+   "dig": 54,
+   "speed": 70,
+   "power": 78,
+   "stamina": 74,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "트윈 번",
+   "hairColor": "민트 그린",
+   "eyeColor": "골드",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "엉뚱",
+   "낙천",
+   "잠꾸러기"
+  ],
+  "bio": "블로킹 타이밍 감각 하나로 스카우트된 원석. 연습 중에도 하품을 하지만 손은 항상 공보다 먼저 올라가 있다."
+ },
+ {
+  "id": "p007",
+  "name": "문반디",
+  "teamId": "t01",
+  "position": "L",
+  "rarity": "R",
+  "jerseyNumber": 2,
+  "heightCm": 168,
+  "age": 20,
+  "stats": {
+   "serve": 34,
+   "receive": 60,
+   "set": 48,
+   "spike": 26,
+   "block": 22,
+   "dig": 62,
+   "speed": 62,
+   "power": 34,
+   "stamina": 52,
+   "mental": 46
+  },
+  "potential": {
+   "serve": 49,
+   "receive": 82,
+   "set": 68,
+   "spike": 41,
+   "block": 37,
+   "dig": 84,
+   "speed": 82,
+   "power": 50,
+   "stamina": 74,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "사이드 브레이드",
+   "hairColor": "체스트넛 브라운",
+   "eyeColor": "앰버",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "활발",
+   "응원단장",
+   "수다쟁이"
+  ],
+  "bio": "코트 안팎에서 가장 목소리가 큰 리베로. 화려한 팀의 분위기 메이커를 자처한다."
+ },
+ {
+  "id": "p008",
+  "name": "백윤슬",
+  "teamId": "t02",
+  "position": "L",
+  "rarity": "SSR",
+  "jerseyNumber": 3,
+  "heightCm": 167,
+  "age": 22,
+  "stats": {
+   "serve": 45,
+   "receive": 84,
+   "set": 62,
+   "spike": 25,
+   "block": 22,
+   "dig": 85,
+   "speed": 82,
+   "power": 48,
+   "stamina": 74,
+   "mental": 78
+  },
+  "potential": {
+   "serve": 60,
+   "receive": 99,
+   "set": 82,
+   "spike": 40,
+   "block": 37,
+   "dig": 100,
+   "speed": 98,
+   "power": 66,
+   "stamina": 94,
+   "mental": 98
+  },
+  "skill": {
+   "name": "닻을 내리다",
+   "description": "상대의 강서브를 리시브에 성공하면 그 랠리 동안 팀 전체의 디그 성공률이 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "안쪽 컬 숏 보브",
+   "hairColor": "화이트 실버",
+   "eyeColor": "딥 블루",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "냉정",
+   "관찰력",
+   "무표정 속 다정함"
+  ],
+  "bio": "해솔 수비의 심장. 공이 떨어질 자리를 미리 알고 서 있는 것 같다는 평을 듣는 철벽 리베로."
+ },
+ {
+  "id": "p009",
+  "name": "하담희",
+  "teamId": "t02",
+  "position": "OH",
+  "rarity": "SSR",
+  "jerseyNumber": 5,
+  "heightCm": 181,
+  "age": 24,
+  "stats": {
+   "serve": 62,
+   "receive": 76,
+   "set": 52,
+   "spike": 70,
+   "block": 58,
+   "dig": 74,
+   "speed": 66,
+   "power": 60,
+   "stamina": 72,
+   "mental": 80
+  },
+  "potential": {
+   "serve": 82,
+   "receive": 92,
+   "set": 72,
+   "spike": 90,
+   "block": 78,
+   "dig": 90,
+   "speed": 84,
+   "power": 80,
+   "stamina": 90,
+   "mental": 95
+  },
+  "skill": {
+   "name": "등대",
+   "description": "팀이 2연속 실점하면 발동한다. 다음 랠리에서 팀 전원의 리시브와 멘탈이 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "롱 싱글 브레이드",
+   "hairColor": "블랙",
+   "eyeColor": "다크 브라운",
+   "bodyType": "장신 균형형"
+  },
+  "personality": [
+   "책임감",
+   "과묵",
+   "후배 챙김"
+  ],
+  "bio": "해솔의 주장이자 리시브의 기준점. 흔들리는 팀을 한 마디로 다시 세우는 등대 같은 존재."
+ },
+ {
+  "id": "p010",
+  "name": "채보름",
+  "teamId": "t02",
+  "position": "S",
+  "rarity": "SR",
+  "jerseyNumber": 9,
+  "heightCm": 175,
+  "age": 21,
+  "stats": {
+   "serve": 50,
+   "receive": 58,
+   "set": 70,
+   "spike": 40,
+   "block": 44,
+   "dig": 62,
+   "speed": 60,
+   "power": 42,
+   "stamina": 58,
+   "mental": 62
+  },
+  "potential": {
+   "serve": 68,
+   "receive": 76,
+   "set": 92,
+   "spike": 56,
+   "block": 62,
+   "dig": 80,
+   "speed": 78,
+   "power": 58,
+   "stamina": 78,
+   "mental": 84
+  },
+  "skill": {
+   "name": "흐트러진 공도",
+   "description": "리시브가 흔들린 상황(B/C패스)에서 토스 정확도 하락 폭이 감소한다."
+  },
+  "appearance": {
+   "hairStyle": "하프업 미디엄",
+   "hairColor": "허니 블론드",
+   "eyeColor": "그린",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "온화",
+   "꼼꼼",
+   "걱정 많음"
+  ],
+  "bio": "나쁜 리시브도 어떻게든 공격으로 이어 주는 살림꾼 세터. 경기 전날엔 늘 잠을 설친다."
+ },
+ {
+  "id": "p011",
+  "name": "유청아",
+  "teamId": "t02",
+  "position": "MB",
+  "rarity": "SR",
+  "jerseyNumber": 14,
+  "heightCm": 187,
+  "age": 22,
+  "stats": {
+   "serve": 46,
+   "receive": 40,
+   "set": 44,
+   "spike": 60,
+   "block": 72,
+   "dig": 46,
+   "speed": 54,
+   "power": 58,
+   "stamina": 60,
+   "mental": 60
+  },
+  "potential": {
+   "serve": 64,
+   "receive": 58,
+   "set": 62,
+   "spike": 80,
+   "block": 90,
+   "dig": 66,
+   "speed": 74,
+   "power": 78,
+   "stamina": 80,
+   "mental": 82
+  },
+  "skill": {
+   "name": "읽기",
+   "description": "상대 세터의 토스 방향을 읽어 블로킹 위치 선정 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "롱 스트레이트",
+   "hairColor": "네이비 블루",
+   "eyeColor": "그레이",
+   "bodyType": "장신 슬림"
+  },
+  "personality": [
+   "지적",
+   "차분",
+   "독서광"
+  ],
+  "bio": "점프보다 눈으로 막는 미들블로커. 상대 세터의 버릇을 기록한 노트가 팀의 자산이다."
+ },
+ {
+  "id": "p012",
+  "name": "국다율",
+  "teamId": "t02",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 17,
+  "heightCm": 177,
+  "age": 19,
+  "stats": {
+   "serve": 42,
+   "receive": 58,
+   "set": 40,
+   "spike": 46,
+   "block": 42,
+   "dig": 56,
+   "speed": 54,
+   "power": 44,
+   "stamina": 54,
+   "mental": 46
+  },
+  "potential": {
+   "serve": 64,
+   "receive": 80,
+   "set": 58,
+   "spike": 72,
+   "block": 64,
+   "dig": 78,
+   "speed": 74,
+   "power": 66,
+   "stamina": 76,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "로우 트윈테일",
+   "hairColor": "다크 브라운",
+   "eyeColor": "브라운",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "씩씩",
+   "성실",
+   "부끄럼"
+  ],
+  "bio": "리시브 훈련이라면 누구보다 오래 남는 신인. 공격 때는 아직 어깨에 힘이 들어간다."
+ },
+ {
+  "id": "p013",
+  "name": "명세라",
+  "teamId": "t02",
+  "position": "OP",
+  "rarity": "R",
+  "jerseyNumber": 11,
+  "heightCm": 181,
+  "age": 20,
+  "stats": {
+   "serve": 50,
+   "receive": 34,
+   "set": 34,
+   "spike": 58,
+   "block": 48,
+   "dig": 36,
+   "speed": 48,
+   "power": 60,
+   "stamina": 50,
+   "mental": 42
+  },
+  "potential": {
+   "serve": 74,
+   "receive": 56,
+   "set": 52,
+   "spike": 86,
+   "block": 72,
+   "dig": 56,
+   "speed": 70,
+   "power": 86,
+   "stamina": 74,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "울프컷 미디엄",
+   "hairColor": "오번",
+   "eyeColor": "앰버",
+   "bodyType": "장신 애슬레틱"
+  },
+  "personality": [
+   "무뚝뚝",
+   "의리",
+   "매운 음식 애호"
+  ],
+  "bio": "수비 위주 팀에서 유일하게 때리는 걸 좋아하는 원석 아포짓. 다듬어지면 해솔의 결정력을 바꿀 카드."
+ },
+ {
+  "id": "p014",
+  "name": "인초원",
+  "teamId": "t02",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 21,
+  "heightCm": 184,
+  "age": 18,
+  "stats": {
+   "serve": 36,
+   "receive": 32,
+   "set": 36,
+   "spike": 46,
+   "block": 56,
+   "dig": 34,
+   "speed": 50,
+   "power": 48,
+   "stamina": 52,
+   "mental": 44
+  },
+  "potential": {
+   "serve": 60,
+   "receive": 56,
+   "set": 58,
+   "spike": 74,
+   "block": 84,
+   "dig": 58,
+   "speed": 74,
+   "power": 74,
+   "stamina": 78,
+   "mental": 72
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "픽시 숏컷 정돈형",
+   "hairColor": "라이트 브라운",
+   "eyeColor": "라이트 블루",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "순수",
+   "노력파",
+   "겁 많음"
+  ],
+  "bio": "항구 마을 출신의 늦깎이 미들블로커. 무서운 것도 많지만 코트에서만은 손을 내리지 않는다."
+ },
+ {
+  "id": "p015",
+  "name": "한새봄",
+  "teamId": "t03",
+  "position": "MB",
+  "rarity": "SSR",
+  "jerseyNumber": 8,
+  "heightCm": 191,
+  "age": 23,
+  "stats": {
+   "serve": 58,
+   "receive": 45,
+   "set": 48,
+   "spike": 72,
+   "block": 85,
+   "dig": 48,
+   "speed": 56,
+   "power": 76,
+   "stamina": 70,
+   "mental": 66
+  },
+  "potential": {
+   "serve": 78,
+   "receive": 65,
+   "set": 66,
+   "spike": 92,
+   "block": 100,
+   "dig": 68,
+   "speed": 78,
+   "power": 94,
+   "stamina": 90,
+   "mental": 88
+  },
+  "skill": {
+   "name": "설벽(雪壁)",
+   "description": "블로킹 득점을 올리면 다음 랠리 동안 팀 전체의 블로킹 성공률이 상승한다. 상대의 오픈 공격에 특히 강하다."
+  },
+  "appearance": {
+   "hairStyle": "사이드 포니테일 미디엄",
+   "hairColor": "화이트",
+   "eyeColor": "아이스 블루",
+   "bodyType": "최장신 탄탄한 체형"
+  },
+  "personality": [
+   "과묵",
+   "든든함",
+   "은근한 장난기"
+  ],
+  "bio": "리그에서 가장 높은 손. 태령 고원의 눈보라 속에서 자란 '벽'은 무너지는 법을 모른다."
+ },
+ {
+  "id": "p016",
+  "name": "석누리",
+  "teamId": "t03",
+  "position": "MB",
+  "rarity": "SR",
+  "jerseyNumber": 13,
+  "heightCm": 189,
+  "age": 20,
+  "stats": {
+   "serve": 50,
+   "receive": 40,
+   "set": 42,
+   "spike": 68,
+   "block": 66,
+   "dig": 42,
+   "speed": 62,
+   "power": 64,
+   "stamina": 56,
+   "mental": 50
+  },
+  "potential": {
+   "serve": 70,
+   "receive": 58,
+   "set": 60,
+   "spike": 88,
+   "block": 88,
+   "dig": 60,
+   "speed": 82,
+   "power": 84,
+   "stamina": 78,
+   "mental": 76
+  },
+  "skill": {
+   "name": "이동 공격",
+   "description": "이동 공격(슬라이드) 시도 시 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "하이 번",
+   "hairColor": "다크 브라운",
+   "eyeColor": "브라운",
+   "bodyType": "장신 애슬레틱"
+  },
+  "personality": [
+   "호승심",
+   "직진",
+   "큰 목소리"
+  ],
+  "bio": "막는 것보다 때리는 게 좋다는 공격형 미들블로커. 새봄의 그늘에서 벗어나겠다는 욕심이 원동력."
+ },
+ {
+  "id": "p017",
+  "name": "진로아",
+  "teamId": "t03",
+  "position": "OP",
+  "rarity": "SR",
+  "jerseyNumber": 6,
+  "heightCm": 186,
+  "age": 22,
+  "stats": {
+   "serve": 60,
+   "receive": 42,
+   "set": 40,
+   "spike": 70,
+   "block": 64,
+   "dig": 42,
+   "speed": 52,
+   "power": 70,
+   "stamina": 58,
+   "mental": 54
+  },
+  "potential": {
+   "serve": 80,
+   "receive": 62,
+   "set": 58,
+   "spike": 90,
+   "block": 84,
+   "dig": 62,
+   "speed": 72,
+   "power": 88,
+   "stamina": 80,
+   "mental": 78
+  },
+  "skill": {
+   "name": "고공 낙하",
+   "description": "블로킹 성공 직후 자신의 다음 스파이크 파워가 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "헤어밴드 롱 스트레이트",
+   "hairColor": "애쉬 브라운",
+   "eyeColor": "다크 그린",
+   "bodyType": "장신"
+  },
+  "personality": [
+   "쿨함",
+   "냉소적 농담",
+   "고양이 집사"
+  ],
+  "bio": "높은 타점에서 내리꽂는 아포짓. 표정 변화가 없어 오해를 사지만 고양이 얘기엔 말이 많아진다."
+ },
+ {
+  "id": "p018",
+  "name": "모예나",
+  "teamId": "t03",
+  "position": "S",
+  "rarity": "SR",
+  "jerseyNumber": 10,
+  "heightCm": 176,
+  "age": 21,
+  "stats": {
+   "serve": 48,
+   "receive": 50,
+   "set": 72,
+   "spike": 38,
+   "block": 50,
+   "dig": 52,
+   "speed": 56,
+   "power": 44,
+   "stamina": 58,
+   "mental": 64
+  },
+  "potential": {
+   "serve": 68,
+   "receive": 68,
+   "set": 92,
+   "spike": 54,
+   "block": 68,
+   "dig": 70,
+   "speed": 74,
+   "power": 60,
+   "stamina": 78,
+   "mental": 86
+  },
+  "skill": {
+   "name": "높이 띄우기",
+   "description": "미들블로커에게 토스할 때 속공 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "시스루 뱅 단발",
+   "hairColor": "블랙",
+   "eyeColor": "브라운",
+   "bodyType": "표준 슬림"
+  },
+  "personality": [
+   "계획적",
+   "조용함",
+   "커피 애호"
+  ],
+  "bio": "장신 공격수들의 타점에 맞춰 공을 정확히 띄우는 세터. 경기 전 커피 한 잔이 루틴."
+ },
+ {
+  "id": "p019",
+  "name": "봉수린",
+  "teamId": "t03",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 4,
+  "heightCm": 179,
+  "age": 19,
+  "stats": {
+   "serve": 46,
+   "receive": 44,
+   "set": 38,
+   "spike": 56,
+   "block": 44,
+   "dig": 44,
+   "speed": 52,
+   "power": 50,
+   "stamina": 50,
+   "mental": 40
+  },
+  "potential": {
+   "serve": 70,
+   "receive": 70,
+   "set": 56,
+   "spike": 80,
+   "block": 66,
+   "dig": 68,
+   "speed": 74,
+   "power": 74,
+   "stamina": 74,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "미디엄 웨이브",
+   "hairColor": "코랄 핑크",
+   "eyeColor": "마젠타",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "명랑",
+   "덜렁",
+   "간식 애호"
+  ],
+  "bio": "높이의 팀에서 유일하게 '빠른 공'을 좋아하는 아웃사이드 히터. 덜렁대지만 스윙만은 시원하다."
+ },
+ {
+  "id": "p020",
+  "name": "감다미",
+  "teamId": "t03",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 16,
+  "heightCm": 182,
+  "age": 20,
+  "stats": {
+   "serve": 44,
+   "receive": 46,
+   "set": 40,
+   "spike": 52,
+   "block": 52,
+   "dig": 42,
+   "speed": 46,
+   "power": 52,
+   "stamina": 52,
+   "mental": 46
+  },
+  "potential": {
+   "serve": 66,
+   "receive": 70,
+   "set": 58,
+   "spike": 78,
+   "block": 76,
+   "dig": 64,
+   "speed": 68,
+   "power": 76,
+   "stamina": 74,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "프렌치 브레이드",
+   "hairColor": "라이트 브라운",
+   "eyeColor": "헤이즐",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "느긋",
+   "마이페이스",
+   "식물 키우기"
+  ],
+  "bio": "아웃사이드 히터치고 블로킹이 좋은 장신. 서두르는 법이 없어 답답해 보이지만 타이밍은 정확하다."
+ },
+ {
+  "id": "p021",
+  "name": "반소리",
+  "teamId": "t03",
+  "position": "L",
+  "rarity": "R",
+  "jerseyNumber": 1,
+  "heightCm": 166,
+  "age": 18,
+  "stats": {
+   "serve": 32,
+   "receive": 58,
+   "set": 44,
+   "spike": 24,
+   "block": 20,
+   "dig": 60,
+   "speed": 64,
+   "power": 32,
+   "stamina": 50,
+   "mental": 42
+  },
+  "potential": {
+   "serve": 48,
+   "receive": 82,
+   "set": 64,
+   "spike": 39,
+   "block": 35,
+   "dig": 84,
+   "speed": 86,
+   "power": 48,
+   "stamina": 74,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "짧은 트윈테일",
+   "hairColor": "애쉬 그레이",
+   "eyeColor": "오렌지 앰버",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "씩씩",
+   "겁 없음",
+   "목소리 큼"
+  ],
+  "bio": "이름처럼 목소리로 코트를 채우는 막내 리베로. 장신 선배들 사이를 뛰어다니며 공을 살린다."
+ },
+ {
+  "id": "p022",
+  "name": "천유하",
+  "teamId": "t04",
+  "position": "OP",
+  "rarity": "SSR",
+  "jerseyNumber": 9,
+  "heightCm": 188,
+  "age": 24,
+  "stats": {
+   "serve": 74,
+   "receive": 45,
+   "set": 46,
+   "spike": 85,
+   "block": 64,
+   "dig": 48,
+   "speed": 58,
+   "power": 84,
+   "stamina": 72,
+   "mental": 62
+  },
+  "potential": {
+   "serve": 92,
+   "receive": 67,
+   "set": 64,
+   "spike": 100,
+   "block": 84,
+   "dig": 70,
+   "speed": 78,
+   "power": 100,
+   "stamina": 92,
+   "mental": 86
+  },
+  "skill": {
+   "name": "달군 쇠",
+   "description": "팀이 2점 이상 연속 득점 중일 때 자신의 스파이크 파워와 성공률이 상승한다. 연속 득점이 끊기면 초기화된다."
+  },
+  "appearance": {
+   "hairStyle": "사이드 뱅 레이어드 미디엄",
+   "hairColor": "크림슨 레드",
+   "eyeColor": "골드",
+   "bodyType": "장신 근육질"
+  },
+  "personality": [
+   "호쾌",
+   "리더십",
+   "단순함"
+  ],
+  "bio": "적동의 해머. 한 번 달아오르면 멈추지 않는 연속 득점 머신으로, 팀의 정신적 기둥이기도 하다."
+ },
+ {
+  "id": "p023",
+  "name": "방한결",
+  "teamId": "t04",
+  "position": "MB",
+  "rarity": "SSR",
+  "jerseyNumber": 15,
+  "heightCm": 190,
+  "age": 22,
+  "stats": {
+   "serve": 55,
+   "receive": 46,
+   "set": 46,
+   "spike": 70,
+   "block": 82,
+   "dig": 50,
+   "speed": 52,
+   "power": 78,
+   "stamina": 80,
+   "mental": 68
+  },
+  "potential": {
+   "serve": 75,
+   "receive": 66,
+   "set": 64,
+   "spike": 90,
+   "block": 98,
+   "dig": 70,
+   "speed": 74,
+   "power": 96,
+   "stamina": 95,
+   "mental": 90
+  },
+  "skill": {
+   "name": "모루 위에서",
+   "description": "세트 20점 이후에도 스태미나 저하로 인한 블로킹 페널티를 받지 않는다. 상대 속공 블로킹 성공률이 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "크롭 숏컷",
+   "hairColor": "블랙",
+   "eyeColor": "레드 브라운",
+   "bodyType": "최장신 탄탄한 체형"
+  },
+  "personality": [
+   "무뚝뚝",
+   "우직",
+   "손재주"
+  ],
+  "bio": "대장간 집안에서 자란 미들블로커. 아무리 두들겨도 물러서지 않는 모루 같은 블로커다."
+ },
+ {
+  "id": "p024",
+  "name": "연시율",
+  "teamId": "t04",
+  "position": "S",
+  "rarity": "SR",
+  "jerseyNumber": 2,
+  "heightCm": 174,
+  "age": 20,
+  "stats": {
+   "serve": 56,
+   "receive": 48,
+   "set": 70,
+   "spike": 44,
+   "block": 46,
+   "dig": 52,
+   "speed": 60,
+   "power": 50,
+   "stamina": 58,
+   "mental": 60
+  },
+  "potential": {
+   "serve": 76,
+   "receive": 66,
+   "set": 92,
+   "spike": 62,
+   "block": 64,
+   "dig": 70,
+   "speed": 78,
+   "power": 68,
+   "stamina": 78,
+   "mental": 84
+  },
+  "skill": {
+   "name": "몰아주기",
+   "description": "팀 내 스파이크가 가장 높은 공격수에게 토스할 때 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "미디엄 하이 포니테일",
+   "hairColor": "다크 브라운",
+   "eyeColor": "브라운",
+   "bodyType": "표준 슬림"
+  },
+  "personality": [
+   "승부사",
+   "직설",
+   "계산 빠름"
+  ],
+  "bio": "가장 센 공격수에게 가장 많은 공을 준다는 단순한 철학의 세터. 그 판단이 틀린 적은 거의 없다."
+ },
+ {
+  "id": "p025",
+  "name": "심노을",
+  "teamId": "t04",
+  "position": "OH",
+  "rarity": "SR",
+  "jerseyNumber": 7,
+  "heightCm": 180,
+  "age": 23,
+  "stats": {
+   "serve": 66,
+   "receive": 52,
+   "set": 42,
+   "spike": 68,
+   "block": 52,
+   "dig": 50,
+   "speed": 58,
+   "power": 66,
+   "stamina": 62,
+   "mental": 54
+  },
+  "potential": {
+   "serve": 84,
+   "receive": 74,
+   "set": 60,
+   "spike": 88,
+   "block": 72,
+   "dig": 70,
+   "speed": 76,
+   "power": 84,
+   "stamina": 82,
+   "mental": 78
+  },
+  "skill": {
+   "name": "강서브 압박",
+   "description": "강서브 성공 시 상대 리시브 품질 하락 폭이 소폭 증가한다."
+  },
+  "appearance": {
+   "hairStyle": "롱 웨이브",
+   "hairColor": "선셋 오렌지",
+   "eyeColor": "앰버",
+   "bodyType": "장신 애슬레틱"
+  },
+  "personality": [
+   "열정",
+   "다혈질",
+   "정 많음"
+  ],
+  "bio": "서브 한 방으로 흐름을 뒤집는 파워형 아웃사이드 히터. 화는 빨리 내고 더 빨리 푼다."
+ },
+ {
+  "id": "p026",
+  "name": "편하윤",
+  "teamId": "t04",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 18,
+  "heightCm": 177,
+  "age": 19,
+  "stats": {
+   "serve": 44,
+   "receive": 52,
+   "set": 40,
+   "spike": 50,
+   "block": 42,
+   "dig": 50,
+   "speed": 54,
+   "power": 48,
+   "stamina": 54,
+   "mental": 42
+  },
+  "potential": {
+   "serve": 68,
+   "receive": 74,
+   "set": 58,
+   "spike": 76,
+   "block": 64,
+   "dig": 72,
+   "speed": 74,
+   "power": 72,
+   "stamina": 76,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "턱선 단발 보브",
+   "hairColor": "라이트 브라운",
+   "eyeColor": "그린",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "성실",
+   "조용함",
+   "관찰형"
+  ],
+  "bio": "힘의 팀에서 리시브를 담당하는 조용한 신인. 화려하지 않은 대신 기본기가 반듯하다."
+ },
+ {
+  "id": "p027",
+  "name": "옥루하",
+  "teamId": "t04",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 20,
+  "heightCm": 186,
+  "age": 18,
+  "stats": {
+   "serve": 38,
+   "receive": 30,
+   "set": 34,
+   "spike": 50,
+   "block": 56,
+   "dig": 34,
+   "speed": 44,
+   "power": 56,
+   "stamina": 50,
+   "mental": 40
+  },
+  "potential": {
+   "serve": 62,
+   "receive": 54,
+   "set": 54,
+   "spike": 76,
+   "block": 84,
+   "dig": 56,
+   "speed": 68,
+   "power": 80,
+   "stamina": 76,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "트윈 브레이드",
+   "hairColor": "허니 블론드",
+   "eyeColor": "브라운",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "느긋",
+   "대식가",
+   "순둥이"
+  ],
+  "bio": "타고난 파워를 아직 쓸 줄 모르는 원석 미들블로커. 연습 후 간식을 먹을 때 가장 진지하다."
+ },
+ {
+  "id": "p028",
+  "name": "기온유",
+  "teamId": "t04",
+  "position": "L",
+  "rarity": "R",
+  "jerseyNumber": 5,
+  "heightCm": 170,
+  "age": 21,
+  "stats": {
+   "serve": 36,
+   "receive": 62,
+   "set": 46,
+   "spike": 28,
+   "block": 24,
+   "dig": 60,
+   "speed": 58,
+   "power": 36,
+   "stamina": 56,
+   "mental": 50
+  },
+  "potential": {
+   "serve": 52,
+   "receive": 84,
+   "set": 66,
+   "spike": 43,
+   "block": 39,
+   "dig": 82,
+   "speed": 78,
+   "power": 52,
+   "stamina": 78,
+   "mental": 74
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "사이드 핀 픽시 숏컷",
+   "hairColor": "애쉬 브라운",
+   "eyeColor": "그레이",
+   "bodyType": "단신 다부진 체형"
+  },
+  "personality": [
+   "차분",
+   "배려",
+   "유머"
+  ],
+  "bio": "강타자들이 마음껏 때릴 수 있도록 뒤를 받치는 리베로. 팀에서 유일하게 목소리를 낮추는 사람."
+ },
+ {
+  "id": "p029",
+  "name": "소이든",
+  "teamId": "t05",
+  "position": "S",
+  "rarity": "SSR",
+  "jerseyNumber": 3,
+  "heightCm": 177,
+  "age": 21,
+  "stats": {
+   "serve": 62,
+   "receive": 58,
+   "set": 85,
+   "spike": 46,
+   "block": 54,
+   "dig": 62,
+   "speed": 68,
+   "power": 48,
+   "stamina": 64,
+   "mental": 82
+  },
+  "potential": {
+   "serve": 82,
+   "receive": 78,
+   "set": 100,
+   "spike": 66,
+   "block": 74,
+   "dig": 82,
+   "speed": 88,
+   "power": 68,
+   "stamina": 86,
+   "mental": 97
+  },
+  "skill": {
+   "name": "한 수 앞",
+   "description": "랠리가 3회 이상 이어진 뒤의 토스에서 시간차·이동 공격 성공률이 상승한다. 상대 블로커 위치를 예측하는 보너스를 받는다."
+  },
+  "appearance": {
+   "hairStyle": "히메컷 롱 스트레이트",
+   "hairColor": "라벤더 퍼플",
+   "eyeColor": "실버 그레이",
+   "bodyType": "표준 슬림"
+  },
+  "personality": [
+   "천재형",
+   "말수 적음",
+   "바둑 애호"
+  ],
+  "bio": "상대의 다음 수를 먼저 읽는 천재 세터. 연화의 정교한 배구는 이 손끝에서 시작된다."
+ },
+ {
+  "id": "p030",
+  "name": "위채운",
+  "teamId": "t05",
+  "position": "OH",
+  "rarity": "SSR",
+  "jerseyNumber": 11,
+  "heightCm": 180,
+  "age": 22,
+  "stats": {
+   "serve": 66,
+   "receive": 70,
+   "set": 58,
+   "spike": 76,
+   "block": 56,
+   "dig": 68,
+   "speed": 74,
+   "power": 58,
+   "stamina": 66,
+   "mental": 70
+  },
+  "potential": {
+   "serve": 86,
+   "receive": 88,
+   "set": 78,
+   "spike": 94,
+   "block": 78,
+   "dig": 86,
+   "speed": 90,
+   "power": 80,
+   "stamina": 86,
+   "mental": 90
+  },
+  "skill": {
+   "name": "학의 날개",
+   "description": "상대 블로커가 2인 이상일 때 페인트와 코스 공략으로 스파이크 성공률이 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "아시메트릭 보브",
+   "hairColor": "블랙",
+   "eyeColor": "딥 그린",
+   "bodyType": "표준 균형형"
+  },
+  "personality": [
+   "우아",
+   "여유",
+   "장난기 있는 미소"
+  ],
+  "bio": "힘 대신 코스로 블로커를 지나가는 기교파 아웃사이드 히터. 여유로운 미소 뒤에 승부사가 있다."
+ },
+ {
+  "id": "p031",
+  "name": "현아린",
+  "teamId": "t05",
+  "position": "MB",
+  "rarity": "SR",
+  "jerseyNumber": 14,
+  "heightCm": 188,
+  "age": 21,
+  "stats": {
+   "serve": 48,
+   "receive": 42,
+   "set": 46,
+   "spike": 62,
+   "block": 70,
+   "dig": 44,
+   "speed": 56,
+   "power": 60,
+   "stamina": 58,
+   "mental": 58
+  },
+  "potential": {
+   "serve": 68,
+   "receive": 60,
+   "set": 64,
+   "spike": 84,
+   "block": 90,
+   "dig": 64,
+   "speed": 76,
+   "power": 80,
+   "stamina": 80,
+   "mental": 80
+  },
+  "skill": {
+   "name": "시간차",
+   "description": "시간차 공격(B퀵/C퀵) 시도 시 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "롱 웨이브 로우 포니테일",
+   "hairColor": "애쉬 브라운",
+   "eyeColor": "브라운",
+   "bodyType": "장신 슬림"
+  },
+  "personality": [
+   "온순",
+   "예의 바름",
+   "다도"
+  ],
+  "bio": "세터와의 호흡으로 상대 블로커의 타이밍을 흔드는 미들블로커. 경기 후엔 차를 우린다."
+ },
+ {
+  "id": "p032",
+  "name": "신다온",
+  "teamId": "t05",
+  "position": "OP",
+  "rarity": "SR",
+  "jerseyNumber": 8,
+  "heightCm": 183,
+  "age": 20,
+  "stats": {
+   "serve": 60,
+   "receive": 42,
+   "set": 44,
+   "spike": 68,
+   "block": 56,
+   "dig": 44,
+   "speed": 58,
+   "power": 64,
+   "stamina": 58,
+   "mental": 56
+  },
+  "potential": {
+   "serve": 80,
+   "receive": 62,
+   "set": 62,
+   "spike": 90,
+   "block": 76,
+   "dig": 64,
+   "speed": 78,
+   "power": 84,
+   "stamina": 80,
+   "mental": 80
+  },
+  "skill": {
+   "name": "빈 곳 찌르기",
+   "description": "상대 리베로가 코트 밖(전위 로테이션)일 때 스파이크 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "커튼 뱅 미디엄 스트레이트",
+   "hairColor": "다크 브라운",
+   "eyeColor": "앰버",
+   "bodyType": "장신 애슬레틱"
+  },
+  "personality": [
+   "냉정",
+   "효율 중시",
+   "벌레 공포"
+  ],
+  "bio": "상대 수비의 빈 자리를 찾아 때리는 영리한 아포짓. 냉정해 보이지만 벌레 앞에서는 무너진다."
+ },
+ {
+  "id": "p033",
+  "name": "주은하",
+  "teamId": "t05",
+  "position": "L",
+  "rarity": "SR",
+  "jerseyNumber": 6,
+  "heightCm": 169,
+  "age": 23,
+  "stats": {
+   "serve": 40,
+   "receive": 72,
+   "set": 56,
+   "spike": 24,
+   "block": 22,
+   "dig": 74,
+   "speed": 70,
+   "power": 40,
+   "stamina": 62,
+   "mental": 64
+  },
+  "potential": {
+   "serve": 56,
+   "receive": 90,
+   "set": 76,
+   "spike": 39,
+   "block": 37,
+   "dig": 92,
+   "speed": 88,
+   "power": 58,
+   "stamina": 82,
+   "mental": 86
+  },
+  "skill": {
+   "name": "2단 토스",
+   "description": "세터가 첫 번째 터치를 했을 때 자신의 2단 토스 정확도가 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "귀 뒤로 넘긴 단발 보브",
+   "hairColor": "로즈 브라운",
+   "eyeColor": "헤이즐",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "든든함",
+   "엄마 기질",
+   "잔소리"
+  ],
+  "bio": "리시브뿐 아니라 2단 토스까지 맡는 만능 리베로. 후배들의 식단까지 챙기는 연화의 살림꾼."
+ },
+ {
+  "id": "p034",
+  "name": "여슬아",
+  "teamId": "t05",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 17,
+  "heightCm": 176,
+  "age": 18,
+  "stats": {
+   "serve": 42,
+   "receive": 54,
+   "set": 44,
+   "spike": 48,
+   "block": 40,
+   "dig": 52,
+   "speed": 56,
+   "power": 42,
+   "stamina": 50,
+   "mental": 46
+  },
+  "potential": {
+   "serve": 64,
+   "receive": 76,
+   "set": 64,
+   "spike": 74,
+   "block": 62,
+   "dig": 74,
+   "speed": 76,
+   "power": 66,
+   "stamina": 74,
+   "mental": 72
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "짧은 사이드 포니테일",
+   "hairColor": "밀크티 베이지",
+   "eyeColor": "브라운",
+   "bodyType": "표준 마른 체형"
+  },
+  "personality": [
+   "수줍음",
+   "노력",
+   "만화 애호"
+  ],
+  "bio": "만화 속 배구를 보고 시작한 신인 아웃사이드 히터. 수줍지만 훈련량만큼은 팀 최고."
+ },
+ {
+  "id": "p035",
+  "name": "우로운",
+  "teamId": "t05",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 19,
+  "heightCm": 183,
+  "age": 19,
+  "stats": {
+   "serve": 38,
+   "receive": 34,
+   "set": 38,
+   "spike": 50,
+   "block": 54,
+   "dig": 36,
+   "speed": 50,
+   "power": 50,
+   "stamina": 50,
+   "mental": 44
+  },
+  "potential": {
+   "serve": 62,
+   "receive": 58,
+   "set": 58,
+   "spike": 76,
+   "block": 82,
+   "dig": 58,
+   "speed": 74,
+   "power": 76,
+   "stamina": 76,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "컬리 숏",
+   "hairColor": "차콜 그레이",
+   "eyeColor": "브라운",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "명랑",
+   "리액션 부자",
+   "노래"
+  ],
+  "bio": "조용한 연화에서 가장 시끄러운 원석 미들블로커. 리액션이 커서 팀 분위기를 띄운다."
+ },
+ {
+  "id": "p036",
+  "name": "도리원",
+  "teamId": "t06",
+  "position": "S",
+  "rarity": "SSR",
+  "jerseyNumber": 1,
+  "heightCm": 173,
+  "age": 19,
+  "stats": {
+   "serve": 60,
+   "receive": 56,
+   "set": 82,
+   "spike": 46,
+   "block": 48,
+   "dig": 64,
+   "speed": 78,
+   "power": 46,
+   "stamina": 66,
+   "mental": 68
+  },
+  "potential": {
+   "serve": 80,
+   "receive": 76,
+   "set": 100,
+   "spike": 66,
+   "block": 68,
+   "dig": 84,
+   "speed": 93,
+   "power": 66,
+   "stamina": 88,
+   "mental": 93
+  },
+  "skill": {
+   "name": "순풍",
+   "description": "리시브가 정확(A패스)했을 때 속공과 이동 공격 성공률이 크게 상승한다. 랠리 템포가 빨라진다."
+  },
+  "appearance": {
+   "hairStyle": "레이어드 숏 보브",
+   "hairColor": "스카이 블루",
+   "eyeColor": "골드",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "자유분방",
+   "직감",
+   "낙천"
+  ],
+  "bio": "리그에서 가장 빠른 토스를 올리는 10대 세터. 계산보다 감각으로 공을 뿌리는 라온의 바람."
+ },
+ {
+  "id": "p037",
+  "name": "공산들",
+  "teamId": "t06",
+  "position": "OH",
+  "rarity": "SR",
+  "jerseyNumber": 10,
+  "heightCm": 178,
+  "age": 20,
+  "stats": {
+   "serve": 70,
+   "receive": 50,
+   "set": 42,
+   "spike": 64,
+   "block": 48,
+   "dig": 52,
+   "speed": 66,
+   "power": 60,
+   "stamina": 58,
+   "mental": 52
+  },
+  "potential": {
+   "serve": 88,
+   "receive": 72,
+   "set": 60,
+   "spike": 86,
+   "block": 68,
+   "dig": 72,
+   "speed": 84,
+   "power": 80,
+   "stamina": 80,
+   "mental": 78
+  },
+  "skill": {
+   "name": "점프 서브",
+   "description": "서브 에이스 확률이 소폭 상승한다. 대신 서브 범실 확률도 약간 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "스포츠 하이 포니테일",
+   "hairColor": "골든 브라운",
+   "eyeColor": "그린",
+   "bodyType": "표준 애슬레틱"
+  },
+  "personality": [
+   "호탕",
+   "도전",
+   "서핑"
+  ],
+  "bio": "파도를 타듯 뛰어올라 때리는 점프 서버. 실패를 두려워하지 않아 범실도 에이스도 많다."
+ },
+ {
+  "id": "p038",
+  "name": "류별하",
+  "teamId": "t06",
+  "position": "OP",
+  "rarity": "SR",
+  "jerseyNumber": 12,
+  "heightCm": 184,
+  "age": 22,
+  "stats": {
+   "serve": 62,
+   "receive": 44,
+   "set": 42,
+   "spike": 70,
+   "block": 54,
+   "dig": 46,
+   "speed": 66,
+   "power": 66,
+   "stamina": 56,
+   "mental": 54
+  },
+  "potential": {
+   "serve": 82,
+   "receive": 64,
+   "set": 60,
+   "spike": 90,
+   "block": 74,
+   "dig": 66,
+   "speed": 84,
+   "power": 86,
+   "stamina": 78,
+   "mental": 78
+  },
+  "skill": {
+   "name": "파이프",
+   "description": "후위 중앙(파이프) 공격 시도 시 성공률이 소폭 상승한다."
+  },
+  "appearance": {
+   "hairStyle": "롱 웨이브 하프업",
+   "hairColor": "피치 핑크",
+   "eyeColor": "브라운",
+   "bodyType": "장신 슬림"
+  },
+  "personality": [
+   "밝음",
+   "SNS 중독",
+   "사진 애호"
+  ],
+  "bio": "빠른 템포에 맞춰 후위에서 달려드는 스피드형 아포짓. 경기 사진을 직접 찍어 올리는 게 취미."
+ },
+ {
+  "id": "p039",
+  "name": "엄시아",
+  "teamId": "t06",
+  "position": "OH",
+  "rarity": "R",
+  "jerseyNumber": 5,
+  "heightCm": 180,
+  "age": 21,
+  "stats": {
+   "serve": 48,
+   "receive": 50,
+   "set": 40,
+   "spike": 54,
+   "block": 46,
+   "dig": 48,
+   "speed": 56,
+   "power": 50,
+   "stamina": 52,
+   "mental": 44
+  },
+  "potential": {
+   "serve": 70,
+   "receive": 74,
+   "set": 58,
+   "spike": 78,
+   "block": 68,
+   "dig": 72,
+   "speed": 78,
+   "power": 72,
+   "stamina": 76,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "웨이비 보브",
+   "hairColor": "블랙",
+   "eyeColor": "다크 브라운",
+   "bodyType": "표준"
+  },
+  "personality": [
+   "차분",
+   "성숙",
+   "요리"
+  ],
+  "bio": "자유분방한 팀에서 중심을 잡아 주는 아웃사이드 히터. 원정 숙소에서 팀 식사를 도맡는다."
+ },
+ {
+  "id": "p040",
+  "name": "손라희",
+  "teamId": "t06",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 15,
+  "heightCm": 185,
+  "age": 19,
+  "stats": {
+   "serve": 40,
+   "receive": 34,
+   "set": 38,
+   "spike": 52,
+   "block": 54,
+   "dig": 38,
+   "speed": 54,
+   "power": 50,
+   "stamina": 48,
+   "mental": 42
+  },
+  "potential": {
+   "serve": 64,
+   "receive": 58,
+   "set": 58,
+   "spike": 78,
+   "block": 80,
+   "dig": 62,
+   "speed": 76,
+   "power": 76,
+   "stamina": 74,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "풀어 내린 롱 스트레이트",
+   "hairColor": "다크 브라운",
+   "eyeColor": "헤이즐",
+   "bodyType": "장신 마른 체형"
+  },
+  "personality": [
+   "조용함",
+   "그림",
+   "관찰"
+  ],
+  "bio": "빠른 팀에 맞춰 속공을 배우는 중인 미들블로커. 스케치북에 팀원들의 스파이크 폼을 그린다."
+ },
+ {
+  "id": "p041",
+  "name": "홍이슬",
+  "teamId": "t06",
+  "position": "MB",
+  "rarity": "R",
+  "jerseyNumber": 21,
+  "heightCm": 187,
+  "age": 20,
+  "stats": {
+   "serve": 38,
+   "receive": 32,
+   "set": 36,
+   "spike": 48,
+   "block": 58,
+   "dig": 34,
+   "speed": 46,
+   "power": 54,
+   "stamina": 52,
+   "mental": 42
+  },
+  "potential": {
+   "serve": 62,
+   "receive": 56,
+   "set": 56,
+   "spike": 76,
+   "block": 84,
+   "dig": 56,
+   "speed": 70,
+   "power": 78,
+   "stamina": 78,
+   "mental": 70
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "로우 번",
+   "hairColor": "오번",
+   "eyeColor": "그린",
+   "bodyType": "장신"
+  },
+  "personality": [
+   "털털",
+   "웃음 많음",
+   "낚시"
+  ],
+  "bio": "섬에서 낚시하며 자란 미들블로커. 블로킹 타이밍을 '입질'에 비유하는 특이한 감각파."
+ },
+ {
+  "id": "p042",
+  "name": "설하루",
+  "teamId": "t06",
+  "position": "L",
+  "rarity": "R",
+  "jerseyNumber": 2,
+  "heightCm": 165,
+  "age": 18,
+  "stats": {
+   "serve": 30,
+   "receive": 56,
+   "set": 42,
+   "spike": 22,
+   "block": 18,
+   "dig": 58,
+   "speed": 64,
+   "power": 30,
+   "stamina": 50,
+   "mental": 40
+  },
+  "potential": {
+   "serve": 46,
+   "receive": 82,
+   "set": 64,
+   "spike": 37,
+   "block": 33,
+   "dig": 84,
+   "speed": 84,
+   "power": 46,
+   "stamina": 74,
+   "mental": 68
+  },
+  "skill": {
+   "name": "",
+   "description": ""
+  },
+  "appearance": {
+   "hairStyle": "컬리 보브",
+   "hairColor": "라이트 브라운",
+   "eyeColor": "블루",
+   "bodyType": "단신 민첩"
+  },
+  "personality": [
+   "활발",
+   "응석",
+   "막내"
+  ],
+  "bio": "리그 최연소·최단신 리베로. 작지만 코트 구석까지 뛰어가는 스피드가 무기다."
+ }
+];
+
+export const TEAMS = [
+ {
+  "id": "t01",
+  "name": "가온 프리즘",
+  "city": "가온특별시",
+  "colors": {
+   "primary": "#6C2BD9",
+   "secondary": "#22E4F2"
+  },
+  "emblemConcept": "정삼각형 프리즘을 정면에서 본 실루엣. 왼쪽 아래에서 들어온 흰 빛줄기가 프리즘을 통과해 오른쪽 위로 사이언·바이올렛·마젠타 3색 띠로 갈라져 나간다. 프리즘 윤곽은 두꺼운 바이올렛 라인, 빛 띠는 네온 사이언 그라데이션. 하단에 산세리프 대문자 'PRISM' 워드마크.",
+  "identity": "스타 공격수 중심의 화력 배구. 강서브와 오픈 강타로 흐름을 단숨에 가져오지만 수비 조직은 느슨하고 기복이 있다. 리그 최고 인기·미디어 노출 구단.",
+  "homeArena": "가온 크리스탈 아레나"
+ },
+ {
+  "id": "t02",
+  "name": "해솔 앵커스",
+  "city": "해솔시",
+  "colors": {
+   "primary": "#0F2C4C",
+   "secondary": "#A8DCD1"
+  },
+  "emblemConcept": "원형 방패 안에 굵은 닻 실루엣. 닻의 양쪽 팔을 감싸듯 시폼 컬러의 파도 두 줄이 아래에서 위로 휘감고, 닻 상단 고리는 등대 불빛처럼 작은 방사선 4개로 강조. 바탕은 딥 네이비, 라인은 시폼 화이트, 방패 테두리에 로프 문양.",
+  "identity": "리시브·디그·블로킹 위치 선정으로 랠리를 길게 끌고 가는 수비 조직력의 팀. 규율과 끈기가 강점이나 결정력이 약해 접전에서 마무리를 못 하는 경우가 잦다.",
+  "homeArena": "해솔 등대체육관"
+ },
+ {
+  "id": "t03",
+  "name": "태령 피크스",
+  "city": "태령시",
+  "colors": {
+   "primary": "#1F6B45",
+   "secondary": "#E3EEF0"
+  },
+  "emblemConcept": "세 봉우리가 겹친 산 실루엣(가운데 봉우리가 가장 높음). 봉우리 정상부는 아이스 실버로 눈 덮인 표현, 산 몸통은 포레스트 그린 플랫 컬러. 산 위로 배구공 하나가 태양처럼 떠 있고, 봉우리 아래에는 두꺼운 슬랩 세리프 'PEAKS' 워드마크.",
+  "identity": "리그 최고의 높이. 미들블로커 중심의 블로킹 벽과 고공 속공으로 상대를 내려다본다. 대신 발이 느리고 뒤로 흘러가는 공에 약하다.",
+  "homeArena": "태령 구름마루 체육관"
+ },
+ {
+  "id": "t04",
+  "name": "적동 앤빌스",
+  "city": "적동시",
+  "colors": {
+   "primary": "#A8201A",
+   "secondary": "#D9853B"
+  },
+  "emblemConcept": "정면에서 본 모루(앤빌) 실루엣. 모루 윗면에서 카퍼 컬러 불꽃 스파크 5~6개가 위로 튀어오르며, 스파크 하나는 작은 배구공 형태. 모루는 크림슨 바탕에 카퍼 아웃라인, 아래쪽에 굵고 각진 인더스트리얼 서체 'ANVILS'. 톱니 형태의 원형 테두리.",
+  "identity": "파워·체력·강서브의 팀. 단순하지만 무거운 강타로 상대 수비를 부순다. 정교함과 리시브가 약해 서브 리시브에서 흔들리면 무너진다.",
+  "homeArena": "적동 철마루 아레나"
+ },
+ {
+  "id": "t05",
+  "name": "연화 크레인즈",
+  "city": "연화시",
+  "colors": {
+   "primary": "#C9A227",
+   "secondary": "#2A2624"
+  },
+  "emblemConcept": "날개를 활짝 편 학 한 마리를 옆에서 본 실루엣. 학은 먹색(차콜) 단색으로 처리하고 부리와 다리 끝만 골드. 학의 발 아래에 골드 연꽃 한 송이(꽃잎 5장, 단순화). 전체를 얇은 골드 원 두 겹이 감싸며, 원 사이에 작은 점 문양(전통 단청 느낌)을 배치. 워드마크는 세리프 'CRANES'.",
+  "identity": "세터가 경기를 설계하는 두뇌 배구. 시간차·이동 공격·2단 토스까지 정교하게 조립하고, 코스 공략으로 블로커를 지나간다. 순수 파워와 높이는 부족하다. 리그 역대 최다 우승의 전통 명문.",
+  "homeArena": "연화 서원체육관"
+ },
+ {
+  "id": "t06",
+  "name": "라온 브리즈",
+  "city": "라온시",
+  "colors": {
+   "primary": "#FF6B3D",
+   "secondary": "#19B5A6"
+  },
+  "emblemConcept": "수평선 위로 떠오르는 반원 태양(코랄 오렌지)과 그 앞을 가로지르는 바람 궤적 세 줄(터콰이즈, 왼쪽에서 오른쪽으로 갈수록 가늘어짐). 태양 왼쪽에 야자잎 하나가 실루엣으로 기울어져 있고, 바람 궤적 끝에 작은 배구공. 둥근 산세리프 'BREEZE' 워드마크, 전체 형태는 가로로 긴 타원.",
+  "identity": "리그에서 가장 빠른 템포. 스피드 세터의 속공·이동 공격과 변칙 서브로 상대를 흔든다. 자유분방하고 밝지만 안정성과 블로킹 높이가 부족하다.",
+  "homeArena": "라온 선셋 돔"
+ }
+];

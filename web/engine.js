@@ -1,0 +1,50 @@
+// 여자 배구 매니저 — 브라우저용 순수 로직 엔진 (DOM 비참조).
+// C# 원본(sim/VolleySim.*) 포팅. 자세한 정합 결과·의도적 차이는 web/PARITY.md 참조.
+//
+// 사용법(번들러 없이):
+//   <script type="module">
+//     import { createGame, playMatch, renderCommentary } from './engine.js';
+//     const g = createGame({ seed: 42, clubName: '새록 스프라우츠' });
+//     const r = playMatch(g, 't06');
+//     console.log(renderCommentary(r.events, r.ctx).slice(0, 20));
+//   </script>
+
+// ---------------------------------------------------------------- 공개 API
+export {
+  createGame, loadGame, saveGame,
+  scout, trainingCard,
+  startTraining, trainingOptions, applyTrainingChoice, graduate,
+  recommendSupporters, supporterCandidates,
+  autoLineup, setLineupSlot, lineupValid, lineupOvr, myRoster, myTeamState, myTeam,
+  playMatch, clubTeamState, clubList,
+  representatives, representativeOf, promoteInstance, releaseInstance,
+  canScout, departedCardIds, growthFor,
+  CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, SCOUT_RATES, SEASON_GROWTH,
+} from './engine/game.js';
+
+export { renderCommentary, ga } from './engine/commentary.js';
+
+// 참조 데이터·열거형(UI 표기용)
+export {
+  POSITIONS, RARITIES, POS, POS_CODES, RARITY,
+  STAT, STAT_KEYS, STAT_NAMES_KO, SIDE,
+  EV, Q, OUT, ATK, REASON, FORMATION,
+  defaultTactics,
+} from './engine/domain.js';
+
+export {
+  ACT, ACT_NAMES_KO, COND, COND_NAMES_KO, COND_ARROWS,
+  ZONE, ZONE_NAMES_KO, APT_NAMES, GRADE_NAMES, SPECIAL, SPECIAL_NAMES_KO, INJURY,
+  DEFAULT_TRAINING_CONFIG, ovrOf, gradeOf,
+} from './engine/training-config.js';
+
+export { POLICIES, runWithPolicy, injuryBadge, campLine } from './engine/training.js';
+
+// 저수준(파리티 하네스·고급 UI 용)
+export { Rng, mixSeed, derivedSeed } from './engine/rng.js';
+export { simulateMatch, setScoreLine, totalPoints } from './engine/match.js';
+export { generateTeamState, generatePlayer } from './engine/generator.js';
+export { DEFAULT_SIM_CONFIG, createSimConfig } from './engine/config.js';
+export { PLAYERS, TEAMS } from './data.js';
+
+export const ENGINE_VERSION = '0.2.0-js';
