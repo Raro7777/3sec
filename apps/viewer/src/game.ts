@@ -30,7 +30,7 @@ import {
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
-import { canvasBlob, downloadsBlocked, drawSeasonCard, shareFile } from "./share";
+import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
@@ -2342,7 +2342,7 @@ export class Game {
     const cupResult = cupSt === "holder" ? "우승 🏆" : myLastTie ? `${CUP_STAGE_LABEL[myLastTie.stage]} ${tieWinner(myLastTie) === me.id ? "진출" : "탈락"}` : "—";
     const n = rows.length;
     const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? "강등권 성적입니다. 전력 보강이 시급합니다." : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
-    if (downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 카드를 공유할 수 있습니다."); return; }
+    if (!isNativeApp() && downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 카드를 공유할 수 있습니다."); return; }
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = "카드 만드는 중…";
     try {

@@ -1,18 +1,52 @@
 /**
- * Sharing helpers: hand a generated file to the OS share sheet (Android Chrome / WebView) or fall
- * back to a download; plus the 1080×1350 season summary card painter.
+ * Sharing helpers: hand a generated file to the OS share sheet (Android Chrome / WebView, or the
+ * native Capacitor Share plugin inside the APK) or fall back to a download; plus the 1080×1350
+ * season summary card painter.
  */
 
 type ShareNav = Navigator & { share?: (d: { files?: File[]; title?: string; text?: string }) => Promise<void>; canShare?: (d: { files?: File[] }) => boolean };
 
+/** True inside the packaged Android app (Capacitor WebView) — a `blob:` download there never reaches the Downloads folder. */
+export function isNativeApp(): boolean {
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.();
+}
+
 /** The claude.ai artifact viewer blocks page-initiated downloads; only the share sheet works there. */
 export const downloadsBlocked = (): boolean => { try { return location.hostname.endsWith("claude.ai"); } catch { return false; } };
+
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve((r.result as string).split(",", 2)[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+
+/**
+ * Inside the Android app, a page `<a download>` click cannot reach the system Downloads folder —
+ * Android's WebView has no download handler for `blob:` URLs. Write the file to the app's cache via
+ * the native Filesystem plugin instead, then hand it to the native Share sheet (save to Downloads,
+ * a Files app, or send it on) — this is the only path that reliably produces a file on-device.
+ */
+async function shareNative(blob: Blob, name: string, title: string): Promise<"shared" | "blocked"> {
+  try {
+    const [{ Filesystem, Directory }, { Share }] = await Promise.all([import("@capacitor/filesystem"), import("@capacitor/share")]);
+    const data = await blobToBase64(blob);
+    const written = await Filesystem.writeFile({ path: name, data, directory: Directory.Cache });
+    await Share.share({ title, url: written.uri, dialogTitle: title });
+    return "shared";
+  } catch {
+    return "blocked";
+  }
+}
 
 /**
  * Share a blob as a file; returns "shared", "downloaded" or "blocked" (no share support and downloads
  * blocked — show a hint). A cancelled share sheet counts as "shared".
  */
 export async function shareFile(blob: Blob, name: string, title: string): Promise<"shared" | "downloaded" | "blocked"> {
+  if (isNativeApp()) return shareNative(blob, name, title);
   const nav = navigator as ShareNav;
   const file = new File([blob], name, { type: blob.type });
   if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {

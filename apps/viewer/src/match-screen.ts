@@ -7,7 +7,7 @@ import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./r
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
 import { roundsPerSeason, table, type Fixture, type GameState } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
-import { downloadsBlocked, shareFile } from "./share";
+import { downloadsBlocked, isNativeApp, shareFile } from "./share";
 
 /** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
 interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
@@ -1250,7 +1250,7 @@ export class MatchScreen {
    */
   private async shareClipGif(clip: Clip): Promise<void> {
     if (this.gifBusy) return;
-    if (downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 GIF를 공유할 수 있습니다."); return; }
+    if (!isNativeApp() && downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 GIF를 공유할 수 있습니다."); return; }
     this.gifBusy = true;
     this.render();
     try {
