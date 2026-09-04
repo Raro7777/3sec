@@ -12,6 +12,19 @@ league-and-economy.md 수치 검증용 경제·리그 몬테카를로 (표준 �
 실행: python3 tools/economy-sim/economy_sim.py            (--quick 로 n 축소, --seasons 5, --seed 1, --only new)
 데이터: data/players.json 을 읽어 42명 카드 풀·6구단 전력(성장률 g)을 계산한다.
 모든 잡은 시드 고정이라 같은 값이 재현된다.
+
+--- v0.2 (문서 league-and-economy v0.2 와 동시 갱신) -------------------------------------------
+이 스크립트는 더 이상 "문서 초기값"의 구현이 아니라 **실제 게임 엔진(web/engine/*.js)의 근사 모델**이다.
+v0.1 의 초기값은 ① 승률 로지스틱 근사 위에서 ② 결원 보충(A.3.5) 미반영으로 잡힌 값이었고,
+실제 MatchSimulator 위에서는 시즌 1 이 너무 쉬웠다(승률 59% / 우승 38%). 그래서 web 엔진이
+사다리 g·결원 강도·중복 처리를 재캘리브레이션했고, 여기 DEFAULT_CFG 를 그 값에 맞췄다.
+
+**권위 있는 수치는 이 스크립트가 아니라 `node web/season-check.mjs`(실제 엔진) 이다.**
+이 스크립트는 (a) 천장 규칙처럼 대량 표본이 필요한 계산과 (b) 엔진에 없는 대조군(현행 프로토타입
+규칙·정식 미션 시나리오)을 싸게 돌려 보는 용도로 남긴다. 근사 모델이라 승률·순위는 엔진과 어긋난다
+(차이는 문서 B.3.1 아래 대조표 참조).
+
+엔진에서 실측해 옮겨 온 상수: ladder / vacancy_ovr_delta / filler_ovr·per_season·cap / shards_per_dup
 """
 import argparse, json, math, os, random, sys, time
 from collections import Counter, defaultdict
@@ -44,19 +57,30 @@ DEFAULT_CFG = dict(
     seasons=3, rounds=14,
     points_rule={"3-0": (3, 0), "3-1": (3, 0), "3-2": (2, 1)},
     playoff_teams=4, semi_bestof=1, po_bestof=3, final_bestof=5, final_advantage=1,
-    ladder=[0.35, 0.48, 0.58, 0.66, 0.72, 0.76], ladder_cap=0.80,
+    # 사다리 g — web/engine/game.js SEASON_GROWTH 와 1:1 (v0.1 초기값 [.35 .48 .58 .66 .72 .76] 에서 재캘리브레이션)
+    ladder=[0.52, 0.63, 0.74, 0.80, 0.80, 0.80, 0.80], ladder_cap=0.80,
     club_g_offset={"t01": 0.0, "t02": 0.0, "t03": 0.0, "t04": 0.0, "t05": 0.0, "t06": 0.0},
     k_logit=0.235,          # 승률 = sigmoid(k × (내 라인업 OVR − 상대 OVR) + 홈)  (밸런스 리포트 9절 회귀)
     home_logit=0.10,        # 홈 이점(로짓). 경기 시뮬 HomeCourtLogit 의 승률 환산 가정치
-    filler_ovr=46.0, filler_per_season=1.0, filler_cap=50.0,
+    # A.3.5 결원 보충: 스카우트된 선수 자리에 들어가는 대체 선수의 OVR = 그 구단 원 로스터 평균 OVR + delta.
+    # 엔진은 stat 평균 공간에서 −4(VACANCY.overallDelta)를 주고, 그것이 포지션 가중 OVR 공간에서
+    # −7.4 로 나온다(g 35~80% 구간에서 −7.32 ~ −7.53, 42쌍 실측). 여기서는 OVR 공간의 −7.4 를 쓴다.
+    vacancy=True, vacancy_ovr_delta=-7.4,
+    # 연습생 라인업 OVR — 엔진 실측(fillerOverall 44 +1/시즌·상한 48 → OVR 46.00 / +0.83 / 고원 49.7)
+    filler_ovr=46.0, filler_per_season=0.83, filler_cap=49.7,
     # 스카우트 (B.2)
     rate={"R": 0.80, "SR": 0.17, "SSR": 0.03},
     pity_sr=10, pity_ssr=60,
     price_general_ticket=1, price_pos_ticket=1, price_pos_gold=1200,
-    shards_per_dup=10, lb_cost=30, lb_max=5, lb_potential=3, shard_up_ratio=5,
+    # 중복 처리 — 엔진은 조각 풀이 하나뿐이고 중복이 곧바로 한계돌파 1단계를 준다(조각 지급 0).
+    # 문서 v0.1 의 "중복 → 희귀도 조각 10 → 30개마다 1단계"는 미구현이다. 조각 10을 같이 주면
+    # 뽑기 1회가 뽑기 0.83회를 재생산해 시즌 2 스카우트가 폭주한다(PARITY.md 시즌 계층 절).
+    shards_per_dup=0, dup_limit_break=True, lb_cost=30, lb_max=5, lb_potential=3, shard_up_ratio=5,
     n_card_stats=42.0, n_card_potential=57.0,   # 포지션 지정 폴백용 N 무명 신인(평균 stats / potential)
     # 수입 (B.3) — 티켓은 승리·순위·마일스톤에서만, 경기 참가는 조각으로
-    init_tickets=5, init_gold=1200, tutorial_sr_setter=True,
+    # 튜토리얼 SR 세터 확정 지급은 문서 v0.1 의 계획이고 web 엔진에는 없다(createGame 의 ownedCards 는 빈 객체).
+    # 엔진과 맞추려고 기본을 False 로 내린다. --tutorial-setter 로 되살려 효과만 볼 수 있다.
+    init_tickets=5, init_gold=1200, tutorial_sr_setter=False,
     match_shards=2, win_shards=4, shards_per_ticket=12,
     match_gold=100, win_gold=180, set_gold=25, home_gold=50,
     rank_tickets=[8, 7, 6, 5, 4, 4, 3], rank_gold=[2600, 2200, 1800, 1500, 1200, 900, 700],
@@ -141,13 +165,52 @@ def build_pool(players, cfg):
     return pool
 
 
-def club_strength(players, g_by_club):
+def club_strength(players, g_by_club, departed=None, vacancy_delta=0.0):
+    """구단별 평균 OVR. departed 에 든 카드 id 는 플레이어가 스카우트해 간 결원이라
+    같은 포지션의 대체 선수(그 구단 **원** 로스터 평균 + vacancy_delta)로 갈아 끼운다(A.3.5).
+    대체 선수 강도의 기준이 되는 평균은 결원이 늘어도 흔들리지 않게 원본 기준으로 고정한다
+    (web/engine/game.js clubTeamState 와 같은 규칙)."""
+    by_team = defaultdict(list)
+    ids_by_team = defaultdict(list)
+    for p in players:
+        g = g_by_club[p["teamId"]]
+        # A.3.1 실효스탯 = clamp(round(stats + g×(potential − stats)), 0, 100).
+        # 엔진은 roundHalfEven 을 쓰고 파이썬 내장 round() 도 half-to-even 이라 결과가 같다.
+        st = [min(100.0, max(0.0, round(p["stats"][k] + g * (p["potential"][k] - p["stats"][k])))) for k in STATS]
+        by_team[p["teamId"]].append(ovr_of(st, p["position"]))
+        ids_by_team[p["teamId"]].append(p["id"])
+    out = {}
+    for t, v in by_team.items():
+        base = sum(v) / len(v)
+        if not departed:
+            out[t] = base
+            continue
+        sub = base + vacancy_delta
+        out[t] = sum(sub if cid in departed else o for cid, o in zip(ids_by_team[t], v)) / len(v)
+    return out
+
+
+def club_ovr_table(players, g_by_club):
+    """{teamId: ([(cardId, ovr), ...], 원 로스터 평균 OVR)} — 결원 반영을 매치데이마다 싸게 다시 계산하기 위한 캐시."""
     by_team = defaultdict(list)
     for p in players:
         g = g_by_club[p["teamId"]]
-        st = [p["stats"][k] + g * (p["potential"][k] - p["stats"][k]) for k in STATS]
-        by_team[p["teamId"]].append(ovr_of(st, p["position"]))
-    return {t: sum(v) / len(v) for t, v in by_team.items()}
+        # A.3.1 실효스탯 = clamp(round(stats + g×(potential − stats)), 0, 100).
+        # 엔진은 roundHalfEven 을 쓰고 파이썬 내장 round() 도 half-to-even 이라 결과가 같다.
+        st = [min(100.0, max(0.0, round(p["stats"][k] + g * (p["potential"][k] - p["stats"][k])))) for k in STATS]
+        by_team[p["teamId"]].append((p["id"], ovr_of(st, p["position"])))
+    return {t: (v, sum(o for _, o in v) / len(v)) for t, v in by_team.items()}
+
+
+def club_strength_now(table, departed, vacancy_delta):
+    """club_ovr_table 결과 + 현재 결원 집합 → {teamId: 평균 OVR}."""
+    if not departed:
+        return {t: base for t, (v, base) in table.items()}
+    out = {}
+    for t, (v, base) in table.items():
+        sub = base + vacancy_delta
+        out[t] = sum(sub if cid in departed else o for cid, o in v) / len(v)
+    return out
 
 
 def p_match_from_set(p):
@@ -316,7 +379,8 @@ class Run:
         if card.rarity == "N":
             self.owned.setdefault(card.id, 0)
         elif dup:
-            if cfg["proto_rules"]:
+            if cfg["proto_rules"] or cfg["dup_limit_break"]:
+                # 중복 = 한계돌파 1단계 즉시(web 엔진 규칙). 조각은 주지 않는다.
                 if self.owned[card.id] < cfg["lb_max"]:
                     self.owned[card.id] += 1
                     self.lb_count += 1
@@ -495,7 +559,12 @@ class Run:
         self.season_idx = season
         self._lineup_cache = None
         g = min(cfg["ladder_cap"], cfg["ladder"][min(season - 1, len(cfg["ladder"]) - 1)])
-        clubs = club_strength(self.players, {t: min(1.0, g + cfg["club_g_offset"][t]) for t in CLUB_NAMES})
+        ovr_table = club_ovr_table(self.players, {t: min(1.0, g + cfg["club_g_offset"][t]) for t in CLUB_NAMES})
+        # A.3.5 결원은 "졸업시켜 대표 인스턴스가 된 카드"에만 생긴다(엔진 departedCardIds = state.instances 기준).
+        # 보유만 하고 아직 안 키운 카드는 원소속 구단에서 계속 뛴다.
+        vac_delta = cfg["vacancy_ovr_delta"] if cfg["vacancy"] else 0.0
+        departed = set(self.inst) if cfg["vacancy"] else None
+        clubs = club_strength_now(ovr_table, departed, vac_delta)
         me = "me"
         teams = [me] + sorted(clubs)
         sched = round_robin_schedule(teams, self.rng)
@@ -520,6 +589,9 @@ class Run:
             self.limit_break_phase()
             self.train_phase(cfg["trainings_per_matchday"])
             trainings += cfg["trainings_per_matchday"]
+            if cfg["vacancy"]:
+                # 이번 매치데이에 새로 졸업시킨 선수가 있으면 원소속 구단이 그만큼 약해진다
+                clubs = club_strength_now(ovr_table, set(self.inst), vac_delta)
             holes_md[md] = self.holes()
             ovr_md[md] = self.lineup_ovr()
             my_ovr = ovr_md[md]
@@ -701,6 +773,10 @@ def main():
     ap.add_argument("--trainings", type=int, default=None,
                     help=f"매치데이당 육성 횟수 (기본 {DEFAULT_CFG['trainings_per_matchday']})")
     ap.add_argument("--only", default="", help="new|proto|general|live|safe|t2 중 하나만")
+    ap.add_argument("--tutorial-setter", action="store_true",
+                    help="튜토리얼 SR 세터 확정 지급을 켠다(엔진 미구현. 문서 v0.1 의 계획값 재현용)")
+    ap.add_argument("--no-vacancy", action="store_true",
+                    help="A.3.5 결원 보충을 끈다(문서 v0.1 의 '구단 로스터 고정' 가정 재현용)")
     args = ap.parse_args()
     n = 150 if args.quick else args.n
     t0 = time.time()
@@ -709,13 +785,17 @@ def main():
     cfg["seasons"] = args.seasons
     if args.trainings:
         cfg["trainings_per_matchday"] = args.trainings
+    if args.tutorial_setter:
+        cfg["tutorial_sr_setter"] = True
+    if args.no_vacancy:
+        cfg["vacancy"] = False
     pool = build_pool(players, cfg)
     print(f"# economy_sim — n={n}, seed={args.seed}, seasons={cfg['seasons']}")
     report_pool(pool, players, cfg)
     report_pity(cfg, args.seed)
     scenarios = []
     if args.only in ("", "new"):
-        scenarios.append(("신규 설계(기준선) — 프로토타입 범위 수입 (초기 5 · 경기 조각 2/승리 +4 · 순위/PO/마일스톤 · 천장 10/60 · 포지션 지정 · 중복→조각→한계돌파)", dict(cfg)))
+        scenarios.append(("기준선 — 실제 엔진 상수 근사 (초기 5 · 경기 조각 2/승리 +4 · 순위/PO/마일스톤 · 천장 10/60 · 포지션 지정 · 중복 = 한계돌파 1단계 · 사다리 52/63/74% · 결원 −7.4 OVR)", dict(cfg)))
     if args.only in ("", "proto"):
         c = dict(cfg); c.update(proto_rules=True, init_tickets=5, init_gold=0, tutorial_sr_setter=False, scout_mode="general_only")
         scenarios.append(("현행 프로토타입 규칙 — 초기 5 · 승리 +1 · 패배 조각 1/3 · 천장 없음 · 일반만 · 중복 = 즉시 한계돌파", c))
