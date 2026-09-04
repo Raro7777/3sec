@@ -6,7 +6,7 @@ import { Sfx } from "./sfx";
 import { Haptics } from "./haptics";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
-import { roundsPerSeason, table, type Fixture, type GameState } from "@3sec/game";
+import { seasonRounds, table, type Fixture, type GameState } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, isNativeApp, shareFile } from "./share";
 
@@ -823,7 +823,7 @@ export class MatchScreen {
       const mine = rows[i];
       if (!mine) { this.liveHtml = ""; return ""; }
       const near = (j: number) => rows[j] !== undefined && Math.abs(rows[j]!.pts - mine.pts) <= 3;
-      const lastRounds = live.fixture.round >= roundsPerSeason(st.clubs.length) - 3;
+      const lastRounds = live.fixture.round >= seasonRounds(st) - 3;
       const matters = lastRounds || near(0) || near(i - 1) || near(i + 1);
       if (!matters) { this.liveHtml = ""; return ""; }
       const arrow = pos < this.livePos0 ? '<b style="color:var(--good)">▲</b>' : pos > this.livePos0 ? '<b style="color:var(--bad)">▼</b>' : "";

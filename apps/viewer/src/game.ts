@@ -3,7 +3,7 @@ import { FORMATIONS, INSTRUCTION_IDS, INSTRUCTION_LABEL, ROLES, Rng, TACTIC_PRES
 type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 import {
   CLUBS, SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
-  overall, playerOf, prepareRound, recordResult, roundsPerSeason, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
+  overall, playerOf, prepareRound, recordResult, seasonRounds, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
   MAX_SQUAD, MIN_SQUAD, bestOffer, playerValue, sellPlayer, transferTargets, windowOpen, deadlineDay, makeBid, openOffers, acceptOffer, rejectOffer, respondToCounter,
   freeAgentTerms, signFreeAgent, loanableOut, loanDestination, loanOut, loanTargets, loanIn, type BidResult,
@@ -20,6 +20,9 @@ import {
   avgHomeAttendance, clubCapacity, moodBand, moodLabel,
   expectedAttendance, fixtureSeed, penaltyShootoutDetail, type ShootoutDetail,
   EXPANSION_STEP, KIT_PATTERNS, KIT_PATTERN_LABEL, CLUB_NAME_MAX, SHORT_NAME_MAX, STADIUM_NAME_MAX, expandStadium, expansionAdvice, renameClub, renameStadium, resetClubKit, setClubKit, type ClubKit, type KitPatternName,
+} from "@3sec/game";
+import {
+  CLUBS_D2, DIVISIONS, SWAP, divisionName, userDivision, inPromotionZone, inRelegationZone,
 } from "@3sec/game";
 import {
   ACHIEVEMENTS, TIER_LABEL, achievementById, hallOfFame, takeFreshAchievements, type AchievementTier,
@@ -71,6 +74,9 @@ export function newsIcon(n: string): string {
 }
 
 /** One-line character per club for the club picker (indexed like CLUBS). */
+/** Every club a new manager can pick, in club-id order: the top flight, then the division below. */
+const WORLD_CLUBS = [...CLUBS, ...CLUBS_D2];
+
 const CLUB_BLURBS: string[] = [
   "수도의 명문, 중간 전력에 큰 기대",
   "항구 도시의 자존심, 롱볼과 투지로 버틴다",
@@ -84,6 +90,19 @@ const CLUB_BLURBS: string[] = [
   "철강 도시의 뚝심, 중위권 안정이 현실적",
   "최약체, 잔류가 목표",
   "신흥 구단, 성장 가능성에 베팅",
+  // second division (world.ts CLUBS_D2), in the same id order — a harder start with promotion to chase
+  "2부 최강 후보, 한 시즌 만의 승격을 노린다",
+  "지난 시즌 승격 실패, 스쿼드는 그대로 남았다",
+  "젊은 팀에 재정은 여유롭다, 시간이 필요하다",
+  "수비는 단단하지만 골이 부족하다",
+  "해안 도시의 스리백, 홈에서는 강하다",
+  "성실한 중위권, 한 방이 아쉽다",
+  "만성 자금난, 유스로 버티는 구단",
+  "승격과 강등을 오간 엘리베이터 팀",
+  "작은 구장, 뜨거운 응원",
+  "공격적이지만 기복이 심하다",
+  "재건 첫 시즌, 기대치는 낮다",
+  "리그 최약체, 살아남는 것이 목표",
 ];
 
 /**
@@ -245,21 +264,26 @@ export class Game {
     const h: string[] = [];
     h.push(`<div class="card onb-welcome"><h3>환영합니다</h3>
       <div class="onb-title">가난한자의 FM에 오신 것을 환영합니다</div>
-      <div class="hint">12개 구단이 22라운드 리그를 치릅니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요. 전력이 강한 팀은 우승을, 약한 팀은 잔류를 목표로 합니다.</div>
+      <div class="hint">1부·2부 각각 12개 구단이 22라운드 리그를 치릅니다. 매 시즌 1부 하위 2팀이 강등되고 2부 상위 2팀이 승격합니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요.</div>
       <div class="hint" style="color:var(--accent)">커리어 모드 추천: 평판 낮은 구단에서 시작하세요. 기대를 넘는 성적은 감독 평판을 빠르게 올리고, 시즌 중 큰 구단의 감독직 제안으로 이어집니다.</div>
       <label style="margin-top:4px">감독 이름 <input id="onbName" type="text" placeholder="감독 이름" maxlength="12" autocomplete="off" /></label>
       <div class="hint">비워두면 "감독"으로 불립니다.</div></div>`);
-    h.push(`<div class="card"><h3>팀 선택 <span>카드를 눌러 선택</span></h3><div class="club-grid">`);
-    CLUBS.forEach((c, i) => {
-      const n = clubStars(c.reputation);
-      h.push(`<button type="button" class="club-card${this.pickedClub === i ? " sel" : ""}" data-club="${i}" style="--club:${c.color}">
-        <div class="cc-head">${emblemSvg({ id: i, name: c.name, shortName: c.shortName, color: c.color }, 22)}<b>${c.name}</b><small>${c.shortName}</small></div>
-        <div class="cc-meta">${stars(n)}<span class="cc-form">${c.formation}</span></div>
-        <div class="cc-blurb">${CLUB_BLURBS[i] ?? ""}</div>
-      </button>`);
-    });
-    h.push(`</div></div>`);
-    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${this.pickedClub === null ? "disabled" : ""}>이 팀으로 시작 →</button><span class="hint" id="onbHint">${this.pickedClub === null ? "팀을 먼저 선택하세요." : `${CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
+    // Both divisions are on offer: starting below is the harder career, with promotion to chase.
+    const world = [...CLUBS.map((c) => ({ c, d: 1 })), ...CLUBS_D2.map((c) => ({ c, d: 2 }))];
+    for (const d of [1, 2]) {
+      h.push(`<div class="card"><h3>${divisionName(d)} <span>${d === 1 ? "카드를 눌러 선택" : "어려운 시작 · 승격이 목표"}</span></h3><div class="club-grid">`);
+      world.forEach(({ c, d: cd }, i) => {
+        if (cd !== d) return;
+        const n = clubStars(c.reputation);
+        h.push(`<button type="button" class="club-card${this.pickedClub === i ? " sel" : ""}" data-club="${i}" style="--club:${c.color}">
+          <div class="cc-head">${emblemSvg({ id: i, name: c.name, shortName: c.shortName, color: c.color }, 22)}<b>${c.name}</b><small>${c.shortName}</small></div>
+          <div class="cc-meta">${stars(n)}<span class="cc-form">${c.formation}</span></div>
+          <div class="cc-blurb">${CLUB_BLURBS[i] ?? ""}</div>
+        </button>`);
+      });
+      h.push(`</div></div>`);
+    }
+    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${this.pickedClub === null ? "disabled" : ""}>이 팀으로 시작 →</button><span class="hint" id="onbHint">${this.pickedClub === null ? "팀을 먼저 선택하세요." : `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
     this.el.onboarding.innerHTML = h.join("");
 
     const nameInput = document.getElementById("onbName") as HTMLInputElement;
@@ -269,7 +293,7 @@ export class Game {
       this.pickedClub = Number(b.dataset.club);
       this.el.onboarding.querySelectorAll<HTMLElement>(".club-card").forEach((x) => x.classList.toggle("sel", x === b));
       startBtn.disabled = false;
-      hint.textContent = `${CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`;
+      hint.textContent = `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`;
     }));
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) startBtn.click(); });
     startBtn.addEventListener("click", () => {
@@ -468,7 +492,7 @@ export class Game {
 
   private renderAll(): void {
     const s = this.state;
-    this.el.season.textContent = `${s.managerName} 감독 · 시즌 ${s.season} · ${s.pendingCupDay && !seasonOver(s) ? `컵 ${CUP_STAGE_LABEL[s.cup.stage] ?? ""}` : `${Math.min(s.round + 1, roundsPerSeason(s.clubs.length))}/${roundsPerSeason(s.clubs.length)}R`}`;
+    this.el.season.textContent = `${s.managerName} 감독 · 시즌 ${s.season} · ${s.pendingCupDay && !seasonOver(s) ? `컵 ${CUP_STAGE_LABEL[s.cup.stage] ?? ""}` : `${Math.min(s.round + 1, seasonRounds(s))}/${seasonRounds(s)}R`}`;
     this.el.tabMatch.disabled = !this.live && !this.challenge;
     this.renderHome();
     this.renderSquad();
@@ -490,7 +514,7 @@ export class Game {
 
   private stateLabel(st: GameState = this.state): string {
     const c = st.clubs[st.userClub]!;
-    return `${st.managerName} 감독 · ${c.name} · 시즌 ${st.season} ${Math.min(st.round + 1, roundsPerSeason(st.clubs.length))}R`;
+    return `${st.managerName} 감독 · ${c.name} · 시즌 ${st.season} ${Math.min(st.round + 1, seasonRounds(st))}R`;
   }
 
   private applyLoaded(st: GameState, source: string): void {
@@ -636,7 +660,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     h.push(this.todoHtml());
     h.push(this.careerStripHtml());
     // the pending interview (press.ts) and the story events with their choices (story.ts)
@@ -653,7 +677,9 @@ export class Game {
       h.push(`<div class="hint">${this.challenge ? `도전 「${this.challenge.scen.title}」 경기가 진행 중입니다.` : "경기가 진행 중입니다."}</div><div class="actions"><button class="primary" data-act="toMatch">경기로 돌아가기</button>${this.challenge ? `<button class="danger" data-act="chalAbandon">도전 포기</button>` : ""}</div>`);
     } else if (over) {
       const champ = clubOf(s, rows[0]!.club);
-      h.push(`<div class="hint">시즌 ${s.season} 최종 순위 ${pos}위. 우승: <b style="color:var(--accent)">${champ.name}</b>${s.cup.holder !== undefined ? ` · ${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b>` : ""}</div>`);
+      const fate = inPromotionZone(s, me.id) ? ` <b style="color:var(--accent)">승격!</b> 다음 시즌은 ${divisionName(userDivision(s) - 1)}입니다.`
+        : inRelegationZone(s, me.id) ? ` <b style="color:var(--bad)">강등.</b> 다음 시즌은 ${divisionName(userDivision(s) + 1)}에서 다시 시작합니다.` : "";
+      h.push(`<div class="hint">${divisionName(userDivision(s))} 시즌 ${s.season} 최종 순위 ${pos}위.${fate} 우승: <b style="color:var(--accent)">${champ.name}</b>${s.cup.holder !== undefined ? ` · ${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b>` : ""}</div>`);
       h.push(`<div class="actions"><button class="primary" data-act="review">시즌 결산 보기</button><button data-act="nextSeason">다음 시즌 시작 →</button></div>`);
     } else if (s.pendingCupDay) {
       const tie = userCupTie(s);
@@ -1119,7 +1145,7 @@ export class Game {
       <div class="rvTitle" style="color:${declined ? "var(--accent)" : "var(--bad)"}">${declined ? "자유계약" : "경질"} <small>${when}</small></div>
       <div class="hint">${declined ? `${s.managerName} 감독이 ${me.name}의 재계약을 거절하고 떠났습니다. 평판 ${managerRep(s)}에 맞는 구단들이 연락해 옵니다.` : `${me.name} 이사회가 ${s.managerName} 감독과의 계약을 해지했습니다. ${rec.reason === "rollover" ? "시즌 결산에서 신뢰도가 35 아래였습니다." : "두 번째 경고와 함께 신뢰도가 15 아래로 떨어졌습니다."}`}</div>
       <div class="stats">
-        <div class="stat"><small>당시 순위</small><b>${rec.position}위 <small>/ ${s.clubs.length}팀 · ${rec.pts}점</small></b></div>
+        <div class="stat"><small>당시 순위</small><b>${rec.position}위 <small>/ ${table(s).length}팀 · ${rec.pts}점</small></b></div>
         <div class="stat"><small>이사회 기대</small><b>${rec.expected}위</b></div>
         <div class="stat"><small>신뢰도</small><b style="color:var(--bad)">${Math.round(s.board.confidence)}</b></div>
         <div class="stat"><small>경고</small><b>${s.board.warnings}회</b></div>
@@ -1887,18 +1913,41 @@ export class Game {
   }
 
   // ------------------------------------------------------------ table
-  private tableHtml(rows: ReturnType<typeof table>, compact = false): string {
+  /**
+   * A league table. `division` names the league the rows belong to (the user's own by default) so the
+   * promotion and relegation places can be marked: the top `SWAP` of any division below the first go
+   * up, the bottom `SWAP` of any division above the last go down (divisions.ts).
+   */
+  private tableHtml(rows: ReturnType<typeof table>, compact = false, division = userDivision(this.state)): string {
     const s = this.state;
-    const posOf = new Map(table(s).map((r, i) => [r.club, i + 1]));
+    const posOf = new Map(rows.map((r, i) => [r.club, i + 1]));
+    const full = rows.length;
+    const promoTo = division > 1 ? SWAP : 0;
+    const relegFrom = division < DIVISIONS ? full - SWAP : full;
     return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th>${compact ? "" : '<th class="l mgrcol">감독</th>'}<th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th></tr></thead><tbody>${rows
       .map((r) => {
         const c = clubOf(s, r.club);
         const pos = posOf.get(r.club)!;
         const mgr = c.id === s.userClub ? s.managerName : c.manager?.name ?? "—";
         const mgrTitle = c.manager ? managerTags(c.manager).join(", ") : "";
-        return `<tr class="${r.club === s.userClub ? "me" : ""}" data-club="${c.id}" style="cursor:pointer"><td>${pos}</td><td class="l"><span class="embWrap">${emblemSvg(c, 18)}</span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
+        // zones only make sense on the full table, not the six-row home summary
+        const zone = compact ? "" : pos <= promoTo ? " promo" : pos > relegFrom ? " releg" : "";
+        const line = !compact && (pos === promoTo + 1 || pos === relegFrom + 1) ? " zoneline" : "";
+        const title = zone === " promo" ? " title=\"승격권\"" : zone === " releg" ? " title=\"강등권\"" : "";
+        return `<tr class="${r.club === s.userClub ? "me" : ""}${zone}${line}" data-club="${c.id}" style="cursor:pointer"${title}><td>${pos}</td><td class="l"><span class="embWrap">${emblemSvg(c, 18)}</span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
       })
       .join("")}</tbody></table>`;
+  }
+
+  /** The standings card for one division, with a legend for whatever zones it has. */
+  private divisionCard(division: number): string {
+    const s = this.state;
+    const mine = division === userDivision(s);
+    const legend = [
+      division > 1 ? `<span style="color:var(--accent)">■</span> 상위 ${SWAP}팀 승격` : "",
+      division < DIVISIONS ? `<span style="color:var(--bad)">■</span> 하위 ${SWAP}팀 강등` : "",
+    ].filter(Boolean).join(" · ");
+    return `<div class="card"><h3>${divisionName(division)} <span>시즌 ${s.season}${mine ? " · 내 리그" : ""}</span></h3>${this.tableHtml(table(s, division), false, division)}<div class="hint">${legend}${legend ? " · " : ""}구단을 누르면 구단 카드가 열립니다.</div></div>`;
   }
 
   private scheduleHtml(): string {
@@ -1964,7 +2013,10 @@ export class Game {
     const scorers = topScorers(s, 10);
     const assists = topAssists(s, 10);
     const ratings = topRatings(s, 10);
-    const standings = `<div class="card"><h3>리그 순위 <span>시즌 ${s.season}</span></h3>${this.tableHtml(table(s))}<div class="hint">구단을 누르면 구단 카드가 열립니다.</div></div>`;
+    // the user's own division first, then the rest — a relegated manager still wants to see the league above
+    const mine = userDivision(s);
+    const order = [mine, ...Array.from({ length: DIVISIONS }, (_, i) => i + 1).filter((d) => d !== mine)];
+    const standings = order.map((d) => this.divisionCard(d)).join("");
     const sched = `<div class="card"><h3>내 일정 <span>${clubOf(s, s.userClub).name}</span></h3>${this.scheduleHtml()}</div>`;
     const records = `<div class="grid2">
       <div class="card"><h3>득점 순위</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>도움</th><th>골</th></tr></thead><tbody>${scorers
@@ -2325,7 +2377,7 @@ export class Game {
       const fx = s.fixtures.filter((f) => f.round === round);
       title = `라운드 ${round + 1} 결과`;
       body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm, f.attendance)).join("");
-      btn = round + 1 >= roundsPerSeason(s.clubs.length) ? "시즌 결산 보기 →" : "다음 라운드로 →";
+      btn = round + 1 >= seasonRounds(s) ? "시즌 결산 보기 →" : "다음 라운드로 →";
     }
     this.el.results.innerHTML = `${this.interviewHtml()}${this.myMatchSummaryHtml(kind, round, cupStage)}<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
       <div class="card"><h3>순위</h3>${this.tableHtml(table(s))}</div>`;
@@ -2539,7 +2591,7 @@ export class Game {
         this.setBusy(null, 0);
       }
       this.live = items.map((x) => ({ fixture: x.fixture, tie: x.tie, match: asMatch(results.get(x.job.id)!) }));
-      const last = k === n - 1 || seasonOver(s) || (!cup && s.round + 1 >= roundsPerSeason(s.clubs.length));
+      const last = k === n - 1 || seasonOver(s) || (!cup && s.round + 1 >= seasonRounds(s));
       if (last) {
         this.finishRound();
         return;
@@ -2568,7 +2620,7 @@ export class Game {
     s.celebratedSeason = s.season;
     const rows = table(s);
     const lead = rows[0]!, second = rows[1]!;
-    const total = roundsPerSeason(s.clubs.length);
+    const total = seasonRounds(s);
     const left = total - lead.played;
     const club = clubOf(s, champ);
     const early = left > 0 ? `${left}경기를 남기고 ` : "";

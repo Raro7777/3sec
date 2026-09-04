@@ -53,6 +53,12 @@
       table.std td.l, table.std th.l { text-align:left; }
       table.std tr.me td { background:#1c2a1f; }
       table.std tr.me td:first-child { border-left:3px solid var(--good); }
+      /* promotion / relegation places: a coloured edge on the position cell, so the zone reads at a glance
+         and still reads without colour thanks to the divider line above it (divisions.ts) */
+      table.std tr.promo td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+      table.std tr.releg td:first-child { box-shadow:inset 3px 0 0 var(--bad); }
+      table.std tr.me.promo td:first-child, table.std tr.me.releg td:first-child { border-left-color:transparent; }
+      table.std tr.zoneline td { border-top:2px solid var(--line); }
       .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
       /* club emblem (emblem.ts): inline crest used where the colour dot used to be */
       .embWrap { display:inline-block; line-height:0; margin-right:6px; vertical-align:middle; }
