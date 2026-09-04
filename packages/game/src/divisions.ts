@@ -41,6 +41,21 @@ export const divisionName = (d: number): string => DIVISION_NAME[d] ?? `${d}부 
 export const DIVISION_PRIZE_FACTOR: Record<number, number> = { 1: 1, 2: 0.32 };
 export const prizeFactor = (division: number): number => DIVISION_PRIZE_FACTOR[division] ?? 0.32;
 
+/**
+ * One-off payment (억원) to a promoted club, paid at the rollover.
+ *
+ * Without it promotion was a one-year holiday. Measured over a season, a club coming up arrived with
+ * 29억 against the 87억 of the division it joined — and less even than the 79억 of the clubs that had
+ * just dropped out of it, who then bounced straight back. A median first-division player costs 18억,
+ * so promotion bought a single signing and three quarters of promoted clubs went down again inside
+ * two seasons.
+ *
+ * The money is deliberately the lever rather than a bigger reputation bump: reputation also raises
+ * what the board expects and what squads are generated at, so a promoted side would be handed a
+ * mid-table demand in the same breath as promotion. Cash leaves the manager free to spend it or not.
+ */
+export const PROMOTION_PRIZE = 35;
+
 
 /**
  * Fixtures for every division on one shared calendar: each division plays its own double
@@ -186,6 +201,7 @@ export function applyPromotionRelegation(s: GameState): SwapResult {
       const c = s.clubs[id]!;
       c.division = d;
       c.reputation = Math.round(Math.min(15, c.reputation + 0.8) * 10) / 10;
+      c.budget = Math.round((c.budget + PROMOTION_PRIZE) * 10) / 10;
       out.promoted.push({ club: id, to: d });
     }
   }

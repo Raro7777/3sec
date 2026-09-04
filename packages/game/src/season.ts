@@ -22,7 +22,7 @@ import { storyMatch, storyRollover, storyWeek } from "./story";
 import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
 import { careerInit, careerRollover, careerWeek } from "./career";
-import { CLUBS_PER_DIVISION, DIVISIONS, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
+import { CLUBS_PER_DIVISION, DIVISIONS, PROMOTION_PRIZE, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -334,7 +334,7 @@ export function startNextSeason(s: GameState): void {
   // Up and down before the new calendar is drawn, so the fixtures are for the divisions as they now
   // stand (divisions.ts).
   const swap = applyPromotionRelegation(s);
-  for (const { club, to } of swap.promoted) s.news.unshift(`${clubOf(s, club).name} ${divisionName(to)} 승격!`);
+  for (const { club, to } of swap.promoted) s.news.unshift(`${clubOf(s, club).name} ${divisionName(to)} 승격! 승격 지원금 ${PROMOTION_PRIZE}억이 지급되었습니다.`);
   for (const { club, from } of swap.relegated) s.news.unshift(`${clubOf(s, club).name} ${divisionName(from)} 강등.`);
   if (swap.promoted.some((p) => p.club === s.userClub)) s.news.unshift(`승격했습니다. 다음 시즌은 ${divisionName(userDivision(s))}입니다.`);
   if (swap.relegated.some((r) => r.club === s.userClub)) s.news.unshift(`강등입니다. 다음 시즌은 ${divisionName(userDivision(s))}에서 다시 시작합니다.`);
