@@ -11,6 +11,7 @@ import { Rng, derivedSeed, mixSeed } from './rng.js';
 import { roundHalfEven } from './mathx.js';
 import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
+import { SKILL_BY_NAME } from './skills.js';
 import {
   TrainingSession, PHASE, emptySupport, buildSupport, recommendSupporterList,
   simEvaluationProvider, stubEvaluationProvider, campLine,
@@ -100,6 +101,16 @@ export const SEASON_GROWTH = [0.52, 0.63, 0.74, 0.80, 0.80, 0.80, 0.80];
 export function growthFor(season) {
   const i = Math.max(1, season | 0) - 1;
   return SEASON_GROWTH[Math.min(i, SEASON_GROWTH.length - 1)];
+}
+/**
+ * AI 구단 선수의 고유 스킬 레벨 사다리(docs/skills.md 7.2).
+ * 원소속 SSR·SR 은 자기 구단에서도 당연히 스킬을 쓴다. 숙련도는 스탯 성장(SEASON_GROWTH)과
+ * 같은 속도로 올라간다 — 시즌 1 Lv1 · 시즌 2 Lv2 · 시즌 3+ Lv3.
+ */
+export const CLUB_SKILL_LEVEL = [1, 2, 3, 3, 3, 3, 3];
+export function clubSkillLevelFor(season) {
+  const i = Math.max(1, season | 0) - 1;
+  return CLUB_SKILL_LEVEL[Math.min(i, CLUB_SKILL_LEVEL.length - 1)];
 }
 /**
  * 결원 보충 선수의 강도 = 구단 평균 + vacancyOverallDelta. league-and-economy.md A.3.5
@@ -748,6 +759,8 @@ function instanceToPlayer(inst, teamId) {
     jersey: inst.jersey, heightCm: inst.heightCm, age: inst.age,
     stats: inst.finalStats.slice(), potential: inst.finalStats.slice(),
     skillName: inst.skillName,
+    // 육성 힌트로 해금한 고유 스킬 레벨(0~3)이 그대로 경기 판정에 들어간다. docs/skills.md 3절
+    skillLevel: inst.skillLevel | 0,
   });
 }
 
@@ -878,6 +891,9 @@ export function clubTeamState(state, clubId, opts = {}) {
   avg = pool.length > 0 ? avg / pool.length : 60;
   const subOverall = avg + VACANCY.overallDelta;
 
+  // AI 구단 선수의 고유 스킬 레벨(시즌 사다리). docs/skills.md 7.2
+  const clubSkill = opts.clubSkillLevel !== undefined ? (opts.clubSkillLevel | 0) : clubSkillLevelFor(state.season);
+
   const roster = [];
   for (const p of pool) {
     if (departed.has(p.id)) {
@@ -887,7 +903,15 @@ export function clubTeamState(state, clubId, opts = {}) {
       sub.isSubstitute = true;
       roster.push(sub);
     } else {
-      roster.push(grownPlayer(p, g));
+      const gp = grownPlayer(p, g);
+      if (clubSkill > 0 && SKILL_BY_NAME.has(gp.skillName)) {
+        // grownPlayer 는 g<=0 이면 원본을 그대로 돌려주므로 반드시 복제한 뒤에 쓴다.
+        const c = gp === p ? clonePlayer(p) : gp;
+        c.skillLevel = clubSkill;
+        roster.push(c);
+      } else {
+        roster.push(gp);
+      }
     }
   }
   const tactics = (opts.useClubTactics ?? state.useClubTactics) && CLUB_TACTICS[clubId]

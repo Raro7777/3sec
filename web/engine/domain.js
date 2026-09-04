@@ -50,6 +50,8 @@ export function makePlayer(o) {
     jersey: o.jersey | 0, heightCm: o.heightCm || 175, age: o.age || 20,
     stats: o.stats, potential: o.potential || o.stats.slice(),
     skillName: o.skillName || '', skillDesc: o.skillDesc || '',
+    // 고유 스킬 레벨(0 = 미해금 → 경기 판정에 아무 영향 없음). docs/skills.md 3절
+    skillLevel: o.skillLevel | 0,
     isLibero: o.pos === POS.L,
   };
 }
@@ -68,6 +70,7 @@ export function playerFromJson(j) {
     jersey: j.jerseyNumber, heightCm: j.heightCm ?? 175, age: j.age ?? 20,
     stats: s, potential: p,
     skillName: j.skill ? j.skill.name : '', skillDesc: j.skill ? j.skill.description : '',
+    skillLevel: j.skill && j.skill.level !== undefined ? j.skill.level : 0,
   });
 }
 

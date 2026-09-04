@@ -8,6 +8,7 @@ import {
 import { ratingServe, ratingReceive, ratingSet, ratingAttack, ratingBlock, ratingDig } from './ratings.js';
 import { contest, sigmoid, logit, lerp, clamp } from './mathx.js';
 import { DEFAULT_SIM_CONFIG } from './config.js';
+import { createSkillRuntime } from './skills.js';
 import { Rng } from './rng.js';
 
 // ---------------------------------------------------------------- 로그
@@ -42,8 +43,10 @@ function newBox(p) {
 
 // ---------------------------------------------------------------- 경기 컨텍스트 + 랠리 엔진
 class MatchSim {
-  constructor(config, rng, log, home, away, boxScores) {
+  constructor(config, rng, log, home, away, boxScores, skills) {
     this.cfg = config;
+    // 고유 스킬 런타임. null 이면 모든 스킬 훅을 건너뛴다 → 기존 판정과 비트 단위로 동일.
+    this.sk = skills || null;
     this.rng = rng;
     this.log = log;
     this.home = home;
@@ -85,16 +88,21 @@ class MatchSim {
     return diff <= c.maxDiff;
   }
 
-  /** 실효 배수 = 팀 컨디션 × 개인 컨디션 × 피로 × 클러치(멘탈). MatchContext.cs:57 */
-  effMult(p, team, clutch) {
+  /**
+   * 실효 배수 = 팀 컨디션 × 개인 컨디션 × 피로 × 클러치(멘탈). MatchContext.cs:57
+   * noFatigue = true 면 피로 감소를 면제한다(스킬 '모루 위에서'). docs/skills.md 4.7
+   */
+  effMult(p, team, clutch, noFatigue) {
     const st = team.state;
     let m = st.teamCondition * conditionOf(st, p.id);
     const f = this.cfg.fatigue;
-    const progress = (this.setIndex - 1) + clamp((this.home.score + this.away.score) / f.pointsPerSetForProgress, 0.0, 1.0);
-    let loss = f.lossPerSet * progress * (1.0 - p.stats[STAT.stamina] / 100.0);
-    if (loss > f.maxLoss) loss = f.maxLoss;
-    else if (loss < 0) loss = 0;
-    m *= 1.0 - loss;
+    if (noFatigue !== true) {
+      const progress = (this.setIndex - 1) + clamp((this.home.score + this.away.score) / f.pointsPerSetForProgress, 0.0, 1.0);
+      let loss = f.lossPerSet * progress * (1.0 - p.stats[STAT.stamina] / 100.0);
+      if (loss > f.maxLoss) loss = f.maxLoss;
+      else if (loss < 0) loss = 0;
+      m *= 1.0 - loss;
+    }
     if (clutch) {
       const c = this.cfg.clutch;
       m *= 1.0 + c.mentalScale * (p.stats[STAT.mental] - c.mentalPivot) / 50.0;
@@ -103,7 +111,7 @@ class MatchSim {
     return m < r.effectiveMultiplierMin ? r.effectiveMultiplierMin : (m > r.effectiveMultiplierMax ? r.effectiveMultiplierMax : m);
   }
 
-  eff(raw, p, team, clutch) { return raw * this.effMult(p, team, clutch); }
+  eff(raw, p, team, clutch, noFatigue) { return raw * this.effMult(p, team, clutch, noFatigue); }
 
   boxOf(p) {
     let b = this.box.get(p.id);
@@ -131,8 +139,9 @@ class MatchSim {
   // ---------------------------------------------------------------- 랠리
   /** RallyEngine.cs:61 PlayRally */
   playRally(serving, receiving) {
-    const cfg = this.cfg, rng = this.rng;
+    const cfg = this.cfg, rng = this.rng, sk = this.sk;
     const clutch = this.isClutch();
+    if (sk !== null) sk.beginRally();
     const res = this._res;
     res.clutch = clutch;
     res.attacks = 0;
@@ -150,7 +159,8 @@ class MatchSim {
     const sp = cfg.serve;
     const errBase = lerp(sp.errorBaseSafe, sp.errorBaseAggressive, aggression);
     const homeLogit = serving.side === SIDE.HOME ? cfg.match.homeCourtLogit : 0.0;
-    const pServeErr = contest(errBase, -(serveRating - sp.errorRefRating), this.K(sp.errorK), -homeLogit);
+    const skServeErr = sk !== null ? sk.serveErrorLogit(serving, server, aggression) : 0.0;
+    const pServeErr = contest(errBase, -(serveRating - sp.errorRefRating), this.K(sp.errorK), -homeLogit + skServeErr);
 
     const serverBox = this.boxOf(server);
     serverBox.serves++;
@@ -171,8 +181,10 @@ class MatchSim {
     let recvRating = this.eff(ratingReceive(receiver, cfg.rating), receiver, receiving, clutch);
     if (receiver.isLibero) recvRating = MatchSim.stretch(recvRating, cfg.receive.liberoRoleGain, cfg.receive.liberoRoleRefRating);
     const formationLogit = this.formationLogit(receiving, receiver);
-    const x = (recvRating - serveRating) / this.K(sp.receiveK) - sp.aggressionLogit * (aggression - 0.5) + formationLogit;
-    const pAce = sigmoid(logit(sp.aceBase) - x + homeLogit);
+    const skRecv = sk !== null ? sk.receiveXLogit(receiving, receiver, serving) : 0.0;
+    const x = (recvRating - serveRating) / this.K(sp.receiveK) - sp.aggressionLogit * (aggression - 0.5) + formationLogit + skRecv;
+    const skAce = sk !== null ? sk.aceLogit(serving, server) : 0.0;
+    const pAce = sigmoid(logit(sp.aceBase) - x + homeLogit + skAce);
 
     if (this.log.enabled) this.emit(EV.Serve, serving, server, 1, Q.None, OUT.InPlay, ATK.None, pAce, (aggression * 100) | 0, clutch);
 
@@ -196,6 +208,7 @@ class MatchSim {
     else if (passQuality === Q.Good) { recvBox.receptionGood++; receiving.stats.receptionGood++; }
     else { recvBox.receptionPoor++; receiving.stats.receptionPoor++; }
     if (this.log.enabled) this.emit(EV.Reception, receiving, receiver, receiverPos, passQuality, OUT.InPlay, ATK.None, pAce, 0, clutch);
+    if (sk !== null) sk.noteReceive(receiving, receiver, passQuality, aggression);
 
     // ---------------- 3. 공격 시퀀스(트랜지션 반복) ----------------
     let attacking = receiving, defending = serving;
@@ -225,7 +238,7 @@ class MatchSim {
 
   /** 세트 → 공격 옵션 → 블로킹 → 킬/디그. RallyEngine.cs:176 RunAttackSequence */
   runAttackSequence(attacking, defending, pass, firstContact, attackIndex, clutch) {
-    const cfg = this.cfg, rng = this.rng, seq = this._seq;
+    const cfg = this.cfg, rng = this.rng, seq = this._seq, sk = this.sk;
     const ap = cfg.attack, bp = cfg.block, setp = cfg.set;
     const homeLogit = attacking.side === SIDE.HOME ? cfg.match.homeCourtLogit : 0.0;
     const logging = this.log.enabled;
@@ -279,7 +292,8 @@ class MatchSim {
     const setRating = this.eff(ratingSet(setter, cfg.rating), setter, attacking, clutch);
     const chem = chemistryOf(attacking.state, setter.id, attacker.id);
     const chemLogit = cfg.chemistry.logitScale * (chem - 50.0) / 50.0;
-    const setX = (setRating - setp.refRating) / this.K(setp.k) + chemLogit + (nonSetter ? setp.nonSetterPenaltyLogit : 0.0);
+    const skSet = sk !== null ? sk.setLogit(attacking, setter, attacker, type, pass, nonSetter, attackIndex) : 0.0;
+    const setX = (setRating - setp.refRating) / this.K(setp.k) + chemLogit + (nonSetter ? setp.nonSetterPenaltyLogit : 0.0) + skSet;
     let setQuality = this.rollSetQuality(pass, setX);
     if (type === ATK.Dump) setQuality = Q.Perfect;
 
@@ -289,6 +303,7 @@ class MatchSim {
 
     // --- 블로커 결정 ---
     this.chooseBlockers(defending, type, attackPos, setQuality, clutch);
+    if (sk !== null) sk.noteBlockers(this._blockN, this._blockers);
 
     // --- 공격 레이팅·범실 ---
     const atk = this.eff(ratingAttack(attacker, cfg.rating), attacker, attacking, clutch);
@@ -311,7 +326,8 @@ class MatchSim {
     if (attackIndex === 0) attacking.stats.firstBallAttacks++; else attacking.stats.transitionAttacks++;
     if (type === ATK.Dump) attacking.stats.dumps++;
 
-    const pErr = contest(clamp(ap.errorBase * typeErrMult * setErrMult, 0.0, 0.95), -(atk - ap.errorRefRating), this.K(ap.errorK), -homeLogit);
+    const skAtkErr = sk !== null ? sk.attackErrorLogit(attacking, attacker) : 0.0;
+    const pErr = contest(clamp(ap.errorBase * typeErrMult * setErrMult, 0.0, 0.95), -(atk - ap.errorRefRating), this.K(ap.errorK), -homeLogit + skAtkErr);
     if (rng.chance(pErr)) {
       atkBox.attackErrors++;
       attacking.stats.attackErrors++;
@@ -325,7 +341,8 @@ class MatchSim {
     if (this._blockN > 0) {
       const blockStrength = this.weightedBlockRating(defending, clutch) + bp.extraBlockerBonus * (this._blockN - 2);
       const primary = this._blockers[0];
-      const blockExtra = typeBlockLogit + setBlockLogit - homeLogit + predictLogit - decoyLogit * ap.mbDecoyBlockShare;
+      const skBlock = sk !== null ? sk.blockLogit(defending, attacking, attacker) : 0.0;
+      const blockExtra = typeBlockLogit + setBlockLogit - homeLogit + predictLogit - decoyLogit * ap.mbDecoyBlockShare + skBlock;
       const pBlock = contest(bp.killBase, blockStrength - atk, this.K(bp.k), blockExtra);
       if (rng.chance(pBlock)) {
         atkBox.blocked++;
@@ -404,9 +421,12 @@ class MatchSim {
     const defense = this._blockN > 0
       ? (1.0 - ap.blockShareInKill) * digBlend + ap.blockShareInKill * this.weightedBlockRating(defending, clutch)
       : digBlend;
+    const skDig = sk !== null ? sk.digLogit(defending, digger) : 0.0;
+    const skKill = sk !== null ? sk.attackKillLogit(attacking, attacker) : 0.0;
     const killExtra = typeKillLogit + setKillLogit - digBonus + homeLogit - predictLogit
       + decoyLogit * ap.mbDecoyKillShare
-      + (attackIndex === 0 ? ap.firstBallKillLogit : ap.transitionKillLogitPerAttack * attackIndex);
+      + (attackIndex === 0 ? ap.firstBallKillLogit : ap.transitionKillLogitPerAttack * attackIndex)
+      + skKill - skDig;
     const pKill = contest(ap.killBase, atk - defense, this.K(ap.killK), killExtra);
 
     const digBox = this.boxOf(digger);
@@ -429,7 +449,7 @@ class MatchSim {
 
     digBox.digs++;
     defending.stats.digs++;
-    const dx = (digRating - atk) / this.K(cfg.dig.k) + digBonus;
+    const dx = (digRating - atk) / this.K(cfg.dig.k) + digBonus + skDig;
     const dq = this.rollQuality(dx, cfg.dig.perfectBase, cfg.dig.goodBase);
     if (logging) {
       this.emit(EV.Attack, attacking, attacker, attackPos, setQuality, OUT.Dug, type, pKill, this._blockN, clutch);
@@ -561,7 +581,12 @@ class MatchSim {
 
   /** 전술 가중치 × 패스 품질 가용성으로 공격 옵션을 고른다. RallyEngine.cs:562 ChooseAttackOption */
   chooseAttackOption(team, setter, pass) {
-    const a = this.cfg.attack, t = team.tactics, w = this._w;
+    const a = this.cfg.attack, t = team.tactics, w = this._w, sk = this.sk;
+    // 스킬 '순풍' 처럼 공격 배분 자체를 바꾸는 효과. 배수 1.0 = 변화 없음(난수 소비는 그대로).
+    const wm = sk !== null
+      ? [1, sk.weightMult(team, setter, ATK.Quick, pass), sk.weightMult(team, setter, ATK.Open, pass),
+         sk.weightMult(team, setter, ATK.BackRow, pass), sk.weightMult(team, setter, ATK.Delayed, pass)]
+      : null;
     this._candN = 0;
     this._quickThreatMb = null;
 
@@ -580,7 +605,7 @@ class MatchSim {
       const p = team.playerAt(pos);
       if (p === setter || p.isLibero) continue;
       if (p.pos === POS.MB) {
-        const v = t.quickWeight * quickAvail;
+        const v = t.quickWeight * quickAvail * (wm !== null ? wm[ATK.Quick] : 1);
         if (v > 0) {
           this.addCand(p, ATK.Quick, v);
           if (this._quickThreatMb === null || ratingAttack(p, this.cfg.rating) > ratingAttack(this._quickThreatMb, this.cfg.rating)) this._quickThreatMb = p;
@@ -588,10 +613,10 @@ class MatchSim {
       } else {
         anyFrontWing = true;
         const rel = p.pos === POS.OP ? a.openOpRelativeWeight : 1.0;
-        const v = t.openWeight * rel;
+        const v = t.openWeight * rel * (wm !== null ? wm[ATK.Open] : 1);
         if (v > 0) this.addCand(p, ATK.Open, v);
         if (frontMbExists) {
-          const wd = t.delayedWeight * delayedAvail * rel;
+          const wd = t.delayedWeight * delayedAvail * rel * (wm !== null ? wm[ATK.Delayed] : 1);
           if (wd > 0) this.addCand(p, ATK.Delayed, wd);
         }
       }
@@ -616,7 +641,7 @@ class MatchSim {
     }
     const backAttacker = backOp || backOh;
     if (backAttacker !== null) {
-      const v = t.backRowWeight * backAvail;
+      const v = t.backRowWeight * backAvail * (wm !== null ? wm[ATK.BackRow] : 1);
       if (v > 0) this.addCand(backAttacker, ATK.BackRow, v);
     }
 
@@ -735,11 +760,12 @@ class MatchSim {
   /** 블로커 실효 블로킹 레이팅 가중 평균(MB 는 MbStrengthWeight). RallyEngine.cs:812 */
   weightedBlockRating(defending, clutch) {
     let sum = 0, wsum = 0;
-    const mbw = this.cfg.block.mbStrengthWeight;
+    const mbw = this.cfg.block.mbStrengthWeight, sk = this.sk;
     for (let i = 0; i < this._blockN; i++) {
       const p = this._blockers[i];
       const w = p.pos === POS.MB ? mbw : 1.0;
-      sum += w * this.eff(ratingBlock(p, this.cfg.rating), p, defending, clutch);
+      const noFatigue = sk !== null && sk.blockFatigueImmune(defending, p);
+      sum += w * this.eff(ratingBlock(p, this.cfg.rating), p, defending, clutch, noFatigue);
       wsum += w;
     }
     return wsum > 0 ? sum / wsum : 0.0;
@@ -763,6 +789,7 @@ class MatchSim {
   /** RallyEngine.cs:840 CreditBlock */
   creditBlock(defending, primary) {
     defending.stats.blockKills++;
+    if (this.sk !== null) this.sk.noteBlockKill(defending, this._blockers, this._blockN);
     for (let i = 0; i < this._blockN; i++) {
       const box = this.boxOf(this._blockers[i]);
       if (this._blockers[i] === primary) box.blockKills++; else box.blockAssists++;
@@ -791,6 +818,7 @@ class MatchSim {
 
     home.resetForSet();
     away.resetForSet();
+    if (this.sk !== null) this.sk.startSet(this.pointsToWin);
 
     let serving = firstServer;
     let receiving = this.opponent(firstServer);
@@ -806,6 +834,7 @@ class MatchSim {
       this.rallyIndex = rallies;
 
       const r = this.playRally(serving, receiving);
+      if (this.sk !== null) this.sk.endRally(r.winner);
       const winner = this.team(r.winner);
       winner.score++;
       winner.stats.points++;
@@ -885,7 +914,8 @@ export function simulateMatch(home, away, seed, config, collectEvents = true) {
   const homeState = new TeamMatchState(SIDE.HOME, home);
   const awayState = new TeamMatchState(SIDE.AWAY, away);
   const box = new Map();
-  const sim = new MatchSim(cfg, rng, log, homeState, awayState, box);
+  const skills = createSkillRuntime(cfg, homeState, awayState);
+  const sim = new MatchSim(cfg, rng, log, homeState, awayState, box, skills);
 
   const result = {
     seed, homeTeamId: home.team.id, awayTeamId: away.team.id,

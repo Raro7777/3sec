@@ -21,6 +21,7 @@ export {
   canScout, scoutCost, departedCardIds, growthFor,
   addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
   CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
+  CLUB_SKILL_LEVEL, clubSkillLevelFor,
 } from './engine/game.js';
 
 // ---------------------------------------------------------------- 리그 시즌 계층
@@ -52,6 +53,14 @@ export {
 
 export { POLICIES, runWithPolicy, injuryBadge, campLine } from './engine/training.js';
 
+// 고유 스킬(docs/skills.md) — 카드 UI 표기·밸런스 하네스용
+export {
+  SKILLS, SKILL_BY_NAME, SKILL_BY_ID, SKILL_BY_OWNER,
+  CH as SKILL_CHANNEL, CH_NAMES_KO as SKILL_CHANNEL_NAMES_KO,
+  EFFECT as SKILL_EFFECT, TARGET as SKILL_TARGET, TARGET_NAMES_KO as SKILL_TARGET_NAMES_KO,
+  findSkill, hasActiveSkill, describeSkill, createSkillRuntime, SkillRuntime,
+} from './engine/skills.js';
+
 // 저수준(파리티 하네스·고급 UI 용)
 export { Rng, mixSeed, derivedSeed } from './engine/rng.js';
 export { simulateMatch, setScoreLine, totalPoints } from './engine/match.js';
@@ -59,4 +68,4 @@ export { generateTeamState, generatePlayer } from './engine/generator.js';
 export { DEFAULT_SIM_CONFIG, createSimConfig } from './engine/config.js';
 export { PLAYERS, TEAMS } from './data.js';
 
-export const ENGINE_VERSION = '0.2.0-js';
+export const ENGINE_VERSION = '0.3.0-js';

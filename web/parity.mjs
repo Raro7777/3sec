@@ -2,7 +2,8 @@
 // C# 기준값(docs/match-sim-balance-report.md v0.2, docs/training-mode.md 12.4절 · OracleTests)과
 // JS 포팅의 집계 지표를 비교한다. 비트 단위 일치가 아니라 집계 일치가 목표.
 //
-// 옵션: --matches N (기본 2000)  --runs N (기본 2000)  --json
+// 옵션: --matches N (기본 2000)  --runs N (기본 2000)  --skill N (기본 1500)  --json
+//       --skill-table  스킬 24종 × Lv1/Lv3 단독 기여 표를 함께 뽑는다(느림, 문서 갱신용)
 
 import { performance } from 'node:perf_hooks';
 import { generateTeamState } from './engine/generator.js';
@@ -13,6 +14,8 @@ import {
   TrainingSession, POLICIES, runWithPolicy, emptySupport, buildSupport, stubEvaluationProvider,
 } from './engine/training.js';
 import { DEFAULT_TRAINING_CONFIG, gradeOf, ovrOf } from './engine/training-config.js';
+import { SKILLS, createSkillRuntime, findSkill } from './engine/skills.js';
+import { createSimConfig } from './engine/config.js';
 import * as G from './engine/game.js';
 import { renderCommentary } from './engine/commentary.js';
 
@@ -24,6 +27,8 @@ function arg(name, def) {
 }
 const MATCHES = arg('matches', 2000);
 const RUNS = arg('runs', 2000);
+const SKILL_PAIRS = arg('skill', 1500);
+const SKILL_TABLE = argv.includes('--skill-table');
 const AS_JSON = argv.includes('--json');
 
 const rows = [];
@@ -379,6 +384,125 @@ const SEC6 = '성능 · 저장 용량';
   }
   const bytes = JSON.stringify(G.saveGame(heavy)).length;
   budget(SEC6, '저장 JSON 크기(육성 40회·경기 40회)', bytes / 1024, 50, v => v.toFixed(1) + 'KB', 'localStorage 예산');
+}
+
+// ================================================================ 7. 스킬 (docs/skills.md)
+// 스킬은 "있으면 확실히 유리하지만 능력치를 뒤집지는 않는" 수준이어야 한다.
+// 동일 능력치(overall 67) 두 팀 중 한쪽 선수에게만 스킬을 주고 승률 상승폭을 잰다.
+// 홈/원정을 뒤집어 두 번 돌려 홈 선서브 편향을 상쇄한다 → 한 조건당 경기 수 = pairs × 2.
+const SEC7 = `스킬 (동일 능력치 · 한쪽만 보유 · 조건당 ${SKILL_PAIRS * 2}경기, 홈·원정 교대)`;
+{
+  // 라인업 슬롯: 0=S 1=OH1 2=MB1 3=OP 4=OH2 5=MB2 (+ 리베로). domain.js standard51
+  const SLOT = { [POS.S]: [0], [POS.OH]: [1, 4], [POS.OP]: [3], [POS.MB]: [2, 5] };
+  function applySkills(ts, specs) {
+    const used = {};
+    for (const sp of specs) {
+      const nth = used[sp.pos] = (used[sp.pos] === undefined ? 0 : used[sp.pos] + 1);
+      const id = sp.pos === POS.L ? ts.lineup.liberoId : ts.lineup.startingIds[SLOT[sp.pos][Math.min(nth, SLOT[sp.pos].length - 1)]];
+      const p = ts.index.get(id);
+      p.skillName = sp.name;
+      p.skillLevel = sp.level;
+    }
+  }
+  /** specs 를 가진 팀의 승률(사이드 상쇄). specs = [] 면 베이스라인. */
+  function skillWinRate(specs, pairs = SKILL_PAIRS, seed = 42) {
+    let wins = 0;
+    for (let i = 0; i < pairs; i++) {
+      for (let side = 0; side < 2; side++) {
+        const home = generateTeamState(mixSeed(seed, i, 1), 'HOME', '홈', 67);
+        const away = generateTeamState(mixSeed(seed, i, 2), 'AWAY', '원정', 67);
+        if (specs.length) applySkills(side === 0 ? home : away, specs);
+        const r = simulateMatch(home, away, mixSeed(seed, i, 7 + side), null, false);
+        if (side === 0 ? r.winner === SIDE.HOME : r.winner === SIDE.AWAY) wins++;
+      }
+    }
+    return wins / (pairs * 2);
+  }
+  const one = name => [{ pos: findSkill(name).pos, name, level: 0 }];
+  const lvl = (specs, level) => specs.map(x => ({ ...x, level }));
+
+  // --- 7.1 스킬이 없으면 판정이 완전히 그대로인가 (가장 중요한 안전장치) ---
+  {
+    const off = createSimConfig();
+    off.skill.enabled = false;
+    const sig = (cfg) => {
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        const h = generateTeamState(mixSeed(7, i, 1), 'HOME', '홈', 67);
+        const a = generateTeamState(mixSeed(7, i, 2), 'AWAY', '원정', 67);
+        const r = simulateMatch(h, a, mixSeed(7, i, 3), cfg, false);
+        out.push(`${r.homeSets}:${r.awaySets}|${r.sets.map(x => x.home + '-' + x.away).join(',')}|${r.homeStats.kills},${r.awayStats.blockKills},${r.homeStats.aces}`);
+      }
+      return out.join(';');
+    };
+    must(SEC7, '7.1 스킬 미보유 = 훅 이전과 동일한 판정', sig(null) === sig(off), '스킬 on/off 설정이 결과에 무영향');
+    const h = generateTeamState(mixSeed(7, 0, 1), 'HOME', '홈', 67);
+    const a = generateTeamState(mixSeed(7, 0, 2), 'AWAY', '원정', 67);
+    must(SEC7, '7.1 활성 스킬 0명 → 런타임 null', createSkillRuntime(createSimConfig(), { side: 0, state: h, positionOf: () => 0 }, { side: 1, state: a, positionOf: () => 0 }) === null);
+  }
+
+  // --- 7.2 결정성 ---
+  {
+    const specs = lvl(one('스포트라이트'), 3);
+    const sig = () => {
+      const h = generateTeamState(mixSeed(9, 0, 1), 'HOME', '홈', 67);
+      const a = generateTeamState(mixSeed(9, 0, 2), 'AWAY', '원정', 67);
+      applySkills(h, specs);
+      const r = simulateMatch(h, a, 24680, null, false);
+      return `${r.homeSets}:${r.awaySets}|${r.homeStats.kills},${r.awayStats.digs}`;
+    };
+    must(SEC7, '7.2 스킬 보유 경기 재현(동일 시드)', sig() === sig(), esc(sig()));
+  }
+
+  // --- 7.3 승률 기여 목표 범위 (docs/skills.md 6절) ---
+  const base = skillWinRate([]);
+  const MID = '스포트라이트';                       // 기여도 중앙값 근처의 대표 SSR
+  const SIX = ['한 수 앞', '스포트라이트', '학의 날개', '천둥 왼손', '설벽(雪壁)', '모루 위에서'];
+  const sixSpecs = SIX.map(n => ({ pos: findSkill(n).pos, name: n, level: 0 }));
+  const d1 = (skillWinRate(lvl(one(MID), 1)) - base) * 100;
+  const d3 = (skillWinRate(lvl(one(MID), 3)) - base) * 100;
+  const d6 = (skillWinRate(lvl(sixSpecs, 3)) - base) * 100;
+  const se = Math.sqrt(0.5 / (SKILL_PAIRS * 2)) * 100;
+  info(SEC7, '베이스라인(스킬 0) 승률', P(base), `표준오차 ±${se.toFixed(2)}%p`);
+  must(SEC7, `7.3 SSR 1개 Lv1 = +1~3%p (${MID})`, d1 >= 1.0 && d1 <= 3.0, `+${d1.toFixed(2)}%p`);
+  must(SEC7, `7.3 SSR 1개 Lv3 = +3~6%p (${MID})`, d3 >= 3.0 && d3 <= 6.0, `+${d3.toFixed(2)}%p`);
+  must(SEC7, '7.3 SSR 6개 Lv3 = +10~18%p', d6 >= 10.0 && d6 <= 18.0, `+${d6.toFixed(2)}%p`);
+  must(SEC7, '7.3 레벨 단조 증가(Lv1 < Lv3)', d1 < d3, `${d1.toFixed(2)} < ${d3.toFixed(2)}`);
+  must(SEC7, '7.3 능력치를 뒤집지 않음(6개 Lv3 < 전원 +5 = 76%)', base + d6 / 100 < 0.76, P(base + d6 / 100));
+
+  // --- 7.4 양 팀 모두 스킬을 가져도 리그 KPI 가 유지되는가 ---
+  {
+    const a = { receiveRallies: 0, receiveRalliesWon: 0, attacks: 0, kills: 0, serves: 0, aces: 0, serveErrors: 0, blocked: 0, points: 0, sets: 0 };
+    const n = Math.max(300, Math.round(SKILL_PAIRS / 3));
+    for (let i = 0; i < n; i++) {
+      const home = generateTeamState(mixSeed(77, i, 1), 'HOME', '홈', 67);
+      const away = generateTeamState(mixSeed(77, i, 2), 'AWAY', '원정', 67);
+      applySkills(home, lvl(sixSpecs, 3));
+      applySkills(away, lvl(sixSpecs, 3));
+      const r = simulateMatch(home, away, mixSeed(77, i, 7), null, false);
+      a.sets += r.sets.length;
+      for (const s of r.sets) a.points += s.home + s.away;
+      for (const s of [r.homeStats, r.awayStats]) {
+        a.receiveRallies += s.receiveRallies; a.receiveRalliesWon += s.receiveRalliesWon;
+        a.attacks += s.attacks; a.kills += s.kills; a.serves += s.serves;
+        a.aces += s.aces; a.serveErrors += s.serveErrors; a.blocked += s.blocked;
+      }
+    }
+    check(SEC7, '7.4 양 팀 6스킬 Lv3 — 사이드아웃', a.receiveRalliesWon / a.receiveRallies, 0.609, 0.025, P, '기본 ±1.5%p 보다 넓은 허용');
+    check(SEC7, '7.4 양 팀 6스킬 Lv3 — kill%', a.kills / a.attacks, 0.423, 0.025, P);
+    check(SEC7, '7.4 양 팀 6스킬 Lv3 — 에이스', a.aces / a.serves, 0.067, 0.015, P);
+    check(SEC7, '7.4 양 팀 6스킬 Lv3 — 유효 블로킹', a.blocked / a.attacks, 0.102, 0.025, P);
+    check(SEC7, '7.4 양 팀 6스킬 Lv3 — 세트당 득점', a.points / a.sets, 44.2, 2.0, v => v.toFixed(2));
+  }
+
+  // --- 7.5 스킬별 단독 기여 표(옵션) ---
+  if (SKILL_TABLE) {
+    for (const def of SKILLS) {
+      const s1 = (skillWinRate([{ pos: def.pos, name: def.name, level: 1 }]) - base) * 100;
+      const s3 = (skillWinRate([{ pos: def.pos, name: def.name, level: 3 }]) - base) * 100;
+      info(SEC7 + ' — 스킬별 단독 기여', `${def.rarity} ${def.name}`, `Lv1 ${s1 >= 0 ? '+' : ''}${s1.toFixed(2)}%p · Lv3 ${s3 >= 0 ? '+' : ''}${s3.toFixed(2)}%p`);
+    }
+  }
 }
 
 // ================================================================ 출력

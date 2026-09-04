@@ -120,6 +120,14 @@ export function createSimConfig() {
       spreadLiberoMult: 0.7, spreadOhMult: 1.2,
       spreadLiberoLogit: 0.0, spreadOtherLogit: 0.0,
     },
+    // 선수 고유 스킬(docs/skills.md). C# 에는 아직 없는 JS 선행 구현 — 이식 명세는 skills.md 8절.
+    // enabled=false 또는 활성 스킬 0명이면 판정에 아무 영향이 없다(로짓 가산 0).
+    skill: {
+      enabled: true,
+      levelScale: [0.0, 1.0, 1.5, 2.0], // 인덱스 = 스킬 레벨(0 = 미해금)
+      channelCap: 1.50,                 // 채널 1개에 실릴 수 있는 팀 합계 로짓 상한(±)
+      globalScale: 1.0,                 // 스킬 전체 세기 노브(StatSensitivity 와 같은 역할)
+    },
     // SimConfig.cs:29 전역 스탯 민감도
     statSensitivity: 1.0,
   };
