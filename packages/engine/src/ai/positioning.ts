@@ -404,13 +404,29 @@ function shapePosition(m: Match, p: PlayerState, possession: TeamId | null): Vec
   // A low block is also a compact one: the lower the line, the tighter the midfield screens the
   // back four (lengthwise and across), so the ball has to go around ten men, not through them.
   const compact = !inPoss ? Math.max(0, (0.4 - tactics.defensiveLine) / 0.4) : 0; // 0 .. 1
+  // A wing-back is a full-back by slot but plays the midfield line going forward: in possession they
+  // are the team's whole width, so they push on like a midfielder. Out of possession the defender
+  // branch below still applies and they tuck into the back line — a back three becomes a back five.
+  const wingBack = m.isWingBack(p.id);
+  const asDefender = isDefender(role) && !(wingBack && inPoss);
+  const asMidfielder = isMidfielder(role) || (wingBack && inPoss);
   const pullX = inPoss
-    ? isDefender(role) ? Math.max(0, 0.1 + mentPull) : isMidfielder(role) ? 0.4 + mentPull * 0.6 : 0.55
-    : isDefender(role) ? 0 : isMidfielder(role) ? 0.25 + 0.3 * compact : 0.15 + 0.15 * compact;
-  const pullY = (isDefender(role) ? 0.15 : isMidfielder(role) ? 0.3 : 0.2) * (1 + 0.6 * compact);
+    ? asDefender ? Math.max(0, 0.1 + mentPull) : asMidfielder ? 0.4 + mentPull * 0.6 : 0.55
+    : asDefender ? 0 : asMidfielder ? 0.25 + 0.3 * compact : 0.15 + 0.15 * compact;
+  const pullY = (asDefender ? 0.15 : asMidfielder ? 0.3 : 0.2) * (1 + 0.6 * compact);
 
   const rd = m.roleOf(p.id);
-  let x = home.x * dir + shiftX + rd.dx * 52.5;
+  // Defending, a wing-back drops out of the midfield line and into the back line — the slot's own
+  // depth would leave them 12-15 m in front of the centre-backs, which is a back three with two
+  // stragglers rather than the back five a 3-5-2 is supposed to defend with.
+  // The role's forward shift is an attacking instruction, so a wing-back tucking in drops it (a
+  // defensive-minded role's negative shift still counts — that one asks them to sit deeper still).
+  // Both terms are substituted in place rather than regrouped: float addition is not associative, so
+  // reordering this sum alone moves every player by an ulp and reshuffles the whole match.
+  const tuckIn = wingBack && !inPoss;
+  const homeX = tuckIn ? m.backLineX(team) : home.x * dir;
+  const roleDx = tuckIn ? Math.min(0, rd.dx) : rd.dx;
+  let x = homeX + shiftX + roleDx * 52.5;
   let y = home.y * (1 + rd.dy) + shiftY;
   // "hold": how far the role pushes up with the ball (0 = bombs on, 1 = stays home)
   if (ballX > x) x += (ballX - x) * pullX * (inPoss ? 1.4 - 0.8 * rd.hold : 1);

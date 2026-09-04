@@ -1,5 +1,5 @@
 import type { Attributes, FormationName, InstructionId, PlayerRoleId, Role, Tactics } from "../types";
-import { FORMATIONS } from "../formation";
+import { FORMATIONS, isWingBackSlot, type Slot } from "../formation";
 
 /**
  * Player roles: what a player in a formation slot is asked to do. Each role shifts the shape a
@@ -87,8 +87,13 @@ export function defaultRole(slot: Role): PlayerRoleId {
   }
 }
 
+/** The default for a concrete slot: a wing-back slot wants 윙백, everything else the plain default. */
+function defaultRoleForSlot(slot: Slot): PlayerRoleId {
+  return isWingBackSlot(slot) ? "WB" : defaultRole(slot.role);
+}
+
 export function defaultRoles(formation: FormationName): PlayerRoleId[] {
-  return FORMATIONS[formation].map((s) => defaultRole(s.role));
+  return FORMATIONS[formation].map(defaultRoleForSlot);
 }
 
 /** Make a roles array valid for the formation: right length, each role legal for its slot. */
@@ -96,7 +101,7 @@ export function normalizeRoles(formation: FormationName, roles?: PlayerRoleId[])
   const slots = FORMATIONS[formation];
   return slots.map((s, i) => {
     const r = roles?.[i];
-    return r && ROLES[r] && ROLES[r].slots.includes(s.role) ? r : defaultRole(s.role);
+    return r && ROLES[r] && ROLES[r].slots.includes(s.role) ? r : defaultRoleForSlot(s);
   });
 }
 
@@ -105,11 +110,13 @@ export function autoRoles(formation: FormationName, attrsBySlot: (Attributes | u
   const slots = FORMATIONS[formation];
   return slots.map((s, i) => {
     const a = attrsBySlot[i];
-    if (!a) return defaultRole(s.role);
+    if (!a) return defaultRoleForSlot(s);
     switch (s.role) {
       case "GK": return a.pace + a.gkPositioning >= 26 ? "SK" : "GK";
       case "CB": return a.passing >= 13 && a.vision >= 12 ? "BPD" : a.anticipation >= 14 && a.pace >= 13 ? "STP" : "CB";
-      case "LB": case "RB": return a.pace + a.stamina >= 28 && a.technique >= 12 ? "WB" : a.tackling >= 14 && a.pace < 12 ? "DFB" : "FB";
+      // A wing-back slot is a wing-back unless the player has no legs for it, in which case the
+      // defensive full-back at least holds the flank.
+      case "LB": case "RB": return isWingBackSlot(s) ? (a.pace + a.stamina >= 22 ? "WB" : "DFB") : a.pace + a.stamina >= 28 && a.technique >= 12 ? "WB" : a.tackling >= 14 && a.pace < 12 ? "DFB" : "FB";
       case "DM": return a.passing >= 14 && a.vision >= 13 ? "DLP" : a.tackling >= 14 ? "BWM" : "ANC";
       case "CM": return a.passing + a.vision >= 28 ? "PM" : a.tackling >= 14 && a.passing < 13 ? "BWM" : "BBM";
       case "AM": return a.finishing >= 14 && a.pace >= 13 ? "SS" : "AP";

@@ -5,7 +5,7 @@ import { ROLES, applyInstructions, type RoleDef } from "./ai/roles";
 
 const TACTIC_LABEL: Partial<Record<keyof Tactics, string>> = { mentality: "멘탈리티", defensiveLine: "수비라인", pressing: "프레싱", directness: "직접성", width: "폭", tempo: "템포", counter: "역습", engageLine: "압박선", offsideTrap: "오프사이드 트랩", formation: "포메이션" };
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
-import { FORMATIONS, roleDistance, slotToPitch } from "./formation";
+import { FORMATIONS, isWingBackSlot, roleDistance, slotToPitch } from "./formation";
 import { BALL, kickBall, stepBall } from "./physics/ball";
 import { a01, stepPlayer } from "./physics/player";
 import { add, dist, fromAngle, len, norm, pointSegment, scale, sub, type Vec2 } from "./math/vec";
@@ -364,6 +364,25 @@ export class Match {
   /** Formation slot index of an on-pitch player, or -1. */
   slotIndex(id: string): number {
     return this.state.lineups[this.teamOf.get(id)!].indexOf(id);
+  }
+
+  /** True when the player fills a wing-back slot (a full-back starting on the midfield line). */
+  isWingBack(id: string): boolean {
+    const team = this.teamOf.get(id)!;
+    const idx = this.slotIndex(id);
+    if (idx < 0) return false;
+    const slot = FORMATIONS[this.teams[team].tactics.formation][idx];
+    return !!slot && isWingBackSlot(slot);
+  }
+
+  /**
+   * Forward-x of the centre-back line in this team's formation, in metres. Wing-backs defend from
+   * here rather than from their own (much higher) slot, which is what turns a back three into a
+   * back five when the ball is lost.
+   */
+  backLineX(team: TeamId): number {
+    const cbs = FORMATIONS[this.teams[team].tactics.formation].filter((s) => s.role === "CB");
+    return cbs.length ? (cbs.reduce((a, s) => a + s.x, 0) / cbs.length) * 52.5 : -32;
   }
 
   homeSlot(id: string): Vec2 {

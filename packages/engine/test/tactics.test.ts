@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Match } from "../src/match";
 import { generateTeam, normalizeTactics, defaultTactics } from "../src/teams";
 import { TACTIC_PRESETS, autoRoles, defaultRoles, normalizeRoles, rolesForSlot } from "../src/ai/roles";
+import { FORMATIONS, isWingBackSlot } from "../src/formation";
 import type { PlayerRoleId } from "../src/types";
 
 function play(seeds: number[], home: Parameters<typeof generateTeam>[0]["tactics"], away: Parameters<typeof generateTeam>[0]["tactics"], minutes = 20) {
@@ -35,6 +36,39 @@ describe("player roles", () => {
     expect(t.mentality).toBe(1);
     expect(t.tempo).toBe(0);
     expect(t.roles!.length).toBe(11);
+  });
+
+  it("a 3-5-2 defends as a back five: the wing-backs drop in with the ball lost and push on with it", () => {
+    // The wide pair of a 3-5-2 are wing-backs, so they should sit on the midfield line going forward
+    // and tuck into the back line when the ball is lost. Before they were modelled as wide
+    // midfielders and never dropped, leaving a back three defending the whole width.
+    const slots = FORMATIONS["3-5-2"];
+    const wide = slots.map((s, i) => [s, i] as const).filter(([s]) => s.role === "LB" || s.role === "RB").map(([, i]) => i);
+    const cb = slots.map((s, i) => [s, i] as const).filter(([s]) => s.role === "CB").map(([, i]) => i);
+    expect(wide.length).toBe(2);
+    expect(wide.every((i) => isWingBackSlot(slots[i]!))).toBe(true);
+    expect(defaultRoles("3-5-2")[wide[0]!]).toBe("WB");
+
+    let att = 0, nAtt = 0, def = 0, gap = 0, nDef = 0;
+    for (let seed = 0; seed < 3; seed++) {
+      const h = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "3-5-2", quality: 12, seed: 100 + seed });
+      const a = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-3-3", quality: 12, seed: 200 + seed });
+      const m = new Match(h, a, { seed: 300 + seed, halfLength: 5 * 60, aiManaged: [0, 1] });
+      while (m.state.phase !== "FULL_TIME") {
+        m.step();
+        if (m.state.phase !== "PLAY" || m.state.tick % 10 !== 0) continue;
+        const dir = m.dirOf(0);
+        const line = m.state.lineups[0];
+        const at = (idx: number[]) => idx.reduce((s, i) => s + m.player(line[i]!).pos.x * dir, 0) / idx.length;
+        const wideX = at(wide);
+        if (m.possessionTeam() === 0) { att += wideX; nAtt++; } else { def += wideX; gap += wideX - at(cb); nDef++; }
+      }
+    }
+    // Defending, the wing-backs sit close to the centre-backs rather than ~22 m up the pitch, which
+    // is where they used to sit as wide midfielders.
+    expect(gap / nDef).toBeLessThan(14);
+    // In possession they are the team's whole width and get well ahead of where they defend.
+    expect(att / nAtt).toBeGreaterThan(def / nDef + 6);
   });
 
   it("auto roles depend on attributes and are legal for their slots", () => {

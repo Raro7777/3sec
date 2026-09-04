@@ -53,20 +53,35 @@ export const FORMATIONS: Record<FormationName, Slot[]> = {
     { role: "RW", x: 0.1, y: 0.7 },
     { role: "ST", x: 0.38, y: 0 },
   ],
+  // The wide pair are wing-backs, not wide midfielders: they carry the width on their own (there is
+  // no winger outside them) and drop in to make a back five when the ball is lost. Giving them the
+  // LB/RB slot role is what makes both halves of that work — see `isWingBackSlot`.
   "3-5-2": [
     { role: "GK", x: -0.94, y: 0 },
     { role: "CB", x: -0.6, y: -0.4 },
     { role: "CB", x: -0.65, y: 0 },
     { role: "CB", x: -0.6, y: 0.4 },
-    { role: "LM", x: -0.15, y: -0.85 },
+    { role: "LB", x: -0.2, y: -0.85 },
     { role: "DM", x: -0.3, y: 0 },
     { role: "CM", x: -0.1, y: -0.3 },
     { role: "CM", x: -0.1, y: 0.3 },
-    { role: "RM", x: -0.15, y: 0.85 },
+    { role: "RB", x: -0.2, y: 0.85 },
     { role: "ST", x: 0.32, y: -0.2 },
     { role: "ST", x: 0.32, y: 0.2 },
   ],
 };
+
+/**
+ * A wing-back slot: a full-back who starts level with the midfield rather than in the back line.
+ *
+ * The slot role decides how the player defends (LB/RB drops into the defensive line, so a back three
+ * becomes a back five out of possession) and which player roles the manager can pick; the starting
+ * x decides how they attack. A full-back in a back four sits at x ≈ −0.55, a wing-back at −0.2, so
+ * the threshold below separates them with room to spare either side.
+ */
+export function isWingBackSlot(slot: Slot): boolean {
+  return (slot.role === "LB" || slot.role === "RB") && slot.x > -0.4;
+}
 
 /** Convert a normalized slot to pitch meters for a team attacking in `dir`. */
 export function slotToPitch(slot: { x: number; y: number }, dir: 1 | -1, width = 1): Vec2 {
