@@ -23,6 +23,7 @@ import {
 } from "@3sec/game";
 import {
   CLUBS_D2, DIVISIONS, SWAP, divisionName, userDivision, inPromotionZone, inRelegationZone,
+  MIN_WINDOW_MINUTES, formatValue, lineSwing, type TacticsReport,
 } from "@3sec/game";
 import {
   ACHIEVEMENTS, TIER_LABEL, achievementById, hallOfFame, takeFreshAchievements, type AchievementTier,
@@ -163,6 +164,8 @@ export class Game {
   private live: { fixture: Fixture; match: Match; tie?: CupTie }[] | null = null;
   /** what the live matches belong to (decides how they are settled and shown) */
   private liveKind: "league" | "cup" = "league";
+  /** The last watched match's before/after readout of the manager's own changes (tactics-report.ts). */
+  private lastTactics: TacticsReport | null = null;
   /** the running 도전 모드 match (outside the season: never settled, never saved) */
   private challenge: { scen: ChallengeScenario; match: Match; side: TeamId } | null = null;
   private selA: string | null = null;
@@ -2333,6 +2336,39 @@ export class Game {
 
   // ------------------------------------------------------------ results
   /** My match at a glance: score, scorers, man of the match and my three best-rated players. */
+  /**
+   * "내 지시" — what happened after each change the manager made during the match (tactics-report.ts).
+   *
+   * Deliberately worded as a sequence, not a cause: the opponent adjusts too and ten minutes is a
+   * small sample, so the card says what followed a change and leaves the reading to the manager.
+   */
+  private tacticsReportHtml(): string {
+    const rep = this.lastTactics;
+    if (!rep) return "";
+    if (!rep.changes.length) {
+      return `<div class="card"><h3>내 지시</h3><div class="hint">전술을 ${rep.unmeasured}번 바꿨지만, 앞뒤로 ${MIN_WINDOW_MINUTES}분씩은 지나야 효과를 읽을 수 있어 이번엔 측정하지 못했습니다.</div></div>`;
+    }
+    const body = rep.changes.map((c) => {
+      const rows = [...c.lines]
+        .sort((a, b) => Math.abs(lineSwing(b)) - Math.abs(lineSwing(a)))
+        .map((l) => {
+          const swing = lineSwing(l);
+          const moved = Math.abs(swing) >= 0.1;
+          const better = l.good === "up" ? swing > 0 : swing < 0;
+          const color = !moved ? "var(--muted)" : better ? "var(--good)" : "var(--bad)";
+          const arrow = !moved ? "→" : swing > 0 ? "↑" : "↓";
+          return `<tr><td class="l">${l.label}</td><td>${formatValue(l, l.before)}</td><td style="color:${color}">${arrow}</td><td style="color:${color}"><b>${formatValue(l, l.after)}</b></td></tr>`;
+        }).join("");
+      return `<div style="margin-top:8px">
+        <div><b>${c.minute}분</b> ${c.labels.join(" · ")}</div>
+        <table class="std" style="margin-top:4px"><thead><tr><th class="l">지표</th><th>이전 ${c.beforeMinutes}분</th><th></th><th>이후 ${c.afterMinutes}분</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>`;
+    }).join("");
+    const skipped = rep.unmeasured ? ` 나머지 ${rep.unmeasured}번은 앞뒤 구간이 ${MIN_WINDOW_MINUTES}분에 못 미쳐 뺐습니다.` : "";
+    return `<div class="card"><h3>내 지시 <span>변경 ${rep.changes.length}건</span></h3>${body}
+      <div class="hint" style="margin-top:8px">슈팅·태클은 10분당 횟수입니다. 바꾼 <b>뒤에</b> 벌어진 일이지 바꿨기 <b>때문에</b> 벌어진 일은 아닙니다 — 상대도 함께 조정하고, 스코어 자체가 양 팀을 움직입니다.${skipped}</div></div>`;
+  }
+
   private myMatchSummaryHtml(kind: "league" | "cup", round: number, cupStage: number): string {
     const s = this.state;
     const me = this.me;
@@ -2350,7 +2386,7 @@ export class Game {
       ${fx.scorers.length ? `<div class="scorers">${fx.scorers.join(" · ")}</div>` : '<div class="hint">득점 없음</div>'}
       ${motm ? `<div class="hint"><span style="color:var(--accent)">★ MOTM</span> ${motm.name} (${home.squad.includes(motm) ? home.shortName : away.shortName}) ${fmtRating(fx.motm!.rating)}</div>` : ""}
       ${rated.length ? `<div class="pcSeason">${rated.map(({ p, r }) => `<span>${p.name} <b style="color:${ratingColor(r)}">${fmtRating(r)}</b> ${INFO_BTN(`${me.id}:${p.id}`)}</span>`).join("")}</div>` : ""}
-    </div>`;
+    </div>${this.tacticsReportHtml()}`;
   }
 
   private renderResults(round: number, kind: "league" | "cup" = "league", cupStage = 0): void {
@@ -2690,6 +2726,8 @@ export class Game {
   private finishRound(): void {
     const s = this.state;
     if (!this.live || this.challenge) return;
+    // What the manager's own changes did, read off the match before the screen is torn down.
+    this.lastTactics = this.screen.tacticsReport();
     const round = s.round;
     const kind = this.liveKind;
     const cupStage = s.cup.stage;

@@ -15,6 +15,10 @@ export {
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
 export {
+  MIN_WINDOW_MINUTES, TacticsRecorder, lineSwing, formatValue,
+  type ReportLine, type TacticsChange, type TacticsReport,
+} from "./tactics-report";
+export {
   DIVISIONS, CLUBS_PER_DIVISION, SWAP, CLUBS_D2, DIVISION_NAME, DIVISION_PRIZE_FACTOR, PROMOTION_PRIZE,
   divisionOf, userDivision, clubsIn, divisionName, prizeFactor, buildAllFixtures, divisionTable, divisionPosition,
   simulateFixture, simulateAwayDivisions, applyPromotionRelegation, inRelegationZone, inPromotionZone, type SwapResult,

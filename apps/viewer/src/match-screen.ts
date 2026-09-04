@@ -6,7 +6,7 @@ import { Sfx } from "./sfx";
 import { Haptics } from "./haptics";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
-import { seasonRounds, table, type Fixture, type GameState } from "@3sec/game";
+import { TacticsRecorder, seasonRounds, table, type Fixture, type GameState, type TacticsReport } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, isNativeApp, shareFile } from "./share";
 
@@ -117,6 +117,8 @@ export class MatchScreen {
   private readonly sfx = new Sfx();
   private readonly haptics = new Haptics();
   private readonly recorder = new Recorder();
+  /** Samples the user's tactics and both sides' stats so the result screen can show what a change did. */
+  private tactics: TacticsRecorder | null = null;
   private clips: Clip[] = [];
   /** event index → clip, for the ▶ buttons in the log */
   private clipByEvent = new Map<number, Clip>();
@@ -304,6 +306,7 @@ export class MatchScreen {
     this.pendingReplay = null;
     this.bannerT0 = null;
     this.userTeam = userTeam;
+    this.tactics = new TacticsRecorder(match, userTeam);
     this.others = others;
     this.onFinish = onFinish;
     this.finished = false;
@@ -454,9 +457,14 @@ export class MatchScreen {
 
   private stepAll(n: number, record = false): void {
     for (let i = 0; i < n; i++) {
-      if (this.match.state.phase !== "FULL_TIME") { this.match.step(); if (record) this.recorder.push(this.match.state); }
+      if (this.match.state.phase !== "FULL_TIME") { this.match.step(); this.tactics?.sample(); if (record) this.recorder.push(this.match.state); }
       for (const o of this.others) if (o.match.state.phase !== "FULL_TIME") o.match.step();
     }
+  }
+
+  /** The manager's own before/after readout for this match, once it has been played (tactics-report.ts). */
+  tacticsReport(): TacticsReport | null {
+    return this.tactics?.report() ?? null;
   }
 
   private allDone(): boolean {
