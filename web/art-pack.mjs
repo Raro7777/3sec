@@ -29,10 +29,17 @@ export const ART_BUDGET_MB = 11;
 const MIME = { '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
 const PREFER = ['.webp', '.png', '.jpg', '.jpeg'];
 
-/** 규격 (art-style-guide 4.1·4.2·4.3). 비율만 본다 — 해상도는 낮춰 넣어도 화면에서는 문제가 없다. */
+/**
+ * 규격 (art-style-guide 4.1·4.2·4.3). 비율만 본다 — 해상도는 낮춰 넣어도 화면에서는 문제가 없다.
+ *
+ * card 와 hero 는 같은 3:4 지만 **프레이밍이 다르다**(art-pipeline 10):
+ *   card = 미디엄 샷(허벅지 컷). 리스트·가챠 결과에서 96px 로 줄어도 얼굴이 읽혀야 한다.
+ *   hero = 전신 액션. 선수 상세 화면에서 크게 본다. 없으면 카드로 대신한다.
+ */
 export const SPEC = {
   thumb: { ratio: 1,     tol: 0.02, ideal: '512×512',   what: '썸네일' },
-  card:  { ratio: 3 / 4, tol: 0.02, ideal: '2048×2732', what: '카드 일러스트' },
+  card:  { ratio: 3 / 4, tol: 0.02, ideal: '2048×2732', what: '카드 일러스트(미디엄 샷)' },
+  hero:  { ratio: 3 / 4, tol: 0.04, ideal: '1600×2133', what: '전신 일러스트' },
 };
 
 /** PNG·WebP 헤더에서 크기를 읽는다(외부 의존 없이). 못 읽으면 null. */
@@ -75,9 +82,9 @@ export function collectArt() {
   for (const pid of fs.readdirSync(EXPORT_DIR).sort()) {
     const dir = path.join(EXPORT_DIR, pid);
     if (!fs.statSync(dir).isDirectory()) continue;
-    const row = { pid, thumb: 0, card: 0, dim: {} };
+    const row = { pid, thumb: 0, card: 0, hero: 0, dim: {} };
     const one = {};
-    for (const kind of ['thumb', 'card']) {
+    for (const kind of ['thumb', 'card', 'hero']) {
       const hit = pick(dir, pid, kind);
       if (!hit) continue;
       const { uri, bytes: n, dim } = dataUri(hit);
@@ -109,13 +116,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
   const dim = d => d ? `${d.w}×${d.h}` : '?';
-  console.log('| pid | 썸네일 | 크기 | 카드 | 크기 |');
-  console.log('|---|---|---|---|---|');
+  console.log('| pid | 썸네일 | 카드 | 크기 | 전신 | 크기 |');
+  console.log('|---|---|---|---|---|---|');
   for (const e of entries)
-    console.log(`| ${e.pid} | ${kb(e.thumb)} | ${dim(e.dim.thumb)} | ${kb(e.card)} | ${dim(e.dim.card)} |`);
+    console.log(`| ${e.pid} | ${kb(e.thumb)} | ${kb(e.card)} | ${dim(e.dim.card)} | ${kb(e.hero)} | ${dim(e.dim.hero)} |`);
   const mb = bytes / 1024 / 1024;
   console.log(`\n${entries.length}명 · 합계 ${mb.toFixed(2)}MB / 예산 ${ART_BUDGET_MB}MB` +
     (mb > ART_BUDGET_MB ? ' — **초과**' : ''));
+
+  // 42명 전원으로 늘렸을 때의 추정 — 지금 넣은 것의 1인당 평균 × 42.
+  // 예산을 넘길지는 3명쯤 넣었을 때 이미 알 수 있어야 한다(다 만들고 나서 알면 늦다).
+  const per = bytes / entries.length;
+  const proj = per * 42 / 1024 / 1024;
+  console.log(`1인당 평균 ${(per / 1024).toFixed(0)}KB → **42명이면 약 ${proj.toFixed(1)}MB**` +
+    (proj > ART_BUDGET_MB
+      ? ` — 예산 ${ART_BUDGET_MB}MB 초과. 전신을 SR 이상만 넣거나 품질을 낮춰야 한다`
+      : ` (예산 ${ART_BUDGET_MB}MB 안)`));
   if (problems.length) {
     console.log(`\n## 규격 확인 — ${problems.length}건\n`);
     for (const p of problems) console.log(`- ${p}`);

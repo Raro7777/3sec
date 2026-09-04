@@ -436,7 +436,22 @@ function hairPhrase(styleTag, colorTag) {
 }
 
 /** 카드 자연어 프롬프트 — 한 문단. */
-function buildCardNatural(p, d) {
+/**
+ * 프레이밍 지시 (art-pipeline 9·10).
+ *
+ * "머리가 화면 높이의 1/5" 같은 **비율** 지시는 모델이 무시한다(8라운드 전부 실패).
+ * "무릎 아래는 프레임 밖" 같은 **자를 위치** 지시는 먹힌다. 그리고 **맨 앞**에 와야 한다 —
+ * 스타일·인물 묘사 뒤에 두면 묻힌다.
+ *
+ * 두 프레이밍을 다 쓴다: 카드는 미디엄 샷(리스트에서 얼굴이 읽혀야 한다),
+ * 선수 상세 화면은 전신(점프의 박력을 크게 본다).
+ */
+const FRAMING = {
+  card: 'MEDIUM SHOT / WAIST-UP CROP. The bottom edge of the frame cuts her off at mid-thigh — her lower legs and feet are NOT in the picture. Her head, shoulders and torso fill most of the frame; her head alone is about one fifth of the total image height. This is a close hero portrait, not a full-body shot.',
+  hero: 'FULL BODY ACTION SHOT. Her whole body is in frame, from her raised hand down to her feet, airborne with space around her — the dramatic full-figure illustration shown large on the player detail screen.',
+};
+
+function buildCardNatural(p, d, kind) {
   const club = CLUB[p.teamId], pos = POSITION[p.position], rar = RARITY[p.rarity];
   const hair = hairPhrase(HAIR_STYLE[p.appearance.hairStyle], HAIR_COLOR[p.appearance.hairColor].tag);
   const eyeColor = EYE_COLOR[p.appearance.eyeColor].split(',')[0].trim().replace(/\s*eyes$/, '');
@@ -448,6 +463,7 @@ function buildCardNatural(p, d) {
     : `a plain ${club.primary} volleyball jersey with ${club.secondary} trim`;
 
   return [
+    FRAMING[kind === 'hero' ? 'hero' : 'card'],
     // 이 문장이 화풍을 결정한다. 초기 판은 태그형과 같은 `cel shading, flat colors, clean lineart` 를 썼는데,
     // 범용 모델(Nano Banana 등)은 그걸 **문자 그대로** 받아 초등학생 만화처럼 그렸다. 반대로 지시한다.
     `Ultra-detailed semi-realistic anime illustration, the quality of a high-end painted key visual for a premium mobile game — rendering pushed close to realism. Skin has real texture, soft subsurface scattering and a faint flush of exertion. Hair is drawn strand by strand in layered clumps with sharp specular highlights and stray flyaway hairs. Fabric behaves like real fabric: visible weave, stitched seams, stretch across the shoulder, creases where the body twists. Anatomically accurate athletic musculature. Hands fully articulated with correct fingers. Individual sweat droplets catching the light. Cinematic volumetric lighting, shallow depth of field, high dynamic range. NOT flat cel shading, NOT simple anime, NOT thick uniform outlines, NOT a cartoon.`,
@@ -464,7 +480,9 @@ function buildCardNatural(p, d) {
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
     `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
     // 얼굴 크기는 카드가 96px 로 줄었을 때 읽히느냐의 문제다(4.2). 정숙 규정이 아니라 가독성 규정이라 남긴다.
-    `Vertical 3:4 composition: her face sits about 30% down from the top edge and stays clearly readable when the picture is shrunk to a tiny thumbnail.`,
+    kind === 'hero'
+      ? `Vertical 3:4 composition.`
+      : `Vertical 3:4 composition: her face sits about 30% down from the top edge and stays clearly readable when the picture is shrunk to a tiny thumbnail.`,
     // 1.4.2 — 15세 등급의 금지선.
     `Keep it within a 15+ sports rating: she stays fully in her uniform — no nudity, no underwear, no see-through fabric, no upskirt angle and no sexual posing. The pose comes from the volleyball action itself.`,
   ].join(' ');
@@ -494,7 +512,8 @@ function renderPack(p, d, warn) {
 
   return head
     + section('CARD — POSITIVE · 태그형 (로컬 SD / 애니메 SDXL)', buildCard(p, d))
-    + section('CARD — POSITIVE · 자연어형 (Higgsfield · Midjourney 등 호스팅 모델)', buildCardNatural(p, d))
+    + section('CARD — POSITIVE · 자연어형 · **미디엄 샷** (카드·리스트용 / Seedream 5 Pro · 3:4 · 2k)', buildCardNatural(p, d, 'card'))
+    + section('HERO — POSITIVE · 자연어형 · **전신** (선수 상세 화면용 / 같은 모델·같은 설정)', buildCardNatural(p, d, 'hero'))
     + section('STANDING (1440×2560, 9:16) — POSITIVE', buildStanding(p, d))
     + section('SD TOKEN (256×256) — POSITIVE', buildToken(p))
     + section('SD TOKEN — NEGATIVE (공용 네거티브를 쓰지 말 것: chibi 가 서로 싸운다)', TOKEN_NEGATIVE)

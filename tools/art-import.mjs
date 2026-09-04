@@ -26,22 +26,30 @@ const ROOT = path.resolve(HERE, '..');
 const ARGV = process.argv.slice(2);
 const DRY = ARGV.includes('--dry');
 const opt = (name, def) => { const i = ARGV.indexOf('--' + name); return i >= 0 && ARGV[i + 1] ? ARGV[i + 1] : def; };
-const VALUED = ['face', 'quality', 'cardw', 'headfrac'];
+const VALUED = ['face', 'quality', 'cardw', 'headfrac', 'kind'];
 const [pid, src] = ARGV.filter((a, i) => !a.startsWith('--') && !VALUED.includes((ARGV[i - 1] || '').replace('--', '')));
 
 if (!pid || !src) {
-  console.error('사용법: node tools/art-import.mjs <pid> <원본 이미지> [--face cx,cy,h] [--headfrac 0.20] [--cardw 900] [--dry]');
+  console.error('사용법: node tools/art-import.mjs <pid> <원본> [--kind card|hero] [--face cx,cy,h] [--headfrac 0.20] [--dry]');
   process.exit(1);
 }
 if (!fs.existsSync(src)) { console.error(`원본을 찾을 수 없습니다: ${src}`); process.exit(1); }
 
+/**
+ * 무엇을 만드는가 — `card`(기본) 또는 `hero`.
+ *   card: 미디엄 샷을 3:4 로 잘라 카드·썸네일을 만든다. 리스트에서 96px 로 줄어도 얼굴이 읽혀야 한다.
+ *   hero: 전신 액션을 그대로 3:4 로 맞춰 넣는다. 선수 상세 화면에서 크게 보는 용도라 자르지 않는다.
+ */
+const KIND = opt('kind', 'card');
+if (KIND !== 'card' && KIND !== 'hero') { console.error("--kind 는 card 또는 hero 입니다."); process.exit(1); }
+
 /** 카드 가로 픽셀. 웹 프로토타입 표시 크기(최대 108px CSS)의 8배면 충분하고, 용량이 예산 안에 든다. */
-const CARD_W = +opt('cardw', 900);
+const CARD_W = +opt('cardw', KIND === 'hero' ? 1000 : 900);
 /** 카드 높이에서 머리가 차지할 비율. 주면 그 크기가 되도록 잘라 낸다(4.2 는 0.18~0.23). */
 const HEADFRAC = opt('headfrac', null) ? +opt('headfrac') : null;
 const THUMB_W = 512;
 /** 용량 상한 — 42명 × (카드+썸네일)이 인라인 예산 11MB 안에 들어야 한다. */
-const BUDGET = { card: 200 * 1024, thumb: 60 * 1024 };
+const BUDGET = { card: 200 * 1024, thumb: 60 * 1024, hero: 160 * 1024 };
 const QUALITIES = [0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55];
 
 // ── 원본 크기 (PNG/WebP 헤더에서 직접 읽는다)
@@ -81,7 +89,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
  */
 function cardCrop() {
   const R = 3 / 4;
-  if (HEADFRAC) {
+  if (HEADFRAC && KIND === 'card') {
     let h = Math.round(face.h / HEADFRAC);
     let w = Math.round(h * R);
     if (w > SW || h > SH) {                           // 원본보다 커지면 들어가는 최대 크기로
@@ -163,11 +171,20 @@ async function render(crop, outW, outH, budget, label) {
 const dir = path.join(ROOT, 'art', '04_export', pid);
 fs.mkdirSync(dir, { recursive: true });
 console.log('');
-fs.writeFileSync(path.join(dir, `${pid}_card.webp`), await render(card, CARD_W, Math.round(CARD_W * 4 / 3), BUDGET.card, '카드 '));
-fs.writeFileSync(path.join(dir, `${pid}_thumb.webp`), await render(thumb, THUMB_W, THUMB_W, BUDGET.thumb, '썸네일'));
+if (KIND === 'hero') {
+  fs.writeFileSync(path.join(dir, `${pid}_hero.webp`),
+    await render(card, CARD_W, Math.round(CARD_W * 4 / 3), BUDGET.hero, '전신 '));
+} else {
+  fs.writeFileSync(path.join(dir, `${pid}_card.webp`), await render(card, CARD_W, Math.round(CARD_W * 4 / 3), BUDGET.card, '카드 '));
+  fs.writeFileSync(path.join(dir, `${pid}_thumb.webp`), await render(thumb, THUMB_W, THUMB_W, BUDGET.thumb, '썸네일'));
+}
 await browser.close();
 
 // ── meta.json — 카드 좌표계로 환산한 얼굴 위치를 기록한다(썸네일 재생성·연출이 이 값을 쓴다)
+if (KIND === 'hero') {
+  console.log(`\n→ art/04_export/${pid}/${pid}_hero.webp 를 넣었습니다(선수 상세 화면용).`);
+  process.exit(0);
+}
 const seed = path.join(ROOT, 'art', '00_guide', 'meta_seed', `${pid}_meta.json`);
 const meta = fs.existsSync(seed) ? JSON.parse(fs.readFileSync(seed, 'utf8')) : { pid };
 const scale = CARD_W / card.w;
