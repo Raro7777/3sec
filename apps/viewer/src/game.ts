@@ -30,6 +30,7 @@ import {
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
+import { emblemSvg } from "./emblem";
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
@@ -41,6 +42,12 @@ import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings" | "profile" | "sacked";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
+/** Rolling automatic backups: three snapshots, oldest overwritten first (see `backupNow`). */
+const AUTO_KEY = (n: number) => `3sec.auto.${n}`;
+const AUTO_SLOTS = [1, 2, 3];
+/** When the last automatic backup was taken, so the timer survives a reload. */
+const AUTO_AT_KEY = "3sec.auto.at";
+const AUTO_EVERY_MS = 30 * 60 * 1000;
 const APP_VERSION = "0.21";
 
 /** Rough category of a news line, for the home-screen filter chips. */
@@ -148,6 +155,10 @@ export class Game {
   private tabSel: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem("3sec.tabs") ?? "{}") as Record<string, string>; } catch { return {}; } })();
   /** the player waiting in the compare tray */
   private comparePick: { club: number; id: string } | null = null;
+  /** a failed save is reported once per session, not on every action */
+  private saveWarned = false;
+  /** when the last automatic backup was taken (epoch ms; restored from storage) */
+  private lastAutoAt: number = (() => { try { return Number(localStorage.getItem(AUTO_AT_KEY)) || 0; } catch { return 0; } })();
   private readonly sheet = document.getElementById("sheet") as HTMLDivElement;
   private readonly sheetBody = document.getElementById("sheetBody") as HTMLDivElement;
   /** while the shoot-out is being revealed the sheet cannot be dismissed by tapping outside */
@@ -242,7 +253,7 @@ export class Game {
     CLUBS.forEach((c, i) => {
       const n = clubStars(c.reputation);
       h.push(`<button type="button" class="club-card${this.pickedClub === i ? " sel" : ""}" data-club="${i}" style="--club:${c.color}">
-        <div class="cc-head"><span class="dot" style="background:${c.color}"></span><b>${c.name}</b><small>${c.shortName}</small></div>
+        <div class="cc-head">${emblemSvg({ id: i, name: c.name, shortName: c.shortName, color: c.color }, 22)}<b>${c.name}</b><small>${c.shortName}</small></div>
         <div class="cc-meta">${stars(n)}<span class="cc-form">${c.formation}</span></div>
         <div class="cc-blurb">${CLUB_BLURBS[i] ?? ""}</div>
       </button>`);
@@ -357,11 +368,91 @@ export class Game {
     }
   }
   private save(): void {
+    let data: string;
     try {
-      localStorage.setItem(SAVE_KEY, serialize(this.state));
+      data = serialize(this.state);
     } catch {
-      /* private mode etc. – the session still works, it just will not persist */
+      this.warnSaveFailed();
+      return;
     }
+    if (!this.writeKey(SAVE_KEY, data)) {
+      // Out of room: the live save matters more than an old snapshot, so free one and try again.
+      this.dropOldestAuto();
+      if (!this.writeKey(SAVE_KEY, data)) this.warnSaveFailed();
+    }
+    this.maybeAutoBackup();
+  }
+
+  // ------------------------------------------------------------ automatic backups
+  /** One guarded localStorage write; false when storage refused it (quota, disabled, private mode). */
+  private writeKey(key: string, value: string): boolean {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Warn once per session that the game can no longer be written to this device. */
+  private warnSaveFailed(): void {
+    if (this.saveWarned) return;
+    this.saveWarned = true;
+    alert("저장에 실패했습니다. 기기 저장 공간이 부족하거나 브라우저가 저장을 막고 있습니다.\n설정 화면에서 '파일로 내보내기' 또는 '텍스트 복사'로 지금 백업해 두세요.");
+  }
+
+  private autoInfo(n: number): { savedAt: string; label: string; data: string } | null {
+    try {
+      const raw = localStorage.getItem(AUTO_KEY(n));
+      return raw ? (JSON.parse(raw) as { savedAt: string; label: string; data: string }) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The stored automatic backups, newest first. */
+  private autoBackups(): { n: number; info: { savedAt: string; label: string; data: string } }[] {
+    return AUTO_SLOTS.map((n) => ({ n, info: this.autoInfo(n) }))
+      .filter((x): x is { n: number; info: { savedAt: string; label: string; data: string } } => !!x.info)
+      .sort((a, b) => Date.parse(b.info.savedAt) - Date.parse(a.info.savedAt));
+  }
+
+  /** Remove the oldest automatic backup (optionally keeping one slot). Returns true if one went. */
+  private dropOldestAuto(keep?: number): boolean {
+    const stored = this.autoBackups().filter((x) => x.n !== keep);
+    const victim = stored[stored.length - 1];
+    if (!victim) return false;
+    try { localStorage.removeItem(AUTO_KEY(victim.n)); } catch { /* ignore */ }
+    return true;
+  }
+
+  /**
+   * Take an automatic snapshot into the free slot, or over the oldest one. Never throws: a backup that
+   * cannot be written (quota, storage off) drops the oldest snapshot and retries once, then gives up.
+   */
+  private backupNow(): void {
+    let entry: string;
+    try {
+      entry = JSON.stringify({ savedAt: new Date().toISOString(), label: this.stateLabel(), data: serialize(this.state) });
+    } catch {
+      return;
+    }
+    const slots = AUTO_SLOTS.map((n) => ({ n, info: this.autoInfo(n) }));
+    const free = slots.find((x) => !x.info);
+    const oldest = slots.filter((x) => x.info).sort((a, b) => Date.parse(a.info!.savedAt) - Date.parse(b.info!.savedAt))[0];
+    const target = (free ?? oldest)?.n;
+    if (target === undefined) return;
+    // Mark the attempt even if it fails, so a full device is not retried on every single action.
+    this.lastAutoAt = Date.now();
+    this.writeKey(AUTO_AT_KEY, String(this.lastAutoAt));
+    if (this.writeKey(AUTO_KEY(target), entry)) return;
+    if (this.dropOldestAuto(target)) this.writeKey(AUTO_KEY(target), entry);
+  }
+
+  /** Time-based backup: at most one every ~30 minutes of play, so a long season is covered too. */
+  private maybeAutoBackup(): void {
+    if (Date.now() - this.lastAutoAt < AUTO_EVERY_MS) return;
+    this.backupNow();
   }
 
   // ------------------------------------------------------------ navigation
@@ -415,6 +506,7 @@ export class Game {
   private renderSettings(): void {
     const s = this.state;
     const slots = [1, 2, 3].map((n) => ({ n, info: this.slotInfo(n) }));
+    const autos = this.autoBackups();
     this.el.settings.innerHTML = `<div class="card"><h3>설정 <span>가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
       <div class="hint">현재 게임: <b>${this.stateLabel()}</b> — 진행 상황은 매 조작마다 자동 저장됩니다. 아래 슬롯은 별도 백업이고, 파일로 내보내면 다른 기기로 옮길 수 있습니다.</div>
       <div class="actions" style="margin-top:6px"><button data-set="guide">📖 설명서 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div>
@@ -423,13 +515,19 @@ export class Game {
       .map(({ n, info }) => `<div class="slot"><div><div>슬롯 ${n}</div><div class="meta">${info ? `${info.label}<br>${new Date(info.savedAt).toLocaleString("ko-KR")}` : "비어 있음"}</div></div>
         <div class="btns"><button data-slot-save="${n}">저장</button><button data-slot-load="${n}" ${info ? "" : "disabled"}>불러오기</button><button class="danger" data-slot-del="${n}" ${info ? "" : "disabled"}>삭제</button></div></div>`)
       .join("")}</div>
+    <div class="card"><h3>자동 백업 <span>최근 ${AUTO_SLOTS.length}개</span></h3>
+      <div class="hint">시즌이 시작될 때마다, 그리고 오래 플레이하면 30분마다 자동으로 백업이 남습니다. 최근 ${AUTO_SLOTS.length}개만 보관하고 오래된 것부터 덮어씁니다.</div>
+      ${autos.length
+        ? autos.map(({ n, info }) => `<div class="slot"><div><div>자동 백업</div><div class="meta">${info.label}<br>${new Date(info.savedAt).toLocaleString("ko-KR")}</div></div>
+          <div class="btns"><button data-auto-load="${n}">불러오기</button></div></div>`).join("")
+        : '<div class="slot"><div><div>자동 백업</div><div class="meta">아직 없습니다. 다음 시즌이 시작되면 만들어집니다.</div></div></div>'}</div>
     <div class="card"><h3>파일로 저장 / 불러오기 <span>기기 간 이동</span></h3>
       <div class="actions"><button data-set="export">파일로 내보내기</button><button data-set="share">공유하기</button><button data-set="copy">텍스트 복사</button><label style="cursor:pointer"><input type="file" id="setImportFile" accept=".json,application/json,text/plain" style="display:none"><span style="border:1px solid #2c3d4b;border-radius:6px;padding:6px 10px;background:#1a2530;color:var(--text)">파일에서 불러오기</span></label></div>
       <div class="hint" style="margin-top:6px">붙여넣기로 불러오기: 저장 텍스트를 아래에 붙여 넣고 버튼을 누르세요.</div>
       <textarea id="setImportText" placeholder='{"version":1, ...}'></textarea>
       <div class="actions"><button data-set="importText">텍스트에서 불러오기</button></div></div>
     <div class="card"><h3>구단 꾸미기 <span>${s.clubs[s.userClub]?.name ?? ""}</span></h3><div class="actions"><button data-set="customize">🎨 유니폼 · 구단명 · 홈구장</button></div><div class="hint">유니폼 색과 패턴, 구단명, 구장 이름을 바꾸고 예산으로 좌석을 늘립니다. 홈 화면의 구단명을 눌러도 열립니다.</div></div>
-    <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
+    <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯, 자동 백업을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
     this.el.settings.insertAdjacentHTML("beforeend", this.challengeCardHtml(true));
     this.wireChallenge(this.el.settings);
@@ -463,6 +561,17 @@ export class Game {
         if (!confirm(`슬롯 ${n}을 삭제할까요?`)) return;
         try { localStorage.removeItem(SLOT_KEY(n)); } catch { /* ignore */ }
         this.renderSettings();
+      });
+    }
+    for (const { n } of autos) {
+      this.el.settings.querySelector(`[data-auto-load="${n}"]`)!.addEventListener("click", () => {
+        const info = this.autoInfo(n);
+        if (!info) return;
+        if (this.live && !confirm("진행 중인 경기가 있습니다. 불러오면 그 경기는 사라집니다. 계속할까요?")) return;
+        if (!confirm(`${info.label} 을(를) 불러올까요? 현재 게임은 덮어쓰입니다.`)) return;
+        const st = deserialize(info.data);
+        if (!st) { alert("자동 백업 데이터가 손상되었습니다."); return; }
+        this.applyLoaded(st, "자동 백업");
       });
     }
     const fileName = () => `gananhanja-fm-s${s.season}-r${s.round + 1}.json`;
@@ -501,8 +610,14 @@ export class Game {
       this.applyLoaded(st, "텍스트");
     });
     q('[data-set="wipe"]').addEventListener("click", () => {
-      if (!confirm("자동 저장과 슬롯을 모두 지웁니다. 정말 초기화할까요?")) return;
-      try { localStorage.removeItem(SAVE_KEY); [1, 2, 3].forEach((n) => localStorage.removeItem(SLOT_KEY(n))); localStorage.removeItem("3sec.guide.seen"); } catch { /* ignore */ }
+      if (!confirm("자동 저장과 슬롯, 자동 백업을 모두 지웁니다. 정말 초기화할까요?")) return;
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        [1, 2, 3].forEach((n) => localStorage.removeItem(SLOT_KEY(n)));
+        AUTO_SLOTS.forEach((n) => localStorage.removeItem(AUTO_KEY(n)));
+        localStorage.removeItem(AUTO_AT_KEY);
+        localStorage.removeItem("3sec.guide.seen");
+      } catch { /* ignore */ }
       location.reload();
     });
   }
@@ -546,9 +661,9 @@ export class Game {
       if (tie) {
         const home = clubOf(s, tie.home), away = clubOf(s, tie.away);
         h.push(`<div class="fixture cup">
-          <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="dot" style="background:${home.color}"></span>${home.name}<small>${tie.home === me.id ? "홈" : "상대"} · 최근 ${this.form(home.id)}</small></div>
+          <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="embWrap">${emblemSvg(home, 26)}</span>${home.name}<small>${tie.home === me.id ? "홈" : "상대"} · 최근 ${this.form(home.id)}</small></div>
           <div class="vs"><span class="cupTag">${CUP_NAME}</span>${stage}<b>vs</b></div>
-          <div class="team r" data-clubcard="${away.id}" style="cursor:pointer">${away.name}<span class="dot" style="background:${away.color};margin:0 0 0 6px"></span><small>${tie.away === me.id ? "원정" : "상대"} · 최근 ${this.form(away.id)}</small></div>
+          <div class="team r" data-clubcard="${away.id}" style="cursor:pointer">${away.name}<span class="embWrap r">${emblemSvg(away, 26)}</span><small>${tie.away === me.id ? "원정" : "상대"} · 최근 ${this.form(away.id)}</small></div>
         </div>`);
         h.push(this.opponentHtml(clubOf(s, tie.home === me.id ? tie.away : tie.home)));
         const prob = selectionProblem(me);
@@ -566,9 +681,9 @@ export class Game {
       const oppPos = rows.findIndex((r) => r.club === oppId) + 1;
       const form = (c: Club) => this.form(c.id);
       h.push(`<div class="fixture">
-        <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="dot" style="background:${home.color}"></span>${home.name}<small>${fx.home === me.id ? "홈" : `${oppPos}위`} · 최근 ${form(home)}</small></div>
+        <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="embWrap">${emblemSvg(home, 26)}</span>${home.name}<small>${fx.home === me.id ? "홈" : `${oppPos}위`} · 최근 ${form(home)}</small></div>
         <div class="vs">R${fx.round + 1}<b>vs</b></div>
-        <div class="team r" data-clubcard="${away.id}" style="cursor:pointer">${away.name}<span class="dot" style="background:${away.color};margin:0 0 0 6px"></span><small>${fx.away === me.id ? "원정" : `${oppPos}위`} · 최근 ${form(away)}</small></div>
+        <div class="team r" data-clubcard="${away.id}" style="cursor:pointer">${away.name}<span class="embWrap r">${emblemSvg(away, 26)}</span><small>${fx.away === me.id ? "원정" : `${oppPos}위`} · 최근 ${form(away)}</small></div>
       </div>`);
       h.push(this.opponentHtml(clubOf(s, oppId)));
       const dby = derbyFor(s, fx);
@@ -969,7 +1084,8 @@ export class Game {
       case "cupSim": void this.simRounds(1); break;
       case "review": this.renderReview(); this.show("review"); break;
       case "sacked": this.renderSacked(); this.show("sacked"); break;
-      case "nextSeason": startNextSeason(this.state); this.save(); this.renderAll(); this.afterAdvance("home"); break;
+      // The snapshot goes first so the timer it resets keeps `save` from taking a second, near-identical one.
+      case "nextSeason": startNextSeason(this.state); this.backupNow(); this.save(); this.renderAll(); this.afterAdvance("home"); break;
       case "newGame":
         if (confirm("현재 진행 상황을 지우고 새 게임을 시작할까요?")) {
           if (this.current === "match") this.screen.leave();
@@ -1463,7 +1579,7 @@ export class Game {
       return;
     }
     this.openSheet(`<div class="pc">
-      <div class="pcHead"><div class="pcNum" style="font-size:22px"><span class="dot" style="background:${c.color};width:18px;height:18px"></span></div>
+      <div class="pcHead"><div class="pcNum" style="font-size:22px;line-height:0">${emblemSvg(c, 34)}</div>
         <div class="pcMain"><div class="pcName">${c.name}</div><div class="hint">${f.mgr} 감독${f.tags.length ? ` · <span style="color:var(--accent)">${f.tags.join(" · ")}</span>` : ""}</div></div>
         <div class="pcOvr"><b>${f.pos}위</b><small>${f.pts}점 · ${f.played}경기</small></div></div>
       <div class="hint">${clubLore(c.id).founded}년 창단 · "${clubLore(c.id).nickname}" · 우승 ${clubLore(c.id).honours}회${clubLore(c.id).rival >= 0 ? ` · 라이벌 <b data-clubcard="${clubLore(c.id).rival}" style="cursor:pointer">${clubOf(s, clubLore(c.id).rival).name}</b> (${clubLore(c.id).derby})` : ""}</div>
@@ -1780,7 +1896,7 @@ export class Game {
         const pos = posOf.get(r.club)!;
         const mgr = c.id === s.userClub ? s.managerName : c.manager?.name ?? "—";
         const mgrTitle = c.manager ? managerTags(c.manager).join(", ") : "";
-        return `<tr class="${r.club === s.userClub ? "me" : ""}" data-club="${c.id}" style="cursor:pointer"><td>${pos}</td><td class="l"><span class="dot" style="background:${c.color}"></span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
+        return `<tr class="${r.club === s.userClub ? "me" : ""}" data-club="${c.id}" style="cursor:pointer"><td>${pos}</td><td class="l"><span class="embWrap">${emblemSvg(c, 18)}</span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
       })
       .join("")}</tbody></table>`;
   }
