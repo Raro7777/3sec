@@ -277,8 +277,8 @@ details[open] summary::after{content:"▴"}
     <div class="club" id="clubName">—</div>
     <div class="res">
       <span>티켓<b id="rTickets">0</b></span>
+      <span>골드<b id="rGold">0</b></span>
       <span>조각<b id="rFrag">0</b></span>
-      <span>전적<b id="rRec">0-0</b></span>
     </div>
   </div>
   <main id="view"></main>
@@ -596,7 +596,8 @@ function renderTop(){
   document.getElementById('clubName').textContent = G.clubName;
   document.getElementById('rTickets').textContent = G.tickets;
   document.getElementById('rFrag').textContent = G.fragments + '/3';
-  document.getElementById('rRec').textContent = G.wins + '-' + G.losses;
+  var gEl = document.getElementById('rGold');
+  if (gEl) gEl.textContent = (G.gold | 0) >= 10000 ? Math.round((G.gold|0)/1000) + 'k' : (G.gold | 0);
 }
 
 // ---------------------------------------------------------------- views
@@ -691,6 +692,8 @@ function vScout(){
   var r = lastScout;
   var can = E.canScout(G);
   var can10 = G.tickets >= 10;
+  var posGold = (E.ECONOMY && E.ECONOMY.positionScoutGold) || 1200;
+  var canPos = can && (G.gold | 0) >= posGold;
   return h(
    '<h2>스카우트</h2>'+
    '<p class="sub">티켓 1장으로 여섯 구단의 명단에서 신인 한 명을 데려옵니다. '+
@@ -698,10 +701,12 @@ function vScout(){
    (lastPulls ? pullResults(lastPulls) : (r ? scoutResult(r) : ''))+
    '<button class="btn" data-act="scout"'+(can?'':' disabled')+'>스카우트 · 티켓 1</button>'+
    '<button class="btn ghost" data-act="scout10"'+(can10?'':' disabled')+'>10연속 스카우트 · 티켓 10</button>'+
-   '<div class="tiny" style="margin:14px 0 7px">포지션을 지정해서 뽑기 (티켓 1)</div>'+
+   '<div class="tiny" style="margin:14px 0 7px">포지션을 지정해서 뽑기 — 티켓 1 + <b style="color:var(--hot)">골드 '+posGold+'</b>'+
+     ' <span style="color:var(--ink3)">(보유 '+(G.gold|0)+')</span></div>'+
    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:7px">'+
-     POSK.map(function(p,i){ return '<button class="btn ghost" style="padding:12px 4px;font-size:14px" data-scoutpos="'+i+'"'+(can?'':' disabled')+'>'+p+'</button>'; }).join('')+
+     POSK.map(function(p,i){ return '<button class="btn ghost" style="padding:12px 4px;font-size:14px" data-scoutpos="'+i+'"'+(canPos?'':' disabled')+'>'+p+'</button>'; }).join('')+
    '</div>'+
+   (can && !canPos ? '<div class="tiny" style="margin-top:7px;color:var(--ink3)">골드가 부족합니다. 경기와 시즌 순위 보상으로 모입니다.</div>' : '')+
    (can?'':'<div class="empty">티켓이 없습니다. 미션을 달성하거나 경기에서 이기면 티켓이 들어옵니다.</div>')
   );
 }
