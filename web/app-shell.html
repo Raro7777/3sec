@@ -1342,14 +1342,31 @@ function loadRally(){
   cr.onEnd = function(){ nextRally(); };
   paintLive(0);
 }
+function unlockSkip(why){
+  if (skipUnlocked) return;
+  skipUnlocked = true;
+  try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){}
+  render();
+  toast(why || '건너뛰기가 열렸습니다');
+}
+
 function nextRally(){
   if (!mv) return;
   paintLive(mv.rallies[mv.ri] ? mv.rallies[mv.ri].touches.length : 0);
+  var doneSet = mv.rallies[mv.ri] ? mv.rallies[mv.ri].set : 1;
   mv.ri++;
-  if (mv.ri >= mv.rallies.length) { setTimeout(finishViewer, 700); return; }
-  setTimeout(function(){ if (mv && cr) { loadRally(); if (mv.playing) cr.play(); } }, 620);
+  var nextSet = mv.rallies[mv.ri] ? mv.rallies[mv.ri].set : doneSet;
+  if (nextSet > doneSet) unlockSkip('1세트 완료 · 건너뛰기가 열렸습니다');
+  var sp = (mv.speed || 1);
+  if (mv.ri >= mv.rallies.length) { setTimeout(finishViewer, 700 / sp); return; }
+  setTimeout(function(){ if (mv && cr) { loadRally(); if (mv.playing) cr.play(); } }, 620 / sp);
 }
-function finishViewer(){ stopViewer(); if (mv) mv.done = true; view = 'matchResult'; render(); window.scrollTo(0,0); }
+function finishViewer(){
+  stopViewer();
+  if (mv) mv.done = true;
+  if (!skipUnlocked) { skipUnlocked = true; try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){} }
+  view = 'matchResult'; render(); window.scrollTo(0,0);
+}
 
 function skipSet(){
   if (!mv) return;
@@ -1433,15 +1450,15 @@ function vMatchLive(){
    (skipUnlocked
      ? '<div class="ctrl">'+
          '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
-         '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
+         '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
          '<button data-mv="skipset">세트 건너뛰기</button>'+
          '<button data-mv="end">결과</button>'+
        '</div>'
      : '<div class="ctrl" style="grid-template-columns:1fr 1fr">'+
          '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
-         '<button data-mv="speed">속도 '+(mv&&mv.speed===2?'2배':'1배')+'</button>'+
+         '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
        '</div>'+
-       '<div class="card flat"><div class="tiny">첫 경기는 끝까지 봅니다. 한 경기를 다 보고 나면 건너뛰기가 열립니다.</div></div>')+
+       '<div class="card flat"><div class="tiny">1세트를 보고 나면 세트 건너뛰기와 결과 바로가기가 열립니다.</div></div>')+
    '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'
   );
 }
@@ -1699,8 +1716,9 @@ document.addEventListener('click', function(e){
       document.getElementById('lvPlay').textContent = mv.playing ? '일시정지' : '재생';
       if (mv.playing) { if (cr) cr.play(); } else stopViewer();
     } else if (d.mv === 'speed') {
-      mv.speed = mv.speed === 2 ? 1 : 2; if (cr) cr.speed = mv.speed;
-      t.textContent = '속도 ' + (mv.speed===2?'2배':'1배');
+      mv.speed = mv.speed === 1 ? 2 : (mv.speed === 2 ? 4 : 1);
+      if (cr) cr.speed = mv.speed;
+      t.textContent = '속도 ' + mv.speed + '배';
     } else if (d.mv === 'skipset') skipSet();
     else if (d.mv === 'end') finishViewer();
     return;
