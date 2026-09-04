@@ -15,23 +15,33 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 
 ## 코드
 
-- `sim/` — .NET 솔루션. `VolleySim.Core`(경기 시뮬, netstandard2.1, 외부 의존 0),
-  `VolleySim.Training`(육성), `VolleySim.Play`(콘솔 프로토타입), 각 테스트 프로젝트, `VolleySim.Cli`(몬테카를로).
-- `web/` — 브라우저 플레이용 자바스크립트 포팅.
-- `data/` — 6구단·42명 로스터. 스키마 검증은 `node data/validate.mjs`.
-- `tools/` — 파이썬 검증 시뮬레이터(육성·경제). 문서의 수치는 이 스크립트 출력과 일치해야 한다.
+**`web/` 이 기준 구현이다.** 새 시스템은 여기에 들어간다.
 
-### 빌드·테스트
+- `web/engine/` — 경기·육성·리그·경제·스킬·노화·신인 (순수 JS, DOM 비참조)
+- `web/app-shell.html` — 모바일 앱 셸(화면). `web/court-render.js` — 쿼터뷰 코트 렌더러
+- `data/` — 6구단·42명 런칭 로스터. 신인 세대는 시드에서 런타임 생성한다
+- `tools/` — 파이썬 보조 시뮬레이터. **권위는 `web/` 하네스에 있고** 파이썬은 근사 모델이다
+- `sim/` — C# 참고 구현(아카이브). 경기·육성만 있고 리그·스킬·노화·신인은 없다. `sim/README.md` 참조
+
+### 빌드·검증
 
 ```bash
-export DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH DOTNET_CLI_TELEMETRY_OPTOUT=1
-dotnet build sim/VolleySim.sln
-dotnet test  sim/VolleySim.sln     # 109개 통과가 기준선
+node web/build.mjs                # web/dist/bloom.html
+node web/app-test.mjs             # 화면 흐름 회귀 32건 (playwright 필요)
+node web/parity.mjs               # 경기·육성 지표 정합
+node web/season-check.mjs         # 시즌 1~3 난이도 목표 7건
+node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건
+node data/validate.mjs            # 로스터 스키마
 ```
+
+밸런스 상수를 바꾸면 위 하네스를 돌려 **문서 수치를 함께 갱신한다.** 하네스 목표를 넓혀서 통과시키지 않는다.
 
 ## 작업 원칙
 
-- **수치는 감으로 정하지 않는다.** 밸런스 상수를 바꾸면 해당 시뮬레이터를 돌려 문서 수치를 함께 갱신한다.
-- 파이썬 시뮬레이터는 C# 구현의 오라클이다. 둘이 어긋나면 C#을 고치고, 오라클을 고쳐 맞추지 않는다.
-- 테스트 허용 오차를 넓혀서 통과시키지 않는다.
+- **수치는 감으로 정하지 않는다.** 밸런스 상수를 바꾸면 해당 하네스를 돌려 문서 수치를 함께 갱신한다.
+- **권위는 `web/` 하네스에 있다.** 파이썬 보조 모델(`tools/`)이나 문서 값과 어긋나면 실제 엔진이 맞다.
+  문서에는 어느 리비전에서 측정한 값인지 남긴다.
+- 테스트·목표의 허용 범위를 넓혀서 통과시키지 않는다.
+- 기존 캘리브레이션을 깨지 않는 것이 새 기능보다 우선한다. 새 시스템은 "그 기능이 꺼진 상태에서
+  기존 지표가 그대로인가"를 먼저 확인한다.
 - 실존 선수·구단·기업명, 특정 작품(하이큐 등) 연상 요소를 넣지 않는다.

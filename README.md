@@ -1,53 +1,57 @@
 # 3sec — 여자 배구 매니저 게임
 
-육성 수집형 모바일 스포츠 매니지먼트 게임 프로젝트. 가상 리그·가상 선수, 일본 애니메풍 카드 아트, Unity 2D 예정, 1인 개발.
+육성 수집형 모바일 스포츠 매니지먼트 게임. 가상 리그(블룸 리그)·가상 선수, 일본 애니메풍 카드 아트, 1인 개발.
+
+**플레이 가능한 프로토타입이 `web/` 에 있습니다.** 스카우트 → 12턴 육성 → 졸업 → 라인업 → 리그 시즌(14매치데이 + 포스트시즌)이 한 바퀴 돌고, 경기는 쿼터뷰 코트에서 실제 물리로 재생됩니다.
+
+```bash
+node web/build.mjs        # web/dist/bloom.html — 브라우저에서 열면 됩니다
+node web/app-test.mjs     # 화면 흐름 회귀 테스트 32건 (playwright 필요)
+```
+
+## 지금 어디까지 되어 있나
+
+| 시스템 | 상태 |
+|---|---|
+| 경기 시뮬레이션 | 랠리 단위 판정, 실제 여자배구 지표로 캘리브레이션 |
+| 육성 | 12턴 캠프, 피로·컨디션·부상, 서포터, 졸업 등급 |
+| 리그 | 7팀 14매치데이, 승점·순위·개인 기록, 포스트시즌, 시즌 결산 |
+| 수집 | 스카우트·10연·천장·포지션 지정, 중복 → 한계돌파 |
+| 고유 스킬 | 24종이 판정에 관여하고 코트에 발동 연출로 표시 |
+| 노화·세대 | 포지션별 전성기·하락·은퇴, 매 시즌 신인 5명 유입 |
+| 아트 | **없음.** 선수 데이터로 그린 SVG 플레이스홀더 |
+
+## 검증
+
+숫자는 감으로 정하지 않습니다. 밸런스 상수를 바꾸면 해당 하네스를 돌려 문서 수치를 함께 갱신합니다.
+
+```bash
+node web/parity.mjs               # 경기·육성 지표가 목표 범위 안인가 (약 15초)
+node web/season-check.mjs         # 시즌 1~3 난이도 목표 7건 (약 40초)
+node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건 (약 60초)
+node data/validate.mjs            # 로스터 스키마·분포
+```
 
 ## 문서
 
 | 문서 | 내용 |
 |---|---|
-| [docs/GDD.md](docs/GDD.md) | 기획 총론 — 컨셉, 코어 루프, 시스템 개요, 비주얼 전략, 기술 스택, 로드맵 |
-| [docs/match-sim.md](docs/match-sim.md) | 경기 시뮬레이션 상세 설계 (랠리 상태기계, 판정식, 로테이션, 이벤트 스키마) |
+| [docs/GDD.md](docs/GDD.md) | 기획 총론 — 컨셉, 코어 루프, 비주얼 전략, 로드맵 |
+| [docs/match-sim.md](docs/match-sim.md) | 경기 시뮬 설계 (랠리 상태기계·판정식·로테이션) |
 | [docs/match-sim-balance-report.md](docs/match-sim-balance-report.md) | 몬테카를로 밸런스 리포트와 캘리브레이션 이력 |
-| [docs/training-mode.md](docs/training-mode.md) | 육성 모드(신인 → 졸업) 상세 설계 — 12턴 캠프, 성장 수식, 피로/부상, 졸업 판정 |
-| [docs/world.md](docs/world.md) | 세계관 · 블룸 리그 · 6구단 · 42명 런칭 로스터 설정 |
-| [docs/art-style-guide.md](docs/art-style-guide.md) | 아트 스타일 가이드 — 규격, 프롬프트 템플릿, 리터치 QA, 라이선스 체크리스트 |
+| [docs/training-mode.md](docs/training-mode.md) | 육성 12턴 설계 — 성장 수식, 피로/부상, 졸업 |
+| [docs/league-and-economy.md](docs/league-and-economy.md) | 리그 시즌·경제·노화·난이도 사다리 |
+| [docs/skills.md](docs/skills.md) | 고유 스킬 시스템과 밸런스 밴드 |
+| [docs/rookies.md](docs/rookies.md) | 신인 세대 생성 규칙 |
+| [docs/world.md](docs/world.md) | 세계관 · 6구단 · 42명 런칭 로스터 |
+| [docs/art-style-guide.md](docs/art-style-guide.md) | 아트 규격·프롬프트·리터치 QA·라이선스 |
+| [docs/prototype-play.md](docs/prototype-play.md) | 콘솔 프로토타입 관찰 리포트 |
+| [web/PARITY.md](web/PARITY.md) | 웹 엔진이 C# 과 어디까지 같고 어디서 갈라졌는가 |
 
-## 데이터
+## 저장소 구조
 
-- `data/teams.json` — 6구단, `data/players.json` — 42명 (시뮬 코어와 공유하는 스키마)
-- 검증: `node data/validate.mjs`
-
-## 경기 시뮬레이션 코어 (`sim/`)
-
-순수 C# 라이브러리(netstandard2.1, 외부 의존 없음 — Unity·서버 공용) + xUnit 테스트 + 몬테카를로 CLI.
-
-```bash
-# .NET 8 SDK (없을 경우)
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0 --install-dir $HOME/.dotnet
-export DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH
-
-dotnet build sim/VolleySim.sln
-dotnet test  sim/VolleySim.sln
-
-# 랜덤 동급 팀 2,000경기 밸런스 리포트
-dotnet run --project sim/VolleySim.Cli -- --matches 2000 --seed 42
-# 실제 로스터로 실행 + 한국어 텍스트 중계
-dotnet run --project sim/VolleySim.Cli -- --matches 1 --seed 3 \
-  --players data/players.json --teams data/teams.json --commentary
-```
-
-## 육성 모드 + 코어 루프 프로토타입 (`sim/VolleySim.Training`, `sim/VolleySim.Play`)
-
-`VolleySim.Training`(netstandard2.1)은 training-mode.md v0.2 규칙의 C# 구현이고, `VolleySim.Play`(net8.0 콘솔)는 "스카우트 → 육성 → 졸업 → 로스터/서포터 → 라인업 → 경기"가 한 바퀴 도는 한국어 텍스트 프로토타입이다. 실행법·설계 편차·관찰 리포트는 [docs/prototype-play.md](docs/prototype-play.md).
-
-```bash
-dotnet run --project sim/VolleySim.Play                                  # 대화형
-dotnet run --project sim/VolleySim.Play -- --script sim/VolleySim.Play/scripts/demo.txt
-dotnet run --project sim/VolleySim.Play -- --auto --runs 8 --seed 1 --matches 3   # 정책 자동 육성 후 6구단과 경기
-dotnet run --project sim/VolleySim.Play -- --oracle-table                # 파이썬 오라클 정책표 재현
-```
-
-## 도구
-
-- `tools/training-sim/train_sim.py` — 육성 모드 수식 검증용 파이썬 몬테카를로 (`python3 tools/training-sim/train_sim.py`)
+- `web/` — **기준 구현.** 엔진(`engine/`), 코트 렌더러, 앱 셸, 검증 하네스
+- `data/` — 6구단·42명 런칭 로스터
+- `docs/` — 기획·설계 문서
+- `tools/` — 파이썬 검증 시뮬레이터(육성·경제). 보조 모델이며 권위는 `web/` 하네스에 있습니다
+- `sim/` — **C# 참고 구현(아카이브).** 경기·육성만 담고 있고 리그·스킬·노화는 없습니다. [sim/README.md](sim/README.md) 참조
