@@ -300,6 +300,7 @@ var ses = null;               // 진행 중 육성 세션
 var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null, lastPulls = null;
 var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
+var detailId = null;   // 상세 화면에서 보고 있는 인스턴스
 var lastSettle = null;
 var trainPick = null, supPick = null;
 // 자동 진행은 수동으로 캠프를 1회 완주해야 열린다(처음부터 자동을 누르면 게임을 이해할 수 없다).
@@ -606,7 +607,7 @@ function render(){
     home:vHome, scout:vScout, train:vTrain, trainSup:vTrainSup, trainTurn:vTrainTurn,
     trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
     matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions,
-    league:vLeague, playoff:vPlayoff, settle:vSettle
+    league:vLeague, playoff:vPlayoff, settle:vSettle, player:vPlayer
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') mountCourt();
@@ -635,7 +636,7 @@ function vHome(){
      ? '<div class="card"><div class="spread"><div><b>먼저 선수를 스카우트하세요</b><div class="tiny" style="margin-top:3px">티켓 '+G.tickets+'장으로 시작합니다. 뽑은 신인을 12턴 캠프에서 키우면 로스터에 들어갑니다.</div></div></div>'+
        '<button class="btn" data-go="scout" style="margin-top:12px">스카우트 하러 가기</button></div>'
      : '<div class="card"><div class="spread"><div class="muted">간판 선수</div><div class="tiny">'+G.trainingCount+'회 육성</div></div>'+
-       pcard(best, true)+
+       pcard(best, true, best ? best.instanceId : null)+
        '<div class="btn-row" style="margin-top:4px">'+
          '<button class="btn ghost" data-go="train">육성하기</button>'+
          '<button class="btn" data-go="match">경기하기</button>'+
@@ -670,17 +671,19 @@ function missionCard(){
   '</div>';
 }
 
-function pcard(inst, plain){
+function pcard(inst, plain, tapId){
   if (!inst) return '';
+  var tag = tapId ? 'button' : 'div';
+  var attr = tapId ? ' class="pcard tap" data-detail="'+tapId+'"' : ' class="pcard"';
   var col = clubColor[inst.clubId] || '#3E8FE0';
   var rar = E.RARITIES ? (typeof inst.rarity==='number' ? ['N','R','SR','SSR'][inst.rarity] : inst.rarity) : 'R';
-  return '<div class="pcard"><span class="ava" style="border-color:'+col+'">'+portraitSvg(inst,44)+'</span>'+
+  return '<'+tag+attr+'><span class="ava" style="border-color:'+col+'">'+portraitSvg(inst,44)+'</span>'+
     '<div style="flex:1;min-width:0">'+
       '<div class="pname">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
       '<div class="pmeta">'+(inst.grade!==undefined?'등급 <span class="grade g-'+['S','A','B','C','D'][inst.grade]+'">'+['S','A','B','C','D'][inst.grade]+'</span> · ':'')+
         (inst.skillName?esc(inst.skillName):'고유 스킬 없음')+'</div>'+
     '</div>'+
-    '<div class="povr num">'+(inst.ovr!==undefined?inst.ovr.toFixed(1):'')+'<small>OVR</small></div></div>';
+    '<div class="povr num">'+(inst.ovr!==undefined?inst.ovr.toFixed(1):'')+'<small>OVR</small></div></'+tag+'>';
 }
 
 // ---------- 스카우트
@@ -914,13 +917,75 @@ function vTrainGrad(){
     '<button class="btn ghost" data-go="train">한 명 더 키우기</button>');
 }
 
+// ---------- 선수 상세
+function vPlayer(){
+  var inst = E.representatives(G).filter(function(i){ return i.instanceId === detailId; })[0];
+  if (!inst) return '<div class="empty">선수를 찾을 수 없습니다.</div>';
+  var card = E.CARD_POOL.filter(function(c){ return c.id === inst.cardId; })[0];
+  var club = E.CLUBS.filter(function(c){ return c.id === inst.clubId; })[0];
+  var rar = ['N','R','SR','SSR'][inst.rarity];
+  var gc = ['S','A','B','C','D'][inst.grade];
+  var lb = G.ownedCards[inst.cardId] || 0;
+  var core = CORE[inst.pos] || [];
+  var app = APPEAR[inst.cardId] || {};
+
+  return h(
+   '<div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">'+
+     '<span class="cardart">'+cardArtSvg(inst, rar, 108)+'</span>'+
+     '<div style="flex:1;min-width:0">'+
+       '<div class="pname" style="font-size:19px">'+esc(inst.name)+'</div>'+
+       '<div class="pmeta" style="font-size:12.5px;margin-top:3px">'+
+         '<span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span> '+
+         '<span class="grade g-'+gc+'">'+gc+'</span></div>'+
+       '<div class="tiny" style="margin-top:6px">'+esc(club?club.name:'')+' 출신 · #'+inst.jersey+'<br>'+
+         inst.heightCm+'cm · '+inst.age+'세'+(lb?' · 한계돌파 '+lb:'')+'</div>'+
+       '<div class="num" style="font-size:24px;margin-top:8px">'+inst.ovr.toFixed(1)+
+         ' <span style="font-size:12px;color:var(--ink3)">OVR</span></div>'+
+     '</div>'+
+   '</div>'+
+
+   (inst.skillName
+     ? '<div class="card" style="border-color:var(--ssr)">'+
+         '<div class="spread"><b style="color:var(--ssr)">'+esc(inst.skillName)+'</b>'+
+           '<span class="tiny">고유 스킬 Lv'+(inst.skillLevel||1)+'</span></div>'+
+         '<div class="tiny" style="margin-top:5px;line-height:1.6">'+esc(card && card.skillDesc ? card.skillDesc : '경기 중 특정 상황에서 발동합니다.')+'</div>'+
+       '</div>'
+     : '<div class="card flat"><div class="tiny">고유 스킬이 없는 카드입니다. SR 이상에서 스킬이 붙습니다.</div></div>')+
+
+   '<div class="card"><div class="spread" style="margin-bottom:9px"><div class="muted">능력치</div>'+
+     '<div class="tiny">파란 항목이 '+POSK[inst.pos]+'의 핵심</div></div>'+
+     '<div class="stats" style="grid-template-columns:1fr">'+
+       inst.finalStats.map(function(v,i){
+         var isCore = core.indexOf(i)>=0;
+         var start = inst.initialStats ? inst.initialStats[i] : v;
+         return '<div class="st"><span class="n">'+STATK[i]+'</span>'+
+           '<span class="b"><i class="'+(isCore?'core':'')+'" style="width:'+v+'%"></i></span>'+
+           '<span class="v num" style="width:76px">'+v.toFixed(0)+
+             (start!==v?' <em style="color:'+(v>start?'var(--good)':'var(--bad)')+'">'+
+               (v>start?'+':'−')+Math.abs(v-start).toFixed(0)+'</em>':'')+'</span></div>';
+       }).join('')+
+     '</div>'+
+   '</div>'+
+
+   '<div class="card"><div class="muted" style="margin-bottom:7px">캠프 기록</div>'+
+     '<div class="legend">'+
+       '<b>졸업 등급</b><span>'+gc+' · 완성도 '+Math.round((inst.completion||0)*100)+'%</span>'+
+       '<b>육성 회차</b><span>'+(inst.runIndex||'-')+'번째로 키운 선수</span>'+
+       (app.hairStyle?'<b>외형</b><span>'+esc(app.hairStyle)+' · '+esc(app.hairColor||'')+'</span>':'')+
+     '</div>'+
+   '</div>'+
+
+   '<button class="btn ghost" data-go="roster">로스터로</button>'
+  );
+}
+
 // ---------- 로스터
 function vRoster(){
   var reps = E.representatives(G).slice().sort(function(a,b){ return b.ovr-a.ovr; });
   var fillers = E.myRoster(G).filter(function(p){ return p.rarity===0; });
   if (!reps.length && !fillers.length) return '<h2>로스터</h2><div class="empty">아직 선수가 없습니다.</div>';
   return h('<h2>로스터</h2><p class="sub">졸업한 선수가 대표로 등록됩니다. 부족한 자리는 연습생이 채웁니다.</p>'+
-    reps.map(function(i){ return pcard(i); }).join('')+
+    reps.map(function(i){ return pcard(i, false, i.instanceId); }).join('')+
     (fillers.length ? '<div class="muted" style="margin:16px 0 8px">연습생 '+fillers.length+'명</div>'+
       fillers.map(function(p){
         var ovr = 0; for (var k=0;k<10;k++) ovr += p.stats[k]; ovr/=10;
@@ -1459,7 +1524,7 @@ function vHelp(){
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail]');
   if (!t) return;
   var d = t.dataset;
 
@@ -1481,6 +1546,7 @@ document.addEventListener('click', function(e){
   if (d.act === 'startcamp') { startCamp(supPick); render(); return; }
   if (d.choice) return applyChoice(d.choice);
   if (d.auto) return autoRun(d.auto);
+  if (d.detail) { detailId = d.detail; go('player'); return; }
   if (d.play) return doMatch(d.play);
   if (d.act === 'startseason') {
     E.startSeason(G); save(); toast('시즌이 시작됐습니다'); go('match'); return;
