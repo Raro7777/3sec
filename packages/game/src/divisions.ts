@@ -12,10 +12,12 @@
  * between the two, and the division they are in is always the one played out in full.
  */
 import { Rng } from "@3sec/engine";
-import type { Club, Fixture, GameState, TableRow } from "./types";
+import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
 import { buildFixtures } from "./fixtures";
 import { CLUBS_D2 } from "./world";
 import { recordAttendance } from "./fans";
+import { overall } from "./rating";
+import { playingTimeBonus } from "./training";
 
 export { CLUBS_D2 };
 
@@ -41,20 +43,6 @@ export const divisionName = (d: number): string => DIVISION_NAME[d] ?? `${d}부 
 export const DIVISION_PRIZE_FACTOR: Record<number, number> = { 1: 1, 2: 0.32 };
 export const prizeFactor = (division: number): number => DIVISION_PRIZE_FACTOR[division] ?? 0.32;
 
-/**
- * One-off payment (억원) to a promoted club, paid at the rollover.
- *
- * Without it promotion was a one-year holiday. Measured over a season, a club coming up arrived with
- * 29억 against the 87억 of the division it joined — and less even than the 79억 of the clubs that had
- * just dropped out of it, who then bounced straight back. A median first-division player costs 18억,
- * so promotion bought a single signing and three quarters of promoted clubs went down again inside
- * two seasons.
- *
- * The money is deliberately the lever rather than a bigger reputation bump: reputation also raises
- * what the board expects and what squads are generated at, so a promoted side would be handed a
- * mid-table demand in the same breath as promotion. Cash leaves the manager free to spend it or not.
- */
-export const PROMOTION_PRIZE = 35;
 
 
 /**
@@ -123,9 +111,27 @@ function poisson(rng: Rng, lambda: number): number {
 }
 
 /**
- * Play one fixture of a division the user is not in. The result is a score and a list of scorers
- * drawn from the two squads, which is everything the table, the news and the top-scorer list need —
- * no player minutes, cards, injuries or fatigue, since nobody is watching that league week to week.
+ * Who played, and for how long: the selected eleven for the match, three substitutes for the last
+ * half-hour. Nobody watched, but they still played — appearances and minutes have to be on the
+ * record, and match minutes are what develops a young player (training.ts playingTimeBonus).
+ */
+function playedIn(c: Club): { player: SquadPlayer; minutes: number }[] {
+  const byId = new Map(c.squad.map((p) => [p.id, p]));
+  const out: { player: SquadPlayer; minutes: number }[] = [];
+  for (const id of c.selection.starters) { const p = byId.get(id); if (p) out.push({ player: p, minutes: 90 }); }
+  for (const id of c.selection.bench.slice(0, SUBS_PER_MATCH)) { const p = byId.get(id); if (p) out.push({ player: p, minutes: 25 }); }
+  // A club with no usable selection (a save mid-migration) still needs somebody to have played.
+  return out.length ? out : c.squad.slice(0, 11).map((player) => ({ player, minutes: 90 }));
+}
+
+/** Substitutes used in a match nobody watched; the engine's own limit is higher but rarely all used. */
+const SUBS_PER_MATCH = 3;
+
+/**
+ * Play one fixture of a division the user is not in: a score, the players who featured, and the
+ * scorers among them. No cards, injuries or fatigue — those need a match to have been simulated —
+ * but appearances, minutes and the development they earn are recorded, because a league where
+ * nobody ever plays a minute has its youngsters stop growing and falls behind the watched one.
  */
 export function simulateFixture(s: GameState, f: Fixture, rng: Rng): void {
   const home = s.clubs[f.home]!, away = s.clubs[f.away]!;
@@ -135,9 +141,20 @@ export function simulateFixture(s: GameState, f: Fixture, rng: Rng): void {
   // A league nobody watches still sells tickets: without this a club would arrive in the user's
   // division having banked no gate money all season and be broke on promotion (fans.ts).
   recordAttendance(s, f, false);
+
+  const lineups: [ReturnType<typeof playedIn>, ReturnType<typeof playedIn>] = [playedIn(home), playedIn(away)];
+  for (const side of lineups) {
+    for (const { player, minutes } of side) {
+      player.stats.apps++;
+      player.stats.minutes += minutes;
+      player.lastMinutes = (player.lastMinutes ?? 0) + minutes;
+      if (overall(player.attrs, player.role) < player.potential) player.growth += playingTimeBonus(player.age, minutes);
+    }
+  }
+
   f.scorers = [
-    ...Array.from({ length: hg }, () => pickScorer(home, rng)),
-    ...Array.from({ length: ag }, () => pickScorer(away, rng)),
+    ...Array.from({ length: hg }, () => pickScorer(lineups[0], rng)),
+    ...Array.from({ length: ag }, () => pickScorer(lineups[1], rng)),
   ]
     .map((p, i) => ({ p, minute: 1 + Math.floor(rng.next() * 90), side: i < hg ? home : away }))
     .sort((x, y) => x.minute - y.minute)
@@ -147,15 +164,19 @@ export function simulateFixture(s: GameState, f: Fixture, rng: Rng): void {
     });
 }
 
-/** Who scored: forwards and attacking midfielders far more often than defenders, never the keeper. */
-function pickScorer(c: Club, rng: Rng) {
+/**
+ * Who scored: one of the players who actually featured, forwards and attacking midfielders far more
+ * often than defenders, never the keeper, and weighted by the minutes they were on the pitch for.
+ */
+function pickScorer(played: { player: SquadPlayer; minutes: number }[], rng: Rng): SquadPlayer {
   const weight = (role: string): number =>
     role === "ST" ? 10 : role === "LW" || role === "RW" || role === "AM" ? 6 : role === "LM" || role === "RM" || role === "CM" ? 3 : role === "GK" ? 0 : 1;
-  const pool = c.squad.filter((p) => weight(p.role) > 0);
-  const total = pool.reduce((a, p) => a + weight(p.role), 0);
+  const pool = played.filter((x) => weight(x.player.role) > 0).map((x) => ({ p: x.player, w: weight(x.player.role) * (x.minutes / 90) }));
+  const total = pool.reduce((a, x) => a + x.w, 0);
+  if (!total) return played[0]!.player;
   let t = rng.next() * total;
-  for (const p of pool) { t -= weight(p.role); if (t <= 0) return p; }
-  return pool[pool.length - 1]!;
+  for (const x of pool) { t -= x.w; if (t <= 0) return x.p; }
+  return pool[pool.length - 1]!.p;
 }
 
 /** Play this round's fixtures in every division the user is not in. */
@@ -201,7 +222,6 @@ export function applyPromotionRelegation(s: GameState): SwapResult {
       const c = s.clubs[id]!;
       c.division = d;
       c.reputation = Math.round(Math.min(15, c.reputation + 0.8) * 10) / 10;
-      c.budget = Math.round((c.budget + PROMOTION_PRIZE) * 10) / 10;
       out.promoted.push({ club: id, to: d });
     }
   }

@@ -19,7 +19,7 @@ export {
   type ReportLine, type TacticsChange, type TacticsReport,
 } from "./tactics-report";
 export {
-  DIVISIONS, CLUBS_PER_DIVISION, SWAP, CLUBS_D2, DIVISION_NAME, DIVISION_PRIZE_FACTOR, PROMOTION_PRIZE,
+  DIVISIONS, CLUBS_PER_DIVISION, SWAP, CLUBS_D2, DIVISION_NAME, DIVISION_PRIZE_FACTOR,
   divisionOf, userDivision, clubsIn, divisionName, prizeFactor, buildAllFixtures, divisionTable, divisionPosition,
   simulateFixture, simulateAwayDivisions, applyPromotionRelegation, inRelegationZone, inPromotionZone, type SwapResult,
 } from "./divisions";
