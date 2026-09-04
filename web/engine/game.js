@@ -201,6 +201,9 @@ export function ageAt(baseAge, season) {
 }
 function peakEndFor(pos) { return AGING.peakEnd + (AGING.peakEndByPos[pos | 0] || 0); }
 function retireAgeFor(pos) { return AGING.retireAge + (AGING.retireByPos[pos | 0] || 0); }
+/** 포지션별 전성기 마지막 나이 · 은퇴 나이 (UI·스카우트 리포트 표기용). */
+export function peakEndOf(pos) { return peakEndFor(pos); }
+export function retireAgeOf(pos) { return retireAgeFor(pos); }
 
 /** 실효 스탯 배수(1.0 = 전성기 이내). */
 export function ageFactor(baseAge, pos, season) {
@@ -395,6 +398,10 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     leagueHistory: [],          // 지난 시즌 결산 목록 (A.5.2)
     clubRecords: newClubRecords(), // 통산 기록 (A.5.1 "구단 기록")
     milestonesGiven: [],        // 육성 누적 마일스톤 중복 지급 방지 (C.3)
+    // 골드 소비처 (B.6 · engine/facility.js). 여기서는 필드만 잡아 두고 규칙은 facility.js 가 갖는다
+    // — game.js 가 시설을 몰라야 순환 import 가 생기지 않는다.
+    facilities: null,           // { analysis, stadium, hall } — facilityLevels() 가 지연 초기화
+    reports: [],                // 스카우트 리포트를 산 카드 id 목록
   };
   state.fillers = createFillers(state);
   return state;
@@ -477,6 +484,9 @@ export function saveGame(state) {
     lg: state.league ? packLeague(state.league) : null,
     lh: state.leagueHistory || [],
     cr: state.clubRecords || newClubRecords(),
+    // 골드 소비처 (B.6) — 시설 등급표와 리포트를 산 카드 목록
+    fc: state.facilities || null,
+    rp: state.reports || [],
   };
 }
 
@@ -564,6 +574,9 @@ export function loadGame(json) {
   state.league = unpackLeague(j.lg);           // 구 세이브(시즌 없음)면 null
   state.leagueHistory = j.lh || [];
   state.clubRecords = j.cr || newClubRecords();
+  // B.6 골드 소비처 — 구 세이브에는 없다(둘 다 빈 상태로 시작하면 도입 전과 동작이 같다).
+  state.facilities = j.fc || null;
+  state.reports = j.rp || [];
   state.fillers = createFillers(state);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
   return state;

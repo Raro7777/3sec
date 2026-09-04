@@ -13,6 +13,8 @@ import {
   formatMatchResult, nextSeed, addHistory, addTickets, addGold, addFragments,
   createFillers, newClubRecords, TRAINING_CFG, rookieClassOf,
 } from './game.js';
+// 골드 소비처(B.6) — 결산에서 구단 운영비를 정산한다.
+import { payUpkeep, facilityUpkeep, clubPrestige } from './facility.js';
 
 // ---------------------------------------------------------------- 상수 (league-and-economy.md 부록 league:)
 /** 시즌 포맷 상수. C.1 SeasonConfig 와 1:1. */
@@ -667,6 +669,17 @@ export function finishSeason(state) {
   addTickets(state, tickets);
   addGold(state, gold);
 
+  // ---- 구단 운영비 (B.6.3). 보상을 받은 **뒤에** 낸다 — 결산 화면의 순서와 같다.
+  //      시설 등급 × 400 + (계약 선수 − 42) × 200. 시즌 1~8 은 둘 다 0 이라 도입 전과 값이 같다.
+  const upkeep = payUpkeep(state);
+  if (upkeep.total > 0) {
+    breakdown.push({
+      label: `구단 운영비 (시설 ${upkeep.levels}단계 · 계약 ${upkeep.squadSize}명)`,
+      tickets: 0, gold: -upkeep.paid,
+    });
+    addHistory(state, `구단 운영비 −${upkeep.paid}골드 (시설 ${upkeep.facility} · 선수단 ${upkeep.squad})`);
+  }
+
   // ---- 기록 (A.5.1 구단 기록)
   const rec = state.clubRecords || (state.clubRecords = newClubRecords());
   rec.seasons++;
@@ -691,7 +704,9 @@ export function finishSeason(state) {
     isChampion,
     playoffEntered: entered,
     playoffWins: poWins,
-    rewards: { tickets, gold, breakdown },
+    rewards: { tickets, gold, breakdown, upkeep, net: gold - upkeep.paid },
+    upkeep,
+    prestige: clubPrestige(state),
     mvp,
     awards,
     myStats: {
@@ -780,6 +795,9 @@ export function seasonView(state) {
       fragments: state.fragments, fragmentsPerTicket: ECONOMY.fragmentsPerTicket,
       pitySR: Math.max(0, ECONOMY.pitySR - state.pitySR),
       pitySSR: Math.max(0, ECONOMY.pitySSR - state.pitySSR),
+      // B.6.3 이번 시즌 결산에서 나갈 구단 운영비 — 잔액 옆에 미리 보여 준다(E.5 UI 필요 사항 #12)
+      upkeep: facilityUpkeep(state),
+      prestige: clubPrestige(state),
     },
     growth: growthFor(L.number),
     lineupOvr: lineupOvrOf(state),

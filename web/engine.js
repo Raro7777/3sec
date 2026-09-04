@@ -29,7 +29,18 @@ export {
   // UI 는 CARD_POOL 대신 allCards(state) / cardById(state, id) 를 써야 한다.
   ROOKIES, LAUNCH_CARDS, allCards, cardById, isRookieCard,
   rookieCards, rookieClassOf, rookieWorld, genericClubSlots,
+  peakEndOf, retireAgeOf,
 } from './engine/game.js';
+
+// ---------------------------------------------------------------- 골드 소비처 (league-and-economy.md B.6)
+// 구단 시설 투자 · 구단 운영비 · 스카우트 리포트. **전부 비전력**이다 —
+// 경기·육성 판정에 들어가는 값이 하나도 없고, parity.mjs 9절이 그것을 자동 검증한다.
+export {
+  FACILITY,
+  facilityLevels, facilityLevel, facilityPrice, canUpgradeFacility, upgradeFacility,
+  clubPrestige, squadSize, facilityUpkeep, payUpkeep, facilityView,
+  reportCost, hasScoutReport, canBuyScoutReport, buyScoutReport, scoutReport, reportableCards,
+} from './engine/facility.js';
 
 // ---------------------------------------------------------------- 리그 시즌 계층
 // docs/league-and-economy.md A(시즌)·B(경제) — 사용 흐름:

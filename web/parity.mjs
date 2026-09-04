@@ -18,6 +18,7 @@ import { DEFAULT_TRAINING_CONFIG, gradeOf, ovrOf } from './engine/training-confi
 import { SKILLS, createSkillRuntime, findSkill } from './engine/skills.js';
 import { createSimConfig } from './engine/config.js';
 import * as G from './engine/game.js';
+import * as F from './engine/facility.js';
 import { renderCommentary } from './engine/commentary.js';
 
 // ---------------------------------------------------------------- 인자
@@ -706,6 +707,135 @@ const SEC8 = '신인 세대 생성기 (docs/rookies.md)';
     check(SEC8, '8.6 신인 승계 후에도 사다리 유지 — 시즌 15 AI 평균 OVR', L15.ovr, 74.91, 0.30, v => v.toFixed(2));
     must(SEC8, '8.6 구단 인원 42명(6×7) 유지', L8.size === 42 && L12.size === 42 && L15.size === 42, `${L8.size}/${L12.size}/${L15.size}`);
     info(SEC8, '8.6 신인이 채운 구단 슬롯 (S8 / S12 / S15)', `${L8.heirs} / ${L12.heirs} / ${L15.heirs} (42중)`);
+  }
+}
+
+// ================================================================ 9. 골드 소비처 (league-and-economy.md B.6)
+// 이 절의 존재 이유 하나: **골드로 산 것이 전력을 바꾸지 않는다**는 것을 기계로 못박는 것.
+// 바꾸는 순간 A.4.4 의 사다리 밴드(시즌 4~15 우승률)가 재캘리브레이션 대상이 된다.
+const SEC9 = '골드 소비처 (B.6 시설·운영비·리포트)';
+{
+  // --- 9.1 가격표·등급 상한 ---
+  let priceOk = true, lenOk = true;
+  for (const t of F.FACILITY.tracks) {
+    if (t.prices.length !== F.FACILITY.maxLevel) lenOk = false;
+    for (let i = 1; i < t.prices.length; i++) if (t.prices[i] <= t.prices[i - 1]) priceOk = false;
+  }
+  must(SEC9, '9.1 시설 가격표가 단계마다 오른다 · 길이 = maxLevel', priceOk && lenOk,
+    F.FACILITY.tracks.map(t => `${t.name} ${t.prices.join('/')}`).join(' · '));
+  {
+    const g = G.createGame({ seed: 5001 });
+    g.gold = 1e7;
+    let spent = 0;
+    for (const t of F.FACILITY.tracks) {
+      for (let i = 0; i < F.FACILITY.maxLevel; i++) spent += F.upgradeFacility(g, t.id).price;
+      let capped = false;
+      try { F.upgradeFacility(g, t.id); } catch (e) { capped = true; }
+      must(SEC9, `9.1 ${t.name} 은 ${F.FACILITY.maxLevel}단계가 상한`, capped && F.facilityLevel(g, t.id) === 5);
+    }
+    const total = F.FACILITY.tracks.reduce((a, t) => a + t.prices.reduce((x, y) => x + y, 0), 0);
+    must(SEC9, '9.1 만렙 총투자 = 가격표 합', spent === total, `${spent.toLocaleString()}골드`);
+    must(SEC9, '9.1 만렙 명성 = 15 (전통의 명문)', F.clubPrestige(g).total === 15 && F.clubPrestige(g).name === '전통의 명문');
+  }
+
+  // --- 9.2 초반 잠금: 초기 골드로는 아무 시설도 못 사고, 지정 스카우트는 살 수 있다 (B.6.4) ---
+  {
+    const g = G.createGame({ seed: 5002 });
+    const cheapest = Math.min(...F.FACILITY.tracks.map(t => t.prices[0]));
+    must(SEC9, '9.2 초기 골드 1,200 = 지정 스카우트 1회 · 시설은 0단계',
+      g.gold === G.ECONOMY.positionScoutGold && g.gold < cheapest,
+      `초기 ${g.gold} · 최저가 시설 ${cheapest}`);
+    must(SEC9, '9.2 예비비 > 시즌 1~3 잔액대(8.7k~10.4k) → 초반에는 소비처가 잠긴다',
+      F.FACILITY.reserveGold > 10400, `예비비 ${F.FACILITY.reserveGold}`);
+  }
+
+  // --- 9.3 결정성: 시설·리포트는 RNG 를 쓰지 않는다 ---
+  {
+    const g = G.createGame({ seed: 5003 });
+    g.gold = 1e6;
+    const si0 = g.seedIndex;
+    for (const t of F.FACILITY.tracks) F.upgradeFacility(g, t.id);
+    for (const c of G.CARD_POOL.slice(0, 10)) F.buyScoutReport(g, c.id);
+    F.payUpkeep(g);
+    must(SEC9, '9.3 시설·리포트·운영비가 시드를 소비하지 않는다 (seedIndex 불변)', g.seedIndex === si0, `si ${si0} → ${g.seedIndex}`);
+  }
+
+  // --- 9.4 전력 불변식 (핵심) ---
+  // 같은 시드로 ① 아무것도 안 산 게임 ② 시설 만렙 + 리포트 30장을 산 게임을 만들고,
+  // 같은 순서로 스카우트 20회 · 육성 1회 · 경기 1회를 돌려 **모든 결과가 같은지** 본다.
+  {
+    const run = (sink) => {
+      const g = G.createGame({ seed: 20260904, unlimitedTickets: true, evaluation: 'stub' });
+      g.gold = 500000;
+      if (sink) {
+        for (const t of F.FACILITY.tracks) for (let i = 0; i < F.FACILITY.maxLevel; i++) F.upgradeFacility(g, t.id);
+        for (const c of G.CARD_POOL.slice(0, 30)) F.buyScoutReport(g, c.id);
+      }
+      const picks = [];
+      for (let i = 0; i < 20; i++) picks.push(G.scout(g).card.id);
+      const s = G.startTraining(g, picks[0], G.recommendSupporters(g, picks[0]));
+      while (s.phase !== 2) {
+        if (s.phase === 0) s.apply(POLICIES.optimal.choose(s));
+        else s.resolveEvent(s.pendingEvent.oracleChoice);
+      }
+      const grad = G.graduate(s, 0);
+      G.autoLineup(g);
+      const m = G.playMatch(g, 't03', { collectEvents: false });
+      return JSON.stringify({
+        picks, ovr: grad.ovr, hints: grad.hints, skill: grad.skillLevel,
+        sets: m.setScores, won: m.won, si: g.seedIndex,
+      });
+    };
+    const plain = run(false), rich = run(true);
+    must(SEC9, '9.4 **시설·리포트를 사도 스카우트·육성·경기 결과가 한 글자도 바뀌지 않는다**', plain === rich,
+      plain === rich ? '동일' : '차이 발생');
+  }
+
+  // --- 9.5 운영비 공식 (B.6.3) ---
+  {
+    const g = G.createGame({ seed: 5005 });
+    g.gold = 1e6;
+    g.season = 8;   // 신인 세대가 들어와 카드 풀이 42장을 넘는 시점 (docs/rookies.md)
+    F.upgradeFacility(g, 'analysis'); F.upgradeFacility(g, 'stadium');
+    // 계약 선수를 무료 슬롯 + 5명으로 만든다
+    const pool = G.activeCardPool(g).slice(0, F.FACILITY.squadFreeSlots + 5);
+    for (const c of pool) g.ownedCards[c.id] = 0;
+    const u = F.facilityUpkeep(g);
+    const want = 2 * F.FACILITY.upkeepPerLevel + 5 * F.FACILITY.squadUpkeepPerPlayer;
+    must(SEC9, '9.5 운영비 = 시설 등급합 × 400 + (계약 − 42) × 200', u.total === want && u.over === 5,
+      `${u.facility} + ${u.squad} = ${u.total}`);
+    const before = g.gold;
+    const paid = F.payUpkeep(g);
+    must(SEC9, '9.5 결산에서 운영비만큼 차감', g.gold === before - want && paid.shortfall === 0);
+  }
+  {
+    const g = G.createGame({ seed: 5006 });
+    g.gold = 1e6;
+    F.upgradeFacility(g, 'hall'); F.upgradeFacility(g, 'hall'); F.upgradeFacility(g, 'analysis');
+    g.gold = 10;
+    const r = F.payUpkeep(g);
+    must(SEC9, '9.5 미납 = 있는 만큼 내고 최고 등급 시설 1단계 강등',
+      g.gold === 0 && r.shortfall === 1190 && r.demoted === 'hall' && F.facilityLevel(g, 'hall') === 1,
+      `미납 ${r.shortfall} · 강등 ${r.demoted}`);
+  }
+
+  // --- 9.6 스카우트 리포트 = 카드 데이터의 순수 함수 (B.6.2) ---
+  {
+    const g = G.createGame({ seed: 5007 });
+    g.gold = 1e6;
+    const card = G.CARD_POOL.find(c => c.rarity === RARITY.SSR);
+    const r1 = F.buyScoutReport(g, card.id);
+    const r2 = F.scoutReport(g, card.id);
+    must(SEC9, '9.6 같은 상태 → 같은 리포트(순수 함수)', JSON.stringify(r1) === JSON.stringify(r2));
+    must(SEC9, '9.6 잠재 OVR ≥ 현재 OVR · 10스탯 전부 실림',
+      r1.ovrPotential >= r1.ovrNow && r1.stats.length === 10 && r1.aptitudes.length === 5,
+      `${r1.name} ${r1.ovrNow} → ${r1.ovrPotential}`);
+    // 한계돌파가 오르면 리포트의 "돌파 반영 천장"도 오른다(표시값이지 전력이 아니다)
+    g.ownedCards[card.id] = 5;
+    const r3 = F.scoutReport(g, card.id);
+    must(SEC9, '9.6 한계돌파 5단계 반영 천장이 더 높다', r3.ovrPotentialLb > r3.ovrPotential,
+      `${r3.ovrPotential} → ${r3.ovrPotentialLb}`);
+    must(SEC9, '9.6 안 산 카드의 리포트는 null', F.scoutReport(g, G.CARD_POOL[41].id) === null);
   }
 }
 

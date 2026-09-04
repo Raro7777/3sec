@@ -82,6 +82,9 @@ function upgradePosition(g) {
   return null;
 }
 
+/** 이번 시즌의 소비 계측(지정 스카우트·시설·리포트). playRun 이 시즌마다 초기화한다. */
+let SPEND = null;
+
 function scoutPhase(g) {
   let guard = 0;
   // 스카우트 중에는 라인업이 바뀌지 않으므로 업그레이드 대상은 한 번만 계산한다(하네스 속도).
@@ -89,8 +92,40 @@ function scoutPhase(g) {
   while (g.tickets > 0) {
     if (++guard > 200) break;
     const target = uncoveredPosition(g) || upgrade;
-    if (target !== null && E.canScout(g, { position: target })) E.scout(g, { position: target });
-    else E.scout(g);
+    if (target !== null && E.canScout(g, { position: target })) {
+      E.scout(g, { position: target });
+      if (SPEND) { SPEND.targeted++; SPEND.scoutGold += E.ECONOMY.positionScoutGold; }
+    } else {
+      E.scout(g);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 골드 소비 정책 (B.6.4)
+// 자동 플레이어는 **예비비(FACILITY.reserveGold = 지정 스카우트 11회분)를 반드시 남기고**,
+// 남는 골드만 시즌 결산에서 구단에 쓴다. 순서는 ① 싼 시설부터 1단계씩 ② 그래도 남으면 스카우트 리포트.
+// 예비비를 남기므로 이 정책이 포지션 지정 스카우트를 굶기지 않는다 — 그게 밸런스를 지키는 핵심이다.
+function spendPhase(g) {
+  const reserve = E.FACILITY.reserveGold;
+  // ① 시설 — 가장 싼 다음 단계부터
+  for (let guard = 0; guard < 60; guard++) {
+    let best = null, bestPrice = Infinity;
+    for (const t of E.FACILITY.tracks) {
+      const price = E.facilityPrice(g, t.id);
+      if (price !== null && price < bestPrice) { bestPrice = price; best = t.id; }
+    }
+    if (best === null || (g.gold | 0) - bestPrice < reserve) break;
+    E.upgradeFacility(g, best);
+    if (SPEND) { SPEND.facilityGold += bestPrice; SPEND.facilityBuys++; }
+  }
+  // ② 스카우트 리포트 — 보유했지만 아직 안 본 카드부터(육성 전에 천장을 확인한다)
+  const owned = Object.keys(g.ownedCards).sort();
+  for (const cid of owned) {
+    if (E.hasScoutReport(g, cid)) continue;
+    const cost = E.reportCost(g);
+    if ((g.gold | 0) - cost < reserve) break;
+    E.buyScoutReport(g, cid);
+    if (SPEND) { SPEND.reportGold += cost; SPEND.reports++; }
   }
 }
 
@@ -207,6 +242,7 @@ function playRun(seed) {
 
   for (let n = 1; n <= SEASONS; n++) {
     E.startSeason(g);
+    SPEND = { targeted: 0, scoutGold: 0, facilityGold: 0, facilityBuys: 0, reportGold: 0, reports: 0 };
     const scoutsBefore = g.scoutCount, trainBefore = g.trainingCount;
     const ticketsBefore = g.tickets, goldBefore = g.gold;
     let minTickets = g.tickets;
@@ -230,6 +266,7 @@ function playRun(seed) {
     }
     E.autoFinishPlayoff(g);
     const st = E.finishSeason(g);
+    spendPhase(g);   // 결산 화면에서 구단에 투자한다 (B.6.4)
     if (st.playoffEntered && out.firstFinal4 === null) out.firstFinal4 = n;
     if (st.isChampion && out.firstTitle === null) out.firstTitle = n;
 
@@ -243,6 +280,13 @@ function playRun(seed) {
       lineupOvr: st.myStats.lineupOvr, holes,
       ticketsIn: g.tickets - ticketsBefore + (g.scoutCount - scoutsBefore), // 소비분 되더한 유입 근사
       goldEnd: g.gold, ticketsEnd: g.tickets, minTickets,
+      // B.6 골드 소비처
+      targeted: SPEND.targeted, scoutGold: SPEND.scoutGold,
+      facilityGold: SPEND.facilityGold, reportGold: SPEND.reportGold,
+      sinkGold: SPEND.facilityGold + SPEND.reportGold,
+      upkeepPaid: st.upkeep ? st.upkeep.paid : 0,
+      upkeepShort: st.upkeep ? st.upkeep.shortfall : 0,
+      prestige: E.clubPrestige(g).total,
       ssr: Object.keys(g.ownedCards).filter(c => card(g, c) && card(g, c).rarity === E.RARITY.SSR).length,
       sr: Object.keys(g.ownedCards).filter(c => card(g, c) && card(g, c).rarity === E.RARITY.SR).length,
       // A.3.6 노화 — finishSeason 이 state.season 을 +1 한 뒤라 이 시즌 기준으로 되돌려 잰다
@@ -293,6 +337,11 @@ T('첫 우승 시즌 2~3 누적', titleS23 + (SEASONS >= 3 ? 0 : NaN), 0.50, nul
 T('첫 승리까지 육성 횟수(p50)', pctl(firstWinTr, 0.5), 4, 8, v => v.toFixed(1) + '회');
 T('시즌 1 스카우트 횟수', scouts1, 10, 16, v => v.toFixed(1) + '회');
 T('3시즌 내 라인업 7슬롯 정식 카드', full3, 0.80, null, p);
+// B.6 골드 소비처를 넣은 뒤에도 **초반에는 지정 스카우트를 쓸 여유가 남아야 한다**.
+// 예비비(13,200)가 시즌 1~3 잔액(8.7k/9.1k/10.4k)보다 커서 시설·리포트를 한 장도 못 사는 것이 설계다.
+const targeted13 = mean(runsOut.map(r => r.seasons.slice(0, 3).reduce((x, y) => x + (y ? y.targeted : 0), 0)));
+T('시즌 1~3 포지션 지정 스카우트(합)', targeted13, 18, null, v => v.toFixed(1) + '회', 'B.6.4 초반 여유');
+T('시즌 3 골드 잔액', mean(byS(3).map(r => r.goldEnd)), 8500, null, v => v.toFixed(0), 'B.6.4 초반은 소비처가 잠긴다');
 
 // ---------------------------------------------------------------- 장기 시즌 목표 (A.4.4) — --long 에서만
 const longTargets = [];
@@ -320,12 +369,29 @@ if (LONG) {
   T('시즌 5~8 정규 승률 최댓값', w5, null, 0.85, p);
   const r5 = Math.min(...[5, 6, 7, 8].map(rank));
   T('시즌 5~8 평균 순위 최솟값', r5, 1.30, null, v => v.toFixed(2) + '위');
-  // ④ 골드가 무한 축적되지 않는다 — 종반 잔액이 중반 정점을 넘지 않을 것
+  // ④ 골드가 무한 축적되지 않는다 — 종반 잔액이 중반 정점을 넘지 않을 것 (B.6.5)
   targets.push({
     label: '골드 잔액이 무한 축적되지 않는다 (시즌 8 ≤ 시즌 4)', value: gold(8), lo: null, hi: null,
     ok: gold(8) <= gold(4),
     text: `S4 ${gold(4).toFixed(0)} → S8 ${gold(8).toFixed(0)}`, note: '',
   });
+  if (SEASONS >= 15) {
+    targets.push({
+      label: '골드 잔액이 후반에 안정된다 (시즌 15 ≤ 시즌 4)', value: gold(15), lo: null, hi: null,
+      ok: gold(15) <= gold(4),
+      text: `S4 ${gold(4).toFixed(0)} → S15 ${gold(15).toFixed(0)}`, note: 'B.6.5',
+    });
+    const lateGold = [9, 10, 11, 12, 13, 14, 15].map(gold);
+    targets.push({
+      label: '시즌 9~15 골드 잔액 최댓값 ≤ 시즌 4 잔액', value: Math.max(...lateGold), lo: null, hi: null,
+      ok: Math.max(...lateGold) <= gold(4),
+      text: `${Math.max(...lateGold).toFixed(0)} vs S4 ${gold(4).toFixed(0)}`, note: 'B.6.5',
+    });
+    // 과도하게 걷어 가면 지정 스카우트가 굶어 전력이 바뀐다 — 아래쪽 가드레일
+    const allGold = [];
+    for (let k = 4; k <= SEASONS; k++) allGold.push(gold(k));
+    T('시즌 4~15 골드 잔액 최솟값', Math.min(...allGold), 3000, null, v => v.toFixed(0), 'B.6.5 과다 회수 방지');
+  }
 
   // ⑤ 신인 세대 (docs/rookies.md) — 은퇴로 줄어드는 스카우트 명단을 새 카드가 붙잡는가
   const pool = n => mean(byS(n).map(r => r.poolLeft));
@@ -536,6 +602,48 @@ function must(label, ok, note) { invariants.push({ label, ok, note: note || '' }
   const before = gg.gold;
   E.scout(gg, { position: 'S' });
   must('지정 스카우트 = 티켓 1 + 골드 1,200 차감', gg.gold === before - E.ECONOMY.positionScoutGold);
+
+  // 골드 소비처 (B.6) — 시설·운영비·리포트
+  {
+    const gf = E.createGame({ seed: 1234 });
+    must('시설: 새 게임의 등급은 0 · 명성 "신생"', E.clubPrestige(gf).total === 0 && E.clubPrestige(gf).name === '신생');
+    gf.gold = 0;
+    must('시설: 골드 부족 시 투자 차단', !E.canUpgradeFacility(gf, 'analysis'));
+    gf.gold = E.FACILITY.tracks[0].prices[0];
+    E.upgradeFacility(gf, 'analysis');
+    must('시설: 1단계 투자 = 가격만큼 차감', gf.gold === 0 && E.facilityLevel(gf, 'analysis') === 1);
+    must('시설: 유지비 = 등급 × 단가', E.facilityUpkeep(gf).facility === E.FACILITY.upkeepPerLevel);
+    // 리포트: 카드당 1회 결제, 재열람 무료
+    gf.gold = 100000;
+    const cid = E.CARD_POOL[0].id;
+    const cost = E.reportCost(gf);
+    const g0 = gf.gold;
+    const rep = E.buyScoutReport(gf, cid);
+    must('리포트: 1회 결제 + 잠재 OVR 제공', gf.gold === g0 - cost && rep && rep.ovrPotential > rep.ovrNow,
+      `${rep.name} 잠재 OVR ${rep.ovrPotential}`);
+    const g1 = gf.gold;
+    E.buyScoutReport(gf, cid);
+    must('리포트: 같은 카드 재열람은 무료', gf.gold === g1);
+    // 분석실 5단계면 리포트가 무료
+    const gr = E.createGame({ seed: 1235 });
+    gr.gold = 1e6;
+    for (let i = 0; i < 5; i++) E.upgradeFacility(gr, 'analysis');
+    must('리포트: 분석실 5단계 = 무료', E.reportCost(gr) === 0);
+    // 운영비 미납 → 시설 1단계 강등
+    const gu = E.createGame({ seed: 1236 });
+    gu.gold = 1e6;
+    E.upgradeFacility(gu, 'stadium'); E.upgradeFacility(gu, 'stadium');
+    gu.gold = 100;
+    const paid = E.payUpkeep(gu);
+    must('운영비: 미납 시 시설 1단계 강등 · 잔액 0', paid.shortfall > 0 && gu.gold === 0 && E.facilityLevel(gu, 'stadium') === 1);
+    // 저장/복원
+    const gs = E.createGame({ seed: 1237 });
+    gs.gold = 1e6;
+    E.upgradeFacility(gs, 'hall'); E.buyScoutReport(gs, E.CARD_POOL[3].id);
+    const gs2 = E.loadGame(JSON.parse(JSON.stringify(E.saveGame(gs))));
+    must('시설·리포트: 저장→복원',
+      E.facilityLevel(gs2, 'hall') === 1 && E.hasScoutReport(gs2, E.CARD_POOL[3].id) && gs2.gold === gs.gold);
+  }
 }
 const invFail = invariants.filter(i => !i.ok).length;
 
@@ -557,10 +665,23 @@ if (AS_JSON) {
   console.log('\n## 시즌별 지표\n');
   console.log('| 시즌 | g | 승률 | 승-패 | 승점 | 평균 순위 | 4강 | 우승 | 스카우트 | 육성 | 라인업 OVR | 연습생 슬롯 | 티켓 잔액 | 골드 잔액 |');
   console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  // (골드 소비처 세부는 아래 "골드 소비처" 표에서 따로 낸다 — B.6)
   for (let n = 1; n <= SEASONS; n++) {
     const rs = byS(n);
     if (!rs.length) continue;
     console.log(`| ${n} | ${(E.growthFor(n) * 100).toFixed(0)}% | ${p(mean(rs.map(r => r.wins / 12)))} | ${mean(rs.map(r => r.wins)).toFixed(1)}-${mean(rs.map(r => r.losses)).toFixed(1)} | ${mean(rs.map(r => r.points)).toFixed(1)} | ${mean(rs.map(r => r.rank)).toFixed(2)} | ${p(mean(rs.map(r => (r.po ? 1 : 0))))} | ${p(mean(rs.map(r => (r.champion ? 1 : 0))))} | ${mean(rs.map(r => r.scouts)).toFixed(1)} | ${mean(rs.map(r => r.trainings)).toFixed(1)} | ${mean(rs.map(r => r.lineupOvr)).toFixed(1)} | ${mean(rs.map(r => r.holes)).toFixed(2)} | ${mean(rs.map(r => r.ticketsEnd)).toFixed(1)} | ${mean(rs.map(r => r.goldEnd)).toFixed(0)} |`);
+  }
+
+  console.log('\n## 골드 소비처 (docs/league-and-economy.md B.6)\n');
+  console.log('| 시즌 | 유입(추정) | 지정 스카우트 | 시설 투자 | 리포트 | 구단 운영비 | 명성 등급 | 계약 선수 | 골드 잔액 |');
+  console.log('|---|---|---|---|---|---|---|---|---|');
+  for (let n = 1; n <= SEASONS; n++) {
+    const rs = byS(n);
+    if (!rs.length) continue;
+    const prev = n > 1 ? mean(byS(n - 1).map(r => r.goldEnd)) : E.ECONOMY.initialGold;
+    const end = mean(rs.map(r => r.goldEnd));
+    const out = mean(rs.map(r => r.scoutGold + r.facilityGold + r.reportGold + r.upkeepPaid));
+    console.log(`| ${n} | ${(end - prev + out).toFixed(0)} | ${mean(rs.map(r => r.targeted)).toFixed(1)}회 / ${mean(rs.map(r => r.scoutGold)).toFixed(0)} | ${mean(rs.map(r => r.facilityGold)).toFixed(0)} | ${mean(rs.map(r => r.reportGold)).toFixed(0)} | ${mean(rs.map(r => r.upkeepPaid)).toFixed(0)} | ${mean(rs.map(r => r.prestige)).toFixed(1)} | ${mean(rs.map(r => r.owned)).toFixed(1)} | ${end.toFixed(0)} |`);
   }
 
   console.log('\n순위 분포 (%)\n');
@@ -624,8 +745,9 @@ if (AS_JSON) {
 
 function fmtT(v, label) {
   if (label.indexOf('순위') >= 0) return v.toFixed(1) + '위';
-  if (label.indexOf('육성 횟수') >= 0 || label.indexOf('스카우트 횟수') >= 0) return v.toFixed(0) + '회';
+  if (label.indexOf('육성 횟수') >= 0 || label.indexOf('스카우트') >= 0) return v.toFixed(0) + '회';
   if (label.indexOf('가능 카드') >= 0) return v.toFixed(0) + '장';
+  if (label.indexOf('골드') >= 0) return v.toFixed(0);   // B.6 골드 잔액 목표는 절대값이다
   return (v * 100).toFixed(0) + '%';
 }
 
