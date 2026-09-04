@@ -31,6 +31,26 @@ export const CLUBS: { name: string; shortName: string; color: string; reputation
   { name: "창원 세일즈", shortName: "창원", color: "#a7c957", reputation: 11.2, formation: "4-3-3", capacity: 24000 },
 ];
 
+/**
+ * The second division's twelve clubs. Reputation runs 8.2-11.0 against the top flight's 10.5-14, so
+ * the two leagues overlap at the edges: a strong second-division side is a match for a poor
+ * first-division one, which is what makes a promotion season survivable.
+ */
+export const CLUBS_D2: { name: string; shortName: string; color: string; reputation: number; formation: FormationName; capacity: number }[] = [
+  { name: "청주 스톤즈", shortName: "청주", color: "#8d99ae", reputation: 11, formation: "4-4-2", capacity: 15000 },
+  { name: "안양 퍼플", shortName: "안양", color: "#7b2cbf", reputation: 10.7, formation: "4-2-3-1", capacity: 17000 },
+  { name: "김포 타이드", shortName: "김포", color: "#118ab2", reputation: 10.4, formation: "4-3-3", capacity: 12000 },
+  { name: "천안 브릭스", shortName: "천안", color: "#bc6c25", reputation: 10.2, formation: "4-4-2", capacity: 14000 },
+  { name: "여수 게일즈", shortName: "여수", color: "#00b4d8", reputation: 9.9, formation: "3-5-2", capacity: 11000 },
+  { name: "원주 하이랜더스", shortName: "원주", color: "#606c38", reputation: 9.7, formation: "4-4-2", capacity: 13000 },
+  { name: "군산 하버", shortName: "군산", color: "#264653", reputation: 9.4, formation: "4-2-3-1", capacity: 10000 },
+  { name: "충주 밀즈", shortName: "충주", color: "#e07a5f", reputation: 9.2, formation: "4-3-3", capacity: 9000 },
+  { name: "속초 웨일스", shortName: "속초", color: "#457b9d", reputation: 9, formation: "4-4-2", capacity: 8000 },
+  { name: "구미 서킷", shortName: "구미", color: "#ffb703", reputation: 8.8, formation: "4-3-3", capacity: 12000 },
+  { name: "목포 앵커스", shortName: "목포", color: "#5f0f40", reputation: 8.5, formation: "3-5-2", capacity: 9000 },
+  { name: "정선 마운티스", shortName: "정선", color: "#3d5a80", reputation: 8.2, formation: "4-4-2", capacity: 7000 },
+];
+
 /** 20-man squad: two keepers, eight defenders, six midfielders, four forwards. */
 const SQUAD_ROLES: Role[] = ["GK", "GK", "CB", "CB", "CB", "CB", "LB", "LB", "RB", "RB", "DM", "CM", "CM", "CM", "AM", "LW", "RW", "ST", "ST", "LM"];
 
@@ -74,7 +94,10 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
 }
 
 export function buildClubs(seed: number): Club[] {
-  return CLUBS.map((c, id) => {
+  // Ids run through the first division and then the second, so `CLUBS[id]` still names a top-flight
+  // club and the second division starts at id 12 (divisions.ts).
+  const defs = [...CLUBS.map((c) => ({ ...c, division: 1 })), ...CLUBS_D2.map((c) => ({ ...c, division: 2 }))];
+  return defs.map((c, id) => {
     const rng = new Rng(seed * 31 + id * 1009 + 7);
     const club: Club = {
       id,
@@ -82,6 +105,7 @@ export function buildClubs(seed: number): Club[] {
       shortName: c.shortName,
       color: c.color,
       reputation: c.reputation,
+      division: c.division,
       budget: seasonBudget(c.reputation, null),
       seasonStartBudget: seasonBudget(c.reputation, null),
       squad: buildSquad(rng, `C${id}`, c.reputation),

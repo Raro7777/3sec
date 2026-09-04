@@ -5,15 +5,20 @@ export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
   DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
-  prepareRound, teamDef, createMatch, type GameMatchOptions, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary,
+  prepareRound, teamDef, createMatch, type GameMatchOptions, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary, seasonRounds, leaguePrize,
   type RecordOptions, type HomeAwayRecord, type FinanceSummary,
 } from "./season";
 export {
-  CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_PRIZE, cupByes, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
+  CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_D2_ENTRANTS, CUP_PRIZE, cupByes, cupField, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
   currentCupTies, pendingCupTies, userCupTie, userCupStatus, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, type ShootoutKick, type ShootoutDetail, recordCupResult,
   simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
+export {
+  DIVISIONS, CLUBS_PER_DIVISION, SWAP, CLUBS_D2, DIVISION_NAME, DIVISION_PRIZE_FACTOR,
+  divisionOf, userDivision, clubsIn, divisionName, prizeFactor, buildAllFixtures, divisionTable, divisionPosition,
+  simulateFixture, simulateAwayDivisions, applyPromotionRelegation, inRelegationZone, inPromotionZone, type SwapResult,
+} from "./divisions";
 export {
   MIN_SQUAD, MAX_SQUAD, SURPLUS_ABOVE, THIN_SQUAD, OFFER_TTL, MAX_FREE_AGENTS, LOAN_GROWTH, FREE_AGENT_FEE, FREE_AGENT_WAGE,
   playerValue, seasonBudget, windowOpen, deadlineDay, surplusPlayers, askingPrice, transferTargets, acceptFactor, refusalChance, makeBid, buyPlayer, bestOffer, sellPlayer,

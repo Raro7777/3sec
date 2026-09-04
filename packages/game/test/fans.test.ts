@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { Rng, TUNING } from "@3sec/engine";
 import {
-  CLUBS, FAN_FRENZY_AT, FAN_PROTEST_BELOW, FAN_PROTEST_CONFIDENCE, FAN_PROTEST_WEEKS, FAN_START_MOOD, advanceRound, adjustMood, avgHomeAttendance, clubCapacity, createMatch,
+  CLUBS, CLUBS_D2, FAN_FRENZY_AT, FAN_PROTEST_BELOW, FAN_PROTEST_CONFIDENCE, FAN_PROTEST_WEEKS, FAN_START_MOOD, advanceRound, adjustMood, avgHomeAttendance, clubCapacity, createMatch,
   currentFixtures, deserialize, expectedAttendance, fanHomeEdge, fansCupResult, fansTransfer, fansWeek, financeSummary, gateReceipts, isStar, moodLabel, newGame, playerOf,
-  roundsPerSeason, seasonOver, serialize, simulateRound, startNextSeason, weeklyRevenue, type GameState,
+  clubsIn, seasonRounds, seasonOver, serialize, simulateRound, startNextSeason, weeklyRevenue, type GameState,
 } from "../src/index";
 import { advanceCupDay, simulateCupDay } from "../src/cup";
+
+/** Every club definition in id order: the top flight, then the division below (divisions.ts). */
+const WORLD = [...CLUBS, ...CLUBS_D2];
 
 const SHORT = { halfLength: 4 * 60 };
 
@@ -22,7 +25,7 @@ describe("fans: model", () => {
   it("every club starts with a capacity matching the world definition, core supporters and a content mood", () => {
     const s = newGame(7);
     for (const c of s.clubs) {
-      expect(c.capacity).toBe(CLUBS[c.id]!.capacity);
+      expect(c.capacity).toBe(WORLD[c.id]!.capacity);
       expect(clubCapacity(c)).toBe(c.capacity);
       expect(c.fans.mood).toBe(FAN_START_MOOD);
       expect(c.fans.base).toBeGreaterThan(0);
@@ -91,8 +94,10 @@ describe("fans: model", () => {
 describe("fans: reactions", () => {
   it("a win against a bigger side lifts the mood, a home defeat to a smaller one sinks it", () => {
     const s = newGame(11);
-    const strong = [...s.clubs].sort((a, b) => b.reputation - a.reputation)[0]!;
-    const weak = [...s.clubs].sort((a, b) => a.reputation - b.reputation)[0]!;
+    // both sides must be in the division whose fixtures are actually played (divisions.ts)
+    const top = clubsIn(s, 1);
+    const strong = [...top].sort((a, b) => b.reputation - a.reputation)[0]!;
+    const weak = [...top].sort((a, b) => a.reputation - b.reputation)[0]!;
     const f = s.fixtures.find((x) => x.round === 0 && (x.home === weak.id || x.away === weak.id))!;
     // rewrite round 0 so the weakest club hosts the strongest and wins 3-0
     f.home = weak.id; f.away = strong.id; f.score = [3, 0];
@@ -136,7 +141,7 @@ describe("fans: season", () => {
   it("records a crowd and a gate for every home match, keeps income near the old flat figure and resets at the rollover", () => {
     const s = newGame(14);
     playSeason(s);
-    const rounds = roundsPerSeason(s.clubs.length);
+    const rounds = seasonRounds(s);
     for (const f of s.fixtures) {
       const home = s.clubs[f.home]!;
       expect(f.attendance).toBeGreaterThanOrEqual(home.fans.base);
@@ -182,7 +187,7 @@ describe("fans: season", () => {
     const back = deserialize(JSON.stringify(raw))!;
     expect(back).not.toBeNull();
     for (const c of back.clubs) {
-      expect(c.capacity).toBe(CLUBS[c.id]!.capacity);
+      expect(c.capacity).toBe(WORLD[c.id]!.capacity);
       expect(c.fans.mood).toBe(FAN_START_MOOD);
       expect(c.fans.base).toBeGreaterThan(0);
       expect(c.fans.seasonHome).toBe(0);

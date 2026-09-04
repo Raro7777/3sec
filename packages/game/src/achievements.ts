@@ -1,6 +1,6 @@
 import type { Match } from "@3sec/engine";
 import type { Club, EarnedAchievement, Fixture, GameState, Records, SeasonRecord, SquadPlayer } from "./types";
-import { clubOf, table, topScorers } from "./season";
+import { clubOf, seasonRounds, table, topScorers } from "./season";
 import { roundsPerSeason } from "./fixtures";
 import { expectedPositions } from "./managers";
 import { tieWinner } from "./cup";
@@ -103,7 +103,7 @@ export const hasAchievement = (s: GameState, id: string): boolean => (s.achievem
 function context(s: GameState, seasonEnd: boolean): AchievementContext {
   const rows = table(s);
   const idx = rows.findIndex((r) => r.club === s.userClub);
-  return { s, me: clubOf(s, s.userClub), records: records(s), row: rows[idx]!, position: idx + 1, expected: expectedPositions(s).get(s.userClub) ?? s.clubs.length, rounds: roundsPerSeason(s.clubs.length), seasonEnd };
+  return { s, me: clubOf(s, s.userClub), records: records(s), row: rows[idx]!, position: idx + 1, expected: expectedPositions(s).get(s.userClub) ?? rows.length, rounds: seasonRounds(s), seasonEnd };
 }
 
 /** Run every locked achievement's check; unlocks go on the list, into the news and onto `freshAchievements`. Returns the new ids. */

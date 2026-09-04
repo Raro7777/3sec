@@ -4,14 +4,21 @@ import { applyStaffRecovery } from "./staff";
 import { boardCupWin } from "./board";
 import { fansCupResult } from "./fans";
 import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver, type GameMatchOptions } from "./season";
+import { clubsIn, divisionOf } from "./divisions";
 
 export const CUP_NAME = "3sec 컵";
 /** Cup matchdays: before league round index r (0-based) when the season reaches it → stage index. */
 export const CUP_ROUNDS = [6, 11, 16, 21] as const;
 export const CUP_STAGES = 4;
-export const CUP_STAGE_LABEL = ["1라운드", "8강", "4강", "결승"] as const;
-/** Byes in round 1: the 12-club field is cut to 8 by resting the four best-reputation clubs. */
-export const CUP_BYES = 4;
+export const CUP_STAGE_LABEL = ["16강", "8강", "4강", "결승"] as const;
+/**
+ * The field: every first-division club plus the `CUP_D2_ENTRANTS` best of the second division — 16
+ * clubs, so the four matchdays are a clean 16-8-4-2 with nobody resting. Second-division sides in the
+ * draw are what make a cup upset possible; a club that drops too far down misses out entirely.
+ */
+export const CUP_D2_ENTRANTS = 4;
+/** No byes since the field became a power of two; kept so older code and saves still read cleanly. */
+export const CUP_BYES = 0;
 /** Prize money (억원): loser of QF / SF, then runner-up and winner of the final. */
 export const CUP_PRIZE = { qfLoser: 4, sfLoser: 8, runnerUp: 15, winner: 30 } as const;
 
@@ -26,17 +33,28 @@ function shuffle<T>(arr: T[], rng: Rng): T[] {
   return a;
 }
 
-/** The four clubs that skip round 1 (highest reputation, ties broken by id). */
-export function cupByes(s: GameState): number[] {
-  return [...s.clubs].sort((a, b) => b.reputation - a.reputation || a.id - b.id).slice(0, CUP_BYES).map((c) => c.id);
+/** Nobody rests any more: the field is already a power of two. */
+export function cupByes(_s: GameState): number[] {
+  return [];
 }
 
-/** Clubs still in the cup entering `stage`: R1 = everyone but the byes, later = byes + previous winners. */
+/** This season's field: the whole top flight plus the best of the division below (divisions.ts). */
+export function cupField(s: GameState): number[] {
+  const top = clubsIn(s, 1).map((c) => c.id);
+  const below = s.clubs
+    .filter((c) => divisionOf(c) > 1)
+    .sort((a, b) => b.reputation - a.reputation || a.id - b.id)
+    .slice(0, CUP_D2_ENTRANTS)
+    .map((c) => c.id);
+  const field = [...top, ...below];
+  // An odd field cannot be paired; drop the weakest entrant rather than throwing on a strange world.
+  return field.length % 2 === 0 ? field : field.slice(0, field.length - 1);
+}
+
+/** Clubs still in the cup entering `stage`: round 1 is the whole field, later rounds the winners. */
 export function cupEntrants(s: GameState, stage: number): number[] {
-  const byes = cupByes(s);
-  if (stage === 0) return s.clubs.map((c) => c.id).filter((id) => !byes.includes(id));
-  const prev = s.cup.ties.filter((t) => t.stage === stage - 1).map((t) => tieWinner(t)!).filter((w) => w !== null);
-  return stage === 1 ? [...byes, ...prev] : prev;
+  if (stage === 0) return cupField(s);
+  return s.cup.ties.filter((t) => t.stage === stage - 1).map((t) => tieWinner(t)!).filter((w) => w !== null);
 }
 
 /** Pair the entrants of a stage at random (seeded by save, season and stage) and append the ties. */

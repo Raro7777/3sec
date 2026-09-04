@@ -1,5 +1,6 @@
 import { FORMATIONS, Rng, autoRoles, normalizeTactics, type FormationName, type PlayerRoleId, type Tactics } from "@3sec/engine";
-import type { Club, GameState, Manager, ManagerOfYear, ManagerTraitId, ManagerTraits, TrainingFocus, TrainingIntensity } from "./types";
+import type { Club, GameState, Manager, ManagerOfYear, ManagerTraitId, ManagerTraits, TableRow, TrainingFocus, TrainingIntensity } from "./types";
+import { DIVISIONS, clubsIn, divisionTable } from "./divisions";
 import { randomName } from "./world";
 import { clubOf, table } from "./season";
 import { autoSelect } from "./selection";
@@ -188,8 +189,22 @@ export function managerTags(m: Manager): string[] {
 
 /** Season-long expectation: 1 for the biggest reputation, N for the smallest. */
 export function expectedPositions(s: GameState): Map<number, number> {
-  const order = [...s.clubs].sort((a, b) => b.reputation - a.reputation || a.id - b.id);
-  return new Map(order.map((c, i) => [c.id, i + 1]));
+  // Expectation is set inside a club's own division: a relegated giant is expected to win the second
+  // division, not to finish thirteenth overall (divisions.ts).
+  const out = new Map<number, number>();
+  for (let d = 1; d <= DIVISIONS; d++) {
+    [...clubsIn(s, d)]
+      .sort((a, b) => b.reputation - a.reputation || a.id - b.id)
+      .forEach((c, i) => out.set(c.id, i + 1));
+  }
+  return out;
+}
+
+/** Every division's table, flattened, each row carrying its position inside its own division. */
+function allDivisionRows(s: GameState): { club: TableRow; position: number }[] {
+  const out: { club: TableRow; position: number }[] = [];
+  for (let d = 1; d <= DIVISIONS; d++) divisionTable(s, d).forEach((r, i) => out.push({ club: r, position: i + 1 }));
+  return out;
 }
 
 /** The manager who beat his club's expectation by the most (the user counts too); ties go to the higher finish. */
@@ -245,12 +260,16 @@ function sackNews(s: GameState, club: Club, old: Manager, fresh: Manager, positi
 export function boardReview(s: GameState, rng: Rng, final = false): Club[] {
   if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
   const expected = expectedPositions(s);
-  const rows = table(s);
+  // Every division's boards judge their own managers, not just the user's league.
+  const rows = allDivisionRows(s);
   const changed: Club[] = [];
-  rows.forEach((r, i) => {
+  rows.forEach(({ club: r, position: i1 }) => {
+    const i = i1 - 1;
     const club = clubOf(s, r.club);
     const m = club.manager;
     if (!m || club.id === s.userClub) return;
+    // Nobody is judged on a league that has not kicked off: an empty table ranks by name, not merit.
+    if (r.played === 0) return;
     const pos = i + 1, exp = expected.get(club.id)!;
     const under = pos - exp >= PRESSURE_GAP;
     club.pressure = under ? (club.pressure ?? 0) + 1 : 0;
@@ -270,17 +289,17 @@ export function boardReview(s: GameState, rng: Rng, final = false): Club[] {
  */
 export function managerRollover(s: GameState, rng: Rng): ManagerOfYear | null {
   if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
-  const rows = table(s);
+  const rows = allDivisionRows(s);
   const expected = expectedPositions(s);
-  rows.forEach((r, i) => {
+  rows.forEach(({ club: r, position }) => {
     const club = clubOf(s, r.club);
-    if (club.manager && club.id !== s.userClub) club.manager.history.push({ season: s.season, club: club.id, position: i + 1 });
+    if (club.manager && club.id !== s.userClub) club.manager.history.push({ season: s.season, club: club.id, position });
   });
   const award = managerOfYear(s);
   if (award) s.news.unshift(`올해의 감독: ${award.name} (${clubOf(s, award.club).shortName}, 기대 ${award.expected}위 → ${award.position}위).`);
   boardReview(s, rng, true);
   for (const m of s.freeManagers) m.age++;
-  rows.forEach((r, i) => {
+  rows.forEach(({ club: r, position }) => {
     const club = clubOf(s, r.club);
     const m = club.manager;
     if (!m || club.id === s.userClub) return;
@@ -290,7 +309,7 @@ export function managerRollover(s: GameState, rng: Rng): ManagerOfYear | null {
       // retirees do not join the pool
       m.since = s.season;
       const fresh = hire(s, club, rng, m);
-      sackNews(s, club, m, fresh, i + 1, expected.get(club.id)!, "은퇴");
+      sackNews(s, club, m, fresh, position, expected.get(club.id)!, "은퇴");
     }
   });
   return award;

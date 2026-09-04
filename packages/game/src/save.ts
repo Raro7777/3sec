@@ -24,6 +24,8 @@ import { migrateCareer } from "./career";
 import { migrateMorale } from "./morale";
 import { migrateStory } from "./story";
 import { markDerbies } from "./lore";
+import { CLUBS_PER_DIVISION, buildAllFixtures, divisionOf, simulateFixture } from "./divisions";
+import { buildClubs } from "./world";
 
 export const SAVE_KEY = "3sec.save.v1";
 
@@ -102,6 +104,9 @@ export function deserialize(json: string | null | undefined): GameState | null {
     // Saves from before the achievements and the manager career: empty counters, reputation from the club.
     migrateAchievements(s);
     migrateCareer(s);
+    // Saves from the one-league game: everyone is first division, and the second one is built and
+    // caught up so the table it will be promoted from is not empty (divisions.ts).
+    migrateDivisions(s);
     // Saves from before personalities / morale, the story layer and derby flags (morale.ts, story.ts, lore.ts).
     migrateMorale(s);
     migrateStory(s);
@@ -109,5 +114,37 @@ export function deserialize(json: string | null | undefined): GameState | null {
     return s;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Bring a save made before the second division up to date.
+ *
+ * The clubs it knows about are the top flight, so they keep their ids and their played fixtures. The
+ * second division is generated from the same seed the world was built with — so it is the same
+ * twelve clubs a new game would have — and its fixtures are added to the existing calendar. Rounds
+ * the save has already played are then resolved statistically, because a league nobody has watched
+ * still needs a table for the promotion places to mean anything at the rollover.
+ */
+function migrateDivisions(s: GameState): void {
+  for (const c of s.clubs) if (typeof c.division !== "number") c.division = 1;
+  if (s.clubs.length > CLUBS_PER_DIVISION) return;
+
+  const fresh = buildClubs(s.seed).slice(CLUBS_PER_DIVISION);
+  if (!fresh.length) return;
+  s.clubs.push(...fresh);
+
+  // Keep the fixtures already played and add only the new division's, numbered after them.
+  const played = s.fixtures;
+  const nextId = played.reduce((m, f) => Math.max(m, f.id), -1) + 1;
+  const added = buildAllFixtures(s.clubs)
+    .filter((f) => divisionOf(s.clubs[f.home]!) > 1)
+    .map((f, i) => ({ ...f, id: nextId + i }));
+  s.fixtures = [...played, ...added];
+
+  // Catch the new division up to the round the save is on.
+  for (const f of added) {
+    if (f.round >= s.round) continue;
+    simulateFixture(s, f, new Rng((s.seed * 7919 + s.season * 104729 + f.id * 131 + 17) >>> 0));
   }
 }

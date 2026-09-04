@@ -263,6 +263,8 @@ export interface Club {
   color: string;
   /** 1..20 – squad quality the club was built around */
   reputation: number;
+  /** which league the club plays in: 1 = top flight, 2 = second division (divisions.ts). Absent in saves from the one-league game, which are all first division. */
+  division?: number;
   /** transfer budget in 억원 */
   budget: number;
   squad: SquadPlayer[];

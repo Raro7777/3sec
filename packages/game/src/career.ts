@@ -1,6 +1,6 @@
 import { Rng } from "@3sec/engine";
 import type { Club, ContractTalk, GameState, JobOffer } from "./types";
-import { clubOf, seasonOver, table } from "./season";
+import { clubOf, seasonOver, seasonRounds, table } from "./season";
 import { roundsPerSeason } from "./fixtures";
 import { expectedPositions } from "./managers";
 import { ROLLOVER_SACK_BELOW, TRUST_AT, acceptJob, userExpectation, userPosition } from "./board";
@@ -92,7 +92,7 @@ export function careerRollover(s: GameState): RepChange {
   const reasons: string[] = [];
   const rows = table(s);
   const pos = rows.findIndex((r) => r.club === s.userClub) + 1;
-  const exp = expectedPositions(s).get(s.userClub) ?? s.clubs.length;
+  const exp = expectedPositions(s).get(s.userClub) ?? rows.length;
   const sacked = !!s.board?.sacked;
   const byPlaces = clamp((exp - pos) * 0.3, -1.5, 1.5);
   if (byPlaces) { bump(s, byPlaces); reasons.push(`기대 ${exp}위 → ${pos}위 (${byPlaces > 0 ? "+" : ""}${round1(byPlaces)})`); }
@@ -241,7 +241,7 @@ export function careerWeek(s: GameState): JobOffer | null {
     s.news.unshift(`${clubOf(s, o.club).shortName}의 감독직 제안이 만료됐습니다.`);
   }
   if (seasonOver(s)) { openContractTalk(s); return null; }
-  const rounds = roundsPerSeason(s.clubs.length);
+  const rounds = seasonRounds(s);
   if (offers.length || s.round < OFFER_FROM_ROUND || s.round > rounds - OFFER_UNTIL_ROUNDS_LEFT) return null;
   const cands = approachCandidates(s);
   if (!cands.length) return null;

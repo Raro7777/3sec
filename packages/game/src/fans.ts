@@ -9,7 +9,7 @@
  */
 import { Rng, TUNING } from "@3sec/engine";
 import type { Club, Fans, Fixture, GameState, SquadPlayer } from "./types";
-import { CLUBS } from "./world";
+import { CLUBS, CLUBS_D2 } from "./world";
 import { clubOf, fixtureSeed, playerOf, table } from "./season";
 import { expectedPositions } from "./managers";
 import { overall } from "./rating";
@@ -46,9 +46,16 @@ const round2 = (x: number): number => Math.round(x * 100) / 100;
 
 // ------------------------------------------------------------------ model
 
+/**
+ * The club definition an id belongs to: the top flight first, then the division below (world.ts).
+ * Looked up lazily rather than spread into a constant — `world` and `fans` sit in an import cycle, so
+ * a module-level spread here reads `CLUBS` before it exists.
+ */
+const worldDef = (id: number) => (id < CLUBS.length ? CLUBS[id] : CLUBS_D2[id - CLUBS.length]);
+
 /** Stadium seats of a club (old saves and test clubs fall back to the world definition, then the default). */
 export const clubCapacity = (club: Pick<Club, "id" | "capacity">): number =>
-  typeof club.capacity === "number" && club.capacity > 0 ? club.capacity : CLUBS[club.id]?.capacity ?? DEFAULT_CAPACITY;
+  typeof club.capacity === "number" && club.capacity > 0 ? club.capacity : worldDef(club.id)?.capacity ?? DEFAULT_CAPACITY;
 
 /** Core supporters who turn up whatever happens. */
 export const fanBase = (reputation: number, capacity: number): number => Math.round(capacity * (FAN_BASE_SHARE + FAN_BASE_PER_REP * clamp(reputation - 10, 0, 6)));

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FORMATIONS } from "@3sec/engine";
 import {
   advanceRound, autoSelect, buildFixtures, createMatch, currentFixtures, deserialize, newGame, playerOf, recordResult,
-  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection, yellowBan, homeAwayRecord, financeSummary, cupPrize, seasonBudget, weeklyRevenue, wageBill, staffWageBill } from "../src/index";
+  roundsPerSeason, selectionProblem, serialize, simulateRound, startNextSeason, swap, table, repairSelection, yellowBan, homeAwayRecord, financeSummary, cupPrize, seasonBudget, weeklyRevenue, wageBill, staffWageBill, CLUBS_PER_DIVISION, DIVISIONS, clubsIn } from "../src/index";
 
 const SHORT = { halfLength: 4 * 60 };
 
@@ -24,9 +24,10 @@ describe("fixtures", () => {
 });
 
 describe("world and selection", () => {
-  it("builds 12 clubs of 20 with a legal XI and bench each", () => {
+  it("builds two divisions of 12 clubs of 20 with a legal XI and bench each", () => {
     const s = newGame(1);
-    expect(s.clubs.length).toBe(12);
+    expect(s.clubs.length).toBe(CLUBS_PER_DIVISION * DIVISIONS);
+    for (let d = 1; d <= DIVISIONS; d++) expect(clubsIn(s, d).length).toBe(CLUBS_PER_DIVISION);
     for (const c of s.clubs) {
       expect(c.squad.length).toBe(20);
       expect(selectionProblem(c)).toBeNull();

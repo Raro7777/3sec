@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Rng } from "@3sec/engine";
 import {
   PRESSURE_LIMIT, TRAIT_IDS, adaptsTo, askingPrice, boardReview, buildClubs, deserialize, differentManager, expectedPositions, generateManager, managerFormation,
-  managerOfYear, managerRollover, managerTactics, managerTags, managerTraining, newGame, playerValue, prepareRound, roundsPerSeason, serialize, simulateRound,
+  managerOfYear, managerRollover, managerTactics, managerTags, managerTraining, newGame, playerValue, prepareRound, seasonRounds, CLUBS_PER_DIVISION, clubsIn, serialize, simulateRound,
   startNextSeason, table, traitDistance, type Club, type Manager,
 } from "../src/index";
 
@@ -141,9 +141,11 @@ describe("board review", () => {
     // fake a table: the biggest club (expected 1st) loses everything, everyone else draws
     const big = s.clubs.find((c) => exp.get(c.id) === 1 && c.id !== s.userClub)!;
     const old = big.manager!;
-    for (const f of s.fixtures.filter((f) => f.round < 10)) f.score = f.home === big.id ? [0, 3] : f.away === big.id ? [3, 0] : [1, 1];
+    // only the user's own division is given a table; the one below has played nothing and so is not judged
+    const mine = new Set(clubsIn(s, 1).map((c) => c.id));
+    for (const f of s.fixtures.filter((f) => f.round < 10 && mine.has(f.home))) f.score = f.home === big.id ? [0, 3] : f.away === big.id ? [3, 0] : [1, 1];
     s.round = 10;
-    expect(table(s).findIndex((r) => r.club === big.id) + 1).toBe(s.clubs.length);
+    expect(table(s).findIndex((r) => r.club === big.id) + 1).toBe(CLUBS_PER_DIVISION);
     const always = new Rng(1);
     let changed: Club[] = [];
     for (let i = 0; i < PRESSURE_LIMIT - 1; i++) { changed = boardReview(s, always); expect(changed).toEqual([]); }
@@ -176,7 +178,7 @@ describe("board review", () => {
 
   it("the rollover files every manager's season, names the manager of the year and survives a save round-trip", () => {
     const s = newGame(14, 0);
-    const rounds = roundsPerSeason(s.clubs.length);
+    const rounds = seasonRounds(s);
     for (let r = 0; r < rounds; r++) { simulateRound(s, SHORT); s.round++; }
     s.round = rounds;
     const before = new Map(s.clubs.map((c) => [c.id, c.manager]));

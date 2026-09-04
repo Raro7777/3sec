@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  CUP_PRIZE, CUP_ROUNDS, advanceCupDay, advanceRound, createCupMatch, cupByes, cupDayDue, cupPrize, currentCupTies, deserialize,
-  newGame, pendingCupTies, recordCupResult, roundsPerSeason, serialize, simulateCupDay, simulateRound, table, tieWinner, userCupStatus,
+  CUP_D2_ENTRANTS, CUP_PRIZE, CUP_ROUNDS, CLUBS_PER_DIVISION, advanceCupDay, advanceRound, createCupMatch, cupByes, cupDayDue, cupField, cupPrize, currentCupTies, deserialize,
+  divisionOf, newGame, pendingCupTies, recordCupResult, seasonRounds, serialize, simulateCupDay, simulateRound, table, tieWinner, userCupStatus,
 } from "../src/index";
 import type { GameState } from "../src/index";
 
@@ -13,30 +13,31 @@ function playCup(s: GameState): void {
 }
 
 describe("3sec 컵 bracket", () => {
-  it("draws 4 round-1 ties among the 8 lowest-reputation clubs; the top 4 get byes", () => {
+  it("draws a 16-club field: the whole top flight plus the best four below it, nobody resting", () => {
     const s = newGame(11);
-    const byes = cupByes(s);
-    expect(byes.length).toBe(4);
-    const sorted = [...s.clubs].sort((a, b) => b.reputation - a.reputation).map((c) => c.id);
-    expect(byes).toEqual(sorted.slice(0, 4));
+    expect(cupByes(s)).toEqual([]);
+    const field = cupField(s);
+    expect(field.length).toBe(CLUBS_PER_DIVISION + CUP_D2_ENTRANTS);
+    // every first-division club is in, and exactly the best four of the second
+    for (const c of s.clubs) if (divisionOf(c) === 1) expect(field).toContain(c.id);
+    const below = s.clubs.filter((c) => divisionOf(c) > 1).sort((a, b) => b.reputation - a.reputation);
+    for (const c of below.slice(0, CUP_D2_ENTRANTS)) expect(field).toContain(c.id);
+    for (const c of below.slice(CUP_D2_ENTRANTS)) expect(field).not.toContain(c.id);
+
     const r1 = currentCupTies(s);
     expect(s.cup.stage).toBe(0);
-    expect(r1.length).toBe(4);
-    const inR1 = r1.flatMap((t) => [t.home, t.away]);
-    expect(new Set(inR1).size).toBe(8);
-    for (const b of byes) expect(inR1.includes(b)).toBe(false);
-    expect(userCupStatus(newGame(11, 7))).toBe("bye"); // 울산: highest reputation
-    expect(userCupStatus(newGame(11, 10))).toBe("playing");
+    expect(r1.length).toBe(8);
+    expect(new Set(r1.flatMap((t) => [t.home, t.away])).size).toBe(16);
+    expect(userCupStatus(newGame(11, 7))).toBe("playing"); // 울산: top flight, always in
+    expect(userCupStatus(newGame(11, 23))).toBe("out"); // 정선: weakest of the division below
   });
 
-  it("runs R1 → QF (4) → SF (2) → F (1) and crowns exactly one holder, deterministically", () => {
+  it("runs R16 (8) → QF (4) → SF (2) → F (1) and crowns exactly one holder, deterministically", () => {
     const a = newGame(12), b = newGame(12);
     for (const s of [a, b]) {
       simulateCupDay(s, SHORT);
       expect(s.cup.stage).toBe(1);
       expect(currentCupTies(s).length).toBe(4);
-      const qfClubs = currentCupTies(s).flatMap((t) => [t.home, t.away]);
-      for (const bye of cupByes(s)) expect(qfClubs.includes(bye)).toBe(true);
       simulateCupDay(s, SHORT);
       expect(s.cup.stage).toBe(2);
       expect(currentCupTies(s).length).toBe(2);
@@ -45,9 +46,9 @@ describe("3sec 컵 bracket", () => {
       expect(currentCupTies(s).length).toBe(1);
       simulateCupDay(s, SHORT);
       expect(s.cup.stage).toBe(4);
-      expect(s.cup.ties.length).toBe(11);
+      expect(s.cup.ties.length).toBe(15);
       expect(typeof s.cup.holder).toBe("number");
-      expect(s.cup.holder).toBe(tieWinner(s.cup.ties[10]!));
+      expect(s.cup.holder).toBe(tieWinner(s.cup.ties[14]!));
       expect(s.cup.ties.every((t) => t.score !== null && tieWinner(t) !== null)).toBe(true);
     }
     expect(a.cup).toEqual(b.cup);
@@ -89,7 +90,7 @@ describe("3sec 컵 bracket", () => {
     const s = newGame(14);
     const start = s.clubs.map((c) => c.budget);
     playCup(s);
-    const final = s.cup.ties[10]!;
+    const final = s.cup.ties.find((t) => t.stage === 3)!;
     const winner = tieWinner(final)!, runnerUp = final.home === winner ? final.away : final.home;
     // home ties also bank gate receipts (fans.ts), booked in seasonGate: the prize is what is left
     const net = (id: number) => s.clubs[id]!.budget - start[id]! - (s.clubs[id]!.seasonGate ?? 0);
@@ -110,7 +111,7 @@ describe("3sec 컵 bracket", () => {
   it("schedules cup days after league rounds 6, 11, 16 and 21", () => {
     const s = newGame(15);
     const seen: number[] = [];
-    while (s.round < roundsPerSeason(12)) {
+    while (s.round < seasonRounds(s)) {
       if (s.pendingCupDay) {
         seen.push(s.round);
         expect(cupDayDue(s)).toBe(true);
@@ -141,7 +142,7 @@ describe("3sec 컵 bracket", () => {
     const m = deserialize(JSON.stringify(old))!;
     expect(m.pendingCupDay).toBe(false);
     expect(m.cup.stage).toBe(0);
-    expect(currentCupTies(m).length).toBe(4);
+    expect(currentCupTies(m).length).toBe(8);
     expect(m.clubs.every((c) => c.seasonStartBudget === c.budget)).toBe(true);
   });
 

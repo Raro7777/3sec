@@ -7,6 +7,7 @@ import { wageFor } from "./contracts";
 import { spendGrowth, weeklyRate } from "./training";
 import { fansTransfer } from "./fans";
 import { moraleOfferRefused } from "./morale";
+import { divisionPosition } from "./divisions";
 
 /** Currency unit: 억원 (100 million KRW). */
 export const MIN_SQUAD = 16;
@@ -216,7 +217,8 @@ export function acceptFactor(s: GameState, club: Club): number {
 /** League position of a club after round 5 (1-based), else null. */
 function positionOf(s: GameState, clubId: number): number | null {
   if (s.round <= 5) return null;
-  return table(s).findIndex((r) => r.club === clubId) + 1;
+  // a club's standing in its own division, so a second-division leader reads as a leader
+  return divisionPosition(s, clubId);
 }
 
 /**

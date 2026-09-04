@@ -22,6 +22,7 @@ import { storyMatch, storyRollover, storyWeek } from "./story";
 import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
 import { careerInit, careerRollover, careerWeek } from "./career";
+import { CLUBS_PER_DIVISION, DIVISIONS, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -33,7 +34,7 @@ export const DEFAULT_MANAGER_NAME = "감독";
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME): GameState {
   const clubs = buildClubs(seed);
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildFixtures(clubs.length), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard() };
+  const s: GameState = { version: 1, seed, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildAllFixtures(clubs), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard() };
   clearUserManager(s);
   newCup(s);
   for (const c of clubs) resetSeasonCounters(c);
@@ -69,8 +70,15 @@ export function yellowBan(seasonYellows: number): number {
 
 export const clubOf = (s: GameState, id: number): Club => s.clubs[id]!;
 export const playerOf = (c: Club, id: string): SquadPlayer => c.squad.find((p) => p.id === id)!;
-export const seasonOver = (s: GameState): boolean => s.round >= roundsPerSeason(s.clubs.length);
-export const currentFixtures = (s: GameState): Fixture[] => s.fixtures.filter((f) => f.round === s.round);
+/** A season is one division's double round-robin; every division runs the same calendar (divisions.ts). */
+export const seasonRounds = (s: GameState): number => roundsPerSeason(Math.min(CLUBS_PER_DIVISION, s.clubs.length));
+export const seasonOver = (s: GameState): boolean => s.round >= seasonRounds(s);
+/**
+ * This round's fixtures in the user's own division — the matches actually played out by the engine.
+ * Other divisions are resolved by `simulateAwayDivisions` (divisions.ts) and never appear here.
+ */
+export const currentFixtures = (s: GameState): Fixture[] =>
+  s.fixtures.filter((f) => f.round === s.round && divisionOf(clubOf(s, f.home)) === userDivision(s));
 export const nextUserFixture = (s: GameState): Fixture | null => currentFixtures(s).find((f) => f.home === s.userClub || f.away === s.userClub) ?? null;
 
 /** Deterministic per-match seed so a saved game replays identically. */
@@ -232,6 +240,9 @@ export function simulateRound(s: GameState, opts: GameMatchOptions = { autoUser:
 
 /** Close the round once every fixture has a result: a week passes (recovery, injuries heal). */
 export function advanceRound(s: GameState): boolean {
+  // The divisions the user is not in are resolved statistically (divisions.ts) so a matchday costs
+  // no more than it did as a single league.
+  simulateAwayDivisions(s);
   if (currentFixtures(s).some((f) => !f.score)) return false;
   s.round++;
   const rng = new Rng(s.seed * 19 + s.season * 503 + s.round * 7);
@@ -247,7 +258,10 @@ export function advanceRound(s: GameState): boolean {
     const dev = trainWeek(c, rng);
     if (c.id === s.userClub) for (const d of dev.slice(0, 3)) s.news.unshift(`훈련: ${d.player.name} ${ATTR_LABEL[d.attr]} ${d.delta > 0 ? "+1" : "-1"}`);
   }
-  payWages(s, roundsPerSeason(s.clubs.length), new Map(table(s).map((r, i) => [r.club, i + 1])));
+  // Every club is paid on where it sits in its own division (divisions.ts), not one shared table.
+  const positions = new Map<number, number>();
+  for (let d = 1; d <= DIVISIONS; d++) divisionTable(s, d).forEach((r, i) => positions.set(r.club, i + 1));
+  payWages(s, seasonRounds(s), positions);
   // The supporters weigh the week (fans.ts): results, goals, the table, runs; a protest can cost the user's board.
   fansWeek(s);
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
@@ -259,7 +273,7 @@ export function advanceRound(s: GameState): boolean {
   if (s.round >= REVIEW_FROM_ROUND && !seasonOver(s)) boardReview(s, new Rng(s.seed * 43 + s.season * 719 + s.round * 53));
   // The user's own board: confidence drifts weekly, warnings and the sack follow.
   if (s.round >= BOARD_FROM_ROUND) boardWeek(s);
-  if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
+  if (seasonOver(s)) s.news.unshift(`시즌 ${s.season} 종료. ${divisionName(userDivision(s))} 우승: ${clubOf(s, table(s)[0]!.club).name}.`);
   // Achievements (lowest budget, weekly checks) and the manager's career (job offers, the season-end contract talk).
   achievementsWeek(s);
   careerWeek(s);
@@ -288,7 +302,7 @@ export function startNextSeason(s: GameState): void {
   achievementsSeasonEnd(s);
   careerRollover(s);
   // Weekly income already covers running costs, so the rollover only pays out prize money.
-  for (const c of s.clubs) c.budget += seasonBudget(c.reputation, finalTable.findIndex((r) => r.club === c.id) + 1) - seasonBudget(c.reputation, null);
+  for (const c of s.clubs) c.budget = Math.round((c.budget + leaguePrize(c, divisionPosition(s, c.id))) * 10) / 10;
   // Money that just sits in the bank goes into the club instead: the board reinvests most of any surplus above
   // BUDGET_CAP in infrastructure, which nudges reputation (and with it income and expectations) upward.
   for (const c of s.clubs) {
@@ -317,9 +331,16 @@ export function startNextSeason(s: GameState): void {
     p.stats = emptyStats();
     p.form = [];
   }
+  // Up and down before the new calendar is drawn, so the fixtures are for the divisions as they now
+  // stand (divisions.ts).
+  const swap = applyPromotionRelegation(s);
+  for (const { club, to } of swap.promoted) s.news.unshift(`${clubOf(s, club).name} ${divisionName(to)} 승격!`);
+  for (const { club, from } of swap.relegated) s.news.unshift(`${clubOf(s, club).name} ${divisionName(from)} 강등.`);
+  if (swap.promoted.some((p) => p.club === s.userClub)) s.news.unshift(`승격했습니다. 다음 시즌은 ${divisionName(userDivision(s))}입니다.`);
+  if (swap.relegated.some((r) => r.club === s.userClub)) s.news.unshift(`강등입니다. 다음 시즌은 ${divisionName(userDivision(s))}에서 다시 시작합니다.`);
   s.season++;
   s.round = 0;
-  s.fixtures = buildFixtures(s.clubs.length);
+  s.fixtures = buildAllFixtures(s.clubs);
   // Morale softens and requests lapse (morale.ts); pending interviews and events settle (press.ts, story.ts).
   moraleRollover(s);
   skipInterview(s);
@@ -334,6 +355,16 @@ export function startNextSeason(s: GameState): void {
   transferWeek(s, rng);
   for (const c of s.clubs) resetSeasonCounters(c);
   prepareRound(s);
+}
+
+/**
+ * League prize money for finishing `position` in a club's division (억원, paid at the rollover).
+ * Second-division money is a fraction of the top flight's (divisions.ts), which is most of why
+ * promotion is worth chasing.
+ */
+export function leaguePrize(c: Club, position: number): number {
+  const full = seasonBudget(c.reputation, position) - seasonBudget(c.reputation, null);
+  return Math.round(full * prizeFactor(divisionOf(c)) * 10) / 10;
 }
 
 export interface HomeAwayRecord { home: { won: number; drawn: number; lost: number }; away: { won: number; drawn: number; lost: number } }
@@ -368,9 +399,8 @@ export interface FinanceSummary {
 /** The season's money story for the review screen. */
 export function financeSummary(s: GameState, clubId: number): FinanceSummary {
   const c = clubOf(s, clubId);
-  const rows = table(s);
-  const pos = rows.findIndex((r) => r.club === clubId) + 1;
-  const rounds = roundsPerSeason(s.clubs.length);
+  const pos = divisionPosition(s, clubId);
+  const rounds = seasonRounds(s);
   const r1 = (x: number): number => Math.round(x * 10) / 10;
   return {
     start: c.seasonStartBudget,
@@ -378,29 +408,22 @@ export function financeSummary(s: GameState, clubId: number): FinanceSummary {
     wages: c.seasonWages ? r1(c.seasonWages + (c.seasonStaffWages ?? 0)) : wageBill(c) + staffWageBill(c),
     revenue: c.seasonRevenue ? r1(c.seasonRevenue) : r1(weeklyRevenue(c, pos) * rounds),
     cupPrize: cupPrize(s, clubId),
-    leaguePrize: seasonBudget(c.reputation, pos) - seasonBudget(c.reputation, null),
+    leaguePrize: leaguePrize(c, pos),
     gate: r1(c.seasonGate ?? 0),
   };
 }
 
-export function table(s: GameState): TableRow[] {
-  const rows: TableRow[] = s.clubs.map((c) => ({ club: c.id, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, pts: 0 }));
-  for (const f of s.fixtures) {
-    if (!f.score) continue;
-    const h = rows[f.home]!, a = rows[f.away]!;
-    const [hg, ag] = f.score;
-    h.played++; a.played++;
-    h.gf += hg; h.ga += ag; a.gf += ag; a.ga += hg;
-    if (hg > ag) { h.won++; a.lost++; h.pts += 3; }
-    else if (hg < ag) { a.won++; h.lost++; a.pts += 3; }
-    else { h.drawn++; a.drawn++; h.pts++; a.pts++; }
-  }
-  return rows.sort((x, y) => y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf || s.clubs[x.club]!.name.localeCompare(s.clubs[y.club]!.name));
+/** The league table. With no division given it is the user's own league — the one they are judged in. */
+export function table(s: GameState, division: number = userDivision(s)): TableRow[] {
+  return divisionTable(s, division);
 }
 
-export function topScorers(s: GameState, n = 10): { player: SquadPlayer; club: Club }[] {
+export function topScorers(s: GameState, n = 10, division: number = userDivision(s)): { player: SquadPlayer; club: Club }[] {
   const all: { player: SquadPlayer; club: Club }[] = [];
-  for (const club of s.clubs) for (const player of club.squad) if (player.stats.goals > 0) all.push({ player, club });
+  for (const club of s.clubs) {
+    if (divisionOf(club) !== division) continue;
+    for (const player of club.squad) if (player.stats.goals > 0) all.push({ player, club });
+  }
   return all.sort((a, b) => b.player.stats.goals - a.player.stats.goals || b.player.stats.apps - a.player.stats.apps).slice(0, n);
 }
 
@@ -411,7 +434,8 @@ export function topScorers(s: GameState, n = 10): { player: SquadPlayer; club: C
 export function titleClinched(s: GameState): number | null {
   const rows = table(s);
   const lead = rows[0]!, second = rows[1]!;
-  const remaining = roundsPerSeason(s.clubs.length) - Math.min(lead.played, roundsPerSeason(s.clubs.length));
+  const total = seasonRounds(s);
+  const remaining = total - Math.min(lead.played, total);
   if (lead.played === 0) return null;
   return lead.pts - second.pts > remaining * 3 ? lead.club : null;
 }

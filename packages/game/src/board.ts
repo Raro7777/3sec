@@ -1,9 +1,10 @@
 import { Rng } from "@3sec/engine";
 import type { Board, Club, GameState, SackRecord } from "./types";
-import { clubOf, seasonOver, table } from "./season";
+import { clubOf, seasonOver, seasonRounds, table } from "./season";
 import { roundsPerSeason } from "./fixtures";
 import { MAX_FREE_MANAGERS, applyManagerPolicy, clearUserManager, expectedPositions, generateManager } from "./managers";
 import { careerOnNewJob } from "./career";
+import { CLUBS_PER_DIVISION } from "./divisions";
 
 /** Weekly reviews start once this many rounds are played. */
 export const BOARD_FROM_ROUND = 5;
@@ -32,7 +33,7 @@ const round1 = (x: number): number => Math.round(x * 10) / 10;
 export const newBoard = (confidence = START_CONFIDENCE): Board => ({ confidence, warnings: 0, lastReview: -1, lowWeeks: 0 });
 
 /** Where the user's board expects the club to finish (rank by reputation, the same yardstick AI boards use). */
-export const userExpectation = (s: GameState): number => expectedPositions(s).get(s.userClub) ?? s.clubs.length;
+export const userExpectation = (s: GameState): number => expectedPositions(s).get(s.userClub) ?? CLUBS_PER_DIVISION;
 
 export const userPosition = (s: GameState): number => table(s).findIndex((r) => r.club === s.userClub) + 1;
 
@@ -157,4 +158,4 @@ export function acceptJob(s: GameState, clubId: number, force = false): string |
 }
 
 /** Rounds the season has (for the sacked-screen summary). */
-export const boardSeasonRounds = (s: GameState): number => roundsPerSeason(s.clubs.length);
+export const boardSeasonRounds = (s: GameState): number => seasonRounds(s);

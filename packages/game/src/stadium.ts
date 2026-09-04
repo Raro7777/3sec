@@ -7,6 +7,7 @@
 import type { Club, GameState } from "./types";
 import { clubOf } from "./season";
 import { avgHomeAttendance, clubCapacity, ticketPrice } from "./fans";
+import { CLUBS_PER_DIVISION } from "./divisions";
 
 /** Seats per block. */
 export const EXPANSION_STEP = 1000;
@@ -123,7 +124,8 @@ export function expansionAdvice(s: GameState, seats = EXPANSION_STEP): Expansion
   const homeMatches = c.fans?.seasonHome ?? 0;
   const avgAttendance = c.fans ? avgHomeAttendance(c) : 0;
   const sellouts = seasonSellouts(s, c.id);
-  const seasonHomeMatches = s.clubs.length - 1 + 1;
+  // one home game against each of the division's other clubs, plus a cup tie
+  const seasonHomeMatches = CLUBS_PER_DIVISION - 1 + 1;
   const selloutRate = homeMatches ? sellouts / homeMatches : 0;
   const cost = expansionCost(c, seats);
   const extraGate = round1((seats * EXPANSION_FILL * selloutRate * seasonHomeMatches * ticketPrice(c.reputation)) / 1e8);

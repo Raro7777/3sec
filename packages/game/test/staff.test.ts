@@ -5,7 +5,7 @@ import {
   advanceRound, aiHireStaff, applyStaffRecovery, deserialize, ensureStaffMarket, expiringStaff, fireStaff, hireStaff, injuryDaysFactor, injuryFactor,
   intakeTier, migrateStaff, newGame, payWages, recoveryBonus, refreshStaffMarket, renewStaff, roundsPerSeason, scoutReport, serialize, simulateRound,
   staffBonus, staffRating, staffRollover, staffSeverance, staffSigningFee, staffWage, staffWageBill, staffWeek, startNextSeason, trainWeek, transferTargets,
-  wageBill, weeklyRevenue, youthIntake, youthNarrowFactor, youthWeek, type GameState, type StaffMember, type StaffRole,
+  wageBill, weeklyRevenue, youthIntake, youthNarrowFactor, youthWeek, type GameState, type StaffMember, type StaffRole, seasonRounds,
 } from "../src/index";
 
 const roleOf = (role: StaffRole, rating: number, season = 1, id = `T-${role}-${rating}`): StaffMember =>
@@ -298,7 +298,7 @@ describe("coaching staff — market", () => {
     const me = s.clubs[s.userClub]!;
     me.staff = [roleOf("assistant", 16), roleOf("fitness", 12)];
     expect(staffWageBill(me)).toBeCloseTo(staffWage(16) + staffWage(12), 5);
-    const weeks = roundsPerSeason(s.clubs.length);
+    const weeks = seasonRounds(s);
     me.budget = 100; me.seasonWages = 0;
     payWages(s, weeks);
     expect(me.budget).toBeCloseTo(100 + weeklyRevenue(me, null) - (wageBill(me) + staffWageBill(me)) / weeks, 1);

@@ -21,6 +21,7 @@ import { MAX_PROSPECTS, scoutedProspect } from "./youth";
 import { STAFF_ROLE_LABEL } from "./staff";
 import { formPoints } from "./board";
 import { overall } from "./rating";
+import { CLUBS_PER_DIVISION } from "./divisions";
 
 export const STORY_CHANCE = 0.25;
 /** Rounds a pending event waits before it settles itself with the last choice. */
@@ -102,7 +103,7 @@ function draft(s: GameState, me: Club, t: StoryTemplateId, rng: Rng): Draft | nu
       return { title: "라커룸 갈등", text: `훈련 중 ${a.name}과(와) ${b.name}이(가) 크게 다퉜습니다. 분위기가 험악합니다.${cap ? ` 주장 ${cap.name}이(가) 중재하겠다고 나섰습니다.` : ""}`, playerId: a.id, playerId2: b.id, choices: [{ label: "주장에게 맡긴다", hint: "주장의 리더십에 따라 결과가 갈림" }, { label: "직접 두 선수를 부른다", hint: "두 선수 사기 −2, 선수단 +1" }, { label: "지켜본다", hint: "두 선수 사기 −6, 라커룸 −" }] };
     }
     case "boardDemand": {
-      const rows = s.clubs.length;
+      const rows = CLUBS_PER_DIVISION;
       const target = Math.max(1, Math.min(rows, Math.round(rows / 3)));
       return { title: "이사회 요구", text: `이사회가 시즌 목표를 ${target}위 이내로 못 박고 감독의 공개 약속을 요구합니다.`, amount: target, choices: [{ label: "약속한다", hint: "이사회 +3, 선수단 사기 −2 (부담)" }, { label: "현실적으로 답한다", hint: "이사회 −1, 선수단 사기 +1" }] };
     }

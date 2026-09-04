@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Match } from "@3sec/engine";
 import {
-  ACHIEVEMENTS, achievementById, achievementsAfterMatch, advanceRound, deserialize, hallOfFame, hasAchievement, newGame, promoteProspect, roundsPerSeason,
+  ACHIEVEMENTS, achievementById, achievementsAfterMatch, advanceRound, deserialize, hallOfFame, hasAchievement, newGame, promoteProspect, seasonRounds,
   seasonCleanSheets, serialize, simulateRound, startNextSeason, takeFreshAchievements, table, type GameState,
 } from "../src/index";
 
@@ -111,7 +111,7 @@ describe("match counters", () => {
 describe("season achievements and the hall of fame", () => {
   it("a perfect season by the weakest club unlocks the title, the unbeaten season, the home sweep, 60 goals and the underdog title", () => {
     const s = newGame(15, 10);
-    const rounds = roundsPerSeason(s.clubs.length);
+    const rounds = seasonRounds(s);
     for (let r = 0; r < rounds; r++) {
       fixRound(s, r, [3, 0]);
       for (const f of s.fixtures.filter((x) => x.round === r && (x.home === 10 || x.away === 10))) achievementsAfterMatch(s, f, fakeMatch([]), false);
