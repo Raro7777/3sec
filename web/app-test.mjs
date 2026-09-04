@@ -125,8 +125,10 @@ for (const t of ['sched', 'stats', 'now']) {
 }
 
 // --- 6. 매치데이 → 경기 뷰어 → 건너뛰기 해금
-await tap('[data-act="advance"]', 800);
-const inMatch = (await count('#lvCanvas')) === 1;
+await tap('[data-act="advance"]', 200);
+// 경기 뷰어는 시뮬 시간이 들쭉날쭉하므로 고정 대기 대신 캔버스를 기다린다
+const inMatch = await page.waitForSelector('#lvCanvas', { timeout: 15000 }).then(() => true, () => false);
+await page.waitForTimeout(300);
 check('경기 뷰어가 뜬다', inMatch);
 if (inMatch) {
   check('처음에는 건너뛰기가 잠겨 있다', (await count('[data-mv="skipset"]')) === 0);
@@ -144,6 +146,10 @@ if (inMatch) {
   check('해금이 저장된다', unlocked && (await page.evaluate(() => localStorage.getItem('bloom-skip-unlocked-v1'))) === '1');
   if (unlocked) await tap('[data-mv="end"]', 700);
 }
+await page.waitForFunction(() => {
+  const t = document.getElementById('view').textContent || '';
+  return t.includes('승리') || t.includes('패배');
+}, { timeout: 20000 }).catch(() => {});
 const res = await viewText();
 check('경기 결과가 나온다', res.includes('승리') || res.includes('패배'));
 check('박스스코어가 있다', res.includes('우리 팀 기록'));

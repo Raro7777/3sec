@@ -544,6 +544,171 @@ const SEC7 = `스킬 (동일 능력치 · 한쪽만 보유 · 조건당 ${SKILL_
   }
 }
 
+// ================================================================ 8. 신인 세대 생성기 (docs/rookies.md)
+// 생성기는 "규칙을 코드로" 옮긴 것이므로, 검증도 규칙 그대로다 —
+// world.md 6절(이름·외형·번호)·6.3 체크리스트(스탯·신장·나이·스킬)·A.3.6.4(사다리 유지)·C.4(결정성).
+const SEC8 = '신인 세대 생성기 (docs/rookies.md)';
+{
+  const { HAIR_COLORS_VIVID, launchLevel } = await import('./engine/rookies.js');
+  const HORIZON = 20;                       // 검증 지평 — 시즌 15 목표보다 넉넉히 본다
+  const mk = (seed, season) => { const g = G.createGame({ seed }); g.season = season; return g; };
+
+  // --- 8.1 결정성 (C.4) ---
+  const sig = (g, n) => G.rookieCards(g, n)
+    .map(c => `${c.id}|${c.name}|${c.teamId}|${c.pos}|${c.rarity}|${c.jersey}|${c.heightCm}|${c.age}|${c.stats.join(',')}|${c.potential.join(',')}|${c.skillName}|${c.appearance.hairStyle}/${c.appearance.hairColor}`)
+    .join('\n');
+  const A = sig(mk(20260904, HORIZON), HORIZON);
+  must(SEC8, '8.1 결정성 — 같은 시드 = 같은 세대', A === sig(mk(20260904, HORIZON), HORIZON));
+  must(SEC8, '8.1 결정성 — 다른 시드 = 다른 세대', A !== sig(mk(20260905, HORIZON), HORIZON));
+  {   // 시즌을 하나씩 올려도(= 실제 플레이 순서) 한 번에 쌓은 것과 같아야 한다
+    const g = G.createGame({ seed: 20260904 });
+    for (let n = 1; n <= HORIZON; n++) { g.season = n; G.activeCardPool(g); }
+    must(SEC8, '8.1 결정성 — 시즌을 하나씩 올려도 동일(캐시 단조성)', sig(g, HORIZON) === A);
+  }
+  {   // 세이브에 카드를 넣지 않는다 → 재로드해도 같은 세대
+    const g = mk(20260904, 12);
+    const saved = JSON.parse(JSON.stringify(G.saveGame(g)));
+    const json = JSON.stringify(saved);
+    must(SEC8, '8.1 세이브에 신인 카드를 저장하지 않는다', json.indexOf('"r0') < 0 && json.indexOf('r0401') < 0);
+    must(SEC8, '8.1 세이브 재로드 후 같은 세대 재현', sig(G.loadGame(saved), 12) === sig(g, 12));
+  }
+  must(SEC8, '8.1 시즌 1~3 은 손대지 않는다(초반 보호)',
+    G.rookieCards(mk(1, 3), 3).length === 0 && G.activeCardPool(mk(1, 3)).length === G.LAUNCH_CARDS.length);
+
+  // --- 8.2 유일성 (world.md 6.1 · 6.2 · art-style-guide 1.3) ---
+  let dupName = 0, dupSurnameInClub = 0, dupHair = 0, dupColorInClub = 0, vividOver = 0, dupJersey = 0;
+  for (const seed of [1, 7, 42, 20260904]) {
+    const g = mk(seed, HORIZON);
+    const jerseyEver = new Map();          // 구단별 등번호는 역대 전체에서 유일해야 한다
+    for (const c of G.allCards(g, HORIZON)) {
+      const k = c.teamId;
+      if (!jerseyEver.has(k)) jerseyEver.set(k, new Set());
+      if (jerseyEver.get(k).has(c.jersey)) dupJersey++;
+      jerseyEver.get(k).add(c.jersey);
+    }
+    for (let n = 1; n <= HORIZON; n++) {   // 나머지는 "그 시즌에 살아 있는 카드" 기준
+      g.season = n;
+      const active = G.activeCardPool(g);
+      const names = new Set(), hair = new Set();
+      const clubSur = new Map(), clubColor = new Map(), clubVivid = new Map();
+      for (const c of active) {
+        if (names.has(c.name)) dupName++;
+        names.add(c.name);
+        const a = c.appearance || {};
+        const combo = a.hairStyle + '|' + a.hairColor;
+        if (hair.has(combo)) dupHair++;
+        hair.add(combo);
+        const sur = c.name.slice(0, 1);
+        if (!clubSur.has(c.teamId)) { clubSur.set(c.teamId, new Set()); clubColor.set(c.teamId, new Set()); clubVivid.set(c.teamId, 0); }
+        if (clubSur.get(c.teamId).has(sur)) dupSurnameInClub++;
+        clubSur.get(c.teamId).add(sur);
+        if (clubColor.get(c.teamId).has(a.hairColor)) dupColorInClub++;
+        clubColor.get(c.teamId).add(a.hairColor);
+        if (HAIR_COLORS_VIVID.indexOf(a.hairColor) >= 0) clubVivid.set(c.teamId, clubVivid.get(c.teamId) + 1);
+      }
+      for (const v of clubVivid.values()) if (v > G.ROOKIES.vividPerClub) vividOver++;
+    }
+  }
+  must(SEC8, '8.2 이름 중복 0 (활성 카드 전체 · 시드 4종 × 20시즌)', dupName === 0, `중복 ${dupName}`);
+  must(SEC8, '8.2 구단 내 성 중복 0', dupSurnameInClub === 0, `중복 ${dupSurnameInClub}`);
+  must(SEC8, '8.2 헤어스타일+컬러 조합 중복 0', dupHair === 0, `중복 ${dupHair}`);
+  must(SEC8, '8.2 구단 내 헤어 컬러 중복 0', dupColorInClub === 0, `중복 ${dupColorInClub}`);
+  must(SEC8, `8.2 파스텔·원색 헤어 구단당 ≤ ${G.ROOKIES.vividPerClub}`, vividOver === 0, `초과 ${vividOver}`);
+  must(SEC8, '8.2 구단 내 등번호 중복 0 (역대 전체)', dupJersey === 0, `중복 ${dupJersey}`);
+
+  // --- 8.3 스탯·신장·나이 범위 (world.md 6.3 체크리스트) ---
+  const HEIGHT_RANGE = [[172, 180], [175, 185], [178, 188], [182, 192], [165, 172]];
+  let statOut = 0, potOut = 0, deltaOut = 0, hOut = 0, ageOut = 0, liberoOut = 0, strongerThanLaunch = 0, n8 = 0;
+  const byRarity = { 1: [], 2: [], 3: [] };
+  for (const seed of [1, 7, 42, 20260904]) {
+    for (const c of G.rookieCards(mk(seed, HORIZON), HORIZON)) {
+      n8++;
+      let sum = 0;
+      for (let i = 0; i < 10; i++) {
+        const v = c.stats[i], q = c.potential[i];
+        if (v < G.ROOKIES.statMin || v > G.ROOKIES.statMax) statOut++;
+        if (q > 100 || q < v) potOut++;
+        const d = q - v;
+        if (d < G.ROOKIES.potDeltaMin || d > G.ROOKIES.potDeltaMax) deltaOut++;
+        sum += v;
+      }
+      const avg = sum / 10;
+      byRarity[c.rarity].push(avg);
+      if (avg > launchLevel(c.rarity, c.pos)) strongerThanLaunch++;
+      const hr = HEIGHT_RANGE[c.pos];
+      if (c.heightCm < hr[0] || c.heightCm > hr[1]) hOut++;
+      if (c.debutAge < 18 || c.debutAge > 20) ageOut++;
+      if (c.pos === POS.L && (c.stats[STAT.spike] > 30 || c.stats[STAT.block] > 30)) liberoOut++;
+    }
+  }
+  must(SEC8, `8.3 개별 스탯 ${G.ROOKIES.statMin}~${G.ROOKIES.statMax} 이탈 0 (신인 ${n8}장)`, statOut === 0, `이탈 ${statOut}`);
+  must(SEC8, '8.3 잠재력 = 초기치 + 15~30 · ≤ 100 이탈 0', deltaOut === 0 && potOut === 0, `Δ ${deltaOut} · 상한 ${potOut}`);
+  must(SEC8, '8.3 신인 스탯 평균이 같은 (희귀도·포지션) 런칭 평균을 넘지 않는다', strongerThanLaunch === 0, `초과 ${strongerThanLaunch}`);
+  must(SEC8, '8.3 포지션별 신장 범위 이탈 0 (world.md 6.3)', hOut === 0, `이탈 ${hOut}`);
+  must(SEC8, '8.3 데뷔 나이 18~20 이탈 0', ageOut === 0, `이탈 ${ageOut}`);
+  must(SEC8, '8.3 리베로 spike·block ≤ 30 이탈 0', liberoOut === 0, `이탈 ${liberoOut}`);
+  const meanOf = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  info(SEC8, '8.3 신인 스탯 평균 (R / SR / SSR)',
+    `${meanOf(byRarity[1]).toFixed(1)} / ${meanOf(byRarity[2]).toFixed(1)} / ${meanOf(byRarity[3]).toFixed(1)}`,
+    '런칭 45.7 / 54.8 / 63.6');
+
+  // --- 8.4 스킬 배정 (docs/skills.md 재사용 — 새 스킬을 만들지 않는다) ---
+  let skillBad = 0, rNoSkill = 0, srSsr = 0;
+  for (const seed of [1, 7, 42, 20260904]) {
+    for (const c of G.rookieCards(mk(seed, HORIZON), HORIZON)) {
+      if (c.rarity === RARITY.R || c.rarity === RARITY.N) { if (c.skillName) rNoSkill++; continue; }
+      srSsr++;
+      const def = findSkill(c.skillName);
+      const want = c.rarity === RARITY.SSR ? 'SSR' : 'SR';
+      if (!def || def.pos !== c.pos || def.rarity !== want) skillBad++;
+    }
+  }
+  must(SEC8, `8.4 SSR·SR 은 기존 레지스트리의 같은 (희귀도·포지션) 스킬만 쓴다 (${srSsr}장)`, skillBad === 0, `불일치 ${skillBad}`);
+  must(SEC8, '8.4 R 카드는 스킬 없음', rNoSkill === 0, `보유 ${rNoSkill}`);
+  must(SEC8, '8.4 새 스킬을 만들지 않았다 (레지스트리 24종 유지)', SKILLS.length === 24, `${SKILLS.length}종`);
+
+  // --- 8.5 카드 풀이 마르지 않는다 (A.3.6.6 의 해답) ---
+  let poolMin = Infinity, poolMinAt = 0;
+  const poolRow = [];
+  for (const seed of [1, 7, 42, 20260904]) {
+    const g = G.createGame({ seed });
+    for (let n = 1; n <= HORIZON; n++) {
+      g.season = n;
+      const k = G.activeCardPool(g).length;
+      if (n >= 4 && k < poolMin) { poolMin = k; poolMinAt = n; }
+      if (seed === 1) poolRow.push(k);
+    }
+  }
+  must(SEC8, '8.5 시즌 4~20 스카우트 가능 카드 ≥ 40 (시드 4종)', poolMin >= 40, `최솟값 ${poolMin}장 (S${poolMinAt})`);
+  info(SEC8, '8.5 카드 풀 추이 (seed 1 · 시즌 1~20)', poolRow.join(' '));
+
+  // --- 8.6 사다리와 구단 로스터가 흔들리지 않는다 (A.3.1 · A.3.6.4) ---
+  {
+    const g = G.createGame({ seed: 12 });
+    const ladderAt = (n) => {
+      g.season = n;
+      let sum = 0, k = 0, size = 0, heirs = 0;
+      for (const c of G.CLUBS) {
+        const ts = G.clubTeamState(g, c.id);
+        size += ts.roster.length;
+        heirs += ts.roster.filter(x => x.isRookieHeir).length;
+        for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+          const pl = ts.index.get(id);
+          if (!pl) continue;
+          sum += ovrOf(TCFG, pl.stats, pl.pos); k++;
+        }
+      }
+      return { ovr: sum / k, size, heirs };
+    };
+    const L8 = ladderAt(8), L12 = ladderAt(12), L15 = ladderAt(15);
+    check(SEC8, '8.6 신인 승계 후에도 사다리 유지 — 시즌 8 AI 평균 OVR', L8.ovr, 74.91, 0.30, v => v.toFixed(2));
+    check(SEC8, '8.6 신인 승계 후에도 사다리 유지 — 시즌 12 AI 평균 OVR', L12.ovr, 74.91, 0.30, v => v.toFixed(2));
+    check(SEC8, '8.6 신인 승계 후에도 사다리 유지 — 시즌 15 AI 평균 OVR', L15.ovr, 74.91, 0.30, v => v.toFixed(2));
+    must(SEC8, '8.6 구단 인원 42명(6×7) 유지', L8.size === 42 && L12.size === 42 && L15.size === 42, `${L8.size}/${L12.size}/${L15.size}`);
+    info(SEC8, '8.6 신인이 채운 구단 슬롯 (S8 / S12 / S15)', `${L8.heirs} / ${L12.heirs} / ${L15.heirs} (42중)`);
+  }
+}
+
 // ================================================================ 출력
 const totalMs = M.ms + safe.ms + optimal.ms + norest.ms + push.ms + rand.ms + spike.ms + optSup.ms + safeSup.ms;
 if (AS_JSON) {

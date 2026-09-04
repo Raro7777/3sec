@@ -13,6 +13,10 @@ import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
 import { SKILL_BY_NAME } from './skills.js';
 import {
+  ROOKIES, createRookieWorld, growRookieWorld, rookiesUpTo,
+  slotOccupant, slotSince, genericSlotCount, rookieSummary,
+} from './rookies.js';
+import {
   TrainingSession, PHASE, emptySupport, buildSupport, recommendSupporterList,
   simEvaluationProvider, stubEvaluationProvider, campLine,
 } from './training.js';
@@ -27,13 +31,40 @@ import { effectBadge } from './training-events.js';
 /** data.js 원본을 엔진 표현으로 1회만 변환(모든 게임이 공유하는 읽기 전용 풀). */
 export const CARD_POOL = PLAYERS.map(playerFromJson);
 const CARD_BY_ID = new Map(CARD_POOL.map(p => [p.id, p]));
+/**
+ * 런칭 카드(시즌 1 개막 로스터) vs 손으로 만든 신규 카드.
+ * `data/players.json` 의 카드에 `debutSeason`(≥ 2) 이 붙어 있으면 그 시즌의 신인 세대로 취급하고,
+ * 생성기는 남은 정원만 채운다 — 라이브 서비스에서 월 2~4명씩 손으로 추가할 자리다(docs/rookies.md 7절).
+ * 지금은 그런 카드가 없으므로 LAUNCH_CARDS === CARD_POOL 이고, 동작은 도입 전과 완전히 같다.
+ */
+const AUTHORED_BY_SEASON = new Map();
+const LAUNCH_CARDS = [];
+for (let i = 0; i < PLAYERS.length; i++) {
+  const s = PLAYERS[i].debutSeason | 0;
+  const card = CARD_POOL[i];
+  // playerFromJson 은 판정에 쓰는 값만 옮긴다. 외형·성격·소개는 UI(초상)와 신인 생성기의
+  // 중복 회피(art-style-guide 1.3)가 읽어야 하므로 여기서 원본 그대로 붙인다.
+  card.appearance = PLAYERS[i].appearance || null;
+  card.personality = PLAYERS[i].personality || [];
+  card.bio = PLAYERS[i].bio || '';
+  if (s > 1) {
+    card.debutSeason = s;
+    card.debutAge = card.age;
+    card.age = card.age - (s - 1);       // A.3.6.1 나이는 `age + (시즌 − 1)` 로 파생한다
+    if (!AUTHORED_BY_SEASON.has(s)) AUTHORED_BY_SEASON.set(s, []);
+    AUTHORED_BY_SEASON.get(s).push(card);
+  } else {
+    LAUNCH_CARDS.push(card);
+  }
+}
 export const CLUBS = TEAMS.map(t => ({
   id: t.id, name: t.name, city: t.city, colors: t.colors,
   emblemConcept: t.emblemConcept, identity: t.identity, homeArena: t.homeArena,
 }));
 const CLUB_BY_ID = new Map(CLUBS.map(c => [c.id, c]));
+/** 구단 1군 슬롯 = 런칭 카드 7명. 신인은 슬롯을 늘리지 않고 **승계**한다(rookies.js). */
 const POOL_BY_CLUB = new Map();
-for (const p of CARD_POOL) {
+for (const p of LAUNCH_CARDS) {
   if (!POOL_BY_CLUB.has(p.teamId)) POOL_BY_CLUB.set(p.teamId, []);
   POOL_BY_CLUB.get(p.teamId).push(p);
 }
@@ -122,6 +153,15 @@ const VACANCY = {
   overallDelta: -4,        // 육성 선수 대체 강도 = 구단 평균 + 이 값(스탯 평균 공간) = OVR −7.4
   traineeSlots: 4,         // 구단이 육성 선수로 버티는 최대 결원 수. 이보다 많이 빠지면 즉시전력을 영입한다
   signingOvrDelta: -2.0,   // 즉시전력 영입의 포지션 가중 OVR = 그 구단의 사다리 평균 OVR + 이 값
+  /**
+   * **결원은 "지금 그 자리에 서 있던 선수"를 데려갔을 때만 생긴다** (docs/rookies.md 5절).
+   * 신인 세대 도입 전에는 42명이 곧 42개 슬롯이라 둘이 같은 말이었지만, 세대교체가 실제로
+   * 돌아가면 다르다 — 두 시즌 전에 주전에서 밀려난 서른 살을 데려간다고 구단에 구멍이 나지는 않는다.
+   * 이 구분이 없으면 시즌 12 에는 런칭 42명이 전원 전성기를 지난 뒤라, 플레이어가 그들을 모아
+   * 두는 것만으로 6구단 42슬롯이 전부 결원 대체 선수가 되어 리그가 텅 빈다(실측 AI 실전 OVR 70.3).
+   * 신인 세대와 같은 경계(시즌 ROOKIES.firstSeason)부터 적용해 시즌 1~3 은 그대로 둔다.
+   */
+  onlyCurrentOccupant: true,
 };
 export const VACANCY_TUNING = VACANCY;
 
@@ -217,15 +257,67 @@ function shiftToOvr(p, target) {
   return p;
 }
 
+// ---------------------------------------------------------------- 신인 세대 (docs/rookies.md)
+/**
+ * 계정 시드에서 파생한 신인 세계. **세이브에 넣지 않는다** — 시드와 시즌만 있으면 다시 만들 수 있다.
+ * state 에 붙여 캐시하고, 시즌이 늘어나면 뒤로만 이어 붙인다(앞 구간은 절대 다시 계산하지 않으므로
+ * "시즌 15 까지 쌓고 시즌 5 를 물어본 결과" 와 "시즌 5 까지만 쌓은 결과" 가 같다).
+ */
+export function rookieWorld(state, upto) {
+  const need = Math.max(1, (upto === undefined ? state.season : upto) | 0);
+  let w = state._rookieWorld;
+  if (!w || w.seed !== (state.seed | 0)) {
+    w = createRookieWorld({
+      seed: state.seed | 0,
+      launchCards: LAUNCH_CARDS,
+      clubs: CLUBS,
+      authoredBySeason: AUTHORED_BY_SEASON,
+      pastPeak: (c, s) => ageAt(c.age, s) > peakEndFor(c.pos),
+      retired: (c, s) => isRetiredAge(c.age, c.pos, s),
+    });
+    state._rookieWorld = w;
+  }
+  if (w.built < need) growRookieWorld(w, need);
+  return w;
+}
+/** 시즌 n 까지 데뷔한 신인 카드(런칭 42명은 제외). */
+export function rookieCards(state, season) {
+  const n = Math.max(1, (season === undefined ? state.season : season) | 0);
+  return rookiesUpTo(rookieWorld(state, n), n);
+}
+/** 그 시즌에 새로 합류한 세대. 시즌 결산·UI 표기용. */
+export function rookieClassOf(state, season) {
+  const n = Math.max(1, season | 0);
+  return rookieSummary(rookieWorld(state, n), n);
+}
+/** 계측용 — 그 시즌에 신인을 못 붙이고 제네릭 육성 선수로 메운 구단 슬롯 수. */
+export function genericClubSlots(state, season) {
+  const n = Math.max(1, (season === undefined ? state.season : season) | 0);
+  return genericSlotCount(rookieWorld(state, n), n);
+}
+/** 런칭 42명 + 지금까지 데뷔한 신인 = 그 시즌에 존재하는 모든 카드(은퇴자 포함). */
+export function allCards(state, season) {
+  return LAUNCH_CARDS.concat(rookieCards(state, season));
+}
+/** id → 카드. 런칭 카드와 신인 카드를 모두 찾는다(UI·엔진 공통 진입점). */
+export function cardById(state, id) {
+  const c = CARD_BY_ID.get(id);
+  if (c) return c;
+  const w = state && state._rookieWorld ? state._rookieWorld : (state ? rookieWorld(state) : null);
+  return w ? (w.byId.get(id) || null) : null;
+}
+/** 신인 생성기가 만든 카드인가. */
+export function isRookieCard(card) { return !!(card && card.isRookieCard); }
+
 /** 카드(사람)가 은퇴했는가 — 스카우트 풀·육성에서 제외된다. */
 export function isCardRetired(state, cardOrId) {
-  const card = typeof cardOrId === 'string' ? CARD_BY_ID.get(cardOrId) : cardOrId;
+  const card = typeof cardOrId === 'string' ? cardById(state, cardOrId) : cardOrId;
   if (!card) return false;
   return isRetiredAge(card.age, card.pos, state.season);
 }
-/** 아직 스카우트할 수 있는 카드 풀(은퇴자 제외). */
+/** 아직 스카우트할 수 있는 카드 풀(은퇴자 제외 · 아직 데뷔하지 않은 세대 제외). */
 export function activeCardPool(state) {
-  return CARD_POOL.filter(p => !isRetiredAge(p.age, p.pos, state.season));
+  return allCards(state).filter(p => !isRetiredAge(p.age, p.pos, state.season));
 }
 
 const TRAINING_CFG = DEFAULT_TRAINING_CONFIG;
@@ -461,7 +553,7 @@ export function loadGame(json) {
   state.pitySSR = j.pty ? j.pty[1] : 0;
   state.scoutCount = j.pty ? j.pty[2] : 0;
   state.ownedCards = j.own || {};
-  state.instances = (j.ins || []).map(rehydrateInstance).filter(Boolean);
+  state.instances = (j.ins || []).map(x => rehydrateInstance(state, x)).filter(Boolean);
   state.lineupStarters = j.lu || null;
   state.lineupLibero = j.lb || null;
   state.history = j.hi || [];
@@ -478,8 +570,8 @@ export function loadGame(json) {
 }
 
 /** 저장된 최소 정보 + 카드 데이터 → 인스턴스 복원(OVR·등급·도달률·스킬 레벨 재계산). */
-function rehydrateInstance(s) {
-  const card = CARD_BY_ID.get(s.c);
+function rehydrateInstance(state, s) {
+  const card = cardById(state, s.c);
   if (!card) return null;
   const finalStats = s.f.slice();
   const potential = s.p.slice();
@@ -566,7 +658,7 @@ export function scout(state, opts = {}) {
   const pool = activeCardPool(state);
   let cands = pool.filter(p => p.rarity === rarity && (wantPos < 0 || p.pos === wantPos));
   if (cands.length === 0) cands = pool.filter(p => wantPos < 0 || p.pos === wantPos);
-  if (cands.length === 0) cands = pool.length > 0 ? pool : CARD_POOL;
+  if (cands.length === 0) cands = pool.length > 0 ? pool : LAUNCH_CARDS;
   const card = cands[rng.nextInt(cands.length)];
 
   const owned = Object.prototype.hasOwnProperty.call(state.ownedCards, card.id);
@@ -609,7 +701,7 @@ function addFragment(state) {
 
 /** 육성 시작용 카드(한계돌파 반영 잠재력). Game.cs:59 TrainingCard */
 export function trainingCard(state, cardId) {
-  const base = CARD_BY_ID.get(cardId);
+  const base = cardById(state, cardId);
   if (!base) throw new Error('알 수 없는 카드: ' + cardId);
   if (isRetiredAge(base.age, base.pos, state.season)) throw new Error('은퇴한 선수는 육성할 수 없습니다: ' + base.name);
   const c = clonePlayer(base);
@@ -629,7 +721,7 @@ function instanceToSupporter(inst) {
 
 /** 추천 서포터 id 배열. Game.cs:72 RecommendSupporters */
 export function recommendSupporters(state, cardId) {
-  const card = CARD_BY_ID.get(cardId);
+  const card = cardById(state, cardId);
   if (!card) throw new Error('알 수 없는 카드: ' + cardId);
   const list = recommendSupporterList(card.pos, card.teamId, supporterCandidates(state, cardId), TRAINING_CFG, TRAINING_CFG.supporterSlots);
   return list.map(s => s.id);
@@ -1037,10 +1129,20 @@ export function clubTeamState(state, clubId, opts = {}) {
   const clubSkill = opts.clubSkillLevel !== undefined ? (opts.clubSkillLevel | 0) : clubSkillLevelFor(state.season);
 
   const season = opts.season !== undefined ? (opts.season | 0) : (state.season | 0);
+  // A.3.6.4 세대교체 승계표 — 슬롯(런칭 카드)마다 그 시즌의 점유자를 미리 정해 둔다(docs/rookies.md 4절).
+  const world = rookieWorld(state, season);
   const roster = [];
   let gone = 0;
   for (const p of pool) {
-    if (departed.has(p.id)) {
+    // 점유자: p 자신(현역) / 승계한 신인 카드 / null(교체 대상인데 붙일 신인이 없다)
+    const occ = slotOccupant(world, p.id, season);
+    const heir = occ !== undefined && occ !== null && occ !== p ? occ : null;
+    // 결원 판정 대상 = 그 시즌에 실제로 그 자리를 지키던 선수(VACANCY.onlyCurrentOccupant).
+    const occupantRule = VACANCY.onlyCurrentOccupant && season >= ROOKIES.firstSeason;
+    const onCourt = heir !== null ? heir
+      : (occupantRule && (occ === null || ageFactor(p.age, p.pos, season) < AGING.clubReplaceFactor
+        || isRetiredAge(p.age, p.pos, season)) ? null : p);
+    if (onCourt !== null && departed.has(onCourt.id)) {
       gone++;
       if (gone > VACANCY.traineeSlots) {
         // A.3.5 결원 상한 — 주전 절반 이상이 빠지면 구단도 육성 선수로 버티지 않고 즉시전력을 영입한다.
@@ -1067,17 +1169,33 @@ export function clubTeamState(state, clubId, opts = {}) {
     // 지난 선수는 같은 자리의 신인으로 교체된다(신인의 OVR = 그 선수의 사다리 OVR + clubRecruitOvrDelta).
     const f = ageFactor(p.age, p.pos, season);
     if (f < AGING.clubReplaceFactor || isRetiredAge(p.age, p.pos, season)) {
-      const gen = Math.max(1, ageAt(p.age, season) - (AGING.peakEnd + (AGING.peakEndByPos[p.pos | 0] || 0)));
-      const rec = generatePlayer(
-        new Rng(hashString(clubId + '/' + p.id + '/gen' + gen)),
-        `${clubId}-new-${p.id}-${gen}`, clubId, p.pos, statAverage(gp.stats), 3.0);
+      let rec;
+      if (heir !== null) {
+        // 신인 세대 카드가 슬롯을 물려받았다(docs/rookies.md 4절). 이름·외형·번호·스킬은 그 카드의 것이고
+        // **세기만** 사다리에 맞춘다 — A.3.1 "같은 선수, 두 얼굴"(구단에서는 성장한 모습, 스카우트 명단에서는 초기치).
+        rec = clonePlayer(heir);
+        rec.age = ageAt(heir.age, season);
+        rec.isRookieHeir = true;
+        rec.heirSince = slotSince(world, p.id, season);
+        if (ROOKIES.clubSkill && SKILL_BY_NAME.has(rec.skillName)) {
+          // 주전 연차만큼 스킬이 여문다(ROOKIES.clubSkillByTenure) — 갓 올라온 신인은 Lv1.
+          const t = ROOKIES.clubSkillByTenure;
+          const tenure = Math.max(1, season - rec.heirSince + 1);
+          rec.skillLevel = Math.min(clubSkill, t[Math.min(tenure, t.length) - 1]);
+        }
+      } else {
+        const gen = Math.max(1, ageAt(p.age, season) - (AGING.peakEnd + (AGING.peakEndByPos[p.pos | 0] || 0)));
+        rec = generatePlayer(
+          new Rng(hashString(clubId + '/' + p.id + '/gen' + gen)),
+          `${clubId}-new-${p.id}-${gen}`, clubId, p.pos, statAverage(gp.stats), 3.0);
+        rec.rarity = RARITY.N;
+        rec.age = AGING.clubRecruitAge;
+        rec.name = rec.name + ' (신인)';
+      }
       // 신인의 세기는 "떠난 선수의 사다리 OVR + clubRecruitOvrDelta" 로 맞춘다.
       // generatePlayer 는 포지션 표준 프로필이라 같은 스탯 평균이어도 포지션 가중 OVR 이 낮게 나온다
       // (A.3.5 의 −4 스탯평균 = −7.4 OVR 과 같은 이유) — 그래서 OVR 공간에서 직접 맞춘다.
       shiftToOvr(rec, ovrOf(TRAINING_CFG, gp.stats, gp.pos) + AGING.clubRecruitOvrDelta);
-      rec.rarity = RARITY.N;
-      rec.age = AGING.clubRecruitAge;
-      rec.name = rec.name + ' (신인)';
       rec.isRecruit = true;
       roster.push(rec);
       continue;
@@ -1217,6 +1335,10 @@ export function clubList(state) {
     };
   });
 }
+
+// 신인 세대 튜닝 상수(docs/rookies.md) — UI·검증 하네스가 읽는다.
+export { ROOKIES };
+export { LAUNCH_CARDS };
 
 // season.js 가 쓰는 내부 헬퍼(리그 계층 전용 — UI 는 season.js 의 공개 API 를 쓴다)
 export { CARD_BY_ID, CLUB_BY_ID, nextSeed, addHistory, addFragment, newClubRecords, TRAINING_CFG };

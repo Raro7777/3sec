@@ -25,6 +25,10 @@ export {
   // 노화·전성기·은퇴 (league-and-economy.md A.3.6)
   AGING, ageAt, ageFactor, agePhase, isRetiredAge, isCardRetired, activeCardPool,
   retiredRepresentatives, instanceAgeInfo,
+  // 신인 세대 (docs/rookies.md) — 카드 풀은 이제 시즌에 따라 늘어난다.
+  // UI 는 CARD_POOL 대신 allCards(state) / cardById(state, id) 를 써야 한다.
+  ROOKIES, LAUNCH_CARDS, allCards, cardById, isRookieCard,
+  rookieCards, rookieClassOf, rookieWorld, genericClubSlots,
 } from './engine/game.js';
 
 // ---------------------------------------------------------------- 리그 시즌 계층

@@ -9,9 +9,9 @@ import { simulateMatch } from './match.js';
 import { ovrOf } from './training-config.js';
 import {
   CLUBS, CLUB_BY_ID, ECONOMY, REWARDS, SEASON_GROWTH, growthFor,
-  myTeamState, myTeam, clubTeamState, departedCardIds,
+  myTeamState, myTeam, clubTeamState, departedCardIds, activeCardPool,
   formatMatchResult, nextSeed, addHistory, addTickets, addGold, addFragments,
-  createFillers, newClubRecords, TRAINING_CFG,
+  createFillers, newClubRecords, TRAINING_CFG, rookieClassOf,
 } from './game.js';
 
 // ---------------------------------------------------------------- 상수 (league-and-economy.md 부록 league:)
@@ -716,6 +716,9 @@ export function finishSeason(state) {
 
   // ---- 이월 (A.5.3): 로스터·재화·한계돌파 유지, 연습생만 신규 세대로 교체
   state.season = L.number + 1;
+  // 신인 드래프트 — 다음 시즌 명단에 오르는 새 카드(docs/rookies.md 3절). 결산 화면이 그대로 쓴다.
+  settlement.rookies = rookieClassOf(state, state.season);
+  settlement.cardPool = activeCardPool(state).length;
   state.fillers = createFillers(state);
   if (state.lineupStarters) { state.lineupStarters = null; state.lineupLibero = null; }  // 연습생 교체로 라인업 재편성
   return settlement;

@@ -357,7 +357,7 @@ var MISSIONS = [
     p:function(){ var n=0; for (var k in (G.winsByClub||{})) if (G.winsByClub[k]>0) n++; return Math.min(3,n); }, goal:3 },
   { id:'sr1', t:'SR 이상을 영입한다', d:'희귀도 높은 카드를 뽑으세요. 천장이 보장합니다.', r:5,
     p:function(){ var ok=0; Object.keys(G.ownedCards||{}).forEach(function(id){
-        var c = E.CARD_POOL.filter(function(x){ return x.id===id; })[0];
+        var c = E.cardById(G, id);
         if (c && c.rarity>=2) ok=1; }); return ok; }, goal:1 },
 ];
 function missionState(){
@@ -428,6 +428,10 @@ function hairShape(style){
 }
 function appearOf(id){
   if (APPEAR[id]) return APPEAR[id];
+  try {                                  // 신인 세대 카드는 런타임 생성이라 부팅 시 목록에 없다
+    var c = E.cardById(G, id);
+    if (c && c.appearance) { APPEAR[id] = c.appearance; return c.appearance; }
+  } catch(e){}
   var n = hashId(id);
   var hk = Object.keys(HAIRC), ek = Object.keys(EYEC);
   return { hairStyle:'숏 보브', hairColor:hk[n % hk.length], eyeColor:ek[(n>>3) % ek.length], filler:true };
@@ -744,12 +748,18 @@ function vScout(){
   );
 }
 
+/** 카드의 현재 나이. card.age 는 기준 나이라 시즌을 반영해야 한다. */
+function cardAge(c){
+  try { return E.ageAt(c.age, G.season); } catch(e){ return c.age; }
+}
+
 /** 은퇴로 줄어드는 스카우트 풀을 드러낸다. */
 function poolLine(){
   try {
     var pool = E.activeCardPool(G);
-    if (!pool || pool.length >= E.CARD_POOL.length) return '';
-    return ' 명단에 남은 선수 <b>'+pool.length+'</b>명 (은퇴 '+(E.CARD_POOL.length-pool.length)+'명).';
+    var all = E.allCards(G);
+    if (!pool || !all || pool.length >= all.length) return '';
+    return ' 명단에 남은 선수 <b>'+pool.length+'</b>명 (은퇴 '+(all.length-pool.length)+'명).';
   } catch(e){ return ''; }
 }
 
@@ -801,7 +811,8 @@ function scoutResult(r){
     '<div style="flex:1;min-width:0">'+
     '<div class="spread"><div class="pname" style="font-size:18px">'+esc(c.name)+'</div>'+
     '<span class="pill rar-'+r.rarity+'">'+r.rarity+'</span></div>'+
-    '<div class="pmeta">'+POSK[c.pos]+' · '+esc(club?club.name:'')+'<br>#'+c.jersey+' · '+c.heightCm+'cm</div>'+
+    '<div class="pmeta">'+POSK[c.pos]+' · '+esc(club?club.name:'')+'<br>#'+c.jersey+' · '+c.heightCm+'cm · '+cardAge(c)+'세'+
+      (E.isRookieCard && E.isRookieCard(G, c.id) ? ' <span class="agb" style="color:var(--good)">신인</span>' : '')+'</div>'+
     '</div></div>'+
     (c.skillName?'<div class="tiny" style="margin-top:6px;color:var(--ssr)">고유 스킬 · '+esc(c.skillName)+'</div>':'')+
     '<div class="stats">'+c.stats.map(function(v,i){
@@ -987,7 +998,7 @@ function vTrainGrad(){
 function vPlayer(){
   var inst = E.representatives(G).filter(function(i){ return i.instanceId === detailId; })[0];
   if (!inst) return '<div class="empty">선수를 찾을 수 없습니다.</div>';
-  var card = E.CARD_POOL.filter(function(c){ return c.id === inst.cardId; })[0];
+  var card = E.cardById(G, inst.cardId);
   var club = E.CLUBS.filter(function(c){ return c.id === inst.clubId; })[0];
   var rar = ['N','R','SR','SSR'][inst.rarity];
   var gc = ['S','A','B','C','D'][inst.grade];
@@ -1301,12 +1312,33 @@ function vSettle(){
     '</div>'+
     (st.mvp ? '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(st.mvp.teamName||'')+'</div></div>'+
       '<div class="pname" style="margin-top:4px">'+esc(st.mvp.playerName)+'</div></div>' : '')+
+    rookieBlock(st)+
     retireBlock()+
     '<div class="card"><div class="legend">'+
       '<b>다음 시즌</b><span>여섯 구단이 잠재력의 '+Math.round(st.nextSeasonGrowth*100)+'%까지 성장합니다 (이번 시즌 '+Math.round(st.growth*100)+'%). 로스터를 더 키워야 따라잡습니다.</span>'+
       '<b>선수 나이</b><span>모두 한 살을 더 먹습니다. 전성기를 지난 선수는 능력치가 깎이고, 은퇴 나이에 닿으면 코트를 떠납니다.</span>'+
     '</div></div>'+
     '<button class="btn" data-act="nextseason">시즌 '+(st.season+1)+' 시작</button>');
+}
+
+/** 결산에서 새로 명단에 오르는 신인 세대를 보여 준다. */
+function rookieBlock(st){
+  var list = st && st.rookies;
+  if (!list || !list.length) return '';
+  return '<div class="card" style="border-color:var(--good)">'+
+    '<div class="spread" style="margin-bottom:8px"><b style="color:var(--good)">신인 명단 등록</b>'+
+      '<span class="tiny">'+list.length+'명 · 명단 '+(st.cardPool||'')+'명</span></div>'+
+    list.map(function(r){
+      var col = clubColor[r.teamId] || 'var(--good)';
+      var rar = typeof r.rarity==='number' ? ['N','R','SR','SSR'][r.rarity] : r.rarity;
+      return '<div class="bx"><span class="ava sm" style="border-color:'+col+'">'+portraitSvg(r,28)+'</span>'+
+        '<span class="pill rar-'+rar+'">'+rar+'</span>'+
+        '<span class="nm">'+esc(r.name)+'</span>'+
+        '<span class="st2">'+POSK[r.pos!==undefined?r.pos:0]+' · '+(r.heightCm||'')+'cm</span>'+
+        '<span class="pt" style="font-size:11px;color:var(--ink3)">'+(r.age||'')+'세</span></div>';
+    }).join('')+
+    '<div class="tiny" style="padding:6px 11px 2px">스카우트 명단에 새로 오릅니다. 은퇴한 자리를 메우는 세대입니다.</div>'+
+  '</div>';
 }
 
 /** 결산에서 이번에 은퇴하는(또는 이미 은퇴한) 선수를 헌액한다. */
