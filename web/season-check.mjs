@@ -5,6 +5,8 @@
 //   node web/season-check.mjs                 기본 n=200 · 3시즌 · seed 1
 //   node web/season-check.mjs --n 400         표본 확대
 //   node web/season-check.mjs --seasons 5     시즌 5까지(사다리 고원 확인)
+//   node web/season-check.mjs --long          장기(시즌 1~8) 목표까지 검증 — 기본 실행에는 포함되지 않는다
+//                                             권장: node web/season-check.mjs --long --n 120  (약 60초)
 //   node web/season-check.mjs --eval sim      육성 평가전을 실제 시뮬로(느림, 정합 확인용)
 //   node web/season-check.mjs --json          기계 판독용 출력
 // 종료 코드 0 = 전 목표 충족.
@@ -19,7 +21,10 @@ function arg(name, dflt) {
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : dflt;
 }
 const N = parseInt(arg('n', '200'), 10);
-const SEASONS = parseInt(arg('seasons', '3'), 10);
+/** --long = 장기 시즌 목표(A.4.4) 검증. 기본 실행은 3시즌만 돌려 빠르게 유지한다. */
+const LONG = argv.includes('--long');
+const LONG_SEASONS = 8;
+const SEASONS = Math.max(parseInt(arg('seasons', LONG ? String(LONG_SEASONS) : '3'), 10), LONG ? LONG_SEASONS : 1);
 const BASE_SEED = parseInt(arg('seed', '1'), 10);
 const EVAL = arg('eval', 'stub');          // stub = 육성 평가전 근사(빠름) / sim = 실제 경기
 const AS_JSON = argv.includes('--json');
@@ -35,11 +40,17 @@ const RETRAIN_MAX = 3;                                  // economy_sim DEFAULT_C
 // economy_sim.py 의 "smart" 정책과 같은 우선순위:
 //   스카우트: 미보유 포지션 → 지정, 시즌 2+ 는 라인업의 R 슬롯 업그레이드 → 지정, 아니면 일반
 //   육성: 미육성 카드(구멍 포지션·고희귀도 우선) → 없으면 재육성(한계돌파 진척 우선, 카드당 3회까지)
+/** 은퇴한 카드는 더 이상 코트에 못 서므로 보유 카드로 세지 않는다 (A.3.6). */
+function playable(g, cid) {
+  const c = CARD_BY_ID.get(cid);
+  return !!c && !E.isCardRetired(g, c);
+}
+
 function ownedCoverage(g) {
   const cover = { S: 0, OH: 0, OP: 0, MB: 0, L: 0 };
   for (const cid of Object.keys(g.ownedCards)) {
     const c = CARD_BY_ID.get(cid);
-    if (c) cover[POS_CODE[c.pos]]++;
+    if (c && playable(g, cid)) cover[POS_CODE[c.pos]]++;
   }
   return cover;
 }
@@ -86,7 +97,7 @@ function isRealCard(playerId) { return String(playerId).indexOf('#') >= 0; }
 
 function pickTrainee(g, runs) {
   const holes = lineupHolePositions(g);
-  const owned = Object.keys(g.ownedCards);
+  const owned = Object.keys(g.ownedCards).filter(cid => playable(g, cid));
   const trained = new Set(g.instances.map(i => i.cardId));
   const untrained = owned.filter(cid => !trained.has(cid));
   if (untrained.length > 0) {
@@ -128,6 +139,28 @@ function trainPhase(g, runs) {
     }
     E.graduate(s, 0);
   }
+}
+
+/** 이 시즌 기준의 노화 지표 — 라인업 평균 나이 · 하락기 슬롯 수 · 은퇴 인스턴스 · 스카우트 풀 크기. */
+function ageMetrics(g, season) {
+  const save = g.season;
+  g.season = season;
+  try {
+    const ts = E.myTeamState(g);
+    let ageSum = 0, n = 0, declining = 0;
+    for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+      const p = ts.index.get(id);
+      if (!p) continue;
+      ageSum += p.age; n++;
+      if (p.ageFactor !== undefined && p.ageFactor < 1) declining++;   // agedPlayer 가 하락기에만 붙인다
+    }
+    return {
+      lineupAge: n ? ageSum / n : 0,
+      declining,
+      retired: E.retiredRepresentatives(g).length,
+      poolLeft: E.activeCardPool(g).length,
+    };
+  } finally { g.season = save; }
 }
 
 // ---------------------------------------------------------------- 1회 플레이(시즌 1..SEASONS)
@@ -176,6 +209,8 @@ function playRun(seed) {
       goldEnd: g.gold, ticketsEnd: g.tickets, minTickets,
       ssr: Object.keys(g.ownedCards).filter(c => CARD_BY_ID.get(c) && CARD_BY_ID.get(c).rarity === E.RARITY.SSR).length,
       sr: Object.keys(g.ownedCards).filter(c => CARD_BY_ID.get(c) && CARD_BY_ID.get(c).rarity === E.RARITY.SR).length,
+      // A.3.6 노화 — finishSeason 이 state.season 을 +1 한 뒤라 이 시즌 기준으로 되돌려 잰다
+      ...ageMetrics(g, n),
     });
   }
   return out;
@@ -222,6 +257,40 @@ T('첫 우승 시즌 2~3 누적', titleS23 + (SEASONS >= 3 ? 0 : NaN), 0.50, nul
 T('첫 승리까지 육성 횟수(p50)', pctl(firstWinTr, 0.5), 4, 8, v => v.toFixed(1) + '회');
 T('시즌 1 스카우트 횟수', scouts1, 10, 16, v => v.toFixed(1) + '회');
 T('3시즌 내 라인업 7슬롯 정식 카드', full3, 0.80, null, p);
+
+// ---------------------------------------------------------------- 장기 시즌 목표 (A.4.4) — --long 에서만
+const longTargets = [];
+if (LONG) {
+  const title = n => mean(byS(n).map(r => (r.champion ? 1 : 0)));
+  const win = n => mean(byS(n).map(r => r.wins / E.SEASON_CONFIG.matchesPerTeam));
+  const rank = n => mean(byS(n).map(r => r.rank));
+  const gold = n => mean(byS(n).map(r => r.goldEnd));
+  const late = [4, 5, 6, 7, 8];
+  const titles = late.map(title);
+
+  // ① 시즌 4~8 은 고원 — 각 시즌 40~70%
+  T(`시즌 4~8 우승률 최솟값`, Math.min(...titles), 0.40, null, p, `S${late[titles.indexOf(Math.min(...titles))]}`);
+  T(`시즌 4~8 우승률 최댓값`, Math.max(...titles), null, 0.70, p, `S${late[titles.indexOf(Math.max(...titles))]}`);
+  // ② 종점이 정점이 아니다(단조 증가 금지)
+  T('시즌 8 우승률', title(8), null, 0.75, p);
+  targets.push({
+    label: '시즌 4~8 우승률이 단조 증가하지 않는다', value: NaN, lo: null, hi: null,
+    ok: !(titles[0] < titles[1] && titles[1] < titles[2] && titles[2] < titles[3] && titles[3] < titles[4]),
+    text: titles.map(v => (v * 100).toFixed(0) + '%').join(' → '), note: '고원',
+  });
+  // ③ 시즌 5 이후 압도 금지
+  const w5 = Math.max(...[5, 6, 7, 8].map(win));
+  T('시즌 5~8 정규 승률 최댓값', w5, null, 0.85, p);
+  const r5 = Math.min(...[5, 6, 7, 8].map(rank));
+  T('시즌 5~8 평균 순위 최솟값', r5, 1.30, null, v => v.toFixed(2) + '위');
+  // ④ 골드가 무한 축적되지 않는다 — 종반 잔액이 중반 정점을 넘지 않을 것
+  targets.push({
+    label: '골드 잔액이 무한 축적되지 않는다 (시즌 8 ≤ 시즌 4)', value: gold(8), lo: null, hi: null,
+    ok: gold(8) <= gold(4),
+    text: `S4 ${gold(4).toFixed(0)} → S8 ${gold(8).toFixed(0)}`, note: '',
+  });
+  for (let i = targets.length - 8; i < targets.length; i++) if (targets[i]) longTargets.push(targets[i]);
+}
 
 const failures = targets.filter(t => !t.ok).length;
 
@@ -316,6 +385,42 @@ function must(label, ok, note) { invariants.push({ label, ok, note: note || '' }
   E.startSeason(migrated);
   must('마이그레이션 세이브에서 시즌 시작 가능', E.seasonView(migrated).totalMatchdays === 14);
 
+  // 노화·은퇴 (A.3.6)
+  {
+    const gAge = E.createGame({ seed: 2026, evaluation: 'stub' });
+    // 나이는 저장하지 않고 파생한다: 카드 나이 + (시즌 − 1)
+    const anyCard = E.CARD_POOL[0];
+    must('노화: 나이 = 카드 나이 + (시즌 − 1)',
+      E.ageAt(anyCard.age, 1) === anyCard.age && E.ageAt(anyCard.age, 5) === anyCard.age + 4);
+    // 시즌 1~3 에는 은퇴자가 없다 — 시즌 1 에 뽑아 키운 선수는 최소 3시즌 주전으로 뛴다
+    let retiredBy3 = 0;
+    for (let n = 1; n <= 3; n++) { gAge.season = n; retiredBy3 += 42 - E.activeCardPool(gAge).length; }
+    must('노화: 시즌 1~3 에는 은퇴 선수가 없다 (초반 경험 보호)', retiredBy3 === 0, `은퇴 ${retiredBy3}명`);
+    // 사다리 자체는 그대로 — 결원·은퇴가 없을 때 AI 구단 평균 OVR 은 A.3.1 표와 같다
+    const ladderOvr = (n) => {
+      gAge.season = n;
+      const v = E.CLUBS.map(c => {
+        const ts = E.clubTeamState(gAge, c.id);
+        let sum = 0, k = 0;
+        for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+          const pl = ts.index.get(id);
+          if (!pl) continue;
+          sum += E.ovrOf(E.DEFAULT_TRAINING_CONFIG, pl.stats, pl.pos); k++;
+        }
+        return sum / k;
+      });
+      return v.reduce((a, b) => a + b, 0) / v.length;
+    };
+    const l1 = ladderOvr(1), l3 = ladderOvr(3), l8 = ladderOvr(8);
+    gAge.season = 1;
+    must('노화: 사다리 유지 — 결원 없을 때 AI 평균 OVR S1 68.7 · S3 73.6 · S8 74.9(상한)',
+      Math.abs(l1 - 68.73) < 0.15 && Math.abs(l3 - 73.60) < 0.15 && Math.abs(l8 - 74.91) < 0.30,
+      `${l1.toFixed(2)} / ${l3.toFixed(2)} / ${l8.toFixed(2)}`);
+    // 은퇴 선수는 코트에 서지 못하지만 서포터(코치)로는 남는다
+    must('노화: 하락 배수는 전성기 안에서 1.0, 이후 단조 감소',
+      E.ageFactor(20, 1, 1) === 1 && E.ageFactor(24, 1, 5) < E.ageFactor(24, 1, 4));
+  }
+
   // 승점 규칙 (A.1.2)
   const mp = E.matchPoints;
   must('승점: 3-0/3-1 승 3점 · 패 0점', mp(3, 0).win === 3 && mp(3, 1).lose === 0);
@@ -342,7 +447,8 @@ if (AS_JSON) {
   console.log('|---|---|---|---|');
   for (const t of targets) {
     const range = t.lo !== null && t.hi !== null ? `${fmtT(t.lo, t.label)}~${fmtT(t.hi, t.label)}`
-      : t.lo !== null ? `≥ ${fmtT(t.lo, t.label)}` : `≤ ${fmtT(t.hi, t.label)}`;
+      : t.lo !== null ? `≥ ${fmtT(t.lo, t.label)}`
+        : t.hi !== null ? `≤ ${fmtT(t.hi, t.label)}` : (t.note || '—');
     console.log(`| ${t.label} | ${range} | **${t.text}** | ${t.ok ? '통과' : '실패'} |`);
   }
 
@@ -376,6 +482,17 @@ if (AS_JSON) {
   line('라인업 7슬롯 충원 시즌 p50', pctl(runsOut.map(r => (r.lineupFullSeason === null ? SEASONS + 1 : r.lineupFullSeason)), 0.5).toFixed(1));
   line('시즌 1 티켓 잔액 최솟값(평균)', mean(s1.map(r => r.minTickets)).toFixed(2));
   line(`${SEASONS}시즌 누적 SR / SSR 보유`, `${mean(byS(SEASONS).map(r => r.sr)).toFixed(1)} / ${mean(byS(SEASONS).map(r => r.ssr)).toFixed(2)}장`);
+
+  if (LONG) {
+    console.log('\n## 노화·은퇴 (A.3.6)\n');
+    console.log('| 시즌 | 라인업 평균 나이 | 하락기 슬롯(7중) | 은퇴한 대표 | 스카우트 가능 카드(42중) |');
+    console.log('|---|---|---|---|---|');
+    for (let n = 1; n <= SEASONS; n++) {
+      const rs = byS(n);
+      if (!rs.length) continue;
+      console.log(`| ${n} | ${mean(rs.map(r => r.lineupAge)).toFixed(1)}세 | ${mean(rs.map(r => r.declining)).toFixed(2)} | ${mean(rs.map(r => r.retired)).toFixed(2)} | ${mean(rs.map(r => r.poolLeft)).toFixed(1)} |`);
+    }
+  }
 
   console.log('\n## 성능 (Node · x86)\n');
   console.log('| 항목 | 목표 | 실측 | 판정 |');

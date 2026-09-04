@@ -22,6 +22,9 @@ export {
   addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
   CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
   CLUB_SKILL_LEVEL, clubSkillLevelFor,
+  // 노화·전성기·은퇴 (league-and-economy.md A.3.6)
+  AGING, ageAt, ageFactor, agePhase, isRetiredAge, isCardRetired, activeCardPool,
+  retiredRepresentatives, instanceAgeInfo,
 } from './engine/game.js';
 
 // ---------------------------------------------------------------- 리그 시즌 계층

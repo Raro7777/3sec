@@ -118,8 +118,112 @@ export function clubSkillLevelFor(season) {
  * 문서 초기값은 −8 이지만 그 값은 A.3.5 미구현 전제의 추정이라 실제 시뮬에서 재캘리브레이션했다
  * (web/PARITY.md "시즌 계층" 절 · 문서 D.2 "A.3.5 구현 시 사다리 재캘리브레이션" 항목).
  */
-const VACANCY = { overallDelta: -4 };
+const VACANCY = {
+  overallDelta: -4,        // 육성 선수 대체 강도 = 구단 평균 + 이 값(스탯 평균 공간) = OVR −7.4
+  traineeSlots: 4,         // 구단이 육성 선수로 버티는 최대 결원 수. 이보다 많이 빠지면 즉시전력을 영입한다
+  signingOvrDelta: -2.0,   // 즉시전력 영입의 포지션 가중 OVR = 빠져나간 선수의 사다리 OVR + 이 값
+};
 export const VACANCY_TUNING = VACANCY;
+
+/**
+ * 선수 노화 곡선(league-and-economy.md A.3.6 · v0.3).
+ *
+ * 나이는 상태로 저장하지 않고 카드 데이터의 `age`(스카우트 시점 = 시즌 1 기준 나이)에서 파생한다:
+ *   나이(시즌 n) = card.age + (n − 1)
+ * 42명 전원이 같은 속도로 늙으므로 저장 포맷이 늘지 않고, 세이브를 불러와도 값이 같다(결정성).
+ *
+ *  - 전성기(peak) 끝까지는 배수 1.0 — 성장은 육성 루프와 사다리가 담당한다.
+ *  - 전성기를 넘기면 매년 declinePerYear 만큼 실효 스탯이 곱셈으로 깎인다.
+ *  - retireAge 에 닿으면 은퇴한다: 코트에 서지 못하고(로스터 제외) 스카우트 풀에서도 빠진다.
+ *  - 세터·리베로는 점프 의존도가 낮고 판단·기술 비중이 커 실제 배구에서도 선수 생명이 길다 → +2년.
+ */
+export const AGING = {
+  peakEnd: 25,                    // 전성기 마지막 나이(OP·MB 기준) — 26세부터 하락
+  peakEndByPos: [2, 1, 0, 0, 2],  // S, OH, OP, MB, L — 세터·리베로 27 / 아웃사이드 26 / 아포짓·미들 25
+  declineFirst: 0.07,             // 전성기를 넘긴 첫 해의 하락폭(점프력·스피드가 먼저 빠진다)
+  declinePerYear: 0.015,          // 그 뒤 매년 추가 하락폭(경험·기술로 버티며 완만해진다)
+  declineFloor: 0.70,             // 배수 하한
+  retireAge: 31,                  // 은퇴 나이(OP·MB 기준)
+  retireByPos: [2, 1, 0, 0, 2],   // 세터·리베로 33 / 아웃사이드 32 / 아포짓·미들 31
+  clubReplaceFactor: 1.0,         // AI 구단이 세대교체하는 기준 배수(1.0 = 전성기를 넘기는 즉시)
+  clubRecruitOvrDelta: 0.0,       // 교체 신인의 포지션 가중 OVR = 떠난 선수의 사다리 OVR + 이 값
+  clubRecruitAge: 20,
+  fillerAge: 19,                  // 연습생은 매 시즌 새 세대 → 항상 신인 나이
+  peakStart: 22,                  // 표기 전용(판정에 쓰지 않는다 — 전성기 이전에도 배수는 1.0)
+};
+
+/** 시즌 n 시점의 실제 나이. */
+export function ageAt(baseAge, season) {
+  return (baseAge | 0) + Math.max(1, season | 0) - 1;
+}
+function peakEndFor(pos) { return AGING.peakEnd + (AGING.peakEndByPos[pos | 0] || 0); }
+function retireAgeFor(pos) { return AGING.retireAge + (AGING.retireByPos[pos | 0] || 0); }
+
+/** 실효 스탯 배수(1.0 = 전성기 이내). */
+export function ageFactor(baseAge, pos, season) {
+  const age = ageAt(baseAge, season);
+  const over = age - peakEndFor(pos);
+  if (over <= 0) return 1;
+  return Math.max(AGING.declineFloor, 1 - AGING.declineFirst - AGING.declinePerYear * (over - 1));
+}
+/** 은퇴 여부. */
+export function isRetiredAge(baseAge, pos, season) {
+  return ageAt(baseAge, season) >= retireAgeFor(pos);
+}
+/** UI 표기용 나이 단계: 'growth' | 'peak' | 'decline' | 'retired'. */
+export function agePhase(baseAge, pos, season) {
+  const age = ageAt(baseAge, season);
+  if (age >= retireAgeFor(pos)) return 'retired';
+  if (age > peakEndFor(pos)) return 'decline';
+  if (age >= AGING.peakStart) return 'peak';
+  return 'growth';
+}
+
+/**
+ * 나이를 반영한 선수. `own = true` 면 p 를 직접 고쳐 쓴다(이미 이 호출자만 아는 사본일 때).
+ * 공유 객체(CARD_POOL)를 넘길 때는 반드시 own = false — 전역 카드가 오염된다.
+ */
+function agedPlayer(p, season, own = false) {
+  const f = ageFactor(p.age, p.pos, season);
+  const age = ageAt(p.age, season);
+  if (f >= 1) {
+    if (age === p.age) return p;
+    const c = own ? p : clonePlayer(p);
+    c.age = age;
+    return c;
+  }
+  const c = own ? p : clonePlayer(p);
+  for (let i = 0; i < 10; i++) c.stats[i] = clampStat(roundHalfEven(p.stats[i] * f));
+  c.age = age;
+  c.ageFactor = f;
+  return c;
+}
+
+/** 전 스탯을 균등 가감해 포지션 가중 OVR 을 target 에 맞춘다(OVR 은 스탯의 가중 평균이라 선형). */
+function shiftToOvr(p, target) {
+  const w = TRAINING_CFG.ovrWeights[p.pos];
+  let sw = 0;
+  for (let i = 0; i < 10; i++) sw += w[i];
+  const slope = TRAINING_CFG.positionScale[p.pos] * sw;
+  if (slope <= 0) return p;
+  const k = (target - ovrOf(TRAINING_CFG, p.stats, p.pos)) / slope;
+  for (let i = 0; i < 10; i++) {
+    p.stats[i] = clampStat(roundHalfEven(p.stats[i] + k));
+    p.potential[i] = clampStat(Math.max(p.potential[i], p.stats[i]));
+  }
+  return p;
+}
+
+/** 카드(사람)가 은퇴했는가 — 스카우트 풀·육성에서 제외된다. */
+export function isCardRetired(state, cardOrId) {
+  const card = typeof cardOrId === 'string' ? CARD_BY_ID.get(cardOrId) : cardOrId;
+  if (!card) return false;
+  return isRetiredAge(card.age, card.pos, state.season);
+}
+/** 아직 스카우트할 수 있는 카드 풀(은퇴자 제외). */
+export function activeCardPool(state) {
+  return CARD_POOL.filter(p => !isRetiredAge(p.age, p.pos, state.season));
+}
 
 const TRAINING_CFG = DEFAULT_TRAINING_CONFIG;
 
@@ -151,6 +255,7 @@ export function createFillers(state) {
   for (let i = 0; i < FILLER_PLAN.length; i++) {
     const p = generatePlayer(rng, `${state.clubId}-t${String(i + 1).padStart(2, '0')}`, state.clubId, FILLER_PLAN[i], 90 + i, overall, 3.0);
     p.rarity = RARITY.N;
+    p.age = AGING.fillerAge;      // 연습생은 매 시즌 새 세대라 늙지 않는다 (A.3.6)
     p.name = '연습생 ' + p.name;
     p.skillName = '';
     p.skillDesc = '';
@@ -454,9 +559,11 @@ export function scout(state, opts = {}) {
   if (rarity === RARITY.SSR) state.pitySSR = 0;
 
   const wantPos = opts.position != null ? (typeof opts.position === 'string' ? POS_CODES.indexOf(opts.position) : opts.position) : -1;
-  let cands = CARD_POOL.filter(p => p.rarity === rarity && (wantPos < 0 || p.pos === wantPos));
-  if (cands.length === 0) cands = CARD_POOL.filter(p => wantPos < 0 || p.pos === wantPos);
-  if (cands.length === 0) cands = CARD_POOL;
+  // A.3.6 은퇴한 선수는 공개 명단에서 빠진다 — 스카우트할 수 없다.
+  const pool = activeCardPool(state);
+  let cands = pool.filter(p => p.rarity === rarity && (wantPos < 0 || p.pos === wantPos));
+  if (cands.length === 0) cands = pool.filter(p => wantPos < 0 || p.pos === wantPos);
+  if (cands.length === 0) cands = pool.length > 0 ? pool : CARD_POOL;
   const card = cands[rng.nextInt(cands.length)];
 
   const owned = Object.prototype.hasOwnProperty.call(state.ownedCards, card.id);
@@ -501,6 +608,7 @@ function addFragment(state) {
 export function trainingCard(state, cardId) {
   const base = CARD_BY_ID.get(cardId);
   if (!base) throw new Error('알 수 없는 카드: ' + cardId);
+  if (isRetiredAge(base.age, base.pos, state.season)) throw new Error('은퇴한 선수는 육성할 수 없습니다: ' + base.name);
   const c = clonePlayer(base);
   const lb = state.ownedCards[cardId] || 0;
   if (lb > 0) for (let i = 0; i < 10; i++) c.potential[i] = clampStat(c.potential[i] + lb * ECONOMY.limitBreakPotential);
@@ -754,8 +862,8 @@ export function releaseInstance(state, instanceId) {
 }
 
 // ---------------------------------------------------------------- 라인업
-function instanceToPlayer(inst, teamId) {
-  return makePlayer({
+function instanceToPlayer(inst, teamId, season) {
+  const p = makePlayer({
     id: inst.instanceId, name: inst.name, teamId, pos: inst.pos, rarity: inst.rarity,
     jersey: inst.jersey, heightCm: inst.heightCm, age: inst.age,
     stats: inst.finalStats.slice(), potential: inst.finalStats.slice(),
@@ -763,13 +871,37 @@ function instanceToPlayer(inst, teamId) {
     // 육성 힌트로 해금한 고유 스킬 레벨(0~3)이 그대로 경기 판정에 들어간다. docs/skills.md 3절
     skillLevel: inst.skillLevel | 0,
   });
+  return agedPlayer(p, season, true);      // A.3.6 노화 — 전성기 이후 실효 스탯 하락
 }
 
-/** 내 로스터 = 대표 인스턴스 + 연습생. Game.cs:145 MyRoster */
+/**
+ * 내 로스터 = (은퇴하지 않은) 대표 인스턴스 + 연습생. Game.cs:145 MyRoster
+ * 은퇴한 인스턴스는 코트에 서지 못하지만 state.instances 에는 남아 서포터(코치)로 계속 쓸 수 있다(A.3.6).
+ */
 export function myRoster(state) {
-  const list = representatives(state).map(i => instanceToPlayer(i, state.clubId));
+  const list = [];
+  for (const i of representatives(state)) {
+    if (isRetiredAge(i.age, i.pos, state.season)) continue;
+    list.push(instanceToPlayer(i, state.clubId, state.season));
+  }
   for (const f of state.fillers) list.push(f);
   return list;
+}
+
+/** 은퇴한 대표 인스턴스(코치·서포터로만 남는다). UI 결산 화면용. */
+export function retiredRepresentatives(state) {
+  return representatives(state).filter(i => isRetiredAge(i.age, i.pos, state.season));
+}
+
+/** 인스턴스의 현재 나이·단계·실효 배수 — UI 표기용. */
+export function instanceAgeInfo(state, inst) {
+  return {
+    age: ageAt(inst.age, state.season),
+    phase: agePhase(inst.age, inst.pos, state.season),
+    factor: ageFactor(inst.age, inst.pos, state.season),
+    retireAt: AGING.retireAge + (AGING.retireByPos[inst.pos | 0] || 0),
+    peakEnd: AGING.peakEnd + (AGING.peakEndByPos[inst.pos | 0] || 0),
+  };
 }
 
 export function myTeam(state) {
@@ -895,24 +1027,61 @@ export function clubTeamState(state, clubId, opts = {}) {
   // AI 구단 선수의 고유 스킬 레벨(시즌 사다리). docs/skills.md 7.2
   const clubSkill = opts.clubSkillLevel !== undefined ? (opts.clubSkillLevel | 0) : clubSkillLevelFor(state.season);
 
+  const season = opts.season !== undefined ? (opts.season | 0) : (state.season | 0);
   const roster = [];
+  let gone = 0;
   for (const p of pool) {
     if (departed.has(p.id)) {
+      const gp0 = grownPlayer(p, g);
+      gone++;
+      if (gone > VACANCY.traineeSlots) {
+        // A.3.5 결원 상한 — 주전 절반 이상이 빠지면 구단도 육성 선수로 버티지 않고 즉시전력을 영입한다.
+        const sign = generatePlayer(new Rng(hashString(clubId + '/' + p.id + '/sign')), `${clubId}-sign-${p.id}`, clubId, p.pos, statAverage(gp0.stats), 3.0);
+        shiftToOvr(sign, ovrOf(TRAINING_CFG, gp0.stats, gp0.pos) + VACANCY.signingOvrDelta);
+        sign.rarity = RARITY.N;
+        sign.age = AGING.clubRecruitAge;
+        sign.name = sign.name + ' (영입)';
+        sign.isSubstitute = true;
+        sign.isSigning = true;
+        roster.push(sign);
+        continue;
+      }
       const sub = generatePlayer(new Rng(hashString(clubId + '/' + p.id)), `${clubId}-sub-${p.id}`, clubId, p.pos, 80 + roster.length, subOverall, 4.0);
       sub.rarity = RARITY.N;
+      sub.age = AGING.clubRecruitAge;
       sub.name = sub.name + ' (육성 선수)';
       sub.isSubstitute = true;
       roster.push(sub);
+      continue;
+    }
+    const gp = grownPlayer(p, g);
+    // A.3.6 세대교체 — 프로 구단은 노쇠한 선수를 붙잡지 않는다. 은퇴했거나 전성기를 충분히
+    // 지난 선수는 같은 자리의 신인으로 교체된다(강도 = 그 선수의 성장 후 스탯 평균 + clubRecruitDelta).
+    const f = ageFactor(p.age, p.pos, season);
+    if (f < AGING.clubReplaceFactor || isRetiredAge(p.age, p.pos, season)) {
+      const gen = Math.max(1, ageAt(p.age, season) - (AGING.peakEnd + (AGING.peakEndByPos[p.pos | 0] || 0)));
+      const rec = generatePlayer(
+        new Rng(hashString(clubId + '/' + p.id + '/gen' + gen)),
+        `${clubId}-new-${p.id}-${gen}`, clubId, p.pos, statAverage(gp.stats), 3.0);
+      // 신인의 세기는 "떠난 선수의 사다리 OVR + clubRecruitOvrDelta" 로 맞춘다.
+      // generatePlayer 는 포지션 표준 프로필이라 같은 스탯 평균이어도 포지션 가중 OVR 이 낮게 나온다
+      // (A.3.5 의 −4 스탯평균 = −7.4 OVR 과 같은 이유) — 그래서 OVR 공간에서 직접 맞춘다.
+      shiftToOvr(rec, ovrOf(TRAINING_CFG, gp.stats, gp.pos) + AGING.clubRecruitOvrDelta);
+      rec.rarity = RARITY.N;
+      rec.age = AGING.clubRecruitAge;
+      rec.name = rec.name + ' (신인)';
+      rec.isRecruit = true;
+      roster.push(rec);
+      continue;
+    }
+    const ap = agedPlayer(gp, season, gp !== p);
+    if (clubSkill > 0 && SKILL_BY_NAME.has(ap.skillName)) {
+      // grownPlayer·agedPlayer 는 변화가 없으면 원본을 그대로 돌려주므로 반드시 복제한 뒤에 쓴다.
+      const c = ap === p ? clonePlayer(p) : ap;
+      c.skillLevel = clubSkill;
+      roster.push(c);
     } else {
-      const gp = grownPlayer(p, g);
-      if (clubSkill > 0 && SKILL_BY_NAME.has(gp.skillName)) {
-        // grownPlayer 는 g<=0 이면 원본을 그대로 돌려주므로 반드시 복제한 뒤에 쓴다.
-        const c = gp === p ? clonePlayer(p) : gp;
-        c.skillLevel = clubSkill;
-        roster.push(c);
-      } else {
-        roster.push(gp);
-      }
+      roster.push(ap);
     }
   }
   const tactics = (opts.useClubTactics ?? state.useClubTactics) && CLUB_TACTICS[clubId]
