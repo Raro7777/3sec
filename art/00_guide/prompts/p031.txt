@@ -15,12 +15,13 @@
 low ponytail, wavy hair, long hair, light brown hair, ashen hair, brown eyes, tareme, gentle drooping eyes,
 volleyball uniform, plain antique gold jersey, ink black trim, short sleeves, tucked in, black shorts, mid-thigh shorts, knee pads, white socks, volleyball shoes,
 no logo, no text, blank jersey, solid color clothes,
+loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,
 blocking at the net, vertical jump, torso straight, both arms extended straight up and over the net, palms open facing the viewer, thumbs close together, volleyball, volleyball just in front of both palms, partly hidden by the hands, low angle 10 degrees, front view from the opposite court, net band crossing at chest height,
 indoor gymnasium, volleyball court, volleyball net, simple background, rim light, motion lines, wind,
 anime style, clean lineart, cel shading, flat colors, bright colors, sharp focus, highly detailed eyes, hair and fabric in motion, sweat drop
 
 ──────── CARD — POSITIVE · 자연어형 (Higgsfield · Midjourney 등 호스팅 모델)
-A tall and slim, long-limbed young woman with fair skin, long, wavy light brown hair worn in a low ponytail and gentle, softly drooping brown eyes. She is blocking at the net — a straight vertical jump, torso upright, both arms extended straight up and over the net, palms open toward the viewer with thumbs close together, the ball just in front of her palms, partly hidden by her hands. She wears a plain antique gold volleyball jersey with ink black trim, tucked in, black mid-thigh shorts, knee pads, white socks and volleyball shoes. The jersey is completely blank — no logo, number, text or pattern of any kind. Shot from a low angle head-on from the opposite court, the net band crossing at her chest. Indoor gymnasium with the volleyball net behind her, a clear rim light along her silhouette, with wind and motion in her hair and jersey. Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes. Vertical 3:4 composition, her face in the upper third, full figure inside the frame.
+A tall and slim, long-limbed young woman with fair skin, long, wavy light brown hair worn in a low ponytail and gentle, softly drooping brown eyes. She is blocking at the net — a straight vertical jump, torso upright, both arms extended straight up and over the net, palms open toward the viewer with thumbs close together, the ball just in front of her palms, partly hidden by her hands. She wears a plain antique gold volleyball jersey with ink black trim, tucked in, black mid-thigh shorts, knee pads, white socks and volleyball shoes. The jersey is completely blank — no logo, number, text or pattern of any kind. Shot from a low angle head-on from the opposite court, the net band crossing at her chest. Indoor gymnasium with the volleyball net behind her, a clear rim light along her silhouette, with wind and motion in her hair and jersey. Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes. Her uniform is a loose-fitting athletic cut: the jersey does not cling and the shorts are standard volleyball shorts reaching about a third of the way to the knee. The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern. Vertical 3:4 composition. Frame her upper body and face, not her hips: her head fills roughly a fifth of the frame height with her face centred around 30% down from the top, clearly readable when the image is shrunk to a small thumbnail.
 
 ──────── STANDING (1440×2560, 9:16) — POSITIVE
 {quality_prefix}, {charLoRA},
@@ -28,6 +29,7 @@ A tall and slim, long-limbed young woman with fair skin, long, wavy light brown 
 low ponytail, wavy hair, long hair, light brown hair, ashen hair, brown eyes, tareme, gentle drooping eyes,
 volleyball uniform, plain antique gold jersey, ink black trim, short sleeves, tucked in, black shorts, knee pads, white socks, volleyball shoes,
 no logo, no text, blank jersey, solid color clothes,
+loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,
 standing, full body, facing viewer, body turned 15 degrees, one hand on hip, relaxed pose, no ball,
 eye level, plain white background, even lighting, no rim light,
 anime style, clean lineart, cel shading, flat colors, sharp focus, highly detailed eyes
@@ -65,5 +67,7 @@ text, logo, letters, numbers, sponsor, emblem, watermark, signature, artist name
 realistic, photorealistic, 3d, cgi, painting texture, sketch, monochrome,
 nsfw, nude, cleavage, underwear, panties, see-through, wet clothes, midriff, navel, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, suggestive, large breasts, huge breasts,
 child, loli, kid, chibi,
-multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball
+multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball,
+ass focus, thigh focus, hip focus, breast focus, skin tight shorts, short shorts, wet thighs, sweat on thighs,
+branded volleyball, blue and yellow volleyball, real brand ball, face too small, distant shot
 

@@ -71,9 +71,28 @@ const check = (name, ok, detail) => {
   if (!ok) console.log(`  ✗ ${name}${detail ? ' — ' + detail : ''}`);
 };
 
-/** 어떤 카드가 뽑혀도 검사가 성립하도록 런칭 42명 전원에 넣는다(인라인 용량 경로도 같이 밟는다). */
+/**
+ * 검사 대상 pid.
+ *
+ * **이미 실물 아트가 들어와 있는 pid 는 건드리지 않는다.** 초기 판에서는 42명 전원에 검사용 파일을 썼는데,
+ * webp 우선순위를 보려고 `{pid}_thumb.webp` 를 만들면 **실물 썸네일을 덮어쓰고 지웠다**(실제로 한 번 날렸다).
+ * 테스트가 저장소의 자산을 지우는 일은 없어야 하므로, 아트가 있는 폴더는 아예 후보에서 뺀다.
+ */
 const ALL_PIDS = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'players.json'), 'utf8')).map(p => p.id);
-const ART_PID = ALL_PIDS[0];
+const hasRealArt = pid => fs.existsSync(path.join(EXPORT, pid)) &&
+  fs.readdirSync(path.join(EXPORT, pid)).some(f => /\.(webp|png|jpe?g)$/i.test(f));
+const REAL = ALL_PIDS.filter(hasRealArt);
+const PIDS = ALL_PIDS.filter(pid => !hasRealArt(pid));
+if (!PIDS.length) { console.error('42명 전원에 실물 아트가 있어 검사할 빈 자리가 없습니다.'); process.exit(1); }
+const ART_PID = PIDS[0];
+/** 검사 시작 시점의 04_export 스냅샷 — 끝나고 그대로 돌아왔는지 본다. */
+const snapshot = () => fs.existsSync(EXPORT)
+  ? fs.readdirSync(EXPORT).flatMap(d => {
+      const p = path.join(EXPORT, d);
+      return fs.statSync(p).isDirectory() ? fs.readdirSync(p).map(f => d + '/' + f) : [d];
+    }).sort().join('|')
+  : '';
+const BEFORE = snapshot();
 const made = [];
 function put(pid, kind, ext, buf) {
   const dir = path.join(EXPORT, pid);
@@ -96,13 +115,13 @@ process.on('exit', () => { if (!KEEP) cleanup(); });
 
 // 1) 검사용 아트를 넣는다 — 눈에 확 띄는 단색
 const THUMB = png(64, 64, [230, 40, 160]), CARD = png(60, 80, [40, 200, 230]);
-for (const pid of ALL_PIDS) { put(pid, 'thumb', '.png', THUMB); put(pid, 'card', '.png', CARD); }
+for (const pid of PIDS) { put(pid, 'thumb', '.png', THUMB); put(pid, 'card', '.png', CARD); }
 
 // 2) art-pack 이 잡아내는가
 const { collectArt } = await import('./art-pack.mjs?t=' + Date.now());
 const packed = collectArt();
-check('art-pack 이 넣은 아트를 전부 찾는다', Object.keys(packed.art).length === ALL_PIDS.length,
-  Object.keys(packed.art).length + '/' + ALL_PIDS.length);
+check('art-pack 이 넣은 아트를 전부 찾는다', Object.keys(packed.art).length === PIDS.length + REAL.length,
+  Object.keys(packed.art).length + '/' + (PIDS.length + REAL.length) + (REAL.length ? ` (실물 ${REAL.length}명 포함)` : ''));
 check('썸네일·카드 둘 다 잡힌다', !!packed.art[ART_PID]?.thumb && !!packed.art[ART_PID]?.card);
 check('data: URI 로 만든다', /^data:image\/png;base64,/.test(packed.art[ART_PID]?.thumb || ''));
 
@@ -116,7 +135,9 @@ fs.rmSync(made.pop(), { force: true });                       // webp 는 가짜
 // 4) 빌드가 인라인하는가
 execFileSync('node', [path.join(HERE, 'build.mjs'), '--out', OUT], { stdio: ['ignore', 'pipe', 'pipe'] });
 const html = fs.readFileSync(OUT, 'utf8');
-check('빌드 산출물에 아트가 인라인된다', html.includes('window.BLOOM_ART={"' + ART_PID + '"'));
+// 키 순서는 폴더 정렬 순이라 ART_PID 가 첫 키라고 가정하면 안 된다(실물 아트가 앞설 수 있다)
+check('빌드 산출물에 아트가 인라인된다',
+  html.includes('window.BLOOM_ART={') && html.includes(`"${ART_PID}":{`));
 
 // 5) 브라우저에서 실제로 <img> 로 그려지는가
 let chromium;
@@ -171,7 +192,9 @@ await browser.close();
 // 7) 뒷정리
 if (!KEEP) {
   cleanup();
-  check('저장소에 임시 파일이 남지 않는다', !fs.existsSync(path.join(EXPORT, ART_PID)));
+  const after = snapshot();
+  check('저장소가 검사 전 상태로 돌아온다', after === BEFORE,
+    after === BEFORE ? '' : '실물 아트가 바뀌었을 수 있습니다 — art/04_export 를 확인하세요');
 }
 
 const failed = results.filter(r => !r.ok);

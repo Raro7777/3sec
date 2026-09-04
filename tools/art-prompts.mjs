@@ -252,6 +252,8 @@ const NEGATIVE = [
   'nsfw, nude, cleavage, underwear, panties, see-through, wet clothes, midriff, navel, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, suggestive, large breasts, huge breasts',
   'child, loli, kid, chibi',
   'multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball',
+  'ass focus, thigh focus, hip focus, breast focus, skin tight shorts, short shorts, wet thighs, sweat on thighs',
+  'branded volleyball, blue and yellow volleyball, real brand ball, face too small, distant shot',
 ].join(',\n');
 
 /** 토큰(6.7) 전용 네거티브 — 공용 네거티브에는 `chibi` 가 들어 있어 그대로 쓰면 안 된다. */
@@ -318,6 +320,7 @@ function buildCard(p, d) {
     tags(hair, hcol.tag, eyes, EYE_SHAPE[d.eye]) + ',',
     `volleyball uniform, ${jersey}, short sleeves, tucked in, ${club.shorts} shorts, mid-thigh shorts, knee pads, white socks, volleyball shoes,`,
     `no logo, no text, blank jersey, solid color clothes,`,
+    `loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,`,
     `${pos.pose}, volleyball, ${pos.ball}, ${pos.camera},`,
     tags('indoor gymnasium, volleyball court, volleyball net, simple background', rar.light) + ',',
     `anime style, clean lineart, cel shading, flat colors, bright colors, sharp focus, highly detailed eyes${rar.extra ? ', ' + rar.extra : ''}`,
@@ -340,6 +343,7 @@ function buildStanding(p, d) {
     tags(hair, hcol.tag, eyes, EYE_SHAPE[d.eye]) + ',',
     `volleyball uniform, ${jersey}, short sleeves, tucked in, ${club.shorts} shorts, knee pads, white socks, volleyball shoes,`,
     `no logo, no text, blank jersey, solid color clothes,`,
+    `loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,`,
     `standing, full body, facing viewer, body turned 15 degrees, one hand on hip, relaxed pose, no ball,`,
     `eye level, plain white background, even lighting, no rim light,`,
     `anime style, clean lineart, cel shading, flat colors, sharp focus, highly detailed eyes`,
@@ -452,7 +456,9 @@ function buildCardNatural(p, d) {
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
     `Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes.`,
-    `Vertical 3:4 composition, her face in the upper third, full figure inside the frame.`,
+    `Her uniform is a loose-fitting athletic cut: the jersey does not cling and the shorts are standard volleyball shorts reaching about a third of the way to the knee.`,
+    `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
+    `Vertical 3:4 composition. Frame her upper body and face, not her hips: her head fills roughly a fifth of the frame height with her face centred around 30% down from the top, clearly readable when the image is shrunk to a small thumbnail.`,
   ].join(' ');
 }
 

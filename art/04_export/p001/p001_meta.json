@@ -1,0 +1,51 @@
+{
+  "pid": "p001",
+  "team": "t01",
+  "position": "OH",
+  "rarity": "SSR",
+  "height_cm": 183,
+  "jersey": 10,
+  "skin": "A",
+  "hair": {
+    "style": "롱 하이 포니테일",
+    "color": "플래티넘 블론드",
+    "palette": 7
+  },
+  "eye": {
+    "shape": "tareme",
+    "color": "바이올렛"
+  },
+  "card": {
+    "face": {
+      "cx": 413,
+      "cy": 272,
+      "h": 158
+    }
+  },
+  "stand": {
+    "face_rect": {
+      "x": 464,
+      "y": 200,
+      "w": 512,
+      "h": 512
+    },
+    "has_hair_front": null
+  },
+  "gen": {
+    "model": null,
+    "lora": null,
+    "seed_card": null,
+    "seed_stand": null
+  },
+  "source": {
+    "file": "044ccdb5-image.png",
+    "size": "1024x1536",
+    "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1024,
+      "h": 1365
+    },
+    "imported": "2026-09-04"
+  }
+}
