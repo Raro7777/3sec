@@ -148,6 +148,28 @@ describe("fatigue", () => {
     const km = outfield.map((p) => p.distance / 1000);
     expect(Math.max(...km)).toBeGreaterThan(7); // a 90-minute outfielder covers 8-12 km in reality
   });
+
+  it("degrades technique: tired legs pass and shoot worse than fresh ones (TUNING.fatigue*)", () => {
+    // Same fixtures and seeds; only the home side's starting fatigue differs.
+    const run = (fatigue: number) => {
+      const acc = { passes: 0, completed: 0, shots: 0, onTarget: 0 };
+      for (const seed of [31, 32, 33]) {
+        const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 13, seed: 11 });
+        const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 13, seed: 22 });
+        const initialFatigue: Record<string, number> = {};
+        for (const p of [...home.players, ...home.bench]) initialFatigue[p.id] = fatigue;
+        const m = new Match(home, away, { seed, halfLength: 10 * 60, aiManaged: [0, 1], initialFatigue });
+        m.runToEnd();
+        const st = m.state.stats[0];
+        acc.passes += st.passes; acc.completed += st.passesCompleted; acc.shots += st.shots; acc.onTarget += st.shotsOnTarget;
+      }
+      return { pass: acc.completed / acc.passes, shots: acc.shots, onTarget: acc.onTarget };
+    };
+    const fresh = run(0);
+    const tired = run(0.6);
+    expect(tired.pass).toBeLessThan(fresh.pass - 0.01); // at least a point of pass completion
+    expect(tired.shots).toBeLessThan(fresh.shots);
+  });
 });
 
 describe("AI manager", () => {

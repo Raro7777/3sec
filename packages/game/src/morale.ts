@@ -4,7 +4,8 @@
  * start MORALE_START). Morale moves weekly with playing time against ambition, results, an expiring contract, a
  * refused offer, the locker-room pull and a drift toward the start value; professionalism dampens the swings.
  *
- * Effects: training growth ×0.85..1.15 (training.ts trainWeek), match attributes ±MATCH_ATTR_SWING (season.ts strip),
+ * Effects: training growth ×0.85..1.15 (training.ts trainWeek), match attributes ±MATCH_ATTR_SWING on technique and
+ * judgement / ±MATCH_ATTR_SWING_OTHER elsewhere (season.ts strip),
  * temperament costs composure/decisions on the pitch, and two weeks under MORALE_COMPLAINT_BELOW bring a complaint:
  * a transfer request (AI clubs bid more readily) or a week's training refusal.
  *
@@ -26,8 +27,16 @@ export const MORALE_COMPLAINT_WEEKS = 2;
 export const MORALE_CONTENT_AT = 55;
 /** Weekly swings (before the professionalism damping). */
 export const MORALE = { win: 4, draw: 1, loss: 4, started: 2, subbed: 0.5, unused: 1, unusedAmbition: 3, expiring: 1.5, offerRefused: 3, offerRefusedAmbition: 4, lockerPull: 0.1, drift: 0.05, captainLift: 5 } as const;
-/** Match attributes move by up to this many points with morale (±). */
-export const MATCH_ATTR_SWING = 0.4;
+/**
+ * Match attributes move by up to this many points with morale (±). The swing is aimed at the attributes that
+ * carry technique and judgement (MORALE_ATTRS) — a confident player passes, finishes and reads the game better,
+ * he does not run faster — while the rest of the attributes move by MATCH_ATTR_SWING_OTHER.
+ */
+export const MATCH_ATTR_SWING = 0.8;
+/** The swing on every other (mostly physical) attribute. */
+export const MATCH_ATTR_SWING_OTHER = 0.25;
+/** The attributes morale really moves: composure, decisions and the primary technical/creative ones. */
+export const MORALE_ATTRS = ["composure", "decisions", "anticipation", "vision", "technique", "passing", "firstTouch", "dribbling", "finishing", "reflexes", "handling"] as const;
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -153,14 +162,22 @@ export function moraleTrainingFactor(p: SquadPlayer): number {
 }
 
 /**
- * The attributes a player takes onto the pitch: every attribute ±MATCH_ATTR_SWING with morale (0 at the start value),
- * and a hot temperament costs up to 1 composure and 0.5 decisions (the engine's card and foul proneness live there).
+ * The attributes a player takes onto the pitch: the technique/judgement attributes (MORALE_ATTRS) move by up to
+ * ±MATCH_ATTR_SWING with morale and the rest by ±MATCH_ATTR_SWING_OTHER (0 at the start value), and a hot
+ * temperament costs up to 1 composure and 0.5 decisions (the engine's card and foul proneness live there).
  */
+const MORALE_ATTR_SET = new Set<string>(MORALE_ATTRS);
+
 export function matchAttrs(p: SquadPlayer): Attributes {
-  const d = round1(clamp((moraleOf(p) - MORALE_START) / 40, -1, 1) * MATCH_ATTR_SWING * 10) / 10;
+  const m = clamp((moraleOf(p) - MORALE_START) / 40, -1, 1);
+  const d = round1(m * MATCH_ATTR_SWING * 10) / 10;
+  const dOther = round1(m * MATCH_ATTR_SWING_OTHER * 10) / 10;
   const temper = Math.max(0, personalityOf(p).temperament - 0.5) * 2;
   const out = { ...p.attrs };
-  if (d !== 0) for (const k of Object.keys(out) as (keyof Attributes)[]) out[k] = round1(clamp(out[k] + d, 1, 20));
+  if (m !== 0) for (const k of Object.keys(out) as (keyof Attributes)[]) {
+    const delta = MORALE_ATTR_SET.has(k) ? d : dOther;
+    if (delta !== 0) out[k] = round1(clamp(out[k] + delta, 1, 20));
+  }
   if (temper > 0) {
     out.composure = round1(clamp(out.composure - temper, 1, 20));
     out.decisions = round1(clamp(out.decisions - temper * 0.5, 1, 20));

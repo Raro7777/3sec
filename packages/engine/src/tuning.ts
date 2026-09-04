@@ -52,6 +52,16 @@ export interface Tuning {
   homeBoost: number;
   /** home advantage: attribute points (1..20 scale) added to every home player for the match, 0 = none */
   homeEdge: number;
+  /** fatigue: pass angle/speed error multiplier at full fatigue (angSd *= 1 + this * fatigue) */
+  fatiguePassSd: number;
+  /** fatigue: mishit probability multiplier at full fatigue (tired legs mis-strike the ball) */
+  fatigueMishit: number;
+  /** fatigue: shot angle error multiplier at full fatigue */
+  fatigueShotSd: number;
+  /** fatigue: on-ball decision noise multiplier at full fatigue (tired players pick worse options) */
+  fatigueDecision: number;
+  /** fatigue: first-touch control probability lost at full fatigue (absolute, 0..1) */
+  fatigueControl: number;
 }
 
 export const TUNING: Tuning = {
@@ -80,6 +90,11 @@ export const TUNING: Tuning = {
   attrCompression: 0.35,
   homeBoost: 0.03,
   homeEdge: 0.8,
+  fatiguePassSd: 0.45,
+  fatigueMishit: 0.9,
+  fatigueShotSd: 0.35,
+  fatigueDecision: 0.5,
+  fatigueControl: 0.25,
 };
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({ ...TUNING });

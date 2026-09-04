@@ -25,7 +25,8 @@ export function decideOnBall(m: Match, p: PlayerState): number {
   const isGk = m.isKeeper(p.id);
   const tactics = m.teams[team].tactics;
   const dGoal = dist(p.pos, goal);
-  const noise = 0.25 * (1.2 - a01(attrs.decisions));
+  // Tired legs think worse too: the option scores get noisier as the match wears on.
+  const noise = 0.25 * (1.2 - a01(attrs.decisions)) * (1 + TUNING.fatigueDecision * p.fatigue);
   const rd = m.roleOf(p.id);
 
   interface Option {
@@ -301,13 +302,16 @@ export function executePass(m: Match, p: PlayerState, target: PlayerState, lofte
   // Crosses into a crowded box are the least precise delivery in the game (~20-25% find a team-mate).
   const skill = a01(attrs.passing) * 0.7 + a01(attrs.technique) * 0.3;
   const pressureFactor = 1 + Math.max(0, 3 - pressure) * 0.35 * (1.55 - a01(attrs.composure));
+  // Tired legs spray the ball: the striking technique goes long before the running does.
+  const fatigueFactor = 1 + TUNING.fatiguePassSd * p.fatigue;
   // A weak passer (skill ~0.35) sprays it ~3x wider than an elite one (~0.8).
-  let angSd = (0.26 - 0.3 * skill) * pressureFactor * (isCross ? 2.2 : lofted ? 1.4 : 1);
-  let spdSd = (0.26 - 0.26 * skill) * pressureFactor * (isCross ? 1.8 : 1);
+  let angSd = (0.26 - 0.3 * skill) * pressureFactor * fatigueFactor * (isCross ? 2.2 : lofted ? 1.4 : 1);
+  let spdSd = (0.26 - 0.26 * skill) * pressureFactor * fatigueFactor * (isCross ? 1.8 : 1);
   // Mishit: every so often a pass is simply struck badly (under-hit into a defender's path,
   // over-hit through to the keeper, or sliced). Elite passers almost never do this; weak ones
   // do it several times a match, which is where most of the real pass% gap between players lives.
-  const mishitP = Math.max(0.008, 0.20 - 0.3 * skill) * (0.6 + 0.4 * pressureFactor) * (0.8 + d / 40);
+  // A tired player mis-strikes far more often – this is the main way fatigue is felt on the ball.
+  const mishitP = Math.max(0.008, 0.20 - 0.3 * skill) * (0.6 + 0.4 * pressureFactor) * (0.8 + d / 40) * (1 + TUNING.fatigueMishit * p.fatigue);
   if (m.rng.next() < mishitP) {
     angSd += 0.35;
     spdSd += 0.4;
@@ -373,7 +377,9 @@ export function executeShot(m: Match, p: PlayerState, xg: number, isPenalty = fa
   // a lateral sd of 2.4 m vs 1.0 m, which yields roughly the real-world ~35-45% on-target rate.
   // Long-range strikes are markedly less precise (body shape, ball movement, power over placement).
   const rangeFactor = 1 + Math.max(0, d - 16) * 0.04;
-  const angSd = (TUNING.shotAngSd + 0.08 - 0.45 * skill) * pressureFactor * rangeFactor * (isPenalty ? 0.22 : 1);
+  // Tired legs strike the ball less cleanly: late-game finishing is measurably worse.
+  const fatigueFactor = 1 + TUNING.fatigueShotSd * p.fatigue;
+  const angSd = (TUNING.shotAngSd + 0.08 - 0.45 * skill) * pressureFactor * rangeFactor * fatigueFactor * (isPenalty ? 0.22 : 1);
   const baseAng = angleOf(sub({ x: goal.x, y: aimY }, p.pos));
   const ang = baseAng + m.rng.gauss(0, angSd);
 

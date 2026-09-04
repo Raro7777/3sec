@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Match } from "@3sec/engine";
 import {
-  MATCH_ATTR_SWING, MORALE, MORALE_START, adjustMorale, answerInterview, captainOf, deserialize, ensureCaptain, interviewContext, leadership, lockerRoom, matchAttrs, moraleOf, moraleTrainingFactor,
+  MATCH_ATTR_SWING, MATCH_ATTR_SWING_OTHER, MORALE_ATTRS, MORALE, MORALE_START, adjustMorale, answerInterview, captainOf, deserialize, ensureCaptain, interviewContext, leadership, lockerRoom, matchAttrs, moraleOf, moraleTrainingFactor,
   moraleWeek, newGame, personalityFromId, personalityOf, pressConference, rejectOffer, serialize, setCaptain, simulateRound, skipInterview, trainWeek, type GameState, type SquadPlayer, type TransferOffer,
 } from "../src/index";
 
@@ -65,17 +65,22 @@ describe("morale: effects", () => {
     expect(moraleTrainingFactor(p)).toBe(1);
   });
 
-  it("match attributes move by at most ±0.4 with morale and a hot head loses composure", () => {
+  it("match attributes swing with morale (technique/judgement most) and a hot head loses composure", () => {
     const s = newGame(24, 0);
     const p = s.clubs[0]!.squad[5]!;
+    const swing = (k: keyof typeof p.attrs) => ((MORALE_ATTRS as readonly string[]).includes(k) ? MATCH_ATTR_SWING : MATCH_ATTR_SWING_OTHER);
+    const round1 = (x: number) => Math.round(x * 10) / 10; // matchAttrs keeps the engine's attributes on a 0.1 grid
     p.morale = MORALE_START; trait(p, { temperament: 0.2 });
     expect(matchAttrs(p)).toEqual(p.attrs);
     p.morale = 100;
     const hi = matchAttrs(p);
-    for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) expect(hi[k]).toBeCloseTo(Math.min(20, p.attrs[k] + MATCH_ATTR_SWING), 5);
+    for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) expect(hi[k]).toBeCloseTo(round1(Math.min(20, p.attrs[k] + swing(k))), 5);
     p.morale = 0;
     const lo = matchAttrs(p);
-    for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) expect(lo[k]).toBeCloseTo(Math.max(1, p.attrs[k] - MATCH_ATTR_SWING), 5);
+    for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) expect(lo[k]).toBeCloseTo(round1(Math.max(1, p.attrs[k] - swing(k))), 5);
+    // the technique/judgement attributes move clearly more than the physical ones
+    expect(MATCH_ATTR_SWING).toBeGreaterThan(MATCH_ATTR_SWING_OTHER);
+    expect(hi.passing - p.attrs.passing).toBeGreaterThan(hi.pace - p.attrs.pace);
     p.morale = MORALE_START; trait(p, { temperament: 1 });
     expect(matchAttrs(p).composure).toBeCloseTo(Math.max(1, p.attrs.composure - 1), 5);
     expect(matchAttrs(p).passing).toBe(p.attrs.passing);

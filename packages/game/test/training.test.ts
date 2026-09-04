@@ -75,7 +75,9 @@ describe("training and development", () => {
 
   it("a season of real matches feeds minutes into development and counts injuries", () => {
     const s = newGame(36);
-    simulateRound(s, { halfLength: 60 });
+    // 3-minute halves: with 1-minute halves a late substitute can cover so little ground that
+    // minutesFromDistance rounds his appearance down to 0 minutes.
+    simulateRound(s, { halfLength: 3 * 60 });
     const played = s.clubs.flatMap((c) => c.squad).filter((p) => p.stats.apps > 0);
     expect(played.length).toBeGreaterThan(0);
     expect(played.every((p) => (p.lastMinutes ?? 0) > 0)).toBe(true);

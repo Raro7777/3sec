@@ -66,6 +66,11 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   attrCompression: [0.5, 0.9],
   homeBoost: [0, 0.1],
   homeEdge: [0, 1.5],
+  fatiguePassSd: [0, 1.2],
+  fatigueMishit: [0, 2.5],
+  fatigueShotSd: [0, 1.2],
+  fatigueDecision: [0, 1.5],
+  fatigueControl: [0, 0.6],
 };
 
 interface Metrics {

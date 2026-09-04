@@ -65,7 +65,7 @@ export {
 } from "./career";
 export { CLUB_LORE, DERBY_CONFIDENCE, clubLore, rivalOf, isDerby, derbyName, markDerbies, derbyFor, derbyPreview, derbyResult, type ClubLore, type DerbyInfo } from "./lore";
 export {
-  MORALE_START, MORALE_COMPLAINT_BELOW, MORALE_COMPLAINT_WEEKS, MORALE_CONTENT_AT, MORALE, MATCH_ATTR_SWING,
+  MORALE_START, MORALE_COMPLAINT_BELOW, MORALE_COMPLAINT_WEEKS, MORALE_CONTENT_AT, MORALE, MATCH_ATTR_SWING, MATCH_ATTR_SWING_OTHER, MORALE_ATTRS,
   personalityFromId, ensurePersonality, personalityOf, moraleOf, personalityTags, moraleLabel, moraleBand, adjustMorale, adjustSquadMorale,
   leadership, pickCaptain, captainOf, ensureCaptain, setCaptain, lockerRoom, moraleTrainingFactor, matchAttrs, moraleOfferRefused, moraleWeek, moraleRollover, migrateMorale,
 } from "./morale";

@@ -919,9 +919,10 @@ export class Match {
     const isGk = this.isKeeper(best.id);
 
     // Fast ball: chance to control depends on first touch; failing = deflection.
+    // A tired player's first touch is heavy: control slips away with fatigue.
     const control = isGk
       ? 0.6 + 0.4 * a01(attrs.handling) - Math.max(0, ballSpeed - 15) * 0.02
-      : TUNING.controlBase + 0.45 * a01(attrs.firstTouch) - Math.max(0, ballSpeed - 8) * 0.035;
+      : TUNING.controlBase + 0.45 * a01(attrs.firstTouch) - Math.max(0, ballSpeed - 8) * 0.035 - TUNING.fatigueControl * best.fatigue;
 
     const prevTeam = b.lastTouchTeam;
     const prevToucher = b.lastTouch;

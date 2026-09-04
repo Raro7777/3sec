@@ -130,7 +130,8 @@ describe("set pieces and individual instructions", () => {
   });
 
   it("'shoot more' on the striker raises the striker's share of shots", () => {
-    const seeds = [21, 22, 23, 24, 25, 26];
+    // 20 seeds: a pair of 15-minute halves is noisy enough that 6 of them can end level.
+    const seeds = Array.from({ length: 20 }, (_, i) => 21 + i);
     let more = 0, base = 0;
     for (const seed of seeds) {
       for (const flag of [true, false]) {

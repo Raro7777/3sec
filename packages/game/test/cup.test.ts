@@ -154,6 +154,9 @@ describe("3sec 컵 bracket", () => {
     recordCupResult(s, t, m);
     expect(t.score).not.toBeNull();
     expect(t.scorers.length).toBe(t.score![0] + t.score![1]);
-    expect(s.news[0]).toMatch(/3sec 컵/);
+    expect(tieWinner(t)).not.toBeNull();
+    // only a level tie goes to penalties, and that is what puts the cup line at the top of the news
+    if (t.score![0] === t.score![1]) expect(s.news[0]).toMatch(/3sec 컵/);
+    else expect(t.penalties).toBeUndefined();
   });
 });
