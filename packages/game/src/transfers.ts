@@ -7,7 +7,7 @@ import { wageFor } from "./contracts";
 import { spendGrowth, weeklyRate } from "./training";
 import { fansTransfer } from "./fans";
 import { moraleOfferRefused } from "./morale";
-import { divisionPosition } from "./divisions";
+import { divisionPosition, pyramidByReputation, pyramidPosition } from "./divisions";
 
 /** Currency unit: 억원 (100 million KRW). */
 export const MIN_SQUAD = 16;
@@ -75,6 +75,9 @@ function windowKey(s: GameState): string {
 
 /** Players of a club that can actually be traded (not borrowed, not away on loan). */
 const tradeable = (p: SquadPlayer): boolean => !p.onLoan && p.loanFrom === undefined;
+
+/** What a relegated club's players go for: a third off, which is what gets a squad broken up. */
+export const RELEGATION_DISCOUNT = 0.68;
 const playing = (c: Club): SquadPlayer[] => c.squad.filter((p) => !p.onLoan);
 const isStarter = (c: Club, p: SquadPlayer): boolean => c.selection.starters.includes(p.id);
 
@@ -103,6 +106,10 @@ export function askingPrice(club: Club, p: SquadPlayer): number | null {
   }
   if (pol.youth && p.age <= 21) price *= 1.6;
   if (pol.stubborn) price *= 1.1;
+  // Relegation is a fire sale: the wages no longer fit the income, the best players want top-flight
+  // football, and everyone in the market knows it. Without this a relegated side keeps its whole
+  // squad and simply walks back up, which is the opposite of what relegation should cost.
+  if (club.firesale) price *= RELEGATION_DISCOUNT;
   return Math.round(price);
 }
 
@@ -225,14 +232,36 @@ function positionOf(s: GameState, clubId: number): number | null {
  * Would the player rather stay? A starter at a clearly bigger club (reputation, or league position
  * once the table means something) turns the user down with some probability; the answer holds for the season.
  */
-export function refusalChance(s: GameState, from: Club, p: SquadPlayer): number {
-  const me = clubOf(s, s.userClub);
+/**
+ * How reluctant a player is to move from `from` to `to`, 0..1.
+ *
+ * A player weighs the two clubs by where they stand in the pyramid, not by league position alone:
+ * the top flight is where the football, the money and the attention are, so leading the second
+ * division is a step down from surviving in the first. Comparing bare positions across divisions
+ * made a second-tier leader look identical to a title-chasing top-flight club.
+ *
+ * Only a player who is a starter where he is has anything to lose. And a club just relegated is the
+ * exception that makes the market move: its good players want out, so they barely refuse anyone.
+ */
+export function refusalChanceBetween(s: GameState, from: Club, to: Club, p: SquadPlayer): number {
   if (!isStarter(from, p)) return 0;
-  const myPos = positionOf(s, me.id), theirPos = positionOf(s, from.id);
-  const gap = myPos !== null && theirPos !== null ? (myPos - theirPos) / 2.5 : from.reputation - me.reputation;
+  // Before a table exists the standing comes from reputation instead of points.
+  const settled = s.round > 5;
+  const stand = (id: number) => (settled ? pyramidPosition(s, id) : pyramidByReputation(s, id));
+  const gap = (stand(to.id) - stand(from.id)) / 2.5;
   if (gap < 1.5) return 0;
-  return gap >= 2.5 ? 0.8 : 0.55;
+  const base = gap >= 2.5 ? 0.8 : 0.55;
+  // A relegated club's dressing room is already halfway out of the door.
+  return from.firesale ? base * 0.25 : base;
 }
+
+/** Reluctance to join the user's club, for the transfer screen. */
+export function refusalChance(s: GameState, from: Club, p: SquadPlayer): number {
+  return refusalChanceBetween(s, from, clubOf(s, s.userClub), p);
+}
+
+/** Is this club playing the season that follows its relegation? (divisions.ts sets the flag.) */
+export const justRelegated = (_s: GameState, c: Club): boolean => !!c.firesale;
 
 /**
  * The user bids for a player. Fee ≥ asking × acceptFactor is taken; a bid within 80% of that may still be
@@ -654,6 +683,10 @@ export function aiTransfers(s: GameState, rng: Rand): void {
       .filter((t) => t.club.id !== club.id && needFor.has(t.player.role) && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
       .filter((t) => !pol.youth || t.player.age <= 24)
       .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
+      // A player has a say: a starter will not drop down the pyramid to sit in someone else's team
+      // (transfers.ts refusalChanceBetween). Without this a moneyed second-division club simply buys
+      // the top flight's best, which is not a transfer market so much as an auction.
+      .filter((t) => refusalChanceBetween(s, t.club, club, t.player) < 0.5)
       .sort((a, b) => ovr(b.player) / b.price! - ovr(a.player) / a.price!);
     const pick = candidates[0];
     const eagerness = (pol.spender ? 1.2 : pol.frugal ? 0.5 : 1) * (rich ? 1.3 : 1);

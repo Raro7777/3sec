@@ -83,6 +83,31 @@ export function divisionTable(s: GameState, division: number): TableRow[] {
   return [...rows.values()].sort((x, y) => y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf || s.clubs[x.club]!.name.localeCompare(s.clubs[y.club]!.name));
 }
 
+/**
+ * A club's standing in the whole pyramid, 1 = champions of the top flight: the division first, then
+ * the position inside it. This is what a player weighs when deciding whether to join — leading the
+ * second division ranks below finishing bottom of the first, because the first is where the football
+ * they want to play is. Comparing bare league positions across divisions would say the two are
+ * identical, which is how a top-flight starter ends up happily signing for a second-tier club.
+ */
+export function pyramidPosition(s: GameState, clubId: number): number {
+  const c = s.clubs[clubId];
+  if (!c) return DIVISIONS * CLUBS_PER_DIVISION;
+  return (divisionOf(c) - 1) * CLUBS_PER_DIVISION + divisionPosition(s, clubId);
+}
+
+/**
+ * The same standing before a table exists (pre-season, the first rounds), from reputation: clubs are
+ * ranked inside their division by reputation instead of by points.
+ */
+export function pyramidByReputation(s: GameState, clubId: number): number {
+  const c = s.clubs[clubId];
+  if (!c) return DIVISIONS * CLUBS_PER_DIVISION;
+  const d = divisionOf(c);
+  const rank = [...clubsIn(s, d)].sort((a, b) => b.reputation - a.reputation || a.id - b.id).findIndex((x) => x.id === clubId) + 1;
+  return (d - 1) * CLUBS_PER_DIVISION + Math.max(1, rank);
+}
+
 /** Where a club finished (1-based) in its own division, or 0 when it has no table. */
 export function divisionPosition(s: GameState, clubId: number): number {
   const c = s.clubs[clubId];
@@ -206,6 +231,8 @@ export interface SwapResult {
  */
 export function applyPromotionRelegation(s: GameState): SwapResult {
   const out: SwapResult = { relegated: [], promoted: [] };
+  // Last year's fire sales are over; only clubs relegated now carry the flag into the new season.
+  for (const c of s.clubs) delete c.firesale;
   for (let d = 1; d < DIVISIONS; d++) {
     const upper = divisionTable(s, d);
     const lower = divisionTable(s, d + 1);
@@ -216,6 +243,9 @@ export function applyPromotionRelegation(s: GameState): SwapResult {
       const c = s.clubs[id]!;
       c.division = d + 1;
       c.reputation = Math.round(Math.max(6, c.reputation - 0.8) * 10) / 10;
+      // Flagged for the one season that follows, so the market behaves the way it does around a
+      // relegated club: the good players want out and go cheaply (transfers.ts).
+      c.firesale = true;
       out.relegated.push({ club: id, from: d });
     }
     for (const id of up) {

@@ -20,12 +20,12 @@ export {
 } from "./tactics-report";
 export {
   DIVISIONS, CLUBS_PER_DIVISION, SWAP, CLUBS_D2, DIVISION_NAME, DIVISION_PRIZE_FACTOR,
-  divisionOf, userDivision, clubsIn, divisionName, prizeFactor, buildAllFixtures, divisionTable, divisionPosition,
+  divisionOf, userDivision, clubsIn, divisionName, prizeFactor, buildAllFixtures, divisionTable, divisionPosition, pyramidPosition, pyramidByReputation,
   simulateFixture, simulateAwayDivisions, applyPromotionRelegation, inRelegationZone, inPromotionZone, type SwapResult,
 } from "./divisions";
 export {
   MIN_SQUAD, MAX_SQUAD, SURPLUS_ABOVE, THIN_SQUAD, OFFER_TTL, MAX_FREE_AGENTS, LOAN_GROWTH, FREE_AGENT_FEE, FREE_AGENT_WAGE,
-  playerValue, seasonBudget, windowOpen, deadlineDay, surplusPlayers, askingPrice, transferTargets, acceptFactor, refusalChance, makeBid, buyPlayer, bestOffer, sellPlayer,
+  playerValue, seasonBudget, windowOpen, deadlineDay, surplusPlayers, askingPrice, transferTargets, acceptFactor, refusalChance, refusalChanceBetween, justRelegated, RELEGATION_DISCOUNT, makeBid, buyPlayer, bestOffer, sellPlayer,
   openOffers, expireOffers, incomingOffers, acceptOffer, rejectOffer, respondToCounter,
   releaseToMarket, freeAgentTerms, signFreeAgent, freeAgentRollover,
   loanableOut, loanDestination, loanOut, loanTargets, loanIn, returnLoans,

@@ -265,6 +265,8 @@ export interface Club {
   reputation: number;
   /** which league the club plays in: 1 = top flight, 2 = second division (divisions.ts). Absent in saves from the one-league game, which are all first division. */
   division?: number;
+  /** set for the one season after relegation: the best players push to leave and go cheaply (transfers.ts) */
+  firesale?: boolean;
   /** transfer budget in 억원 */
   budget: number;
   squad: SquadPlayer[];
