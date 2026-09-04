@@ -3,6 +3,7 @@ import { applyCamera, drawPitch, type Camera, type View } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
 import { Sfx } from "./sfx";
+import { Haptics } from "./haptics";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
 import { roundsPerSeason, table, type Fixture, type GameState } from "@3sec/game";
@@ -114,6 +115,7 @@ export class MatchScreen {
   /** wall-clock time of the first play press this match (banner countdown starts then) */
   private bannerT0: number | null = null;
   private readonly sfx = new Sfx();
+  private readonly haptics = new Haptics();
   private readonly recorder = new Recorder();
   private clips: Clip[] = [];
   /** event index → clip, for the ▶ buttons in the log */
@@ -150,6 +152,11 @@ export class MatchScreen {
   /** wall-clock time of the goal celebration start (auto pacing: slow for the first seconds) */
   private celebT0 = -1e9;
   private readonly btnSound = document.getElementById("btnSound") as HTMLButtonElement | null;
+  private readonly btnHaptics = document.getElementById("btnHaptics") as HTMLButtonElement | null;
+  /** the live 0..1 danger score of the current frame, shared by the auto pacing and the crowd bed */
+  private dangerNow = 0;
+  /** wall-clock time of the last ambient update, so the bed is nudged ~8x a second, not 60x */
+  private ambAt = 0;
   private readonly btnReplay = document.getElementById("btnReplay") as HTMLButtonElement | null;
   /** automatic slow-motion replay after a goal (clips are still recorded for the ▶ buttons when off) */
   private autoReplay = (() => { try { return localStorage.getItem("3sec.replay") !== "0"; } catch { return true; } })();
@@ -193,7 +200,19 @@ export class MatchScreen {
     if (this.btnSound) {
       const paint = () => { this.btnSound!.textContent = this.sfx.enabled ? "🔊" : "🔇"; this.btnSound!.title = this.sfx.enabled ? "효과음 끄기" : "효과음 켜기"; };
       paint();
-      this.btnSound.addEventListener("click", () => { this.sfx.setEnabled(!this.sfx.enabled); paint(); if (this.sfx.enabled) this.sfx.whistle(1, 0.2); });
+      this.btnSound.addEventListener("click", () => {
+        this.sfx.setEnabled(!this.sfx.enabled);
+        paint();
+        if (this.sfx.enabled) { this.sfx.whistle(1, 0.2); if (this.playing) this.sfx.startAmbient(); }
+      });
+    }
+    if (this.btnHaptics) {
+      const paint = () => {
+        this.btnHaptics!.title = this.haptics.enabled ? "진동 켜짐 (누르면 끔)" : "진동 꺼짐 (누르면 켬)";
+        this.btnHaptics!.style.opacity = this.haptics.enabled ? "1" : ".55";
+      };
+      paint();
+      this.btnHaptics.addEventListener("click", () => { this.haptics.setEnabled(!this.haptics.enabled); paint(); if (this.haptics.enabled) this.haptics.yellowCard(); });
     }
     if (this.btnReplay) {
       const paint = () => { this.btnReplay!.textContent = this.autoReplay ? "🔁" : "⏹"; this.btnReplay!.title = this.autoReplay ? "골 자동 리플레이 켜짐 (누르면 끔)" : "골 자동 리플레이 꺼짐 (누르면 켬)"; this.btnReplay!.style.opacity = this.autoReplay ? "1" : ".55"; };
@@ -401,6 +420,7 @@ export class MatchScreen {
 
   /** Called by the controller when leaving the match screen. */
   leave(): void {
+    this.sfx.stopAmbient();
     this.replay = null;
     this.pendingReplay = null;
     this.goalCam = null;
@@ -427,6 +447,8 @@ export class MatchScreen {
     if (this.finished) v = false;
     this.playing = v;
     if (v && this.bannerT0 === null) this.bannerT0 = performance.now();
+    // the crowd bed only runs while the match does (it needs a user gesture to have unlocked audio)
+    if (v) this.sfx.startAmbient(); else this.sfx.stopAmbient();
     this.paintPlay();
   }
 
@@ -473,6 +495,8 @@ export class MatchScreen {
       // Dead-ball waits (free kicks, corners, celebrations, half time) are real-length in the
       // engine; at any fixed speed they run at least 4x faster so the game never drags.
       const dead = this.match.state.phase !== "PLAY";
+      // one danger reading per frame, shared by the auto pacing (below) and the crowd bed (further down)
+      this.dangerNow = this.danger(ts);
       if (this.speed === "auto") {
         // tension-aware pacing: ease toward the target (quick when slowing down, gentle when speeding up)
         const target = this.autoSpeed(ts);
@@ -492,6 +516,12 @@ export class MatchScreen {
         if (this.replay) break; // a goal froze the action for its replay
       }
       if (this.match.state.phase === "FULL_TIME") this.setPlaying(false);
+      // crowd bed: follow the danger score, with a floor while the goal celebration is still going
+      if (ts - this.ambAt > 120) {
+        this.ambAt = ts;
+        const celeb = this.match.state.phase === "GOAL_CELEBRATION" && ts - this.celebT0 < 5000 ? 0.8 : 0;
+        this.sfx.ambient(Math.max(this.dangerNow, celeb));
+      }
     }
     this.processEvents();
     this.render();
@@ -502,6 +532,8 @@ export class MatchScreen {
   private processEvents(): void {
     const s = this.match.state;
     const fast = this.playing && this.effSpeed > 12;
+    /** at 8x and above the ball ticks would machine-gun, so they stop there */
+    const hurried = !this.playing || this.effSpeed >= 8;
     while (this.fxEvents < s.events.length) {
       const idx = this.fxEvents++;
       const e = s.events[idx]!;
@@ -520,6 +552,8 @@ export class MatchScreen {
       const color = team?.color ?? "#ffd166";
       const now = performance.now();
       if (DANGER_EVENTS.has(e.type)) this.dangerAt = now;
+      // ball ticks: a quiet transient on kicks and challenges, skipped once the sim outruns them
+      if (!hurried && KICK_EVENTS.has(e.type)) this.sfx.kick(e.type === "SHOT" || e.type === "SHOT_ON_TARGET" ? 1 : 0.6);
       if ((e.type === "GOAL" || e.type === "OWN_GOAL") && !this.finished) {
         const scorer = e.playerId ? this.match.def(e.playerId).name : team?.shortName ?? "";
         const at = e.pos ?? s.ball.pos;
@@ -534,6 +568,8 @@ export class MatchScreen {
       }
       // home end sings after a goal for either side; the travelling fans are fewer
       const scoringSide = e.type === "GOAL" ? e.team : e.type === "OWN_GOAL" && e.team !== null ? (1 - e.team) as TeamId : null;
+      // haptics: celebrate my goals, one dull buzz for a conceded one (only the notable moments buzz)
+      if (scoringSide !== null && !this.finished) { if (scoringSide === this.userTeam) this.haptics.goalFor(); else this.haptics.goalAgainst(); }
       switch (e.type) {
         case "GOAL":
           if (late) {
@@ -563,15 +599,16 @@ export class MatchScreen {
           break;
         case "RED_CARD":
           this.burst("🟥 퇴장!", e.text, "#ff4d4f", 2000, true);
-          this.shake(now, 6); this.sfx.whistle(1, 0.7); this.sfx.boo();
+          this.shake(now, 6); this.sfx.whistle(1, 0.7); this.sfx.boo(); this.haptics.redCard();
           break;
         case "YELLOW_CARD":
           this.burst("🟨 경고", e.text, "#ffd166", 1200, false);
           if (!fast) this.sfx.whistle(1, 0.25);
+          this.haptics.yellowCard();
           break;
         case "PENALTY":
           this.burst("페널티킥!", e.text, "#ffd166", 1800, true);
-          this.shake(now, 5); this.sfx.whistle(1, 0.6);
+          this.shake(now, 5); this.sfx.whistle(1, 0.6); this.haptics.penalty();
           break;
         case "INJURY":
           this.burst("🩹 부상", e.text, "#8ecae6", 1400, false);
@@ -580,7 +617,7 @@ export class MatchScreen {
         case "SHOT": if (!fast && Math.random() < 0.5) this.sfx.ooh(); break;
         case "KICK_OFF": if (!fast || s.clock < 1) this.sfx.whistle(1, 0.5); break;
         case "HALF_TIME": this.sfx.whistle(2, 0.45); break;
-        case "FULL_TIME": this.sfx.whistle(3, 0.4); this.sfx.clap(); break;
+        case "FULL_TIME": this.sfx.whistle(3, 0.4); this.sfx.clap(); this.sfx.stopAmbient(); this.haptics.fullTime(); break;
         case "SUBSTITUTION": if (!fast) this.sfx.clap(); break;
         default: break;
       }
@@ -646,7 +683,7 @@ export class MatchScreen {
       }
       return Math.min(cap, DEAD_FAST);
     }
-    const d = this.danger(now);
+    const d = this.dangerNow; // read once per frame in frame(), also drives the ambient crowd bed
     // piecewise linear: 0 → PLAY_FAST, 0.5 → PLAY_MID, 1 → PLAY_SLOW (tighter at the top on a knife edge)
     const high = lateTight ? PLAY_SLOW_TIGHT : PLAY_SLOW;
     const v = d < 0.5 ? PLAY_FAST - (PLAY_FAST - PLAY_MID) * (d / 0.5) : PLAY_MID - (PLAY_MID - high) * ((d - 0.5) / 0.5);
@@ -1442,6 +1479,9 @@ const BANNER_MS = 5000;
 const HIDDEN_EVENTS = new Set(["SHOT_ON_TARGET", "INTERCEPTION", "TACKLE", "BLOCK"]);
 /** events that hold the auto pacing slow for a moment afterwards */
 const DANGER_EVENTS = new Set<string>(["SHOT", "SHOT_ON_TARGET", "SAVE", "BLOCK", "CORNER", "PENALTY", "RED_CARD"]);
+
+/** events that make a "ball being kicked" noise: shots, clearances/challenges and restarts */
+const KICK_EVENTS = new Set<string>(["SHOT", "SHOT_ON_TARGET", "BLOCK", "TACKLE", "INTERCEPTION", "GOAL_KICK", "THROW_IN", "FREE_KICK", "CORNER"]);
 
 function restartLabel(kind: string): string {
   return ({ KICK_OFF: "킥오프", THROW_IN: "스로인", GOAL_KICK: "골킥", CORNER: "코너킥", FREE_KICK: "프리킥", PENALTY: "페널티킥" } as Record<string, string>)[kind] ?? kind;
