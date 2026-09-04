@@ -2,8 +2,9 @@
 // C# 기준값(docs/match-sim-balance-report.md v0.2, docs/training-mode.md 12.4절 · OracleTests)과
 // JS 포팅의 집계 지표를 비교한다. 비트 단위 일치가 아니라 집계 일치가 목표.
 //
-// 옵션: --matches N (기본 2000)  --runs N (기본 2000)  --skill N (기본 1500)  --json
-//       --skill-table  스킬 24종 × Lv1/Lv3 단독 기여 표를 함께 뽑는다(느림, 문서 갱신용)
+// 옵션: --matches N (기본 2000)  --runs N (기본 2000)  --skill N (기본 4000)  --json
+//       --skill-table  스킬 24종 × Lv1/Lv3 단독 기여 표를 함께 뽑는다(문서 갱신용)
+//                      표를 신뢰하려면 표본이 커야 한다: `node web/parity.mjs --skill 6000 --skill-table` (약 9분)
 
 import { performance } from 'node:perf_hooks';
 import { generateTeamState } from './engine/generator.js';
@@ -27,7 +28,7 @@ function arg(name, def) {
 }
 const MATCHES = arg('matches', 2000);
 const RUNS = arg('runs', 2000);
-const SKILL_PAIRS = arg('skill', 1500);
+const SKILL_PAIRS = arg('skill', 4000);
 const SKILL_TABLE = argv.includes('--skill-table');
 const AS_JSON = argv.includes('--json');
 
@@ -500,7 +501,7 @@ const SEC7 = `스킬 (동일 능력치 · 한쪽만 보유 · 조건당 ${SKILL_
     for (const def of SKILLS) {
       const s1 = (skillWinRate([{ pos: def.pos, name: def.name, level: 1 }]) - base) * 100;
       const s3 = (skillWinRate([{ pos: def.pos, name: def.name, level: 3 }]) - base) * 100;
-      info(SEC7 + ' — 스킬별 단독 기여', `${def.rarity} ${def.name}`, `Lv1 ${s1 >= 0 ? '+' : ''}${s1.toFixed(2)}%p · Lv3 ${s3 >= 0 ? '+' : ''}${s3.toFixed(2)}%p`);
+      info(SEC7 + ` — 스킬별 단독 기여 (SE ±${se.toFixed(2)}%p)`, `${def.rarity} ${def.name}`, `Lv1 ${s1 >= 0 ? '+' : ''}${s1.toFixed(2)}%p · Lv3 ${s3 >= 0 ? '+' : ''}${s3.toFixed(2)}%p`, se > 0.8 ? '표본 부족 — --skill 6000 권장' : '');
     }
   }
 }

@@ -260,6 +260,20 @@ details[open] summary::after{content:"▴"}
 .legend b{color:var(--ink);font-weight:700;white-space:nowrap}
 .help-open{width:100%;min-height:40px;border-radius:9px;border:1px dashed var(--line2);color:var(--ink2);
   font-size:13px;font-weight:600;margin-bottom:11px}
+.subtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.subtabs button{min-height:40px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);
+  font-size:13.5px;font-weight:700;color:var(--ink2)}
+.subtabs button[aria-current="page"]{background:var(--court-bg);border-color:var(--court);color:var(--court)}
+.md{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:var(--panel)}
+.md-h{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--sunk);font-size:12.5px;color:var(--ink3);
+  font-family:"Barlow Condensed",sans-serif;letter-spacing:.06em}
+.md-h b{color:var(--ink);font-weight:700}
+.fx{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--line);font-size:13px}
+.fx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx .t.r{text-align:right}
+.fx .sc{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:14px;min-width:34px;text-align:center}
+.fx.mine{background:var(--court-bg)}
+.fx .riv{font-size:10.5px;color:var(--hot);font-family:"Barlow Condensed",sans-serif;letter-spacing:.05em}
 
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:50;
   background:var(--panel3);border:1px solid var(--line2);border-radius:10px;
@@ -301,6 +315,9 @@ var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null, lastPulls = null;
 var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
 var detailId = null;   // 상세 화면에서 보고 있는 인스턴스
+var leagueTab = 'now'; // 리그 화면 서브탭: now | sched | stats
+// world.md 3절 라이벌 구도
+var RIVALS = { t01:'t05', t05:'t01', t02:'t06', t06:'t02', t03:'t04', t04:'t03' };
 var lastSettle = null;
 var trainPick = null, supPick = null;
 // 자동 진행은 수동으로 캠프를 1회 완주해야 열린다(처음부터 자동을 누르면 게임을 이해할 수 없다).
@@ -1036,21 +1053,36 @@ function vLeague(){
   if (sv.phase === 'offseason') return vSettle();
   if (sv.phase === 'playoff') return vPlayoff();
 
-  var nx = sv.myNext;
-  var me = sv.standings.filter(function(r){ return r.isMe; })[0];
-  var opp = nx && nx.opponentId ? E.CLUBS.filter(function(c){ return c.id===nx.opponentId; })[0] : null;
+  var head = leagueHeader(sv) +
+    '<div class="subtabs">'+
+      ['now:이번 매치데이','sched:일정','stats:기록'].map(function(x){
+        var k = x.split(':')[0];
+        return '<button data-ltab="'+k+'"'+(leagueTab===k?' aria-current="page"':'')+'>'+x.split(':')[1]+'</button>';
+      }).join('')+
+    '</div>';
+  if (leagueTab === 'sched') return h(head + vSchedule(sv));
+  if (leagueTab === 'stats') return h(head + vLeagueStats(sv));
+  return h(head + vMatchdayNow(sv));
+}
 
-  return h(
-   '<div class="card" style="background:linear-gradient(160deg,var(--court-bg),var(--panel));border-color:var(--line2)">'+
+function leagueHeader(sv){
+  var me = sv.standings.filter(function(r){ return r.isMe; })[0];
+  return '<div class="card" style="background:linear-gradient(160deg,var(--court-bg),var(--panel));border-color:var(--line2)">'+
      '<div class="spread"><div class="eyebrow" style="font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.14em;color:var(--court);font-size:12px">SEASON '+sv.season+'</div>'+
-       '<div class="tiny">매치데이 '+sv.matchday+' / '+sv.totalMatchdays+'</div></div>'+
+       '<div class="tiny">매치데이 '+sv.matchday+' / '+sv.totalMatchdays+' · 상대 성장 '+Math.round(sv.growth*100)+'%</div></div>'+
      '<div class="stat3" style="margin-top:10px">'+
        '<div><div class="v num">'+(me?me.rank:'-')+'위</div><div class="k">현재 순위</div></div>'+
        '<div><div class="v num">'+(me?me.wins+'-'+me.losses:'0-0')+'</div><div class="k">승패</div></div>'+
        '<div><div class="v num">'+(me?me.points:0)+'</div><div class="k">승점</div></div>'+
      '</div>'+
-   '</div>'+
-   (nx ? (nx.isBye
+   '</div>';
+}
+
+// ---------- 리그: 이번 매치데이
+function vMatchdayNow(sv){
+  var nx = sv.myNext;
+  var opp = nx && nx.opponentId ? E.CLUBS.filter(function(c){ return c.id===nx.opponentId; })[0] : null;
+  return (nx ? (nx.isBye
      ? '<div class="card"><b>이번 매치데이는 휴식일입니다</b><div class="tiny" style="margin-top:4px">다른 팀들의 경기만 진행됩니다.</div>'+
        '<button class="btn" style="margin-top:11px" data-act="advance">매치데이 '+nx.matchday+' 진행</button></div>'
      : '<div class="card">'+
@@ -1069,9 +1101,75 @@ function vLeague(){
      '</div>')
     : '<div class="card"><b>정규 시즌이 끝났습니다</b><button class="btn" style="margin-top:11px" data-act="advance">포스트시즌으로</button></div>')+
    standingsTable(sv.standings)+
-   '<details><summary>친선 경기</summary><div style="padding:0 12px 12px">'+friendlyList()+'</div></details>'
-  );
+   '<details><summary>친선 경기</summary><div style="padding:0 12px 12px">'+friendlyList()+'</div></details>';
 }
+
+// ---------- 리그: 일정
+function vSchedule(sv){
+  var sch = E.schedule(G);
+  return sch.map(function(md){
+    var isNow = md.matchday === sv.matchday + 1;
+    return '<div class="md"'+(isNow?' style="border-color:var(--court)"':'')+'>'+
+      '<div class="md-h"><b>MD '+md.matchday+'</b>'+
+        (md.played?'<span>종료</span>':(isNow?'<span style="color:var(--court)">다음 경기</span>':'<span>예정</span>'))+
+        (md.bye?'<span style="margin-left:auto">우리 휴식일</span>':'')+'</div>'+
+      md.fixtures.map(function(f){
+        var mine = f.home===G.clubId || f.away===G.clubId;
+        var riv = RIVALS[f.home]===f.away;
+        var hn = f.home===G.clubId ? G.clubName : f.homeName;
+        var an = f.away===G.clubId ? G.clubName : f.awayName;
+        return '<div class="fx'+(mine?' mine':'')+'">'+
+          '<span class="t">'+esc(hn)+'</span>'+
+          '<span class="sc">'+(f.result? f.result.homeSets+':'+f.result.awaySets : (riv?'<span class="riv">더비</span>':'vs'))+'</span>'+
+          '<span class="t r">'+esc(an)+'</span></div>';
+      }).join('')+
+    '</div>';
+  }).join('');
+}
+
+// ---------- 리그: 개인 기록 · 지난 시즌
+function vLeagueStats(sv){
+  var ps = (G.league && G.league.playerStats) || {};
+  var list = Object.keys(ps).map(function(k){ return ps[k]; });
+  var cats = [
+    { k:'points', n:'득점', f:function(r){ return r.points; } },
+    { k:'kills', n:'공격 성공', f:function(r){ return r.kills; } },
+    { k:'blockKills', n:'블로킹', f:function(r){ return r.blockKills; } },
+    { k:'aces', n:'서브 에이스', f:function(r){ return r.aces; } },
+    { k:'digs', n:'디그', f:function(r){ return r.digs; } }
+  ];
+  var hist = E.seasonHistory(G);
+  var body = list.length
+    ? cats.map(function(c){
+        var top = list.slice().sort(function(a,b){ return c.f(b)-c.f(a); }).slice(0,5).filter(function(r){ return c.f(r)>0; });
+        if (!top.length) return '';
+        return '<div class="card" style="padding:4px 2px">'+
+          '<div class="muted" style="padding:8px 10px 4px">'+c.n+' 순위</div>'+
+          top.map(function(r,i){
+            var mine = r.teamId === G.clubId;
+            return '<div class="bx"'+(mine?' style="background:var(--court-bg)"':'')+'>'+
+              '<span class="pt" style="width:18px;color:var(--ink3)">'+(i+1)+'</span>'+
+              '<span class="pill pos">'+r.positionCode+'</span>'+
+              '<span class="nm"'+(mine?' style="color:var(--court)"':'')+'>'+esc(r.name)+'</span>'+
+              '<span class="st2">'+esc(mine?G.clubName:(E.CLUBS.filter(function(x){return x.id===r.teamId;})[0]||{}).name||'')+'</span>'+
+              '<span class="pt">'+c.f(r)+'</span></div>';
+          }).join('')+
+        '</div>';
+      }).join('')
+    : '<div class="empty">아직 경기 기록이 없습니다.<br>매치데이를 진행하면 리그 전체 선수의 기록이 쌓입니다.</div>';
+
+  var histBlock = hist.length
+    ? '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">지난 시즌</div>'+
+        hist.slice().reverse().map(function(x){
+          return '<div class="bx"><span class="pt" style="width:26px;color:var(--ink3)">S'+x.season+'</span>'+
+            '<span class="nm">'+x.rank+'위 · '+x.wins+'승 '+x.losses+'패'+(x.champion?' <span style="color:var(--ssr)">우승</span>':'')+'</span>'+
+            '<span class="st2">'+esc(x.championName||'')+' 우승</span></div>';
+        }).join('')+
+      '</div>'
+    : '';
+  return body + histBlock;
+}
+
 
 function standingsTable(rows){
   return '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">순위표</div>'+
@@ -1466,6 +1564,7 @@ function doMatch(clubId){
 }
 
 function doAdvance(){
+  leagueTab = 'now';
   if (!E.lineupValid(G)) E.autoLineup(G);
   var sv = E.seasonView(G);
   if (sv && sv.phase === 'matchday' && !sv.nextMatchday) { save(); go('match'); return; }
@@ -1529,7 +1628,7 @@ function vHelp(){
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab]');
   if (!t) return;
   var d = t.dataset;
 
@@ -1551,6 +1650,7 @@ document.addEventListener('click', function(e){
   if (d.act === 'startcamp') { startCamp(supPick); render(); return; }
   if (d.choice) return applyChoice(d.choice);
   if (d.auto) return autoRun(d.auto);
+  if (d.ltab) { leagueTab = d.ltab; render(); window.scrollTo(0,0); return; }
   if (d.detail) { detailId = d.detail; go('player'); return; }
   if (d.play) return doMatch(d.play);
   if (d.act === 'startseason') {

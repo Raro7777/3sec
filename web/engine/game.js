@@ -104,10 +104,11 @@ export function growthFor(season) {
 }
 /**
  * AI 구단 선수의 고유 스킬 레벨 사다리(docs/skills.md 7.2).
- * 원소속 SSR·SR 은 자기 구단에서도 당연히 스킬을 쓴다. 숙련도는 스탯 성장(SEASON_GROWTH)과
- * 같은 속도로 올라간다 — 시즌 1 Lv1 · 시즌 2 Lv2 · 시즌 3+ Lv3.
+ * 원소속 SSR·SR 은 자기 구단에서도 당연히 스킬을 쓴다. 이들은 이미 그 스킬로 리그에서 이름을 낸
+ * 완성형 주전이므로 시즌 1부터 Lv2 로 시작하고, 스탯 사다리(SEASON_GROWTH)가 고원에 닿는
+ * 시즌 2부터 Lv3 이 된다. 갓 졸업한 신인(플레이어 카드)이 힌트로 Lv1~3 을 얻는 것과 대비된다.
  */
-export const CLUB_SKILL_LEVEL = [1, 2, 3, 3, 3, 3, 3];
+export const CLUB_SKILL_LEVEL = [2, 3, 3, 3, 3, 3, 3];
 export function clubSkillLevelFor(season) {
   const i = Math.max(1, season | 0) - 1;
   return CLUB_SKILL_LEVEL[Math.min(i, CLUB_SKILL_LEVEL.length - 1)];

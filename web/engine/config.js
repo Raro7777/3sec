@@ -127,6 +127,9 @@ export function createSimConfig() {
       levelScale: [0.0, 1.0, 1.5, 2.0], // 인덱스 = 스킬 레벨(0 = 미해금)
       channelCap: 1.50,                 // 채널 1개에 실릴 수 있는 팀 합계 로짓 상한(±)
       globalScale: 1.0,                 // 스킬 전체 세기 노브(StatSensitivity 와 같은 역할)
+      // 스킬 중첩 감쇠: 코트 위 스킬 보유자 n 명이면 개별 효과 × 1/(1 + falloff×(n−1)).
+      // n=1 이면 1.0 → 스킬 1개 단독 캘리브레이션은 그대로. docs/skills.md 6.3
+      stackFalloff: 0.06,
     },
     // SimConfig.cs:29 전역 스탯 민감도
     statSensitivity: 1.0,

@@ -113,7 +113,7 @@ export const SKILLS = [
     desc: '세트 20점 이후에도 스태미나 저하로 인한 블로킹 페널티를 받지 않는다. 상대 속공 블로킹 성공률이 상승한다.',
     effects: [
       F(TARGET.blocker, { minScoreFromEnd: 5 }),
-      L(CH.block, TARGET.blocker, 0.55, { types: [ATK.Quick] }),
+      L(CH.block, TARGET.blocker, 0.45, { types: [ATK.Quick] }),
     ],
   },
   {
@@ -205,8 +205,8 @@ export const SKILLS = [
     id: 'jump-serve', name: '점프 서브', owner: 'p037', rarity: 'SR', pos: POS.OH,
     desc: '서브 에이스 확률이 소폭 상승한다. 대신 서브 범실 확률도 약간 상승한다.',
     effects: [
-      L(CH.serveAce, TARGET.self, 0.40, null),
-      L(CH.serveError, TARGET.self, 0.14, null),
+      L(CH.serveAce, TARGET.self, 0.30, null),
+      L(CH.serveError, TARGET.self, 0.12, null),
     ],
   },
   {
@@ -260,6 +260,9 @@ export class SkillRuntime {
     this.scale = cfg.levelScale;
     this.cap = cfg.channelCap;
     this.gs = cfg.globalScale;
+    this.falloff = cfg.stackFalloff || 0;
+    // 코트 위 스킬 보유자 수에 따른 감쇠 배수(랠리 시작마다 갱신). 1명이면 항상 1.0.
+    this.stack = [1, 1];
     this.teams = [home, away];
     this.entries = [[], []];
     this.chMask = [0, 0];
@@ -312,7 +315,13 @@ export class SkillRuntime {
     for (let s = 0; s < 2; s++) {
       const ri = this.teams[s].rotationIndex;
       if (ri !== this.lastRot[s]) { this.rotations[s]++; this.lastRot[s] = ri; }
-      for (const e of this.entries[s]) e.strongRecv = false;
+      const team = this.teams[s];
+      let onCourt = 0;
+      for (const e of this.entries[s]) {
+        e.strongRecv = false;
+        if (team.positionOf(e.p) !== 0) onCourt++;
+      }
+      this.stack[s] = onCourt > 1 ? 1.0 / (1.0 + this.falloff * (onCourt - 1)) : 1.0;
     }
   }
 
@@ -364,7 +373,7 @@ export class SkillRuntime {
       }
     }
     if (total === 0) return 0;
-    total *= this.gs;
+    total *= this.gs * this.stack[side];
     return total > this.cap ? this.cap : (total < -this.cap ? -this.cap : total);
   }
 
@@ -488,7 +497,7 @@ export class SkillRuntime {
         if (ef.kind !== EFFECT.weight || ef.type !== type) continue;
         if (!this.targetOk(ef.target, ent, cx)) continue;
         if (!this.whenOk(ef.when, ent, side, cx)) continue;
-        m *= 1.0 + ef.mult * this.scale[ent.level] * this.gs;
+        m *= 1.0 + ef.mult * this.scale[ent.level] * this.gs * this.stack[side];
       }
     }
     return m;
