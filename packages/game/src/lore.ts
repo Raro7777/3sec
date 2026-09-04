@@ -27,7 +27,7 @@ export interface ClubLore {
 /** Board-confidence swing for the user on a derby result. */
 export const DERBY_CONFIDENCE = 2;
 
-/** Order matches world.ts CLUBS: 서울 부산 인천 대구 광주 대전 수원 울산 전주 포항 제주 창원. */
+/** Indexed by club id: the top flight first (world.ts CLUBS), then the division below (CLUBS_D2). */
 export const CLUB_LORE: ClubLore[] = [
   { id: 0, founded: 1983, nickname: "수도의 붉은 군단", history: "프로 원년부터 수도 서울을 지켜 온 명문. 90년대 황금기 이후 긴 침체를 겪었지만 팬층은 여전히 리그 최대다.", honours: 7, rival: 2, derby: "수도권 더비" },
   { id: 1, founded: 1979, nickname: "항구의 갈매기", history: "부두 노동자 클럽에서 출발한 리그 최고령 구단. 화끈한 공격 축구와 시끄러운 홈구장으로 이름났다.", honours: 5, rival: 7, derby: "동남 더비" },
@@ -41,6 +41,21 @@ export const CLUB_LORE: ClubLore[] = [
   { id: 9, founded: 1973, nickname: "강철", history: "제철소 실업팀에서 출발한 리그의 살아 있는 역사. 외부 영입보다 유스와 조직력을 믿는 구단이다.", honours: 6, rival: 3, derby: "영남 더비" },
   { id: 10, founded: 2006, nickname: "섬사람들", history: "리그에서 가장 젊은 섬 구단. 긴 원정길과 적은 관중이 약점이지만 바람 부는 홈에서는 누구도 쉽지 않다.", honours: 0, rival: 1, derby: "남해 더비" },
   { id: 11, founded: 2001, nickname: "돛", history: "기계 공단 도시의 시민구단. 승격과 강등을 오가다 최근 안정적인 1부 팀으로 자리 잡았다.", honours: 0, rival: 5, derby: "중부 더비" },
+  // 2부 리그 (world.ts CLUBS_D2와 같은 순서): 청주 안양 김포 천안 여수 원주 군산 충주 속초 구미 목포 정선.
+  // 라이벌은 모두 2부 안에서 짝지었다. 1부 구단과 엮으면 승격하기 전까지 더비가 한 번도 열리지 않아,
+  // 2부에서 한 시즌을 보내는 커리어가 라이벌전 없이 지나가 버린다.
+  { id: 12, founded: 1990, nickname: "돌쟁이", history: "한때 1부에서 두 번의 컵을 들었던 구단. 모기업이 손을 떼면서 2부로 내려앉았고, 팬들은 아직 그 시절을 기억한다.", honours: 2, rival: 19, derby: "충북 더비" },
+  { id: 13, founded: 1999, nickname: "보라 군단", history: "연고지를 옮긴 구단에 화가 난 시민들이 직접 돈을 모아 만든 팀. 서포터가 구단의 주주이자 감시자다.", honours: 0, rival: 14, derby: "경기 더비" },
+  { id: 14, founded: 2009, nickname: "밀물", history: "신도시와 함께 태어난 젊은 구단. 인구가 빠르게 느는 만큼 관중도 늘어, 리그에서 가장 빨리 크는 팀으로 꼽힌다.", honours: 0, rival: 13, derby: "경기 더비" },
+  { id: 15, founded: 1994, nickname: "붉은 벽돌", history: "벽돌 공장 실업팀에서 출발했다. 화려하진 않아도 무너지지 않는 수비로 2부에서 늘 중상위권을 지킨다.", honours: 0, rival: 21, derby: "공단 더비" },
+  { id: 16, founded: 2003, nickname: "돌풍", history: "바닷바람이 그대로 들이치는 홈구장 덕에 원정팀이 가장 오기 싫어하는 곳. 홈 승률이 리그 최고다.", honours: 0, rival: 22, derby: "남해안 더비" },
+  { id: 17, founded: 1987, nickname: "고원의 사람들", history: "탄광 노동자들이 만든 팀이 뿌리다. 산업이 저문 뒤에도 구단은 남아, 도시의 마지막 자존심 노릇을 하고 있다.", honours: 1, rival: 20, derby: "강원 더비" },
+  { id: 18, founded: 2005, nickname: "항구지기", history: "항만 노조가 세운 구단. 예산은 리그 최하위권이지만 유스 출신만으로 선발을 채운 시즌이 두 번 있었다.", honours: 0, rival: 22, derby: "서해안 더비" },
+  { id: 19, founded: 1996, nickname: "방앗간", history: "제분 공장 팀에서 출발한 구단. 청주와의 더비는 두 도시의 자존심 싸움이라 매번 표가 동난다.", honours: 0, rival: 12, derby: "충북 더비" },
+  { id: 20, founded: 2011, nickname: "고래", history: "리그에서 가장 작은 구장을 쓰는 구단. 8천 석이 매 경기 가득 차, 관중 밀도만큼은 1부 어느 팀에도 밀리지 않는다.", honours: 0, rival: 17, derby: "강원 더비" },
+  { id: 21, founded: 1985, nickname: "회로", history: "전자 공단 실업팀 시절 1부를 밟아 본 적 있는 노장 구단. 승격과 강등을 여섯 번이나 오간 엘리베이터 팀이다.", honours: 1, rival: 15, derby: "공단 더비" },
+  { id: 22, founded: 1998, nickname: "닻줄", history: "여객선 회사가 만든 구단. 여수와의 남해안 더비, 군산과의 서해안 더비를 모두 안고 있어 라이벌전이 가장 많다.", honours: 0, rival: 16, derby: "남해안 더비" },
+  { id: 23, founded: 2014, nickname: "산사람", history: "리그에서 가장 늦게, 가장 높은 곳에 생긴 구단. 해발 700m 홈구장에 원정팀이 숨차한다는 이야기가 농담 반 진담 반으로 돈다.", honours: 0, rival: 17, derby: "산악 더비" },
 ];
 
 const FALLBACK: Omit<ClubLore, "id" | "rival"> = { founded: 2000, nickname: "", history: "역사가 짧은 구단입니다.", honours: 0, derby: "라이벌전" };

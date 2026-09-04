@@ -14,6 +14,7 @@
 import { Rng } from "@3sec/engine";
 import type { Club, Fixture, GameState, SquadPlayer, TableRow } from "./types";
 import { buildFixtures } from "./fixtures";
+import { markDerbies } from "./lore";
 import { CLUBS_D2 } from "./world";
 import { recordAttendance } from "./fans";
 import { overall } from "./rating";
@@ -59,10 +60,13 @@ export function buildAllFixtures(clubs: Club[]): Fixture[] {
     const ids = clubs.filter((c) => divisionOf(c) === d).map((c) => c.id);
     if (ids.length < 2) continue;
     for (const f of buildFixtures(ids.length)) {
-      all.push({ ...f, id: id++, home: ids[f.home]!, away: ids[f.away]! });
+      // `buildFixtures` works in positions and flags derbies from them; the flags it produces are
+      // about the wrong clubs once the positions are mapped onto real ids, so drop them and mark
+      // again below. (For the first division the two happened to coincide, which hid this.)
+      all.push({ ...f, id: id++, home: ids[f.home]!, away: ids[f.away]!, derby: undefined });
     }
   }
-  return all;
+  return markDerbies(all);
 }
 
 /** The league table of one division. */

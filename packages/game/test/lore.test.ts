@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLUBS, CLUB_LORE, DERBY_CONFIDENCE, buildFixtures, clubLore, currentFixtures, derbyFor, derbyName, derbyPreview, derbyResult, deserialize, isDerby, newGame, prepareRound, rivalOf, serialize,
+  CLUBS, CLUBS_D2, CLUBS_PER_DIVISION, CLUB_LORE, DERBY_CONFIDENCE, DIVISIONS, buildFixtures, clubLore, clubsIn, currentFixtures, derbyFor, derbyName, derbyPreview, derbyResult, deserialize, divisionOf, isDerby, newGame, prepareRound, rivalOf, serialize,
 } from "../src/index";
 
 describe("lore: clubs and rivals", () => {
-  it("every club has lore matching the world roster and exactly one rival inside the league", () => {
-    expect(CLUB_LORE.length).toBe(CLUBS.length);
+  it("gives every club in both divisions a derby against someone it actually plays", () => {
+    const s = newGame(71);
+    for (let d = 1; d <= DIVISIONS; d++) {
+      const ids = clubsIn(s, d).map((c) => c.id);
+      for (const a of ids) {
+        const opponents = ids.filter((b) => b !== a && isDerby(a, b));
+        expect(opponents.length).toBeGreaterThan(0);
+        for (const b of opponents) {
+          expect(divisionOf(s.clubs[b]!)).toBe(d);
+          expect(derbyName(a, b)).toBeTruthy();
+        }
+      }
+      // and the fixture list actually contains those meetings
+      const derbies = s.fixtures.filter((f) => ids.includes(f.home) && isDerby(f.home, f.away));
+      expect(derbies.length).toBeGreaterThanOrEqual(ids.length / 2);
+      for (const f of derbies) expect(f.derby).toBe(true);
+    }
+  });
+
+  it("every club in both divisions has lore and exactly one rival", () => {
+    const world = [...CLUBS, ...CLUBS_D2];
+    expect(CLUB_LORE.length).toBe(world.length);
     for (const [i, l] of CLUB_LORE.entries()) {
       expect(l.id).toBe(i);
       expect(l.founded).toBeGreaterThan(1900);
@@ -14,7 +34,7 @@ describe("lore: clubs and rivals", () => {
       expect(l.honours).toBeGreaterThanOrEqual(0);
       expect(l.rival).not.toBe(i);
       expect(l.rival).toBeGreaterThanOrEqual(0);
-      expect(l.rival).toBeLessThan(CLUBS.length);
+      expect(l.rival).toBeLessThan(world.length);
       expect(rivalOf(i)).toBe(l.rival);
       expect(clubLore(i)).toBe(l);
     }
@@ -22,6 +42,11 @@ describe("lore: clubs and rivals", () => {
     for (const [a, b] of [[0, 2], [1, 7], [8, 4], [3, 9], [5, 11]]) { expect(rivalOf(a!)).toBe(b); expect(rivalOf(b!)).toBe(a); }
     expect(rivalOf(6)).toBe(0);
     expect(rivalOf(10)).toBe(1);
+    // second-division rivals are paired inside the second division: a rivalry with a top-flight club
+    // would never be played, and a season down there would pass without a single derby
+    for (let id = CLUBS_PER_DIVISION; id < CLUB_LORE.length; id++) {
+      expect(rivalOf(id)).toBeGreaterThanOrEqual(CLUBS_PER_DIVISION);
+    }
     // an unknown club gets the fallback and no rival
     expect(clubLore(99).rival).toBe(-1);
     expect(isDerby(99, 0)).toBe(false);
@@ -98,6 +123,7 @@ describe("lore: derby effects", () => {
     const raw = JSON.parse(serialize(s));
     for (const f of raw.fixtures) delete f.derby;
     const loaded = deserialize(JSON.stringify(raw))!;
-    expect(loaded.fixtures.filter((f) => f.derby).length).toBe(14);
+    // seven rivalry pairs in each division, home and away: 14 derby fixtures per division
+    expect(loaded.fixtures.filter((f) => f.derby).length).toBe(28);
   });
 });
