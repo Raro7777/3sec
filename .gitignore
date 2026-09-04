@@ -22,3 +22,6 @@ __pycache__/
 
 # 프로토타입 세이브 파일 (sim/VolleySim.Play)
 saves/
+
+# 웹 빌드 산출물
+web/dist/
