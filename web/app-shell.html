@@ -247,6 +247,8 @@ details[open] summary::after{content:"▴"}
 .tch.me{border-color:var(--court);background:var(--court-bg)}
 .tch.ok .act{color:var(--good)} .tch.bad .act{color:var(--bad)}
 .tch.arrow{align-self:center;background:none;border:none;color:var(--ink3);padding:0 1px;font-size:12px;justify-content:center}
+.skb{display:block;margin-top:3px;font-size:10.5px;font-weight:700;color:var(--ssr);
+  border-top:1px solid rgba(233,185,73,.28);padding-top:2px;white-space:nowrap}
 .rres{margin-top:8px;font-size:13px;font-weight:700}
 .rres.h{color:var(--court)} .rres.a{color:var(--bad)}
 
@@ -1288,7 +1290,7 @@ function buildRallies(m){
   var rallies = [], cur = null;
   var hs = 0, as = 0;
   m.events.forEach(function(e){
-    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as] }; rallies.push(cur); return; }
+    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[] }; rallies.push(cur); return; }
     if (!cur) return;
     if (e.type === 11) {
       cur.point = { side:e.side, reason:e.reason, clutch:e.clutch, home:e.homeScore, away:e.awayScore };
@@ -1298,10 +1300,12 @@ function buildRallies(m){
       var p = m.ctx.players[e.playerId];
       cur.touches.push({
         side:e.side, type:e.type, pos:e.courtPosition || 3,
-        name: p ? p.name : '', jersey: p ? p.jersey : 0,
+        name: p ? p.name : '', jersey: p ? p.jersey : 0, playerId: e.playerId,
         quality:e.quality, outcome:e.outcome, attackType:e.attackType,
-        isServe: e.type === 3
+        isServe: e.type === 3,
+        skills: e.skills || null
       });
+      if (e.skills) for (var si=0; si<e.skills.length; si++) cur.skills.push(e.skills[si]);
     }
   });
   return rallies.filter(function(r){ return r.touches.length && r.point; });
@@ -1393,8 +1397,10 @@ function rallyStrip(r, shown, ended){
     var act = EVN[t.type] || '';
     if (t.type===6 && ATKN[t.attackType]) act = ATKN[t.attackType];
     var note = t.type===4 && QN[t.quality] ? ' ' + QN[t.quality] : '';
+    var sk = (t.skills && t.skills.length)
+      ? '<span class="skb">'+esc(t.skills[0].skillName)+(t.skills.length>1?' +'+(t.skills.length-1):'')+'</span>' : '';
     return (i? '<span class="tch arrow">›</span>' : '') +
-      '<span class="'+cls+'"><span class="act">'+act+note+'</span><span class="who2">'+esc(t.name)+'</span></span>';
+      '<span class="'+cls+'"><span class="act">'+act+note+'</span><span class="who2">'+esc(t.name)+'</span>'+sk+'</span>';
   }).join('');
   var res = '';
   if (ended && r.point) {
@@ -1440,6 +1446,32 @@ function vMatchLive(){
   );
 }
 
+/** 이번 경기에 발동한 스킬 집계 — 카드를 키운 보람이 보이게. */
+function skillSummary(m){
+  var tally = {};
+  m.events.forEach(function(e){
+    if (!e.skills) return;
+    e.skills.forEach(function(sk){
+      var k = sk.playerId + '|' + sk.key;
+      if (!tally[k]) tally[k] = { name:sk.playerName, skill:sk.skillName, side:sk.side, level:sk.level, n:0 };
+      tally[k].n++;
+    });
+  });
+  var rows = Object.keys(tally).map(function(k){ return tally[k]; })
+    .sort(function(a,b){ return (a.side===mySide?-1:1)-(b.side===mySide?-1:1) || b.n-a.n; });
+  if (!rows.length) return '';
+  return '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">발동한 고유 스킬</div>'+
+    rows.map(function(r){
+      var mine = r.side === mySide;
+      return '<div class="bx"'+(mine?' style="background:var(--court-bg)"':'')+'>'+
+        '<span class="pill rar-SSR" style="font-size:10.5px">Lv'+r.level+'</span>'+
+        '<span class="nm"'+(mine?' style="color:var(--court)"':'')+'>'+esc(r.name)+'</span>'+
+        '<span class="st2">'+esc(r.skill)+'</span>'+
+        '<span class="pt">'+r.n+'</span></div>';
+    }).join('')+
+    '<div class="tiny" style="padding:6px 11px 9px">숫자는 그 스킬이 판정에 관여한 횟수입니다.</div></div>';
+}
+
 function vMatchResult(){
   var m = lastMatch;
   if (!m) return '<div class="empty">…</div>';
@@ -1462,6 +1494,7 @@ function vMatchResult(){
          '<span class="pt">'+b.points+'</span></div>';
      }).join('')+
    '</div>'+
+   skillSummary(m)+
    '<details><summary>경기 하이라이트</summary><div class="cast">'+
      m.highlights.map(function(x){ return '<p>'+esc(x)+'</p>'; }).join('')+'</div></details>'+
    '<details><summary>전체 중계 ('+lines.length+'줄)</summary><div class="cast">'+

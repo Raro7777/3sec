@@ -124,7 +124,7 @@ class MatchSim {
 
   emit(type, team, actor, position, quality, outcome, attackType, probability, value, clutch) {
     const e = this.log.add(type, this.setIndex, this.rallyIndex, team.side, this.home.score, this.away.score);
-    if (e === null) return null;
+    if (e === null) { if (this.sk !== null) this.sk.drainPending(); return null; }
     e.playerId = actor ? actor.id : null;
     e.courtPosition = position | 0;
     e.quality = quality | 0;
@@ -133,6 +133,10 @@ class MatchSim {
     e.probability = probability || 0;
     e.value = value | 0;
     e.clutch = !!clutch;
+    if (this.sk !== null) {
+      const fired = this.sk.drainPending();
+      if (fired !== null) e.skills = fired;    // 연출용. 판정에는 영향 없음
+    }
     return e;
   }
 

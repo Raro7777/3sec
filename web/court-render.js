@@ -158,7 +158,7 @@ function create(canvas, opts) {
     colors: opts && opts.colors || { home:'#3E8FE0', away:'#E3705F' },
     t: 0, idx: 0, playing: false, speed: 1, raf: 0, last: 0,
     onTouch: null, onEnd: null, impact: 0, shake: 0, ended: false, endHold: 0,
-    trail: []
+    trail: [], bursts: []   // 스킬 발동 이펙트 {x,y,side,name,t}
   };
 
   R.resize = function () {
@@ -174,8 +174,28 @@ function create(canvas, opts) {
     R.touches = touches || []; R.point = point || null;
     R.flights = buildFlights(R.touches, R.point, seed || 1);
     R.t = 0; R.idx = 0; R.ended = false; R.endHold = 0; R.trail.length = 0;
+    R.bursts.length = 0;
     if (R.onTouch && R.touches.length) R.onTouch(0);
+    if (R.touches.length) spawnBursts(R.touches[0]);
   };
+
+  /** 이 터치에서 발동한 스킬을 코트 이펙트로 띄운다. */
+  function spawnBursts(t) {
+    if (!t || !t.skills || !t.skills.length) return;
+    var seen = {};
+    for (var i = 0; i < t.skills.length; i++) {
+      var sk = t.skills[i];
+      if (seen[sk.key]) continue;
+      seen[sk.key] = 1;
+      var owner = null;
+      for (var j = 0; j < R.touches.length; j++) {
+        if (R.touches[j].playerId === sk.playerId) { owner = R.touches[j]; break; }
+      }
+      var pos = owner ? zonePos(owner.side, owner.pos) : zonePos(sk.side, t.pos);
+      R.bursts.push({ x: pos.x, y: pos.y, side: sk.side, name: sk.skillName, t: 0,
+                      boon: sk.mag > 0 });
+    }
+  }
 
   R.play = function () { if (!R.playing) { R.playing = true; R.last = 0; loop(); } };
   R.pause = function () { R.playing = false; if (R.raf) cancelAnimationFrame(R.raf); R.raf = 0; };
@@ -196,11 +216,13 @@ function create(canvas, opts) {
       if (R.endHold > 0.75 && R.onEnd) { var cb = R.onEnd; R.onEnd = null; cb(); }
       R.impact = Math.max(0, R.impact - dt * 3);
       R.shake = Math.max(0, R.shake - dt * 4);
+      stepBursts(dt);
       return;
     }
     R.t += dt;
     R.impact = Math.max(0, R.impact - dt * 3);
     R.shake = Math.max(0, R.shake - dt * 4);
+    stepBursts(dt);
     var f = R.flights[R.idx];
     if (!f) { R.ended = true; return; }
     if (R.t >= f.T) {
@@ -209,11 +231,43 @@ function create(canvas, opts) {
       var nf = R.flights[R.idx];
       if (nf) {
         if (R.onTouch) R.onTouch(R.idx);
+        spawnBursts(R.touches[R.idx]);
         if (nf.from && nf.from.type === EV.Attack) R.shake = 0.6;
       } else {
         R.ended = true;
         if (R.onTouch) R.onTouch(R.touches.length);
       }
+    }
+  }
+
+  function stepBursts(dt) {
+    for (var i = R.bursts.length - 1; i >= 0; i--) {
+      R.bursts[i].t += dt;
+      if (R.bursts[i].t > 1.5) R.bursts.splice(i, 1);
+    }
+  }
+
+  function drawBursts(c, cam) {
+    for (var i = 0; i < R.bursts.length; i++) {
+      var b = R.bursts[i], u = b.t / 1.5;
+      var col = b.side === R.mySide ? '#E9B949' : '#E3705F';
+      var base = project(cam, b.x, b.y, 0);
+      // 바닥 링이 퍼지며 옅어진다
+      var rr = (0.5 + u * 2.2) * cam.s;
+      c.globalAlpha = Math.max(0, 0.55 * (1 - u));
+      c.strokeStyle = col; c.lineWidth = Math.max(1.5, 0.09 * cam.s);
+      c.beginPath();
+      c.ellipse(base.sx, base.sy, rr, rr * cam.sp, 0, 0, 6.284);
+      c.stroke();
+      // 스킬명이 떠오른다
+      var lift = project(cam, b.x, b.y, 2.5 + u * 1.1);
+      c.globalAlpha = u < 0.15 ? u / 0.15 : Math.max(0, 1 - (u - 0.15) / 0.85);
+      c.font = '700 12px "Gothic A1",sans-serif'; c.textAlign = 'center';
+      c.strokeStyle = 'rgba(6,14,22,.9)'; c.lineWidth = 3.5;
+      c.strokeText(b.name, lift.sx, lift.sy);
+      c.fillStyle = col;
+      c.fillText(b.name, lift.sx, lift.sy);
+      c.globalAlpha = 1;
     }
   }
 
@@ -258,6 +312,7 @@ function create(canvas, opts) {
     ps.filter(function (p) { return p.d < netD; }).forEach(function (p) { drawPlayer(c, cam, p, ball); });
     drawTrail(c, cam);
     drawBall(c, cam, ball);
+    drawBursts(c, cam);
     c.restore();
   }
 

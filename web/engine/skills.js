@@ -261,6 +261,7 @@ export class SkillRuntime {
     this.cap = cfg.channelCap;
     this.gs = cfg.globalScale;
     this.falloff = cfg.stackFalloff || 0;
+    this.pending = [];        // 직전 판정에서 발동한 스킬(이벤트에 실어 보낸다)
     // 코트 위 스킬 보유자 수에 따른 감쇠 배수(랠리 시작마다 갱신). 1명이면 항상 1.0.
     this.stack = [1, 1];
     this.teams = [home, away];
@@ -311,6 +312,14 @@ export class SkillRuntime {
   }
 
   /** 랠리 시작: 랠리 스코프 플래그 초기화 + 로테이션 관찰. */
+  /** 발동 기록(연출용). 판정에는 일절 관여하지 않는다 — 난수도 쓰지 않는다. */
+  drainPending() {
+    if (this.pending.length === 0) return null;
+    const out = this.pending;
+    this.pending = [];
+    return out;
+  }
+
   beginRally() {
     for (let s = 0; s < 2; s++) {
       const ri = this.teams[s].rotationIndex;
@@ -364,12 +373,19 @@ export class SkillRuntime {
       if (team.positionOf(ent.p) === 0) continue; // 코트 밖 = 미발동
       const effs = ent.def.effects;
       const mult = this.scale[ent.level];
+      let contrib = 0;
       for (let j = 0; j < effs.length; j++) {
         const ef = effs[j];
         if (ef.kind !== EFFECT.logit || ef.ch !== ch) continue;
         if (!this.targetOk(ef.target, ent, cx)) continue;
         if (!this.whenOk(ef.when, ent, side, cx)) continue;
-        total += ef.mag * mult;
+        contrib += ef.mag * mult;
+      }
+      if (contrib !== 0) {
+        total += contrib;
+        this.pending.push({ side: side, playerId: ent.p.id, playerName: ent.p.name,
+                            key: ent.def.key, skillName: ent.def.name, ch: ch,
+                            level: ent.level, mag: contrib });
       }
     }
     if (total === 0) return 0;
