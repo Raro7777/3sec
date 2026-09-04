@@ -450,10 +450,11 @@ function buildCardNatural(p, d) {
   return [
     // 이 문장이 화풍을 결정한다. 초기 판은 태그형과 같은 `cel shading, flat colors, clean lineart` 를 썼는데,
     // 범용 모델(Nano Banana 등)은 그걸 **문자 그대로** 받아 초등학생 만화처럼 그렸다. 반대로 지시한다.
-    `Premium mobile gacha game character card illustration — high-detail anime key visual, semi-realistic anime rendering with soft airbrushed shading, glossy specular highlights, individually rendered hair strands, luminous skin, rich colour depth, delicate varying line weight, large expressive eyes with multiple highlights, subtle bloom and lens flare. NOT flat colours, NOT simple cartoon, NOT thick uniform outlines, NOT a children's comic.`,
+    `Ultra-detailed semi-realistic anime illustration, the quality of a high-end painted key visual for a premium mobile game — rendering pushed close to realism. Skin has real texture, soft subsurface scattering and a faint flush of exertion. Hair is drawn strand by strand in layered clumps with sharp specular highlights and stray flyaway hairs. Fabric behaves like real fabric: visible weave, stitched seams, stretch across the shoulder, creases where the body twists. Anatomically accurate athletic musculature. Hands fully articulated with correct fingers. Individual sweat droplets catching the light. Cinematic volumetric lighting, shallow depth of field, high dynamic range. NOT flat cel shading, NOT simple anime, NOT thick uniform outlines, NOT a cartoon.`,
     // 라운드 1 에서 한 장에 "SUPER SPIKE" 글자가 박혔다. 모델이 카드처럼 보이는 그림에 제목을 얹으려 하므로 맨 앞에서 막는다.
     `ABSOLUTELY NO TEXT anywhere in the picture: no words, letters, numbers, captions, titles, logos, watermarks or signage of any kind, on the uniform, the shoes, the walls or as an overlay.`,
-    `A ${body} young woman with ${SKIN_NL[d.skin]} skin, ${hair} and ${eyes}.`,
+    // 헤어스타일은 42명 구분의 1축(world.md 6.2)이고 **편집 패스로는 못 고친다**(구조 변경). 생성 단계에서 못박는다.
+    `A ${body} young woman with ${SKIN_NL[d.skin]} skin and ${eyes}. HER HAIR: ${hair} — exactly this and nothing else.`,
     `She is ${pos.nlAction}, ${pos.nlBall}.`,
     `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings — a real athletic kit, fitted to her body, not a loose t-shirt.`,
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
