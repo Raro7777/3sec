@@ -19,7 +19,7 @@ node web/app-test.mjs     # 화면 흐름 회귀 테스트 32건 (playwright 필
 | 수집 | 스카우트·10연·천장·포지션 지정, 중복 → 한계돌파 |
 | 고유 스킬 | 24종이 판정에 관여하고 코트에 발동 연출로 표시 |
 | 노화·세대 | 포지션별 전성기·하락·은퇴, 매 시즌 신인 5명 유입 |
-| 아트 | **없음.** 선수 데이터로 그린 SVG 플레이스홀더 |
+| 아트 | **이미지 0장.** 선수 데이터로 그린 SVG 플레이스홀더. 제작 파이프라인은 준비 완료 |
 
 ## 검증
 
@@ -30,6 +30,8 @@ node web/parity.mjs               # 경기·육성 지표가 목표 범위 안�
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 7건 (약 40초)
 node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건 (약 60초)
 node data/validate.mjs            # 로스터 스키마·분포
+node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
+node web/art-test.mjs             # 아트 슬롯인 회귀 12건 (playwright 필요)
 ```
 
 ## 문서
@@ -45,6 +47,7 @@ node data/validate.mjs            # 로스터 스키마·분포
 | [docs/rookies.md](docs/rookies.md) | 신인 세대 생성 규칙 |
 | [docs/world.md](docs/world.md) | 세계관 · 6구단 · 42명 런칭 로스터 |
 | [docs/art-style-guide.md](docs/art-style-guide.md) | 아트 규격·프롬프트·리터치 QA·라이선스 |
+| [docs/art-pipeline.md](docs/art-pipeline.md) | 그림 한 장을 게임 안까지 넣는 절차 |
 | [docs/prototype-play.md](docs/prototype-play.md) | 콘솔 프로토타입 관찰 리포트 |
 | [web/PARITY.md](web/PARITY.md) | 웹 엔진이 C# 과 어디까지 같고 어디서 갈라졌는가 |
 
@@ -53,5 +56,6 @@ node data/validate.mjs            # 로스터 스키마·분포
 - `web/` — **기준 구현.** 엔진(`engine/`), 코트 렌더러, 앱 셸, 검증 하네스
 - `data/` — 6구단·42명 런칭 로스터
 - `docs/` — 기획·설계 문서
+- `art/` — 아트 에셋. 지금은 **이미지 0장**이고 프롬프트 팩·폴더 규약만 있다. [art/README.md](art/README.md)
 - `tools/` — 파이썬 검증 시뮬레이터(육성·경제). 보조 모델이며 권위는 `web/` 하네스에 있습니다
 - `sim/` — **C# 참고 구현(아카이브).** 경기·육성만 담고 있고 리그·스킬·노화는 없습니다. [sim/README.md](sim/README.md) 참조

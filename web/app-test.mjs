@@ -126,8 +126,9 @@ for (const t of ['sched', 'stats', 'now']) {
 
 // --- 6. 매치데이 → 경기 뷰어 → 건너뛰기 해금
 await tap('[data-act="advance"]', 200);
-// 경기 뷰어는 시뮬 시간이 들쭉날쭉하므로 고정 대기 대신 캔버스를 기다린다
-const inMatch = await page.waitForSelector('#lvCanvas', { timeout: 15000 }).then(() => true, () => false);
+// 경기 뷰어는 시뮬 시간이 들쭉날쭉하므로 고정 대기 대신 캔버스를 기다린다.
+// 30초로 넉넉히 잡는다 — art-test 와 연달아 돌리면 브라우저 두 개가 겹쳐 15초를 넘긴 적이 있다.
+const inMatch = await page.waitForSelector('#lvCanvas', { timeout: 30000 }).then(() => true, () => false);
 await page.waitForTimeout(300);
 check('경기 뷰어가 뜬다', inMatch);
 if (inMatch) {

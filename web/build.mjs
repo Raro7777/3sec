@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectArt, ART_BUDGET_MB } from './art-pack.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -44,9 +45,24 @@ if (!shell.includes('<!--ENGINE-->')) {
 }
 const engine = fs.readFileSync(bundlePath, 'utf8');
 const court = fs.readFileSync(path.join(HERE, 'court-render.js'), 'utf8');
+
+// 3) 아트 팩 — art/04_export 에 들어온 최종 이미지를 data: URI 로 인라인한다.
+//    한 장도 없으면 빈 객체가 들어가고 앱은 지금처럼 SVG 플레이스홀더를 그린다.
+const { art, bytes: artBytes, entries: artEntries, problems: artProblems } = collectArt();
+const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';</scr' + 'ipt>';
+
 const html = shell.replace('<!--ENGINE-->',
-  '<script>\n' + engine + '\n</scr' + 'ipt>\n<script>\n' + court + '\n</scr' + 'ipt>');
+  artScript + '\n<script>\n' + engine + '\n</scr' + 'ipt>\n<script>\n' + court + '\n</scr' + 'ipt>');
 
 fs.writeFileSync(outPath, html);
 fs.rmSync(bundlePath, { force: true });
-console.log(`${path.relative(ROOT, outPath)}  ${(html.length / 1024).toFixed(0)}KB`);
+
+const mb = html.length / 1024 / 1024;
+const artMb = artBytes / 1024 / 1024;
+console.log(`${path.relative(ROOT, outPath)}  ${(html.length / 1024).toFixed(0)}KB` +
+  (artEntries.length ? `  (아트 ${artEntries.length}명 · ${artMb.toFixed(2)}MB)` : '  (아트 없음 — SVG 플레이스홀더)'));
+if (artMb > ART_BUDGET_MB)
+  console.warn(`⚠ 인라인 아트 ${artMb.toFixed(2)}MB 가 예산 ${ART_BUDGET_MB}MB 를 넘었습니다 — 아티팩트 상한(16MB)에 걸립니다.`);
+if (mb > 15)
+  console.warn(`⚠ 산출물 ${mb.toFixed(2)}MB — 아티팩트 상한 16MB 에 근접했습니다.`);
+for (const p of artProblems) console.warn('⚠ 아트 규격: ' + p);

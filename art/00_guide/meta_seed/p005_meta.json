@@ -1,0 +1,41 @@
+{
+  "pid": "p005",
+  "team": "t01",
+  "position": "OH",
+  "rarity": "R",
+  "height_cm": 178,
+  "jersey": 15,
+  "skin": "A",
+  "hair": {
+    "style": "일자 뱅 단발",
+    "color": "블랙",
+    "palette": 1
+  },
+  "eye": {
+    "shape": "tsurime",
+    "color": "다크 브라운"
+  },
+  "card": {
+    "face": {
+      "cx": 1024,
+      "cy": 820,
+      "h": 540
+    }
+  },
+  "stand": {
+    "face_rect": {
+      "x": 464,
+      "y": 200,
+      "w": 512,
+      "h": 512
+    },
+    "has_hair_front": null
+  },
+  "gen": {
+    "model": null,
+    "lora": null,
+    "seed_card": null,
+    "seed_stand": null
+  },
+  "_note": "리터치 완료 후 face/face_rect/gen 을 실측값으로 채우고 art/04_export/{pid}/ 로 옮긴다."
+}

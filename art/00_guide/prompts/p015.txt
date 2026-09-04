@@ -1,0 +1,66 @@
+# p015 한새봄 — MB · SSR · 태령 피크스 (t03) · 191cm · #8
+# 생성: node tools/art-prompts.mjs  (손으로 고치지 말 것 — 고칠 곳은 생성기의 매핑표)
+#
+# 외형(data/players.json): 사이드 포니테일 미디엄 / 화이트 / 아이스 블루 눈 / 최장신 탄탄한 체형
+# 파생(데이터에 없어 생성기가 결정적으로 배정): 피부 A톤 · 눈매 neutral
+# 헤어 팔레트(2.7): #7
+# 고유 스킬: 설벽(雪壁)
+# 포즈 주의(3.2): 손끝이 세이프 영역 상단선에 닿게 — 장신 강조(3.2④)
+#
+# 고정 파라미터는 art/00_guide/prompts/_params.txt, 네거티브는 _negative.txt (전원 공용).
+# {quality_prefix} 와 {charLoRA} 는 체크포인트·LoRA 가 정해지면 그 값으로 치환한다(6.1·6.2).
+──────── CARD (2048×2732, 3:4) — POSITIVE
+{quality_prefix}, {charLoRA},
+1girl, solo, adult woman, young adult, mature face, fair skin, very tall, solid athletic build, long arms,
+side ponytail, medium hair, white hair, blue eyes, pale blue eyes, almond shaped eyes,
+volleyball uniform, plain dark green jersey, ice white trim, short sleeves, tucked in, black shorts, mid-thigh shorts, knee pads, white socks, volleyball shoes,
+no logo, no text, blank jersey, solid color clothes,
+blocking at the net, vertical jump, torso straight, both arms extended straight up and over the net, palms open facing the viewer, thumbs close together, volleyball, volleyball just in front of both palms, partly hidden by the hands, low angle 10 degrees, front view from the opposite court, net band crossing at chest height,
+indoor gymnasium, volleyball court, volleyball net, simple background, dramatic rim light, spotlight, lens flare, light particles, motion blur background, depth of field,
+anime style, clean lineart, cel shading, flat colors, bright colors, sharp focus, highly detailed eyes, hair and fabric in strong motion, sweat drops
+
+──────── STANDING (1440×2560, 9:16) — POSITIVE
+{quality_prefix}, {charLoRA},
+1girl, solo, adult woman, young adult, mature face, fair skin, very tall, solid athletic build, long arms,
+side ponytail, medium hair, white hair, blue eyes, pale blue eyes, almond shaped eyes,
+volleyball uniform, plain dark green jersey, ice white trim, short sleeves, tucked in, black shorts, knee pads, white socks, volleyball shoes,
+no logo, no text, blank jersey, solid color clothes,
+standing, full body, facing viewer, body turned 15 degrees, one hand on hip, relaxed pose, no ball,
+eye level, plain white background, even lighting, no rim light,
+anime style, clean lineart, cel shading, flat colors, sharp focus, highly detailed eyes
+
+──────── SD TOKEN (256×256) — POSITIVE
+{quality_prefix}, chibi, 1girl, solo, full body, front view, standing, simple pose, 2 heads tall,
+side ponytail, medium hair, white hair, blue eyes, pale blue eyes, volleyball uniform, plain dark green jersey, knee pads,
+flat color, simple shading, thick outline, white background, centered, sticker style
+
+──────── SD TOKEN — NEGATIVE (공용 네거티브를 쓰지 말 것: chibi 가 서로 싸운다)
+lowres, worst quality, bad anatomy, bad hands, extra fingers,
+text, logo, letters, numbers, watermark, signature,
+detailed background, complex, realistic, photorealistic, 3d,
+nsfw, nude, cleavage, suggestive,
+multiple girls, 2girls
+
+──────── FACE 4종 (스탠딩 face_rect 인페인트, denoise 0.45~0.6, only masked)
+[neutral]
+  +  neutral expression, slight smile, closed mouth, looking at viewer
+  −  open mouth, blush
+[joy]
+  +  happy, big smile, open mouth, sparkling eyes, blush, cheerful
+  −  sad, tears
+[tired]
+  +  tired, exhausted, half-closed eyes, sweat, parted lips, slight frown
+  −  smile, tears
+[down]
+  +  frustrated, sad, downcast eyes, furrowed brows, tears in eyes, biting lip
+  −  crying, streaming tears, smile
+
+──────── NEGATIVE (카드·스탠딩 공용)
+lowres, worst quality, low quality, normal quality, jpeg artifacts, blurry, noisy,
+bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, extra limbs, extra arms, extra legs, malformed limbs, deformed, long neck, bad proportions,
+text, logo, letters, numbers, sponsor, emblem, watermark, signature, artist name, username, stripes on chest, pattern on clothes,
+realistic, photorealistic, 3d, cgi, painting texture, sketch, monochrome,
+nsfw, nude, cleavage, underwear, panties, see-through, wet clothes, midriff, navel, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, suggestive, large breasts, huge breasts,
+child, loli, kid, chibi,
+multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball
+
