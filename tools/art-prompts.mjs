@@ -154,32 +154,51 @@ const BODY_TYPE = {
   '표준 애슬레틱':      'athletic build, toned',
 };
 
+/** 체형 자연어 — 태그(`tall, slim athletic build`)는 명사구라 "…build young woman" 이 된다. 문장용 형용사구를 따로 둔다. */
+const BODY_NL = {
+  '단신 다부진 체형':   'petite, compactly built',
+  '단신 민첩':          'petite, lean and quick',
+  '장신':               'tall',
+  '장신 균형형':        'tall, evenly athletic',
+  '장신 근육질':        'tall and muscular',
+  '장신 마른 체형':     'tall and slender',
+  '장신 슬림':          'tall and slim',
+  '장신 슬림 애슬레틱': 'tall, slim and athletic',
+  '장신 애슬레틱':      'tall and athletic',
+  '최장신 탄탄한 체형': 'exceptionally tall, solidly built',
+  '표준':               'averagely built and athletic',
+  '표준 균형형':        'evenly athletic',
+  '표준 마른 체형':     'slender',
+  '표준 슬림':          'slim',
+  '표준 애슬레틱':      'athletic and toned',
+};
+
 /**
  * 포지션 → 3.2 대표 포즈 · 공 위치 · 카메라 · **그 포지션에서만 나오는 신체 특징**(accent).
  * 체형 자체는 data 의 bodyType 이 담당한다 — 여기에 'athletic build' 를 또 넣으면 태그가 겹쳐 흐려진다.
  */
 const POSITION = {
-  S:  { accent: 'long fingers',
+  S:  { accent: 'long fingers', nlAction: 'mid-set — both arms raised above her forehead, elbows bent outward, fingers spread into a diamond, knees slightly bent and back gently arched', nlBall: 'the ball hovering a hand\u2019s width above her fingertips', nlCamera: 'seen from a slightly low angle in three-quarter view, looking up toward the ball',
         pose: 'setting a volleyball, both arms raised above forehead, elbows bent outward, fingers spread in a diamond shape, knees slightly bent, back arched slightly',
         ball: 'volleyball above fingertips, one ball diameter above forehead',
         camera: 'low angle 10 degrees, three-quarter view, looking up at the ball',
         note: '손가락 10개가 전부 노출 → 리터치 비용 최상(3.2① 주의)' },
-  OH: { accent: '',
+  OH: { accent: '', nlAction: 'mid-spike — airborne, right arm fully extended overhead with an open palm, torso twisted like a drawn bow, knees folded back, hair flying upward', nlBall: 'the ball just in front of her striking palm', nlCamera: 'shot from a low angle with strong foreshortening, three-quarter view from her right',
         pose: 'spiking, jumping, right arm fully extended overhead, open hand, torso twisted like a drawn bow, knees folded back, hair flying up',
         ball: 'volleyball just in front of the striking palm',
         camera: 'low angle 15 degrees, dynamic angle, foreshortening, three-quarter view from the right',
         note: '' },
-  OP: { accent: 'long legs, broad shoulders',
+  OP: { accent: 'long legs, broad shoulders', nlBody: 'long-legged and broad-shouldered', nlAction: 'mid back-row attack — a long horizontal leap, body stretched forward on a diagonal, striking arm fully extended, the other arm reaching forward for balance', nlBall: 'the ball in front of her striking hand', nlCamera: 'shot at eye level from a three-quarter side view, wide enough that the attack line on the floor behind her is visible',
         pose: 'back row attack, long horizontal jump, body stretched forward at a 30 degree diagonal, striking arm fully extended, other arm reaching forward for balance, front knee bent',
         ball: 'volleyball in front of the striking hand',
         camera: 'eye level, three-quarter side view, wide framing, attack line visible on the floor behind the jump',
         note: '바닥의 3m 어택 라인이 보여야 "후위 공격"으로 읽힌다(3.2③)' },
-  MB: { accent: 'long arms',
+  MB: { accent: 'long arms', nlBody: 'long-limbed', nlAction: 'blocking at the net — a straight vertical jump, torso upright, both arms extended straight up and over the net, palms open toward the viewer with thumbs close together', nlBall: 'the ball just in front of her palms, partly hidden by her hands', nlCamera: 'shot from a low angle head-on from the opposite court, the net band crossing at her chest',
         pose: 'blocking at the net, vertical jump, torso straight, both arms extended straight up and over the net, palms open facing the viewer, thumbs close together',
         ball: 'volleyball just in front of both palms, partly hidden by the hands',
         camera: 'low angle 10 degrees, front view from the opposite court, net band crossing at chest height',
         note: '손끝이 세이프 영역 상단선에 닿게 — 장신 강조(3.2④)' },
-  L:  { accent: '',
+  L:  { accent: '', nlAction: 'digging — a very low stance, one leg extended far to the side, the other knee bent deep near the floor, torso leaning forward, both forearms joined into a flat platform with hands clasped', nlBall: 'the ball meeting the center of her forearm platform', nlCamera: 'shot from very low near the floor in three-quarter view, framing her whole body',
         pose: 'digging, very low stance, one leg extended far to the side, other knee deeply bent near the floor, torso leaning forward, both forearms joined into a flat platform, hands clasped with thumbs side by side',
         ball: 'volleyball touching the center of the forearm platform',
         camera: 'very low angle near the floor, three-quarter view, full body framing',
@@ -188,12 +207,12 @@ const POSITION = {
 
 /** 등급 → 6.4 연출 태그 · 3.5 강도. */
 const RARITY = {
-  N:   { light: 'soft even lighting, simple background',
+  N:   { nlLight: 'soft even lighting against a plain background', light: 'soft even lighting, simple background',
          extra: 'standing, upper body, holding a volleyball at the hip',
          drop: 'rim light, lens flare, motion lines' },
-  R:   { light: 'soft lighting, simple background', extra: 'sweat drop', drop: 'rim light, lens flare, light particles, motion lines' },
-  SR:  { light: 'rim light, motion lines, wind', extra: 'hair and fabric in motion, sweat drop', drop: 'lens flare, light particles' },
-  SSR: { light: 'dramatic rim light, spotlight, lens flare, light particles, motion blur background, depth of field',
+  R:   { nlLight: 'soft gym lighting against a simple background', light: 'soft lighting, simple background', extra: 'sweat drop', drop: 'rim light, lens flare, light particles, motion lines' },
+  SR:  { nlLight: 'a clear rim light along her silhouette, with wind and motion in her hair and jersey', light: 'rim light, motion lines, wind', extra: 'hair and fabric in motion, sweat drop', drop: 'lens flare, light particles' },
+  SSR: { nlLight: 'a dramatic rim light and an overhead spotlight, lens flare and drifting light particles, the crowd behind her blurred into shallow depth of field', light: 'dramatic rim light, spotlight, lens flare, light particles, motion blur background, depth of field',
          extra: 'hair and fabric in strong motion, sweat drops', drop: '' },
 };
 
@@ -209,8 +228,12 @@ const CLUB = {
 
 /** 피부 3톤 (2.7). 데이터에 필드가 없어 생성기가 배정한다 — 아래 assignDerived() 참조. */
 const SKIN = { A: 'fair skin', B: 'medium skin tone', C: 'tan skin' };
+/** 문장용 — "…with fair skin" 형태. */
+const SKIN_NL = { A: 'fair', B: 'medium-toned', C: 'tanned' };
 /** 눈매 3종 (2.5/6.2). 역시 데이터에 없어 배정한다. */
 const EYE_SHAPE = { tsurime: 'tsurime, sharp eyes', tareme: 'tareme, gentle drooping eyes', neutral: 'almond shaped eyes' };
+/** 문장용 — 눈 색과 한 덩어리로 만든다(둘 다 "eyes" 로 끝나면 문장이 깨진다). */
+const EYE_SHAPE_NL = { tsurime: 'sharp, upturned', tareme: 'gentle, softly drooping', neutral: 'almond-shaped' };
 
 /** 표정 4종 (6.5) — 스탠딩 인페인트용. */
 const FACES = {
@@ -346,6 +369,93 @@ function tags(...parts) {
   return out.join(', ');
 }
 
+// ────────────────────────────────────────────────────────────── 자연어 변환
+/* 태그 나열형은 Danbooru 를 학습한 로컬 애니메 SDXL 을 위한 형태다.
+ * 호스팅 모델(Higgsfield Soul/Seedream/Flux · Midjourney 등)은 **문장**을 훨씬 잘 받는다.
+ * 그래서 같은 매핑표에서 자연어 문단도 뽑는다 — 어휘를 두 벌 관리하지 않기 위해 태그에서 기계적으로 만든다. */
+
+const LENGTH_RE = /^(very short|short|medium|long) hair$/;
+/** 잘라 낸 머리 — 그 자체로 길이를 뜻하므로 "긴 머리를 픽시컷으로" 같은 말이 안 되게 한다. */
+const CUT_STYLES = { 'bob cut': 'bob cut', 'pixie cut': 'pixie cut', 'wolf cut': 'wolf cut',
+  'hime cut': 'hime cut', 'asymmetrical bob cut': 'asymmetrical bob cut', 'cropped hair': 'cropped cut' };
+/** 묶은 머리 — "…hair worn in a high ponytail" 형태. */
+const TIED_RE = /(ponytail|twintails?|braids?|bun|updo)$/;
+/** 그 자체로는 정보가 없어 더 구체적인 값이 있으면 버리는 토큰. */
+const TIED_GENERIC = ['hair bun'];
+/** 질감·길이 — "with wavy hair" 가 아니라 형용사로 앞에 붙인다. */
+const TEXTURE = { 'straight hair': 'straight', 'wavy hair': 'wavy', 'curly hair': 'curly',
+  'layered hair': 'layered', 'chin-length hair': 'chin-length', 'neat hair': 'neatly kept' };
+/** 문장 끝에 붙는 상태. */
+const HAIR_SUFFIX = { 'hair down': 'worn loose', 'hair behind ear': 'tucked behind one ear',
+  'inward curl': 'curled inward at the ends' };
+const HAIR_ACCESSORY = { 'hair clip': 'a hair clip', 'hairband': 'a hairband' };
+/** 묶은 머리와 뜻이 겹쳐 버리는 토큰. */
+const HAIR_REDUNDANT = ['tied hair'];
+
+/**
+ * 헤어 태그 + 컬러 태그 → 문장 조각.
+ *   'high ponytail, long hair' + 'platinum blonde hair' → "long platinum blonde hair worn in a high ponytail"
+ *   'bob cut, short hair, curly hair' + 'light brown hair' → "a curly light brown bob cut"
+ * 태그를 한 벌만 관리하려고 기계적으로 만든다 — 42종 전부 눈으로 확인했다.
+ */
+function hairPhrase(styleTag, colorTag) {
+  const color = colorTag.split(',')[0].trim().replace(/\s*hair$/, '');
+  const parts = styleTag.split(',').map(t => t.trim());
+
+  const length = (parts.find(t => LENGTH_RE.test(t)) || '').replace(/\s*hair$/, '')
+    .replace(/^medium$/, 'medium-length');   // 영어로는 "medium hair" 보다 "medium-length" 가 자연스럽다
+  const cutKey = parts.find(t => CUT_STYLES[t]);
+  const tiedAll = parts.filter(t => TIED_RE.test(t) && !CUT_STYLES[t]);
+  const tied = tiedAll.find(t => !TIED_GENERIC.includes(t)) || tiedAll[0];
+
+  const used = new Set([cutKey, ...tiedAll, ...parts.filter(t => LENGTH_RE.test(t))]);
+  const rest = parts.filter(t => !used.has(t) && !HAIR_REDUNDANT.includes(t));
+  const textures = rest.filter(t => TEXTURE[t]).map(t => TEXTURE[t]);
+  const suffixes = rest.filter(t => HAIR_SUFFIX[t]).map(t => HAIR_SUFFIX[t]);
+  const accessories = rest.filter(t => HAIR_ACCESSORY[t]).map(t => HAIR_ACCESSORY[t]);
+  const bangs = rest.filter(t => /bangs$/.test(t));
+
+  const adj = xs => xs.filter(Boolean).join(', ');
+  let head;
+  if (tied) {
+    const article = /s$/.test(tied) ? '' : 'a ';
+    head = `${adj([length, ...textures])} ${color} hair worn in ${article}${tied}`.replace(/^\s+/, '');
+    if (!length && !textures.length) head = `${color} hair worn in ${article}${tied}`;
+  } else if (cutKey) {
+    const a = /^[aeiou]/.test(textures[0] || color) ? 'an' : 'a';
+    head = `${a} ${adj(textures)}${textures.length ? ' ' : ''}${color} ${CUT_STYLES[cutKey]}`;
+  } else {
+    head = `${adj([length, ...textures])} ${color} hair`.replace(/^\s+/, '');
+  }
+
+  const tail = [...bangs.map(b => `with ${b}`), ...accessories.map(a => `with ${a}`), ...suffixes];
+  return tail.length ? `${head}, ${tail.join(' and ')}` : head;
+}
+
+/** 카드 자연어 프롬프트 — 한 문단. */
+function buildCardNatural(p, d) {
+  const club = CLUB[p.teamId], pos = POSITION[p.position], rar = RARITY[p.rarity];
+  const hair = hairPhrase(HAIR_STYLE[p.appearance.hairStyle], HAIR_COLOR[p.appearance.hairColor].tag);
+  const eyeColor = EYE_COLOR[p.appearance.eyeColor].split(',')[0].trim().replace(/\s*eyes$/, '');
+  const eyes = `${EYE_SHAPE_NL[d.eye]} ${eyeColor} eyes`;
+  const body = [BODY_NL[p.appearance.bodyType], pos.nlBody].filter(Boolean).join(', ');
+  const isL = p.position === 'L';
+  const jersey = isL
+    ? `a plain ${club.libero} libero jersey with ${club.primary} trim — a deliberately different color from her teammates`
+    : `a plain ${club.primary} volleyball jersey with ${club.secondary} trim`;
+
+  return [
+    `A ${body} young woman with ${SKIN_NL[d.skin]} skin, ${hair} and ${eyes}.`,
+    `She is ${pos.nlAction}, ${pos.nlBall}.`,
+    `She wears ${jersey}, tucked in, ${club.shorts} mid-thigh shorts, knee pads, white socks and volleyball shoes.`,
+    `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
+    `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
+    `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
+    `Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes.`,
+    `Vertical 3:4 composition, her face in the upper third, full figure inside the frame.`,
+  ].join(' ');
+}
+
 function section(title, body) { return `\n──────── ${title}\n${body}\n`; }
 
 function renderPack(p, d, warn) {
@@ -369,7 +479,8 @@ function renderPack(p, d, warn) {
   ].filter(Boolean).join('\n');
 
   return head
-    + section('CARD (2048×2732, 3:4) — POSITIVE', buildCard(p, d))
+    + section('CARD — POSITIVE · 태그형 (로컬 SD / 애니메 SDXL)', buildCard(p, d))
+    + section('CARD — POSITIVE · 자연어형 (Higgsfield · Midjourney 등 호스팅 모델)', buildCardNatural(p, d))
     + section('STANDING (1440×2560, 9:16) — POSITIVE', buildStanding(p, d))
     + section('SD TOKEN (256×256) — POSITIVE', buildToken(p))
     + section('SD TOKEN — NEGATIVE (공용 네거티브를 쓰지 말 것: chibi 가 서로 싸운다)', TOKEN_NEGATIVE)

@@ -36,8 +36,23 @@ node tools/art-prompts.mjs --check   # 파일을 쓰지 않고 검사만 (CI 게
 node tools/art-prompts.mjs --id p001 # 한 명만 표준출력으로
 ```
 
-한 명당 나오는 것: **카드 · 스탠딩 · SD 토큰 · 표정 4종 · 네거티브 2종**(카드/스탠딩 공용, 토큰 전용).
+한 명당 나오는 것: **카드(태그형 + 자연어형) · 스탠딩 · SD 토큰 · 표정 4종 · 네거티브 2종**(카드/스탠딩 공용, 토큰 전용).
 공용 고정 파라미터는 `_params.txt`, 전체 목록은 `_index.md`.
+
+### 1.0 태그형과 자연어형
+
+같은 매핑표에서 **두 가지 형태**를 뽑는다. 어휘를 두 벌 관리하지 않으려고 자연어는 태그에서 기계적으로 만든다.
+
+| 형태 | 대상 | 예 |
+|---|---|---|
+| 태그형 | 로컬 SD · 애니메 SDXL(Danbooru 태그 학습) | `high ponytail, long hair, platinum blonde hair, purple eyes, tareme` |
+| 자연어형 | Higgsfield(Soul·Seedream·Flux) · Midjourney 등 호스팅 모델 | `A tall, slim and athletic young woman with fair skin, long platinum blonde hair worn in a high ponytail and gentle, softly drooping purple eyes.` |
+
+변환 규칙에서 주의한 것: 질감(straight/wavy/curly/layered)은 `with wavy hair` 가 아니라 **형용사로 앞에** 붙이고,
+자른 머리(bob/pixie/hime/cropped)에는 길이 수식을 붙이지 않으며(`in a cropped hair` 방지),
+눈 색과 눈매는 **한 덩어리**로 만든다(둘 다 `eyes` 로 끝나면 문장이 깨진다).
+체형은 태그(`tall, slim athletic build`)가 명사구라 문장용 형용사구를 따로 둔다(`tall, slim and athletic`).
+42종 헤어 전부 출력해 눈으로 확인했다.
 
 ### 1.1 어휘는 닫혀 있다
 

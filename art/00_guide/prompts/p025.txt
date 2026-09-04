@@ -10,7 +10,7 @@
 #
 # 고정 파라미터는 art/00_guide/prompts/_params.txt, 네거티브는 _negative.txt (전원 공용).
 # {quality_prefix} 와 {charLoRA} 는 체크포인트·LoRA 가 정해지면 그 값으로 치환한다(6.1·6.2).
-──────── CARD (2048×2732, 3:4) — POSITIVE
+──────── CARD — POSITIVE · 태그형 (로컬 SD / 애니메 SDXL)
 {quality_prefix}, {charLoRA},
 1girl, solo, adult woman, young adult, mature face, fair skin, tall, athletic build, toned,
 long hair, wavy hair, orange hair, orange eyes, amber eyes, tareme, gentle drooping eyes,
@@ -19,6 +19,9 @@ no logo, no text, blank jersey, solid color clothes,
 spiking, jumping, right arm fully extended overhead, open hand, torso twisted like a drawn bow, knees folded back, hair flying up, volleyball, volleyball just in front of the striking palm, low angle 15 degrees, dynamic angle, foreshortening, three-quarter view from the right,
 indoor gymnasium, volleyball court, volleyball net, simple background, rim light, motion lines, wind,
 anime style, clean lineart, cel shading, flat colors, bright colors, sharp focus, highly detailed eyes, hair and fabric in motion, sweat drop
+
+──────── CARD — POSITIVE · 자연어형 (Higgsfield · Midjourney 등 호스팅 모델)
+A tall and athletic young woman with fair skin, long, wavy orange hair and gentle, softly drooping orange eyes. She is mid-spike — airborne, right arm fully extended overhead with an open palm, torso twisted like a drawn bow, knees folded back, hair flying upward, the ball just in front of her striking palm. She wears a plain crimson red volleyball jersey with copper trim, tucked in, black mid-thigh shorts, knee pads, white socks and volleyball shoes. The jersey is completely blank — no logo, number, text or pattern of any kind. Shot from a low angle with strong foreshortening, three-quarter view from her right. Indoor gymnasium with the volleyball net behind her, a clear rim light along her silhouette, with wind and motion in her hair and jersey. Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes. Vertical 3:4 composition, her face in the upper third, full figure inside the frame.
 
 ──────── STANDING (1440×2560, 9:16) — POSITIVE
 {quality_prefix}, {charLoRA},
