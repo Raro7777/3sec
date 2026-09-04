@@ -405,3 +405,32 @@ p001 의 헤어스타일이 데이터(`롱 하이 포니테일`)와 달리 트�
 재생성 한 번에 단일 포니테일이 나왔다.
 
 **규칙**: 헤어·포즈가 틀리면 재생성, 옷·마크가 틀리면 편집 패스. 편집이 싼데 안 되는 것이 있다.
+
+
+---
+
+## 9. 미디엄 샷 — 크롭 손실을 없앤다 (v0.4)
+
+전신 샷은 8라운드 내내 머리가 프레임의 **10~16%** 로 나왔다. 4.2 규격은 18~23% 이고,
+`--headfrac` 로 잘라 맞출 수는 있지만 **원본의 일부만 쓰게 되어 해상도가 깎인다**.
+
+프롬프트 맨 앞에 프레이밍을 못박으니 해결됐다:
+
+```
+MEDIUM SHOT / WAIST-UP CROP. The bottom edge of the frame cuts her off at mid-thigh —
+her lower legs and feet are NOT in the picture. Her head, shoulders and torso fill most
+of the frame; her head alone is about one fifth of the total image height.
+This is a close hero portrait, not a full-body shot.
+```
+
+| | 전신 샷 (v0.3) | 미디엄 샷 (v0.4) |
+|---|---|---|
+| 원본에서 머리 크기 | 11% | **19.6%** |
+| 규격(18~23%) | ✗ | **✅ 크롭 전에 이미 통과** |
+| 크롭이 쓰는 원본 면적 | 약 30% | **약 96%** |
+| 카드 해상도 손실 | 있음 | **거의 없음** |
+
+**"화면의 1/5" 같은 비율 지시는 안 먹히고, "무릎 아래는 프레임 밖" 같은 물리적 지시는 먹힌다.**
+모델은 비율을 못 세지만 무엇을 자를지는 안다.
+
+세트 프롬프트 순서도 중요했다 — 프레이밍 문장을 **맨 앞**에 두어야 한다. 스타일·인물 묘사 뒤에 두면 묻힌다.
