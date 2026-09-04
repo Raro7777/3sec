@@ -26,17 +26,19 @@ const ROOT = path.resolve(HERE, '..');
 const ARGV = process.argv.slice(2);
 const DRY = ARGV.includes('--dry');
 const opt = (name, def) => { const i = ARGV.indexOf('--' + name); return i >= 0 && ARGV[i + 1] ? ARGV[i + 1] : def; };
-const [pid, src] = ARGV.filter(a => !a.startsWith('--') && ARGV[ARGV.indexOf(a) - 1]?.replace('--', '') !== 'face'
-  && ARGV[ARGV.indexOf(a) - 1]?.replace('--', '') !== 'quality' && ARGV[ARGV.indexOf(a) - 1]?.replace('--', '') !== 'cardw');
+const VALUED = ['face', 'quality', 'cardw', 'headfrac'];
+const [pid, src] = ARGV.filter((a, i) => !a.startsWith('--') && !VALUED.includes((ARGV[i - 1] || '').replace('--', '')));
 
 if (!pid || !src) {
-  console.error('사용법: node tools/art-import.mjs <pid> <원본 이미지> [--face cx,cy,h] [--cardw 900] [--dry]');
+  console.error('사용법: node tools/art-import.mjs <pid> <원본 이미지> [--face cx,cy,h] [--headfrac 0.20] [--cardw 900] [--dry]');
   process.exit(1);
 }
 if (!fs.existsSync(src)) { console.error(`원본을 찾을 수 없습니다: ${src}`); process.exit(1); }
 
 /** 카드 가로 픽셀. 웹 프로토타입 표시 크기(최대 108px CSS)의 8배면 충분하고, 용량이 예산 안에 든다. */
 const CARD_W = +opt('cardw', 900);
+/** 카드 높이에서 머리가 차지할 비율. 주면 그 크기가 되도록 잘라 낸다(4.2 는 0.18~0.23). */
+const HEADFRAC = opt('headfrac', null) ? +opt('headfrac') : null;
 const THUMB_W = 512;
 /** 용량 상한 — 42명 × (카드+썸네일)이 인라인 예산 11MB 안에 들어야 한다. */
 const BUDGET = { card: 200 * 1024, thumb: 60 * 1024 };
@@ -67,9 +69,29 @@ if (!faceArg) console.warn('⚠ --face 를 주지 않아 4.2 권장 위치로 �
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// ── 카드 크롭 (3:4). 얼굴 중심이 세로 30% 에 오게 맞추고 경계로 민다.
+/**
+ * 카드 크롭 (3:4).
+ *
+ * 기본은 "비율만 맞춘다" — 원본을 최대한 살리고 얼굴 중심을 세로 30% 로 민다.
+ *
+ * `--headfrac 0.20` 을 주면 **머리 크기까지 맞춘다**: 카드 높이의 20% 를 머리가 채우도록 잘라 낸다.
+ * 이게 필요한 이유는 실측이다 — 생성 모델은 프롬프트로 "머리가 화면의 1/5" 을 아무리 지시해도
+ * 전신을 그린다(히어로 시험 6장 전부 머리 10~16%). 4.2 규격은 18~23% 이고, 그래야 카드가 96px 로
+ * 줄었을 때 얼굴이 읽힌다. 생성으로 안 되는 것을 크롭으로 맞춘다.
+ */
 function cardCrop() {
   const R = 3 / 4;
+  if (HEADFRAC) {
+    let h = Math.round(face.h / HEADFRAC);
+    let w = Math.round(h * R);
+    if (w > SW || h > SH) {                           // 원본보다 커지면 들어가는 최대 크기로
+      const k = Math.min(SW / w, SH / h);
+      w = Math.round(w * k); h = Math.round(h * k);
+    }
+    const x = Math.round(clamp(face.cx - w / 2, 0, SW - w));
+    const y = Math.round(clamp(face.cy - 0.30 * h, 0, SH - h));
+    return { x, y, w, h };
+  }
   if (SW / SH < R) {                                  // 원본이 규격보다 세로로 길다 → 위아래를 자른다
     const h = Math.round(SW / R);
     const y = Math.round(clamp(face.cy - 0.30 * h, 0, SH - h));
@@ -98,7 +120,9 @@ console.log(`| 얼굴(원본 좌표) | 중심 (${face.cx}, ${face.cy}) · 높이
 console.log(`| 카드 크롭 | (${card.x}, ${card.y}) ${card.w}×${card.h} → ${CARD_W}×${Math.round(CARD_W * 4 / 3)} |`);
 console.log(`| 썸네일 크롭 | (${thumb.x}, ${thumb.y}) ${thumb.w}×${thumb.h} → ${THUMB_W}×${THUMB_W} |`);
 const inTol = Math.abs(facePct.x - 0.5) <= 0.06 && Math.abs(facePct.y - 0.30) <= 0.05;
+const headPct = face.h / card.h;
 console.log(`| 카드 안 얼굴 위치 | (${(facePct.x * 100).toFixed(0)}%, ${(facePct.y * 100).toFixed(0)}%) — 권장 (50%, 30%) ±(6, 5) ${inTol ? '✅' : '⚠ 벗어남'} |`);
+console.log(`| 카드 안 머리 크기 | ${(headPct * 100).toFixed(0)}% — 규격 18~23% ${headPct >= 0.18 && headPct <= 0.23 ? '✅' : '⚠ 벗어남'} |`);
 
 if (DRY) process.exit(0);
 

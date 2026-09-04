@@ -449,16 +449,20 @@ function buildCardNatural(p, d) {
     : `a plain ${club.primary} volleyball jersey with ${club.secondary} trim`;
 
   return [
+    `Anime illustration, cel shading, clean lineart, flat vivid colors, sharp focus, highly detailed eyes — a trading-card illustration of a fictional women's volleyball player.`,
+    // 라운드 1 에서 한 장에 "SUPER SPIKE" 글자가 박혔다. 모델이 카드처럼 보이는 그림에 제목을 얹으려 하므로 맨 앞에서 막는다.
+    `ABSOLUTELY NO TEXT anywhere in the picture: no words, letters, numbers, captions, titles, logos, watermarks or signage of any kind, on the uniform, the shoes, the walls or as an overlay.`,
     `A ${body} young woman with ${SKIN_NL[d.skin]} skin, ${hair} and ${eyes}.`,
     `She is ${pos.nlAction}, ${pos.nlBall}.`,
-    `She wears ${jersey}, tucked in, ${club.shorts} mid-thigh shorts, knee pads, white socks and volleyball shoes.`,
+    `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings.`,
+    // 1.4 배꼽 노출 금지 — 라운드 1 에서 두 장이 밑단을 걷어 올려 배가 드러났다
+    `The hem of the jersey is long and stays tucked into her shorts: her midriff and navel are completely covered, no bare stomach.`,
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
-    `Anime illustration style: clean lineart, cel shading, flat vivid colors, sharp focus, highly detailed eyes.`,
     `Her uniform is a loose-fitting athletic cut: the jersey does not cling and the shorts are standard volleyball shorts reaching about a third of the way to the knee.`,
     `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
-    `Vertical 3:4 composition. Frame her upper body and face, not her hips: her head fills roughly a fifth of the frame height with her face centred around 30% down from the top, clearly readable when the image is shrunk to a small thumbnail.`,
+    `Vertical 3:4 composition. This is a head-and-torso hero shot: her head fills about one fifth of the total image height and her face sits about 30% down from the top edge, so her expression is instantly readable when the picture is shrunk to a tiny thumbnail. Do not frame on her hips or legs. Modest sports illustration, no emphasis on chest, hips or thighs.`,
   ].join(' ');
 }
 
