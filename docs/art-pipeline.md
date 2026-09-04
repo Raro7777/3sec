@@ -1,6 +1,7 @@
 # 아트 파이프라인 (art-pipeline v0.1)
 
-> 상태: **그림 제작 전 준비 완료.** 프롬프트 팩·슬롯인·규격 검사·회귀 테스트가 있고, 실제 이미지는 아직 0장이다.
+> 상태: **파이프라인 동작 확인, 히어로 1명 완료.** p001 서하율의 카드·썸네일이 게임에 들어가 있고,
+> 화풍·모델·보정 방법이 실측으로 정해졌다(5.4·5.5). 남은 42명 중 41명은 아직 SVG 플레이스홀더다.
 > 이 문서는 "그림 한 장을 어떻게 게임 안까지 넣는가"의 절차서다.
 > 스타일·규격의 근거는 [art-style-guide.md](art-style-guide.md)에 있고, 여기서는 **손이 움직이는 순서**만 적는다.
 >
@@ -244,6 +245,65 @@ node tools/art-import.mjs p001 원본.png --face 700,490,240 --headfrac 0.20
 
 남은 것: 배경 관중이 2.8 절의 보케보다 또렷하고, 1호와 2호의 화풍이 다르다(8.2 편차 QA는 같은 모델·같은 파라미터로
 3명을 만든 뒤에 판정해야 한다).
+
+### 5.4 히어로 시험 3호 — **화풍은 프롬프트보다 모델이 결정한다**
+
+2호를 본 사용자의 평가: *"처음 내가 만든 이미지가 더 좋은데 지금은 초등학교 만화 같다."* 맞는 지적이었고, 원인은 두 개다.
+
+**① 스타일 문구가 납작함을 요구하고 있었다.** 자연어 프롬프트에 `flat vivid colors, clean lineart, cel shading` 이 들어 있었다.
+이건 태그형에서 가져온 문구인데, 태그형은 **애니메 특화 SDXL** 을 전제한다 — 거기서 이 태그들은 "애니메 화풍"이라는 뜻이다.
+**범용 모델은 같은 단어를 문자 그대로 받는다.**
+
+**② 모델이 애니메용이 아니었다.** Nano Banana(Google)는 범용·실사 지향이다.
+
+| | 2호 (Nano Banana + flat 문구) | 3호 (Seedream 4.5 + 밀도 문구) |
+|---|---|---|
+| 셰이딩 | 단색 2단, 굵고 균일한 외곽선 | 에어브러시 계조, 선 굵기 변화 |
+| 머리카락 | 덩어리 | 가닥별 스페큘러 |
+| 눈 | 하이라이트 1개 | 다중 하이라이트, 발광 |
+| 조명 | 평면 | 림라이트·블룸·플레어·보케 |
+
+바꾼 문구(자연어형에만 적용, 태그형은 그대로 둔다):
+
+```
+Premium mobile gacha game character card illustration — high-detail anime key visual,
+semi-realistic anime rendering with soft airbrushed shading, glossy specular highlights,
+individually rendered hair strands, luminous skin, rich colour depth, delicate varying line weight,
+large expressive eyes with multiple highlights, subtle bloom and lens flare.
+NOT flat colours, NOT simple cartoon, NOT thick uniform outlines, NOT a children's comic.
+```
+
+**확정**: 자연어형은 **Seedream 4.5**(`quality: high`, 3:4). Nano Banana 계열은 쓰지 않는다.
+
+### 5.5 프롬프트로 안 잡히면 **편집 패스**로 고친다
+
+Seedream 4장이 4장 모두 배꼽을 드러냈다(1.4 위반). 대문자로 못박아도 마찬가지였다.
+프롬프트를 계속 다투는 대신, **생성된 그림을 그대로 참조로 넣고 옷만 고치게** 했다:
+
+```
+model: seedream_v5_pro
+medias: [{ value: <media_id>, role: 'image_references' }]
+prompt: "Edit this illustration: make the violet jersey longer so its hem overlaps the top of the
+         shorts, completely covering her stomach — no bare skin. Keep everything else exactly as it is:
+         same character, face, pose, ball, background, lighting and art style."
+```
+
+원본 URL 은 `media_import_url` 로 `media_id` 를 받아 넘긴다. 얼굴·포즈·조명·화풍이 유지된 채 옷만 바뀐다.
+**42명에 쓸 수 있는 수법이고, 리터치 공정(8절)의 일부를 자동화한다.**
+
+이렇게 해서 p001 최종본은 규격을 전부 통과한다 — 얼굴 (50%, 30%) · 머리 20% · 카드 94KB · 썸네일 45KB ·
+글자 없음 · 민무늬 신발 · 공식구 색 · 배 가림.
+
+### 5.6 지금까지의 크레딧
+
+| 라운드 | 모델 | 장수 | 크레딧 |
+|---|---|---|---|
+| 1~2 | nano_banana_pro | 8 | 4 |
+| 3~4 | seedream_v4_5 (high) | 8 | 2 |
+| 보정 | seedream_v5_pro (편집) | 2 | 1 |
+| **합계** | | **18** | **7** |
+
+카드 한 장을 확정하는 데 약 2크레딧. 42명이면 **100크레딧 내외**로 추정된다.
 
 ---
 

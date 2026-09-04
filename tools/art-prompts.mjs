@@ -449,14 +449,17 @@ function buildCardNatural(p, d) {
     : `a plain ${club.primary} volleyball jersey with ${club.secondary} trim`;
 
   return [
-    `Anime illustration, cel shading, clean lineart, flat vivid colors, sharp focus, highly detailed eyes — a trading-card illustration of a fictional women's volleyball player.`,
+    // 이 문장이 화풍을 결정한다. 초기 판은 태그형과 같은 `cel shading, flat colors, clean lineart` 를 썼는데,
+    // 범용 모델(Nano Banana 등)은 그걸 **문자 그대로** 받아 초등학생 만화처럼 그렸다. 반대로 지시한다.
+    `Premium mobile gacha game character card illustration — high-detail anime key visual, semi-realistic anime rendering with soft airbrushed shading, glossy specular highlights, individually rendered hair strands, luminous skin, rich colour depth, delicate varying line weight, large expressive eyes with multiple highlights, subtle bloom and lens flare. NOT flat colours, NOT simple cartoon, NOT thick uniform outlines, NOT a children's comic.`,
     // 라운드 1 에서 한 장에 "SUPER SPIKE" 글자가 박혔다. 모델이 카드처럼 보이는 그림에 제목을 얹으려 하므로 맨 앞에서 막는다.
     `ABSOLUTELY NO TEXT anywhere in the picture: no words, letters, numbers, captions, titles, logos, watermarks or signage of any kind, on the uniform, the shoes, the walls or as an overlay.`,
     `A ${body} young woman with ${SKIN_NL[d.skin]} skin, ${hair} and ${eyes}.`,
     `She is ${pos.nlAction}, ${pos.nlBall}.`,
     `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings.`,
     // 1.4 배꼽 노출 금지 — 라운드 1 에서 두 장이 밑단을 걷어 올려 배가 드러났다
-    `The hem of the jersey is long and stays tucked into her shorts: her midriff and navel are completely covered, no bare stomach.`,
+    // 프롬프트만으로는 4장 중 4장이 배꼽을 드러냈다. 대문자로 못박고, 그래도 나오면 편집 패스로 고친다(art-pipeline 5.4).
+    `HER UNIFORM TOP IS LONG AND FULLY COVERS HER STOMACH: the jersey hem hangs down past her waistband and overlaps the top of her shorts, so there is no gap and NO VISIBLE SKIN between the jersey and the shorts.`,
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
@@ -606,8 +609,13 @@ for (const p of players) {
 }
 fs.writeFileSync(path.join(OUT, '_negative.txt'), NEGATIVE + '\n');
 fs.writeFileSync(path.join(OUT, '_params.txt'), [
-  '# 고정 파라미터 (art-style-guide 6.1). 체크포인트를 정하면 여기 실제 값을 적고 해시를 남긴다.',
-  '체크포인트   : <이름 + 파일 해시>        # 프로젝트 중 교체 시 42명 전원 재검증',
+  '# 고정 파라미터 (art-style-guide 6.1).',
+  '#',
+  '# 실측으로 정해진 것 (docs/art-pipeline.md 5.4):',
+  '#   자연어형 모델  : Seedream 4.5 (quality=high, 3:4) — Higgsfield MCP',
+  '#   보정 편집      : Seedream 5.0 Pro + 원본을 image_references 로 (옷 길이 등 국소 수정)',
+  '#   쓰지 말 것     : Nano Banana 계열 — 범용 모델이라 화풍 태그를 문자 그대로 받아 납작하게 그린다',
+  '체크포인트   : <로컬 SD 를 쓸 경우 이름 + 파일 해시>  # 교체 시 42명 전원 재검증',
   'VAE          : <체크포인트 권장 VAE>',
   '해상도 카드  : 960x1280 (3:4)  → Hires ×1.5 → 업스케일 ×1.4~1.6 → 2048x2732',
   '해상도 스탠딩: 768x1344 (9:16) → 1440x2560',
