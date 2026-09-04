@@ -2,8 +2,7 @@ lowres, worst quality, low quality, normal quality, jpeg artifacts, blurry, nois
 bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, extra limbs, extra arms, extra legs, malformed limbs, deformed, long neck, bad proportions,
 text, logo, letters, numbers, sponsor, emblem, watermark, signature, artist name, username, stripes on chest, pattern on clothes,
 realistic, photorealistic, 3d, cgi, painting texture, sketch, monochrome,
-nsfw, nude, cleavage, underwear, panties, see-through, wet clothes, midriff, navel, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, suggestive, large breasts, huge breasts,
+nsfw, nude, deep cleavage, underwear, panties, see-through, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, explicit,
 child, loli, kid, chibi,
 multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball,
-ass focus, thigh focus, hip focus, breast focus, skin tight shorts, short shorts, wet thighs, sweat on thighs,
 branded volleyball, blue and yellow volleyball, real brand ball, face too small, distant shot

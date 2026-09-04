@@ -38,13 +38,13 @@
     "seed_stand": null
   },
   "source": {
-    "file": "fix-0.png",
+    "file": "final-0.png",
     "size": "1760x2352",
     "crop": {
-      "x": 171,
-      "y": 148,
-      "w": 1238,
-      "h": 1650
+      "x": 463,
+      "y": 304,
+      "w": 1129,
+      "h": 1505
     },
     "imported": "2026-09-04"
   }

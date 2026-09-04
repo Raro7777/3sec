@@ -249,10 +249,9 @@ const NEGATIVE = [
   'bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, extra limbs, extra arms, extra legs, malformed limbs, deformed, long neck, bad proportions',
   'text, logo, letters, numbers, sponsor, emblem, watermark, signature, artist name, username, stripes on chest, pattern on clothes',
   'realistic, photorealistic, 3d, cgi, painting texture, sketch, monochrome',
-  'nsfw, nude, cleavage, underwear, panties, see-through, wet clothes, midriff, navel, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, suggestive, large breasts, huge breasts',
+  'nsfw, nude, deep cleavage, underwear, panties, see-through, crop top, bikini, swimsuit, thong, upskirt, cameltoe, sexual, explicit',
   'child, loli, kid, chibi',
   'multiple girls, 2girls, extra ball, multiple balls, basketball, soccer ball, tennis ball',
-  'ass focus, thigh focus, hip focus, breast focus, skin tight shorts, short shorts, wet thighs, sweat on thighs',
   'branded volleyball, blue and yellow volleyball, real brand ball, face too small, distant shot',
 ].join(',\n');
 
@@ -320,7 +319,7 @@ function buildCard(p, d) {
     tags(hair, hcol.tag, eyes, EYE_SHAPE[d.eye]) + ',',
     `volleyball uniform, ${jersey}, short sleeves, tucked in, ${club.shorts} shorts, mid-thigh shorts, knee pads, white socks, volleyball shoes,`,
     `no logo, no text, blank jersey, solid color clothes,`,
-    `loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,`,
+    `athletic build, toned muscles, sweat, dynamic motion, determined expression, face clearly visible,`,
     `${pos.pose}, volleyball, ${pos.ball}, ${pos.camera},`,
     tags('indoor gymnasium, volleyball court, volleyball net, simple background', rar.light) + ',',
     `anime style, clean lineart, cel shading, flat colors, bright colors, sharp focus, highly detailed eyes${rar.extra ? ', ' + rar.extra : ''}`,
@@ -343,7 +342,7 @@ function buildStanding(p, d) {
     tags(hair, hcol.tag, eyes, EYE_SHAPE[d.eye]) + ',',
     `volleyball uniform, ${jersey}, short sleeves, tucked in, ${club.shorts} shorts, knee pads, white socks, volleyball shoes,`,
     `no logo, no text, blank jersey, solid color clothes,`,
-    `loose fit jersey, modest sportswear, standard volleyball shorts, face clearly visible, upper body emphasis,`,
+    `athletic build, toned muscles, sweat, dynamic motion, determined expression, face clearly visible,`,
     `standing, full body, facing viewer, body turned 15 degrees, one hand on hip, relaxed pose, no ball,`,
     `eye level, plain white background, even lighting, no rim light,`,
     `anime style, clean lineart, cel shading, flat colors, sharp focus, highly detailed eyes`,
@@ -456,16 +455,17 @@ function buildCardNatural(p, d) {
     `ABSOLUTELY NO TEXT anywhere in the picture: no words, letters, numbers, captions, titles, logos, watermarks or signage of any kind, on the uniform, the shoes, the walls or as an overlay.`,
     `A ${body} young woman with ${SKIN_NL[d.skin]} skin, ${hair} and ${eyes}.`,
     `She is ${pos.nlAction}, ${pos.nlBall}.`,
-    `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings.`,
-    // 1.4 배꼽 노출 금지 — 라운드 1 에서 두 장이 밑단을 걷어 올려 배가 드러났다
-    // 프롬프트만으로는 4장 중 4장이 배꼽을 드러냈다. 대문자로 못박고, 그래도 나오면 편집 패스로 고친다(art-pipeline 5.4).
-    `HER UNIFORM TOP IS LONG AND FULLY COVERS HER STOMACH: the jersey hem hangs down past her waistband and overlaps the top of her shorts, so there is no gap and NO VISIBLE SKIN between the jersey and the shorts.`,
+    `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings — a real athletic kit, fitted to her body, not a loose t-shirt.`,
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
+    // 1.4.1 — 금지선이 아니라 **요구 사항**이다. 12세 판에서 이걸 잃어 카드가 밋밋해졌다.
+    `Give it the intensity of a real match: she is at the very top of her jump with her feet clearly off the floor, the low angle exaggerating her height and reach; an athlete's muscle definition visible in her arms, shoulders and thighs; a fierce competitive expression with her eyes locked on the ball; hair, jersey and beads of sweat all streaming in the direction of the motion.`,
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
-    `Her uniform is a loose-fitting athletic cut: the jersey does not cling and the shorts are standard volleyball shorts reaching about a third of the way to the knee.`,
     `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
-    `Vertical 3:4 composition. This is a head-and-torso hero shot: her head fills about one fifth of the total image height and her face sits about 30% down from the top edge, so her expression is instantly readable when the picture is shrunk to a tiny thumbnail. Do not frame on her hips or legs. Modest sports illustration, no emphasis on chest, hips or thighs.`,
+    // 얼굴 크기는 카드가 96px 로 줄었을 때 읽히느냐의 문제다(4.2). 정숙 규정이 아니라 가독성 규정이라 남긴다.
+    `Vertical 3:4 composition: her face sits about 30% down from the top edge and stays clearly readable when the picture is shrunk to a tiny thumbnail.`,
+    // 1.4.2 — 15세 등급의 금지선.
+    `Keep it within a 15+ sports rating: she stays fully in her uniform — no nudity, no underwear, no see-through fabric, no upskirt angle and no sexual posing. The pose comes from the volleyball action itself.`,
   ].join(' ');
 }
 

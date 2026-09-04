@@ -327,3 +327,46 @@ prompt: "Edit this illustration: make the violet jersey longer so its hem overla
 - [ ] **웹 프로토타입 인라인 용량.** 42명 × (카드+썸네일)을 예산 11MB 안에 넣으려면 카드 1장 200KB 가 상한이다.
       정식 앱(Unity)은 Addressables 원격 그룹이라 이 제약이 없다 — 웹 프로토타입만의 제약이다.
 - [ ] AI 생성 고지·라이선스(art-style-guide 10절)는 여전히 미결. 체크포인트를 고르는 순간 결론이 필요하다.
+
+
+---
+
+## 7. 등급 상향 (v0.2) — 규정이 그림을 죽이고 있었다
+
+히어로 시험 3호까지 오고 나서 드러난 것: **12세 금지선이 경기 장면의 박진감까지 같이 잘라 내고 있었다.**
+"엉덩이·가슴 중심 프레이밍 금지", "땀은 얼굴·목·팔에만", "밀착 부위 형태 강조 금지", "배꼽 노출 금지" 를
+프롬프트에 그대로 옮기면 모델은 **동작 자체를 밋밋하게** 그린다 — 점프가 낮아지고, 근육이 사라지고,
+땀과 흐름이 없어진다. 규정을 지킨 결과가 "배구 카드처럼 안 보이는 배구 카드"였다.
+
+`art-style-guide.md` 1.4 를 다시 썼다.
+
+- **목표 등급 12세 → 15세.** 한 번 청소년이용불가까지 열기로 했다가 되돌렸다 —
+  실제로 원한 것이 "경기의 박진감과 선수의 매력"이었고 그건 15세 안에서 전부 되며,
+  19세는 원하지 않는 것(나체·성행위)을 허용하는 대신 심의·스토어·광고 제약만 남기기 때문이다(1.4.3).
+- **1.4.1 을 신설했다 — 금지선이 아니라 요구 사항이다.** 높이·힘·긴장·속도·동작에서 나오는 실루엣·
+  몸에 맞는 유니폼·전신의 땀·아끼지 않는 조명. **이게 없으면 QA 탈락**이다.
+- 금지선(1.4.2)은 나체·속옷·과도한 노출·성행위·투시·업스커트·부위 클로즈업·아동형 체형으로 좁혔고,
+  **실존 브랜드와 화면 내 문자는 등급과 무관하게 유지**한다.
+
+프롬프트 생성기도 같이 바꿨다. `Modest sports illustration, no emphasis on chest, hips or thighs` 와
+`loose-fitting`·`midriff covered` 문장을 걷어내고, 1.4.1 을 한 문장으로 요구한다:
+
+```
+Give it the intensity of a real match: she is at the very top of her jump with her feet clearly off the
+floor, the low angle exaggerating her height and reach; an athlete's muscle definition visible in her
+arms, shoulders and thighs; a fierce competitive expression with her eyes locked on the ball; hair,
+jersey and beads of sweat all streaming in the direction of the motion.
+```
+
+네거티브에서도 `ass focus, thigh focus, hip focus, breast focus, skin tight shorts, wet thighs` 를 뺐다 —
+이것들이 박진감을 죽이던 항목이다. `nsfw, nude, underwear, see-through, upskirt` 는 남긴다.
+
+**결과**: 같은 모델·같은 크롭 규칙으로 도약·근육·땀·시선이 살아난 카드가 나왔다. 규격도 전부 통과
+(얼굴 (50%, 30%) · 머리 20% · 카드 98KB · 썸네일 36KB).
+
+### 7.1 남은 QA 항목
+
+- **머리 모양이 데이터와 다르다.** p001 은 `롱 하이 포니테일`(하나)인데 생성물은 트윈테일이다.
+  헤어스타일은 42명 구분의 1축(world.md 6.2)이라 그냥 넘길 수 없다 — 생성 시 강조하거나 편집 패스로 고친다.
+- 배경 관중이 2.8 절의 보케보다 또렷하다.
+- 화풍 편차 판정(8.2)은 같은 모델·같은 파라미터로 히어로 3명을 만든 뒤에 한다.
