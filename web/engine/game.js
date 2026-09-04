@@ -121,7 +121,7 @@ export function clubSkillLevelFor(season) {
 const VACANCY = {
   overallDelta: -4,        // 육성 선수 대체 강도 = 구단 평균 + 이 값(스탯 평균 공간) = OVR −7.4
   traineeSlots: 4,         // 구단이 육성 선수로 버티는 최대 결원 수. 이보다 많이 빠지면 즉시전력을 영입한다
-  signingOvrDelta: -2.0,   // 즉시전력 영입의 포지션 가중 OVR = 빠져나간 선수의 사다리 OVR + 이 값
+  signingOvrDelta: -2.0,   // 즉시전력 영입의 포지션 가중 OVR = 그 구단의 사다리 평균 OVR + 이 값
 };
 export const VACANCY_TUNING = VACANCY;
 
@@ -133,15 +133,18 @@ export const VACANCY_TUNING = VACANCY;
  * 42명 전원이 같은 속도로 늙으므로 저장 포맷이 늘지 않고, 세이브를 불러와도 값이 같다(결정성).
  *
  *  - 전성기(peak) 끝까지는 배수 1.0 — 성장은 육성 루프와 사다리가 담당한다.
- *  - 전성기를 넘기면 매년 declinePerYear 만큼 실효 스탯이 곱셈으로 깎인다.
+ *  - 전성기를 넘기면 첫 해에 declineFirst(−7%)가 한 번 오고, 그 뒤로는 매년 declinePerYear(−0.5%p)씩
+ *    아주 완만하다. 먼저 빠지는 것은 점프력·스피드이고 기술·경기 읽기가 그 뒤를 상당 부분 상쇄한다는 모양이다.
+ *    시즌마다 커지는 것은 "얼마나 깎이느냐"가 아니라 "몇 명이 하락기에 들어갔느냐"다(A.3.6.2).
  *  - retireAge 에 닿으면 은퇴한다: 코트에 서지 못하고(로스터 제외) 스카우트 풀에서도 빠진다.
- *  - 세터·리베로는 점프 의존도가 낮고 판단·기술 비중이 커 실제 배구에서도 선수 생명이 길다 → +2년.
+ *    단 인스턴스는 남아 서포터(코치)로 계속 쓸 수 있다(training-mode.md 9.7).
+ *  - 세터·리베로(+2년)·아웃사이드(+1년)는 점프 의존도가 낮아 실제 배구에서도 선수 생명이 길다.
  */
 export const AGING = {
   peakEnd: 25,                    // 전성기 마지막 나이(OP·MB 기준) — 26세부터 하락
   peakEndByPos: [2, 1, 0, 0, 2],  // S, OH, OP, MB, L — 세터·리베로 27 / 아웃사이드 26 / 아포짓·미들 25
   declineFirst: 0.07,             // 전성기를 넘긴 첫 해의 하락폭(점프력·스피드가 먼저 빠진다)
-  declinePerYear: 0.015,          // 그 뒤 매년 추가 하락폭(경험·기술로 버티며 완만해진다)
+  declinePerYear: 0.005,          // 그 뒤 매년 추가 하락폭 — 기술·경험이 신체 저하를 거의 상쇄한다
   declineFloor: 0.70,             // 배수 하한
   retireAge: 31,                  // 은퇴 나이(OP·MB 기준)
   retireByPos: [2, 1, 0, 0, 2],   // 세터·리베로 33 / 아웃사이드 32 / 아포짓·미들 31
@@ -1018,10 +1021,16 @@ export function clubTeamState(state, clubId, opts = {}) {
   const g = opts.growth !== undefined ? opts.growth : growthFor(state.season);
   const departed = opts.departed || departedCardIds(state);
 
-  // 구단 평균(전체 7명 성장 기준) — 결원이 늘어도 대체 선수 강도가 흔들리지 않게 원본 기준으로 고정
-  let avg = 0;
-  for (const p of pool) avg += statAverage(grownPlayer(p, g).stats);
+  // 구단 평균(전체 7명 성장 기준) — 결원이 늘어도 대체 선수 강도가 흔들리지 않게 원본 기준으로 고정.
+  // 노화는 넣지 않는다: 기준선은 "사다리 위의 구단 수준"이어야 흔들리지 않는다.
+  let avg = 0, ovrAvg = 0;
+  for (const p of pool) {
+    const gp = grownPlayer(p, g);
+    avg += statAverage(gp.stats);
+    ovrAvg += ovrOf(TRAINING_CFG, gp.stats, gp.pos);
+  }
   avg = pool.length > 0 ? avg / pool.length : 60;
+  ovrAvg = pool.length > 0 ? ovrAvg / pool.length : 60;
   const subOverall = avg + VACANCY.overallDelta;
 
   // AI 구단 선수의 고유 스킬 레벨(시즌 사다리). docs/skills.md 7.2
@@ -1032,12 +1041,11 @@ export function clubTeamState(state, clubId, opts = {}) {
   let gone = 0;
   for (const p of pool) {
     if (departed.has(p.id)) {
-      const gp0 = grownPlayer(p, g);
       gone++;
       if (gone > VACANCY.traineeSlots) {
         // A.3.5 결원 상한 — 주전 절반 이상이 빠지면 구단도 육성 선수로 버티지 않고 즉시전력을 영입한다.
-        const sign = generatePlayer(new Rng(hashString(clubId + '/' + p.id + '/sign')), `${clubId}-sign-${p.id}`, clubId, p.pos, statAverage(gp0.stats), 3.0);
-        shiftToOvr(sign, ovrOf(TRAINING_CFG, gp0.stats, gp0.pos) + VACANCY.signingOvrDelta);
+        const sign = generatePlayer(new Rng(hashString(clubId + '/' + p.id + '/sign')), `${clubId}-sign-${p.id}`, clubId, p.pos, avg, 3.0);
+        shiftToOvr(sign, ovrAvg + VACANCY.signingOvrDelta);
         sign.rarity = RARITY.N;
         sign.age = AGING.clubRecruitAge;
         sign.name = sign.name + ' (영입)';
@@ -1056,7 +1064,7 @@ export function clubTeamState(state, clubId, opts = {}) {
     }
     const gp = grownPlayer(p, g);
     // A.3.6 세대교체 — 프로 구단은 노쇠한 선수를 붙잡지 않는다. 은퇴했거나 전성기를 충분히
-    // 지난 선수는 같은 자리의 신인으로 교체된다(강도 = 그 선수의 성장 후 스탯 평균 + clubRecruitDelta).
+    // 지난 선수는 같은 자리의 신인으로 교체된다(신인의 OVR = 그 선수의 사다리 OVR + clubRecruitOvrDelta).
     const f = ageFactor(p.age, p.pos, season);
     if (f < AGING.clubReplaceFactor || isRetiredAge(p.age, p.pos, season)) {
       const gen = Math.max(1, ageAt(p.age, season) - (AGING.peakEnd + (AGING.peakEndByPos[p.pos | 0] || 0)));

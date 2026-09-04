@@ -122,6 +122,8 @@ h2{margin:0 0 3px;font-size:20px;font-weight:800;letter-spacing:-.02em}
 .cardart svg{display:block}
 .pname{font-weight:700;font-size:15.5px;letter-spacing:-.01em}
 .pmeta{font-size:12px;color:var(--ink3);margin-top:1px}
+.agb{display:inline-block;font-family:"Barlow Condensed",sans-serif;font-size:11.5px;font-weight:700;
+  letter-spacing:.04em;margin-left:5px}
 .povr{font-family:"Barlow Condensed",sans-serif;font-size:20px;font-weight:700;line-height:1;text-align:right}
 .povr small{display:block;font-family:"Gothic A1",sans-serif;font-size:10.5px;font-weight:500;color:var(--ink3);margin-top:2px}
 
@@ -691,6 +693,17 @@ function missionCard(){
   '</div>';
 }
 
+var PHASE_KO = { growth:'성장기', peak:'전성기', decline:'하락기', retired:'은퇴' };
+/** 나이·단계 배지. 하락기부터 색으로 경고한다. */
+function ageBadge(inst, withAge){
+  if (!G.league && !G.season) return '';
+  var a;
+  try { a = E.instanceAgeInfo(G, inst); } catch(e){ return ''; }
+  var col = a.phase === 'decline' ? 'var(--hot)' : (a.phase === 'retired' ? 'var(--bad)' : 'var(--ink3)');
+  var pct = a.factor < 1 ? ' ' + Math.round((1 - a.factor) * 100) + '%↓' : '';
+  return '<span class="agb" style="color:'+col+'">'+(withAge ? a.age + '세 · ' : '')+PHASE_KO[a.phase]+pct+'</span>';
+}
+
 function pcard(inst, plain, tapId){
   if (!inst) return '';
   var tag = tapId ? 'button' : 'div';
@@ -701,7 +714,7 @@ function pcard(inst, plain, tapId){
     '<div style="flex:1;min-width:0">'+
       '<div class="pname">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
       '<div class="pmeta">'+(inst.grade!==undefined?'등급 <span class="grade g-'+['S','A','B','C','D'][inst.grade]+'">'+['S','A','B','C','D'][inst.grade]+'</span> · ':'')+
-        (inst.skillName?esc(inst.skillName):'고유 스킬 없음')+'</div>'+
+        (inst.skillName?esc(inst.skillName):'고유 스킬 없음')+ageBadge(inst,true)+'</div>'+
     '</div>'+
     '<div class="povr num">'+(inst.ovr!==undefined?inst.ovr.toFixed(1):'')+'<small>OVR</small></div></'+tag+'>';
 }
@@ -716,7 +729,8 @@ function vScout(){
   return h(
    '<h2>스카우트</h2>'+
    '<p class="sub">티켓 1장으로 여섯 구단의 명단에서 신인 한 명을 데려옵니다. '+
-     'R 80% · SR 17% · SSR 3%. '+(G.pitySR!==undefined?'SR 보장까지 '+Math.max(0,10-G.pitySR)+'회, SSR 보장까지 '+Math.max(0,60-G.pitySSR)+'회.':'')+'</p>'+
+     'R 80% · SR 17% · SSR 3%. '+(G.pitySR!==undefined?'SR 보장까지 '+Math.max(0,10-G.pitySR)+'회, SSR 보장까지 '+Math.max(0,60-G.pitySSR)+'회.':'')+
+     poolLine()+'</p>'+
    (lastPulls ? pullResults(lastPulls) : (r ? scoutResult(r) : ''))+
    '<button class="btn" data-act="scout"'+(can?'':' disabled')+'>스카우트 · 티켓 1</button>'+
    '<button class="btn ghost" data-act="scout10"'+(can10?'':' disabled')+'>10연속 스카우트 · 티켓 10</button>'+
@@ -728,6 +742,15 @@ function vScout(){
    (can && !canPos ? '<div class="tiny" style="margin-top:7px;color:var(--ink3)">골드가 부족합니다. 경기와 시즌 순위 보상으로 모입니다.</div>' : '')+
    (can?'':'<div class="empty">티켓이 없습니다. 미션을 달성하거나 경기에서 이기면 티켓이 들어옵니다.</div>')
   );
+}
+
+/** 은퇴로 줄어드는 스카우트 풀을 드러낸다. */
+function poolLine(){
+  try {
+    var pool = E.activeCardPool(G);
+    if (!pool || pool.length >= E.CARD_POOL.length) return '';
+    return ' 명단에 남은 선수 <b>'+pool.length+'</b>명 (은퇴 '+(E.CARD_POOL.length-pool.length)+'명).';
+  } catch(e){ return ''; }
 }
 
 // 10연 결과 — 가챠 손맛을 위해 등급을 한눈에
@@ -793,9 +816,15 @@ function scoutResult(r){
 // ---------- 육성: 카드 선택
 function vTrain(){
   if (ses) return vTrainTurn();
-  var owned = Object.keys(G.ownedCards||{});
-  if (!owned.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
+  var ownedAll = Object.keys(G.ownedCards||{});
+  var owned = ownedAll.filter(function(cid){
+    try { return !E.isCardRetired(G, cid); } catch(e){ return true; }
+  });
+  var retiredN = ownedAll.length - owned.length;
+  if (!ownedAll.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
+  if (!owned.length) return '<h2>육성</h2><div class="empty">보유한 카드가 모두 은퇴했습니다.<br>스카우트로 새 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   return h('<h2>육성</h2><p class="sub">12턴 프리시즌 캠프. 훈련으로 능력치를 올리고, 피로를 관리하며, 평가전 3번을 거쳐 졸업시킵니다. 한 번에 5~10분.</p>'+
+    (retiredN ? '<div class="card flat"><div class="tiny">은퇴한 카드 '+retiredN+'장은 목록에서 제외됩니다. 재육성해도 나이는 되돌아가지 않습니다.</div></div>' : '')+
     owned.map(function(cid){
       var c = E.trainingCard(G, cid);
       var rep = E.representativeOf(G, cid);
@@ -805,7 +834,8 @@ function vTrain(){
       return '<button class="pcard tap" data-pick="'+cid+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(c,44)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
         '<div class="pmeta">'+(rep?'대표 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]:'미육성')+
-        ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+'</div></div>'+
+        ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+
+        (rep?ageBadge(rep,true):'')+'</div></div>'+
         '<div class="povr num">'+ovr.toFixed(1)+'<small>초기</small></div></button>';
     }).join(''));
 }
@@ -823,10 +853,22 @@ function vTrainSup(){
       var col = clubColor[s.clubId]||'#3E8FE0';
       return '<button class="pcard tap'+(on?' sel':'')+'" data-sup="'+s.id+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(s,44)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(s.name)+' <span class="pill pos">'+POSK[s.pos]+'</span></div>'+
-        '<div class="pmeta">'+(on?'편성됨':'탭해서 편성')+'</div></div>'+
+        '<div class="pmeta">'+(on?'편성됨':'탭해서 편성')+coachBadge(s)+'</div></div>'+
         '<div class="povr num">'+(on?'✓':'')+'</div></button>';
     }).join('')+
     '<button class="btn" style="margin-top:6px" data-act="startcamp">캠프 시작</button>');
+}
+
+/** 은퇴 선수는 코치로 남는다 — 서포터 목록에서 구분. */
+function coachBadge(sup){
+  try {
+    var inst = E.representatives(G).filter(function(i){ return i.instanceId === sup.id; })[0];
+    if (!inst) return '';
+    var a = E.instanceAgeInfo(G, inst);
+    if (a.phase === 'retired') return '<span class="agb" style="color:var(--ssr)">코치</span>';
+    if (a.phase === 'decline') return '<span class="agb" style="color:var(--hot)">'+a.age+'세 하락기</span>';
+    return '<span class="agb">'+a.age+'세</span>';
+  } catch(e){ return ''; }
 }
 
 function startCamp(ids){
@@ -991,6 +1033,7 @@ function vPlayer(){
      '</div>'+
    '</div>'+
 
+   ageBlock(inst)+
    '<div class="card"><div class="muted" style="margin-bottom:7px">캠프 기록</div>'+
      '<div class="legend">'+
        '<b>졸업 등급</b><span>'+gc+' · 완성도 '+Math.round((inst.completion||0)*100)+'%</span>'+
@@ -1001,6 +1044,22 @@ function vPlayer(){
 
    '<button class="btn ghost" data-go="roster">로스터로</button>'
   );
+}
+
+/** 선수 상세의 나이·전성기 카드. */
+function ageBlock(inst){
+  var a;
+  try { a = E.instanceAgeInfo(G, inst); } catch(e){ return ''; }
+  var msg = a.phase === 'growth' ? '아직 전성기 전입니다.'
+    : a.phase === 'peak' ? (a.peakEnd - a.age >= 0 ? '전성기입니다. ' + (a.peakEnd - a.age) + '시즌 뒤부터 하락이 시작됩니다.' : '전성기입니다.')
+    : a.phase === 'decline' ? '하락기입니다. 능력치가 '+Math.round((1-a.factor)*100)+'% 깎여 출전합니다. '+(a.retireAt - a.age)+'시즌 뒤 은퇴합니다.'
+    : '은퇴했습니다. 코트에는 서지 못하지만 서포터(코치)로 남습니다.';
+  var col = a.phase === 'decline' ? 'var(--hot)' : (a.phase === 'retired' ? 'var(--bad)' : 'var(--line2)');
+  return '<div class="card" style="border-color:'+col+'">'+
+    '<div class="spread"><b>'+a.age+'세 · '+PHASE_KO[a.phase]+'</b>'+
+      '<span class="tiny">전성기 ~'+a.peakEnd+'세 · 은퇴 '+a.retireAt+'세</span></div>'+
+    '<div class="tiny" style="margin-top:5px;line-height:1.6">'+msg+'</div>'+
+  '</div>';
 }
 
 // ---------- 로스터
@@ -1029,7 +1088,7 @@ function vLineup(){
     starters.map(function(p,i){
       return '<div class="pcard"><span class="ava" style="border-color:'+(clubColor[p.teamId]||'var(--n)')+'">'+portraitSvg(p,40)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname" style="font-size:14.5px">'+esc(p.name)+'</div>'+
-        '<div class="pmeta">'+slots[i]+'</div></div>'+
+        '<div class="pmeta">'+slots[i]+lineupAgeWarn(p)+'</div></div>'+
         '<div class="povr num" style="font-size:15px">'+POSK[p.pos]+'</div></div>';
     }).join('')+
     (lib?'<div class="pcard"><span class="ava" style="border-color:'+(clubColor[lib.teamId]||'var(--n)')+'">'+portraitSvg(lib,40)+'</span>'+
@@ -1242,13 +1301,56 @@ function vSettle(){
     '</div>'+
     (st.mvp ? '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(st.mvp.teamName||'')+'</div></div>'+
       '<div class="pname" style="margin-top:4px">'+esc(st.mvp.playerName)+'</div></div>' : '')+
+    retireBlock()+
     '<div class="card"><div class="legend">'+
       '<b>다음 시즌</b><span>여섯 구단이 잠재력의 '+Math.round(st.nextSeasonGrowth*100)+'%까지 성장합니다 (이번 시즌 '+Math.round(st.growth*100)+'%). 로스터를 더 키워야 따라잡습니다.</span>'+
+      '<b>선수 나이</b><span>모두 한 살을 더 먹습니다. 전성기를 지난 선수는 능력치가 깎이고, 은퇴 나이에 닿으면 코트를 떠납니다.</span>'+
     '</div></div>'+
     '<button class="btn" data-act="nextseason">시즌 '+(st.season+1)+' 시작</button>');
 }
 
+/** 결산에서 이번에 은퇴하는(또는 이미 은퇴한) 선수를 헌액한다. */
+function retireBlock(){
+  var list = [];
+  try { list = E.retiredRepresentatives(G) || []; } catch(e){ return ''; }
+  // 다음 시즌에 은퇴 나이에 닿는 선수도 미리 알려 준다
+  var soon = [];
+  try {
+    E.representatives(G).forEach(function(i){
+      var a = E.instanceAgeInfo(G, i);
+      if (a.phase !== 'retired' && a.age + 1 >= a.retireAt) soon.push({ inst:i, a:a });
+    });
+  } catch(e){}
+  if (!list.length && !soon.length) return '';
+  return '<div class="card" style="border-color:var(--line2)">'+
+    (list.length
+      ? '<div class="muted" style="margin-bottom:7px">은퇴</div>'+
+        list.map(function(i){
+          return '<div class="bx"><span class="ava sm">'+portraitSvg(i,28)+'</span>'+
+            '<span class="nm">'+esc(i.name)+'</span>'+
+            '<span class="st2">'+POSK[i.pos]+' · 통산 OVR '+i.ovr.toFixed(1)+'</span>'+
+            '<span class="pt" style="font-size:11px;color:var(--ink3)">코치</span></div>';
+        }).join('')+
+        '<div class="tiny" style="padding:6px 11px 2px">코트를 떠나지만 서포터(코치)로 남아 다음 세대를 돕습니다.</div>'
+      : '')+
+    (soon.length
+      ? '<div class="muted" style="margin:'+(list.length?'12px':'0')+' 0 7px">다음 시즌 은퇴 예정</div>'+
+        soon.map(function(x){
+          return '<div class="bx"><span class="nm">'+esc(x.inst.name)+'</span>'+
+            '<span class="st2">'+POSK[x.inst.pos]+' · '+x.a.age+'세</span>'+
+            '<span class="pt" style="font-size:11px;color:var(--hot)">마지막 시즌</span></div>';
+        }).join('')
+      : '')+
+  '</div>';
+}
+
 // ---------- 친선 경기 (리그 밖)
+/** 라인업에 선 선수가 하락기면 표시(엔진이 실효 능력치를 이미 깎아 내보낸다). */
+function lineupAgeWarn(p){
+  if (p.ageFactor === undefined || p.ageFactor >= 1) return '';
+  return '<span class="agb" style="color:var(--hot)">하락기 '+Math.round((1-p.ageFactor)*100)+'%↓</span>';
+}
+
 function vMatch(){
   if (G.league) return vLeague();
   var list = E.clubList(G);

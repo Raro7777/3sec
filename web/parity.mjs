@@ -335,6 +335,44 @@ const SEC5 = '의도적 차이 (PARITY.md 참조)';
   must(SEC5, '② 졸업생 원소속 이탈', before && !stillThere, `${card.name}(t05)`);
   must(SEC5, '② 결원 = 대체 선수 1명', subs === 1, `대체 ${subs}명`);
   must(SEC5, '② 구단 인원 7명 유지', clubAfter.roster.length === 7, `${clubAfter.roster.length}명`);
+
+  // ③ 노화·전성기·은퇴 (league-and-economy.md A.3.6 · v0.3). C# 프로토타입에는 없는 계층이다.
+  const g3 = G.createGame({ seed: 12 });
+  const POSN = { S: 0, OH: 1, OP: 2, MB: 3, L: 4 };
+  // 나이는 저장하지 않고 파생한다 — 카드 나이 + (시즌 − 1)
+  must(SEC5, '③ 나이 = 카드 나이 + (시즌 − 1)',
+    G.ageAt(20, 1) === 20 && G.ageAt(20, 6) === 25, 'ageAt(20, 6) = 25');
+  // 하락 곡선: 전성기 안에서는 1.0, 첫 해 −7%, 이후 매년 −1.5%p
+  must(SEC5, '③ 전성기 안에서는 배수 1.0', G.ageFactor(25, POSN.MB, 1) === 1, 'age 25 MB');
+  check(SEC5, '③ 하락 첫 해 배수 (MB 26세)', G.ageFactor(26, POSN.MB, 1), 0.93, 0.001, v => v.toFixed(3));
+  check(SEC5, '③ 하락 4년째 배수 (MB 29세)', G.ageFactor(29, POSN.MB, 1), 0.915, 0.001, v => v.toFixed(3));
+  must(SEC5, '③ 세터·리베로는 전성기 +2년 (27세까지 배수 1.0)',
+    G.ageFactor(27, POSN.S, 1) === 1 && G.ageFactor(27, POSN.L, 1) === 1 && G.ageFactor(27, POSN.MB, 1) < 1);
+  // 시즌 1~3 에는 은퇴자가 없다 — 시즌 1 에 뽑아 키운 선수가 최소 3시즌 주전으로 뛴다(A.3.6 초반 보호)
+  let ret13 = 0;
+  for (let n = 1; n <= 3; n++) { g3.season = n; ret13 += G.CARD_POOL.length - G.activeCardPool(g3).length; }
+  g3.season = 1;
+  must(SEC5, '③ 시즌 1~3 에 은퇴 선수 없음', ret13 === 0, `은퇴 ${ret13}명`);
+  // 세대교체: 결원이 없으면 구단 평균 OVR 은 사다리 상한(74.9)에 고정된다 — 노화가 벽을 무너뜨리지 않는다
+  const ladderAt = (n) => {
+    g3.season = n;
+    const v = G.CLUBS.map(c => {
+      const ts = G.clubTeamState(g3, c.id);
+      let sum = 0, k = 0;
+      for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
+        const pl = ts.index.get(id);
+        if (!pl) continue;
+        sum += ovrOf(TCFG, pl.stats, pl.pos); k++;
+      }
+      return sum / k;
+    });
+    return { ovr: v.reduce((a, b) => a + b, 0) / v.length, size: G.clubTeamState(g3, 't01').roster.length };
+  };
+  const L8 = ladderAt(8), L12 = ladderAt(12);
+  g3.season = 1;
+  check(SEC5, '③ 세대교체 후에도 사다리 유지 — 시즌 8 AI 평균 OVR', L8.ovr, 74.91, 0.30, v => v.toFixed(2));
+  check(SEC5, '③ 세대교체 후에도 사다리 유지 — 시즌 12 AI 평균 OVR', L12.ovr, 74.91, 0.30, v => v.toFixed(2));
+  must(SEC5, '③ 세대교체해도 구단 인원 7명 유지', L8.size === 7 && L12.size === 7, `${L8.size}/${L12.size}명`);
 }
 
 // ================================================================ 6. 성능·용량 (모바일 예산)
