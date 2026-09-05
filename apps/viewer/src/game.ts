@@ -53,7 +53,7 @@ const AUTO_SLOTS = [1, 2, 3];
 /** When the last automatic backup was taken, so the timer survives a reload. */
 const AUTO_AT_KEY = "3sec.auto.at";
 const AUTO_EVERY_MS = 30 * 60 * 1000;
-const APP_VERSION = "0.21";
+const APP_VERSION = "0.22";
 
 /** Rough category of a news line, for the home-screen filter chips. */
 export function newsKind(n: string): "market" | "fans" | "board" | "squad" | "comp" | "other" {
