@@ -1,19 +1,19 @@
 {
-  "pid": "p012",
-  "team": "t02",
+  "pid": "p020",
+  "team": "t03",
   "position": "OH",
   "rarity": "R",
-  "height_cm": 177,
-  "jersey": 17,
-  "skin": "A",
+  "height_cm": 182,
+  "jersey": 16,
+  "skin": "B",
   "hair": {
-    "style": "로우 트윈테일",
-    "color": "다크 브라운",
-    "palette": 2
+    "style": "프렌치 브레이드",
+    "color": "라이트 브라운",
+    "palette": 4
   },
   "eye": {
-    "shape": "neutral",
-    "color": "브라운"
+    "shape": "tsurime",
+    "color": "헤이즐"
   },
   "card": {
     "face": {
@@ -38,11 +38,11 @@
     "seed_stand": null
   },
   "source": {
-    "file": "p012.png",
+    "file": "p020.png",
     "size": "1760x2352",
     "crop": {
-      "x": 237,
-      "y": 142,
+      "x": 201,
+      "y": 95,
       "w": 1410,
       "h": 1880
     },
