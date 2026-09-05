@@ -167,7 +167,77 @@ check('새로고침 후 재화가 유지된다', (await text('#rTickets')) === b
   `${before.tickets} → ${await text('#rTickets')}`);
 check('새로고침 후에도 리그가 살아 있다', (await viewText()).length > 20);
 
-// --- 8. 전역 조건
+// --- 8. 골드 소비처 (docs/league-and-economy.md E.5 ⑩~⑱) — 화면이 있어야 골드를 쓸 수 있다
+await tap('[data-tab="home"]', 300);
+check('감독실에 구단 시설 입구가 있다', (await count('[data-go="facility"]')) >= 1);
+await tap('[data-go="facility"]', 400);
+{
+  const t = await viewText();
+  check('시설 화면에 예비비와 쓸 수 있는 돈이 있다', t.includes('13,200') && t.includes('쓸 수 있는 돈'));
+  check('시설 3종 카드가 있다', (await count('[data-fac]')) === 3);
+  // 시작 골드(1,200)로는 한 단계도 못 산다(B.6.4) — 잠금이 아니라 버튼 비활성으로 표현된다
+  const disabled = await page.evaluate(() => [...document.querySelectorAll('[data-fac]')].filter(b => b.disabled).length);
+  check('골드가 모자라면 투자 버튼이 비활성이다', disabled === 3, `비활성 ${disabled}/3`);
+  check('리포트 가격과 분석실 할인 안내가 있다', t.includes('900') && t.includes('5단계에서 무료'));
+}
+// 골드를 넣어 실제로 사 본다 — 세이브를 고쳐 다시 연다(앱에 치트가 없다)
+await page.evaluate(() => { const k = 'bloom-manager-save-v1'; const j = JSON.parse(localStorage.getItem(k)); j.gd = 30000; localStorage.setItem(k, JSON.stringify(j)); });
+await page.reload(); await page.waitForTimeout(800);
+await tap('[data-tab="home"]', 300); await tap('[data-go="facility"]', 400);
+{
+  const before = await page.evaluate(() => document.getElementById('rGold').textContent);
+  await tap('[data-fac="stadium"]', 400);
+  const after = await page.evaluate(() => document.getElementById('rGold').textContent);
+  check('시설 투자가 골드를 소비한다', before !== after, `${before} → ${after}`);
+  check('투자 뒤 등급 점이 켜진다', (await viewText()).includes('2단계'));   // 다음 단계 표시가 1→2
+  check('명성 배지가 붙는다', /지역|준수|명문|신생/.test(await viewText()));
+  check('운영비 예고가 보인다', (await viewText()).includes('결산 운영비'));
+}
+await tap('[data-tab="scout"]', 300); await tap('[data-act="scout"]', 400);
+check('스카우트 결과에 리포트 구매 버튼이 있다', (await count('[data-report]')) === 1);
+await tap('[data-report]', 500);
+{
+  const t = await viewText();
+  check('리포트 화면에 잠재 OVR 이 있다', t.includes('잠재 OVR'));
+  check('리포트가 훈련 적성을 보여 준다', t.includes('훈련 적성'));
+  check('리포트가 전력을 올린다고 말하지 않는다', !/훈련 효율|능력치가 오|강해/.test(t));
+}
+await tap('[data-tab="train"]', 400);
+check('육성 목록에 리포트 배지가 있다', /잠재 \d|리포트/.test(await viewText()));
+await tap('[data-tab="roster"]', 400);
+check('로스터에 계약 인원 게이지가 있다', /계약 \d+\/42/.test(await viewText()));
+
+// --- 9. 결산의 운영비·강등·투자 (E.5 ⑬·⑭)
+// 시즌 하나를 화면으로 다 도는 대신 앱이 노출한 엔진(window.VS)으로 빨리 감아 결산 직전 세이브를 만든다.
+// 시설 15단계(유지비 6,000)에 골드 0 → 시즌 보상으로도 못 내 미납·강등 문구까지 나와야 한다.
+{
+  const info = await page.evaluate(() => {
+    const E = window.VS, k = 'bloom-manager-save-v1';
+    const g = E.loadGame(JSON.parse(localStorage.getItem(k)));
+    g.facilities = { analysis: 5, stadium: 5, hall: 5 };   // 유지비 6,000 — 시즌 보상으로도 못 낸다 → 미납·강등
+    g.gold = 0;
+    if (!E.lineupValid(g)) E.autoLineup(g);
+    if (!g.league || g.league.phase === 'offseason') E.startSeason(g);
+    for (let i = 0; i < 40; i++) { const sv = E.seasonView(g); if (sv.phase !== 'preseason' && sv.phase !== 'matchday') break; try { E.advanceMatchday(g); } catch (e) { break; } }
+    try { E.autoFinishPlayoff(g); } catch (e) {}
+    localStorage.setItem(k, JSON.stringify(E.saveGame(g)));
+    return E.seasonView(g).phase;
+  });
+  await page.reload(); await page.waitForTimeout(800);
+  await tap('[data-tab="match"]', 400);
+  const opened = await tap('[data-act="settle"]', 600);
+  const t = await viewText();
+  check('빨리 감은 시즌이 결산에 닿는다', opened, `phase ${info}`);
+  check('결산에 운영비 −금액 줄이 있다', t.includes('구단 운영비'));
+  check('미납이면 강등을 알린다', /내려갔습니다/.test(t));
+  check('결산에 구단 투자 블록이 있다', t.includes('구단에 투자'));
+  await tap('[data-act="facility-settle"]', 500);
+  check('결산에서 들어간 시설 화면은 결산으로 돌아간다', (await count('[data-go="settle"]')) === 1);
+  await tap('[data-go="settle"]', 500);
+  check('결산으로 돌아온다', (await viewText()).includes('결산'));
+}
+
+// --- 10. 전역 조건
 check('가로 스크롤이 없다', await page.evaluate(() =>
   document.documentElement.scrollWidth <= document.documentElement.clientWidth));
 check('모든 화면에 다음 행동이 있다', await hasWayForward());

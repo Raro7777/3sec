@@ -6,7 +6,7 @@
 
 ```bash
 node web/build.mjs        # web/dist/bloom.html — 브라우저에서 열면 됩니다
-node web/app-test.mjs     # 화면 흐름 회귀 테스트 32건 (playwright 필요)
+node web/app-test.mjs     # 화면 흐름 회귀 테스트 53건 (playwright 필요)
 ```
 
 ## 지금 어디까지 되어 있나

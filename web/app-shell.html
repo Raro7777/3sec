@@ -320,6 +320,8 @@ var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null, lastPulls = null;
 var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
 var detailId = null;   // 상세 화면에서 보고 있는 인스턴스
+var reportId = null;   // 스카우트 리포트 화면의 카드 id
+var facilityBack = 'home'; // 시설 화면에서 돌아갈 곳 — 결산 흐름(E.5 ⑭)에서 들어오면 'settle'
 var leagueTab = 'now'; // 리그 화면 서브탭: now | sched | stats
 // world.md 3절 라이벌 구도
 var RIVALS = { t01:'t05', t05:'t01', t02:'t06', t06:'t02', t03:'t04', t04:'t03' };
@@ -694,7 +696,8 @@ function render(){
     home:vHome, scout:vScout, train:vTrain, trainSup:vTrainSup, trainTurn:vTrainTurn,
     trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
     matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions,
-    league:vLeague, playoff:vPlayoff, settle:vSettle, player:vPlayer
+    league:vLeague, playoff:vPlayoff, settle:vSettle, player:vPlayer,
+    facility:vFacility, report:vReport
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') mountCourt();
@@ -711,7 +714,7 @@ function vHome(){
      '<div style="display:flex;align-items:center;gap:11px;margin-bottom:2px">'+
        '<span class="emb" style="width:46px;height:46px">'+myEmblemSvg(46)+'</span>'+
        '<div><div class="eyebrow">BLOOM LEAGUE · SEASON 1</div>'+
-     '<h1 style="margin:0">'+esc(G.clubName)+'</h1></div></div>'+
+     '<h1 style="margin:0">'+esc(G.clubName)+' '+prestigeBadge()+'</h1></div></div>'+
      '<div class="muted">여섯 구단의 공개 스카우트 명단에서 원석을 데려와 키우고, 리그 정상에 도전합니다.</div>'+
      '<div class="stat3">'+
        '<div><div class="v num">'+ovr.toFixed(1)+'</div><div class="k">라인업 OVR</div></div>'+
@@ -729,6 +732,7 @@ function vHome(){
          '<button class="btn" data-go="match">경기하기</button>'+
        '</div></div>')+
    missionCard()+
+   facilityCard()+
    '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
    (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
       hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
@@ -843,6 +847,127 @@ function pullResults(list){
 }
 
 // ---------- 미션
+// ---------- 골드 소비처 (docs/league-and-economy.md E.5 ⑩~⑲)
+// 전부 **비전력**이다(B.6.1 · parity 9.4). 문구에 "훈련 효율"·"능력치" 같은 말을 쓰지 않는다 — 실제로 오르지 않는다.
+function fmtGold(n){ n = n|0; return n.toLocaleString('ko-KR'); }
+/** ⑪ 구단 명성 배지 — 시설 총 등급으로 신생/지역/준수/명문/전통의 명문. */
+function prestigeBadge(){
+  var p; try { p = E.clubPrestige(G); } catch(e){ return ''; }
+  var col = ['var(--ink3)','var(--ink2)','var(--court)','var(--sr)','var(--ssr)'][p.tier] || 'var(--ink2)';
+  return '<span class="agb" style="color:'+col+';border-color:'+col+'">'+esc(p.name)+'</span>';
+}
+/** ⑫ 운영비 예고 한 줄 — 결산에서 갑자기 빠지면 버그로 읽힌다. 0이면 빈 문자열. */
+function upkeepLine(){
+  var u; try { u = E.facilityUpkeep(G); } catch(e){ return ''; }
+  if (!u.total) return '';
+  return '<div class="tiny" style="color:var(--hot)">이번 시즌 결산 운영비 −'+fmtGold(u.total)+' (시설 '+fmtGold(u.facility)+' · 선수단 '+fmtGold(u.squad)+')</div>';
+}
+/** 홈의 구단 시설 카드 — 시설 화면 입구. */
+function facilityCard(){
+  var fv; try { fv = E.facilityView(G); } catch(e){ return ''; }
+  var dots = fv.tracks.map(function(t){ return t.icon+' '+t.level+'/'+t.maxLevel; }).join(' · ');
+  return '<div class="card"><div class="spread"><div><b>구단 시설</b> '+prestigeBadge()+
+      '<div class="tiny" style="margin-top:3px">'+dots+'</div></div>'+
+      '<div class="tiny" style="text-align:right">골드 '+fmtGold(fv.gold)+'<br>쓸 수 있는 돈 '+fmtGold(fv.spendable)+'</div></div>'+
+    upkeepLine()+
+    '<button class="btn ghost" data-go="facility" style="margin-top:10px">구단 시설 · 리포트</button></div>';
+}
+/** 시설 등급 ●●○○○ */
+function levelDots(lv, max){
+  var out=''; for (var i=0;i<max;i++) out += '<span style="color:'+(i<lv?'var(--ssr)':'var(--line2)')+'">●</span>';
+  return '<span style="letter-spacing:2px;font-size:12px">'+out+'</span>';
+}
+/** ⑩ 구단 시설 화면. */
+function vFacility(){
+  var fv = E.facilityView(G);
+  var back = facilityBack === 'settle' && (lastSettle || (G.league && G.league.settlement));
+  return h('<h2>구단 시설 '+prestigeBadge()+'</h2>'+
+    '<p class="sub">골드로 구단의 규모와 정보력을 키웁니다. 시설은 <b>전력에 영향을 주지 않습니다</b> — 정보(리포트)·연출(홈구장·전당)·명성입니다. 시즌 중에는 스카우트에 쓰고, 결산에서 남는 돈을 구단에 넣는 리듬을 권합니다.</p>'+
+    '<div class="card"><div class="stat3">'+
+      '<div><div class="v num">'+fmtGold(fv.gold)+'</div><div class="k">골드 잔액</div></div>'+
+      '<div><div class="v num">'+fmtGold(fv.reserve)+'</div><div class="k">권장 예비비</div></div>'+
+      '<div><div class="v num" style="color:'+(fv.spendable>0?'var(--good)':'var(--ink3)')+'">'+fmtGold(fv.spendable)+'</div><div class="k">쓸 수 있는 돈</div></div>'+
+    '</div>'+
+    '<div class="tiny" style="margin-top:8px">예비비 '+fmtGold(fv.reserve)+' = 포지션 지정 스카우트 11회분. 이만큼은 남기는 편이 안전합니다.</div>'+
+    upkeepLine()+
+    '</div>'+
+    fv.tracks.map(function(t){
+      var maxed = t.price === null;
+      var warn = !maxed && t.canBuy && !t.afterReserve;
+      return '<div class="card"><div class="spread">'+
+        '<div><b style="font-size:15px">'+t.icon+' '+esc(t.name)+'</b> '+levelDots(t.level, t.maxLevel)+
+          '<div class="tiny" style="margin-top:3px">'+esc(t.effect)+(t.upkeep?' · 유지비 '+fmtGold(t.upkeep)+'/시즌':'')+'</div></div>'+
+        '<div style="text-align:right;flex:none"><div class="num" style="font-size:16px;font-weight:700">'+(maxed?'최대':'골드 '+fmtGold(t.price))+'</div>'+
+          (maxed?'':'<div class="tiny">'+(t.level+1)+'단계</div>')+'</div></div>'+
+        (warn ? '<div class="tiny" style="color:var(--hot);margin-top:6px">⚠ 예비비를 깹니다 — 다음 시즌 지정 스카우트가 막힐 수 있습니다</div>' : '')+
+        (maxed ? '' : '<button class="btn'+(warn?' ghost':'')+'" data-fac="'+t.id+'"'+(t.canBuy?'':' disabled')+' style="margin-top:10px">투자 · 골드 '+fmtGold(t.price)+'</button>')+
+      '</div>';
+    }).join('')+
+    '<div class="card"><div class="spread"><div><b>📄 스카우트 리포트</b><div class="tiny" style="margin-top:3px">잠재 OVR·훈련 적성·전성기까지 카드의 속을 봅니다. 카드당 1회 결제, 영구 보관.</div></div>'+
+      '<div style="text-align:right;flex:none"><div class="num" style="font-size:16px;font-weight:700">'+(fv.report.cost?'골드 '+fmtGold(fv.report.cost):'무료')+'</div><div class="tiny">보유 '+fv.report.owned+'장</div></div></div>'+
+      '<div class="tiny" style="margin-top:6px">정가 '+fmtGold(fv.report.base)+' · 분석실 1단계마다 −180 · <b>5단계에서 무료</b>. 구매는 스카우트 결과·선수 상세에서.</div></div>'+
+    (back
+      ? '<button class="btn" data-go="settle">결산으로 돌아가기</button>'
+      : '<button class="btn ghost" data-go="home">감독실로</button>'));
+}
+/** ⑮ 리포트 구매/열람 버튼 — 스카우트 결과·선수 상세에서 같은 것을 쓴다. */
+function reportButton(cardId, ghost){
+  var has = false, cost = 0, can = false;
+  try { has = E.hasScoutReport(G, cardId); cost = E.reportCost(G); can = E.canBuyScoutReport(G, cardId); } catch(e){ return ''; }
+  if (has) return '<button class="btn ghost" data-viewreport="'+cardId+'" style="margin-top:8px">스카우트 리포트 보기</button>';
+  var lv = 0; try { lv = E.facilityLevel(G, 'analysis'); } catch(e){}
+  return '<button class="btn'+(ghost?' ghost':'')+'" data-report="'+cardId+'"'+(can?'':' disabled')+' style="margin-top:8px">리포트 보기 · '+(cost?'골드 '+fmtGold(cost):'무료')+'</button>'+
+    '<div class="tiny" style="margin-top:4px">분석실 '+lv+'단계 · 단계마다 −180, 5단계에서 무료</div>';
+}
+/** ⑰ 목록용 배지 — 산 카드는 잠재 OVR, 안 산 카드는 자물쇠. */
+function reportBadge(cardId){
+  try {
+    var r = E.scoutReport(G, cardId);
+    if (r) return ' <span class="agb" style="color:var(--good)">잠재 '+r.ovrPotential.toFixed(1)+'</span>';
+    return ' <span class="agb" style="color:var(--ink3)">🔒 리포트</span>';
+  } catch(e){ return ''; }
+}
+/** ⑯ 스카우트 리포트 화면 — 세로 화면이라 스탯 10개는 표가 아니라 막대 리스트다. */
+function vReport(){
+  var r = reportId ? E.scoutReport(G, reportId) : null;
+  if (!r) return h('<h2>스카우트 리포트</h2><div class="empty">아직 이 카드의 리포트가 없습니다.</div>'+
+    (reportId ? reportButton(reportId) : '')+'<button class="btn ghost" data-go="scout" style="margin-top:10px">스카우트로</button>');
+  var col = clubColor[r.clubId] || '#3E8FE0';
+  var card = E.cardById(G, r.cardId) || {};
+  var APT = ['D','C','B','A','S'];
+  var ACTS = ['서브','리시브','토스','스파이크','블로킹'];
+  return h('<h2>스카우트 리포트</h2>'+
+    '<div class="card" style="border-color:'+col+'"><div style="display:flex;gap:12px;align-items:center">'+
+      '<span class="ava" style="width:56px;height:56px;border-color:'+col+'">'+portraitSvg(card,56)+'</span>'+
+      '<div style="flex:1;min-width:0"><div class="pname" style="font-size:18px">'+esc(r.name)+' <span class="pill pos">'+r.posCode+'</span> <span class="pill rar-'+r.rarity+'">'+r.rarity+'</span></div>'+
+      '<div class="pmeta">#'+r.jersey+' · '+r.heightCm+'cm · '+r.age+'세'+(r.skill?' · '+esc(r.skill.name):'')+'</div></div></div>'+
+      '<div class="stat3" style="margin-top:12px">'+
+        '<div><div class="v num">'+r.ovrNow.toFixed(1)+'</div><div class="k">현재 OVR</div></div>'+
+        '<div><div class="v num" style="color:var(--good)">'+r.ovrPotential.toFixed(1)+'</div><div class="k">잠재 OVR · '+(['S','A','B','C','D'][r.gradePotential]||r.gradePotential)+'등급</div></div>'+
+        '<div><div class="v num" style="color:var(--ssr)">'+r.ovrPotentialLb.toFixed(1)+'</div><div class="k">한계돌파 '+r.limitBreak+'/'+r.limitBreakMax+' 반영</div></div>'+
+      '</div></div>'+
+    '<div class="card"><div class="spread"><div class="muted">능력치 · 현재 → 잠재</div><div class="tiny">파란 항목이 핵심 3스탯</div></div>'+
+      '<div class="stats" style="grid-template-columns:1fr">'+r.stats.map(function(st){
+        return '<div class="st"><span class="n">'+esc(st.name)+'</span>'+
+          '<span class="b" style="height:7px"><i class="'+(st.isCore?'core':'')+'" style="width:'+st.now+'%;position:relative;z-index:1"></i>'+
+            '<i style="position:absolute;left:0;top:0;width:'+st.potential+'%;background:'+(st.isCore?'rgba(62,143,224,.35)':'rgba(200,210,220,.22)')+'"></i></span>'+
+          '<span class="v num" style="width:84px">'+st.now+' <em>→ '+st.potential+'</em>'+(st.headroom>0?' <em style="color:var(--good)">+'+st.headroom+'</em>':'')+'</span></div>';
+      }).join('')+'</div></div>'+
+    '<div class="card"><div class="muted" style="margin-bottom:7px">훈련 적성</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;text-align:center">'+r.aptitudes.map(function(a){
+        var g = APT[a.apt] || a.name;
+        return '<div style="background:var(--panel2);border-radius:9px;padding:8px 2px"><div class="grade g-'+g+'" style="font-size:18px;font-weight:800">'+g+'</div><div class="tiny">'+ACTS[a.act]+'</div></div>';
+      }).join('')+'</div></div>'+
+    '<div class="card"><div class="legend">'+
+      '<b>전성기 종료</b><span>'+r.peakEnd+'세 ('+r.seasonsToPeakEnd+'시즌 뒤)</span>'+
+      '<b>은퇴</b><span>'+r.retireAt+'세 ('+r.seasonsToRetire+'시즌 뒤)</span>'+
+      (r.skill?'<b>고유 스킬</b><span>'+esc(r.skill.name)+' — '+esc(r.skill.desc||'')+'</span>':'')+
+      (r.advanced?'<b>심화</b><span>남은 여유 합 '+r.advanced.headroomTotal+' · 핵심 여유 '+r.advanced.coreHeadroom+' · 최고 적성 '+esc(r.advanced.bestApt)+' <em class="tiny">(분석실 '+r.analysisLevel+'단계)</em></span>':'<b>심화</b><span class="tiny">분석실 3단계부터 남은 여유·최고 적성이 붙습니다</span>')+
+    '</div></div>'+
+    '<div class="tiny" style="margin:-4px 0 12px">리포트는 이미 정해진 값을 보여 줄 뿐, 선수를 강하게 만들지 않습니다.</div>'+
+    '<button class="btn ghost" data-go="'+(view==='report' && facilityBack==='player' ? 'player' : 'scout')+'">'+(facilityBack==='player'?'선수 상세로':'스카우트로')+'</button>');
+}
+
 function vMissions(){
   var st = missionState();
   var next = st.filter(function(s){ return !s.done; });
@@ -882,6 +1007,7 @@ function scoutResult(r){
     (r.isDuplicate?'<div class="tiny" style="margin-top:9px;color:var(--hot)">중복 → 한계돌파 '+r.limitBreak+'단계 (잠재력 상승) · 조각 '+r.fragments.total+'/3</div>':'')+
     (r.pity.triggered?'<div class="tiny" style="margin-top:5px;color:var(--ssr)">천장 보장 발동</div>':'')+
     '<button class="btn" style="margin-top:12px" data-trainthis="'+c.id+'">이 선수 키우기</button>'+
+    reportButton(c.id, true)+
   '</div>';
 }
 
@@ -907,7 +1033,7 @@ function vTrain(){
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
         '<div class="pmeta">'+(rep?'대표 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]:'미육성')+
         ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+
-        (rep?ageBadge(rep,true):'')+'</div></div>'+
+        (rep?ageBadge(rep,true):'')+reportBadge(cid)+'</div></div>'+
         '<div class="povr num">'+ovr.toFixed(1)+'<small>초기</small></div></button>';
     }).join(''));
 }
@@ -1110,6 +1236,7 @@ function vPlayer(){
    '</div>'+
 
    ageBlock(inst)+
+   reportCard(inst.cardId)+
    '<div class="card"><div class="muted" style="margin-bottom:7px">캠프 기록</div>'+
      '<div class="legend">'+
        '<b>졸업 등급</b><span>'+gc+' · 완성도 '+Math.round((inst.completion||0)*100)+'%</span>'+
@@ -1122,6 +1249,13 @@ function vPlayer(){
   );
 }
 
+/** 선수 상세의 스카우트 리포트 카드(E.5 ⑮②·⑰). */
+function reportCard(cardId){
+  var r = null; try { r = E.scoutReport(G, cardId); } catch(e){ return ''; }
+  return '<div class="card"><div class="spread"><div class="muted">스카우트 리포트</div>'+
+    (r ? '<span class="tiny">잠재 OVR <b style="color:var(--good)">'+r.ovrPotential.toFixed(1)+'</b> · 한계돌파 반영 '+r.ovrPotentialLb.toFixed(1)+'</span>' : '<span class="agb" style="color:var(--ink3)">🔒 없음</span>')+'</div>'+
+    reportButton(cardId, !r)+'</div>';
+}
 /** 선수 상세의 나이·전성기 카드. */
 function ageBlock(inst){
   var a;
@@ -1144,6 +1278,7 @@ function vRoster(){
   var fillers = E.myRoster(G).filter(function(p){ return p.rarity===0; });
   if (!reps.length && !fillers.length) return '<h2>로스터</h2><div class="empty">아직 선수가 없습니다.</div>';
   return h('<h2>로스터</h2><p class="sub">졸업한 선수가 대표로 등록됩니다. 부족한 자리는 연습생이 채웁니다.</p>'+
+    squadGauge()+
     reps.map(function(i){ return pcard(i, false, i.instanceId); }).join('')+
     (fillers.length ? '<div class="muted" style="margin:16px 0 8px">연습생 '+fillers.length+'명</div>'+
       fillers.map(function(p){
@@ -1155,6 +1290,15 @@ function vRoster(){
     '<button class="btn ghost" style="margin-top:12px" data-go="lineup">라인업 보기</button>');
 }
 
+/** ⑱ 계약 선수 수 게이지 — 무료 슬롯을 넘으면 초과 인원당 운영비가 붙는다. */
+function squadGauge(){
+  var n = 0, free = 42, per = 200;
+  try { n = E.squadSize(G); free = E.FACILITY.squadFreeSlots; per = E.FACILITY.squadUpkeepPerPlayer; } catch(e){ return ''; }
+  var over = Math.max(0, n - free);
+  return '<div class="card flat" style="padding:11px 13px"><div class="spread"><b>계약 '+n+'/'+free+'</b><span class="tiny">'+(over?'초과 '+over+'명 × '+per+' = 시즌 운영비 '+fmtGold(over*per):'무료 슬롯')+'</span></div>'+
+    '<div class="gauge'+(over?' hot':'')+'"><span style="width:'+Math.min(100, n/free*100)+'%"></span></div>'+
+    '<div class="tiny" style="margin-top:5px">'+free+'명을 넘으면 1명당 '+per+'골드가 시즌마다 붙습니다.</div></div>';
+}
 function vLineup(){
   var ts = E.myTeamState(G);
   var slots = ['S (서버)','OH 1','MB 1','OP','OH 2','MB 2'];
@@ -1375,6 +1519,8 @@ function vSettle(){
       }).join('')+
       '<div class="spread" style="padding:9px 11px 3px"><b>합계</b><b class="num">티켓 +'+st.rewards.tickets+' · 골드 +'+st.rewards.gold+'</b></div>'+
     '</div>'+
+    upkeepBlock(st)+
+    investBlock()+
     (st.mvp ? '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(st.mvp.teamName||'')+'</div></div>'+
       '<div class="pname" style="margin-top:4px">'+esc(st.mvp.playerName)+'</div></div>' : '')+
     rookieBlock(st)+
@@ -1386,6 +1532,27 @@ function vSettle(){
     '<button class="btn" data-act="nextseason">시즌 '+(st.season+1)+' 시작</button>');
 }
 
+/** ⑬ 결산 5b — 운영비 정산. 보상 뒤에 빨간 −금액 줄. 미납이면 강등을 반드시 노출한다. */
+function upkeepBlock(st){
+  var u = st && st.upkeep;
+  if (!u || !u.total) return '';
+  var name = '';
+  if (u.demoted) { try { name = (E.FACILITY.tracks.filter(function(t){ return t.id===u.demoted; })[0]||{}).name || u.demoted; } catch(e){ name = u.demoted; } }
+  var lvNow = 0; if (u.demoted) { try { lvNow = E.facilityLevel(G, u.demoted); } catch(e){} }
+  return '<div class="card" style="border-color:'+(u.shortfall>0?'var(--bad)':'var(--line2)')+'">'+
+    '<div class="spread"><b>구단 운영비</b><b class="num" style="color:var(--bad)">−'+fmtGold(u.paid)+'</b></div>'+
+    '<div class="tiny" style="margin-top:4px">시설 '+u.levels+'단계 × '+fmtGold(u.perLevel)+' = '+fmtGold(u.facility)+(u.squad?' · 계약 '+u.squadSize+'명 중 초과 '+u.over+'명 × '+fmtGold(u.perPlayer)+' = '+fmtGold(u.squad):' · 선수단 초과 없음')+'</div>'+
+    (u.shortfall>0 ? '<div style="margin-top:8px;color:var(--bad);font-weight:700">미납 '+fmtGold(u.shortfall)+' — '+esc(name)+' 이 '+lvNow+'단계로 내려갔습니다</div>' : '')+
+  '</div>';
+}
+/** ⑭ 결산 5c — 구단에 투자. 결산에서 남는 돈을 구단에 넣는 리듬(B.6.4). */
+function investBlock(){
+  var fv; try { fv = E.facilityView(G); } catch(e){ return ''; }
+  var any = fv.tracks.some(function(t){ return t.price !== null; });
+  if (!any) return '';
+  return '<div class="card"><div class="spread"><div><b>구단에 투자</b> '+prestigeBadge()+'<div class="tiny" style="margin-top:3px">골드 '+fmtGold(fv.gold)+' · 예비비 '+fmtGold(fv.reserve)+' 를 빼면 <b>'+fmtGold(fv.spendable)+'</b> 을 쓸 수 있습니다</div></div></div>'+
+    '<button class="btn ghost" data-act="facility-settle" style="margin-top:10px">시설 보기</button></div>';
+}
 /** 결산에서 새로 명단에 오르는 신인 세대를 보여 준다. */
 function rookieBlock(st){
   var list = st && st.rookies;
@@ -1421,7 +1588,7 @@ function retireBlock(){
   if (!list.length && !soon.length) return '';
   return '<div class="card" style="border-color:var(--line2)">'+
     (list.length
-      ? '<div class="muted" style="margin-bottom:7px">은퇴</div>'+
+      ? '<div class="spread" style="margin-bottom:7px"><div class="muted">은퇴 · 헌액</div>'+hallBadge()+'</div>'+
         list.map(function(i){
           return '<div class="bx"><span class="ava sm">'+portraitSvg(i,28)+'</span>'+
             '<span class="nm">'+esc(i.name)+'</span>'+
@@ -1439,6 +1606,12 @@ function retireBlock(){
         }).join('')
       : '')+
   '</div>';
+}
+
+/** ⑲ 명예의 전당 등급 표시 — 등급이 있으면 헌액 규모로 읽힌다(외형). */
+function hallBadge(){
+  var lv = 0; try { lv = E.facilityLevel(G, 'hall'); } catch(e){ return ''; }
+  return lv ? '<span class="agb" style="color:var(--ssr)">🏆 명예의 전당 '+lv+'단계</span>' : '<span class="agb" style="color:var(--ink3)">전당 없음 · 기록만 남습니다</span>';
 }
 
 // ---------- 친선 경기 (리그 밖)
@@ -1524,7 +1697,8 @@ function mountCourt(){
   var cv = document.getElementById('lvCanvas');
   if (!cv || !mv) return;
   var m = lastMatch;
-  cr = CourtRender.create(cv, { colors:{ home:'#5FB0FF', away:'#F09080' } });
+  var crowd = 0; try { crowd = E.facilityLevel(G, 'stadium') / 5; } catch(e){}
+  cr = CourtRender.create(cv, { colors:{ home:'#5FB0FF', away:'#F09080' }, crowd: crowd });   // ⑲ 홈구장 등급 → 관중 밀도(외형)
   cr.mySide = mySide;
   cr.speed = mv.speed;
   cr.onTouch = function(i){ paintLive(i); };
@@ -1877,12 +2051,12 @@ function vHelp(){
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport]');
   if (!t) return;
   var d = t.dataset;
 
   if (d.tab) { if (ses && d.tab!=='train') return; go(d.tab==='train'&&ses?'trainTurn':d.tab); return; }
-  if (d.go) { go(d.go); return; }
+  if (d.go) { if (d.go === 'facility') facilityBack = 'home'; go(d.go); return; }
 
   if (d.act === 'scout') return doScout();
   if (d.act === 'scout10') return doScout10();
@@ -1923,6 +2097,18 @@ document.addEventListener('click', function(e){
     return;
   }
   if (d.act === 'help') { stopViewer(); go('help'); return; }
+  if (d.fac) {
+    try { var up = E.upgradeFacility(G, d.fac); save(); toast(up.name+' '+up.level+'단계 · −'+fmtGold(up.price)+'골드'); }
+    catch(err){ toast(err.message); }
+    render(); return;
+  }
+  if (d.report) {
+    try { E.buyScoutReport(G, d.report); save(); reportId = d.report; facilityBack = (view==='player') ? 'player' : 'scout'; go('report'); }
+    catch(err){ toast(err.message); render(); }
+    return;
+  }
+  if (d.viewreport) { reportId = d.viewreport; facilityBack = (view==='player') ? 'player' : 'scout'; go('report'); return; }
+  if (d.act === 'facility-settle') { facilityBack = 'settle'; go('facility'); return; }
   if (d.act === 'autolineup') { E.autoLineup(G); save(); render(); toast('자동 편성했습니다'); return; }
   if (d.act === 'reset') {
     if (!confirm('저장된 진행을 지우고 처음부터 시작할까요?')) return;

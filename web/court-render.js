@@ -156,6 +156,8 @@ function create(canvas, opts) {
     canvas: canvas, ctx: ctx, cam: null, dpr: 1,
     touches: [], flights: [], point: null, mySide: 0,
     colors: opts && opts.colors || { home:'#3E8FE0', away:'#E3705F' },
+    // 관중 밀도 0~1 — 홈구장 시설 등급(E.5 ⑲). 0 이면 빈 체육관, 1 이면 만원. 외형뿐이라 판정과 무관하다.
+    crowd: Math.max(0, Math.min(1, (opts && opts.crowd) || 0)),
     t: 0, idx: 0, playing: false, speed: 1, raf: 0, last: 0,
     onTouch: null, onEnd: null, impact: 0, shake: 0, ended: false, endHold: 0,
     trail: [], bursts: []   // 스킬 발동 이펙트 {x,y,side,name,t}
@@ -297,6 +299,7 @@ function create(canvas, opts) {
     sky.addColorStop(0, '#0C1620'); sky.addColorStop(0.55, '#122335'); sky.addColorStop(1, '#0A1017');
     c.fillStyle = sky; c.fillRect(-10, -10, w+20, h+20);
 
+    drawStands(c, cam);
     drawFloor(c, cam);
     drawLines(c, cam);
 
@@ -316,6 +319,29 @@ function create(canvas, opts) {
     c.restore();
   }
 
+  /** 먼 쪽 관중석 — 밀도(R.crowd)만큼 점을 채운다. 결정적(시드 고정)이라 프레임마다 흔들리지 않는다. */
+  function drawStands(c, cam) {
+    if (R.crowd <= 0) return;
+    var far = project(cam, 0, COURT.length + 2.4, 0), farR = project(cam, COURT.width, COURT.length + 2.4, 0);
+    var top = Math.max(cam.h * 0.09, far.sy - cam.h * 0.30), bottom = far.sy - 4;   // 위쪽 팀 이름 라벨 자리를 남긴다
+    var x0 = Math.min(far.sx, farR.sx) - cam.w * 0.18, x1 = Math.max(far.sx, farR.sx) + cam.w * 0.18;
+    var rows = 6, rnd = rng(7331);
+    c.save();
+    c.fillStyle = 'rgba(8,14,22,.55)'; c.fillRect(x0, top, x1 - x0, bottom - top);   // 스탠드 그림자
+    for (var r = 0; r < rows; r++) {
+      var y = top + (bottom - top) * (r + 0.5) / rows;
+      var cols = 26 + r * 4, sz = 2 + r * 0.35;
+      for (var i = 0; i < cols; i++) {
+        var u = rnd();
+        if (u > R.crowd) continue;                       // 밀도만큼만 앉는다
+        var x = x0 + (x1 - x0) * (i + 0.5) / cols + (rnd() - 0.5) * 3;
+        var hue = rnd();
+        c.fillStyle = hue < 0.5 ? 'rgba(95,176,255,.55)' : (hue < 0.8 ? 'rgba(230,236,242,.45)' : 'rgba(240,144,128,.5)');
+        c.beginPath(); c.arc(x, y, sz, 0, Math.PI * 2); c.fill();
+      }
+    }
+    c.restore();
+  }
   function drawFloor(c, cam) {
     // 코트 바닥(원근 사다리꼴) + 주변 여유 공간
     var out = quad(cam, -1.8, -2.4, COURT.width+1.8, COURT.length+2.4);
