@@ -21,7 +21,9 @@ import { MAX_PROSPECTS, scoutedProspect } from "./youth";
 import { STAFF_ROLE_LABEL } from "./staff";
 import { formPoints } from "./board";
 import { overall } from "./rating";
-import { CLUBS_PER_DIVISION } from "./divisions";
+import { CLUBS_PER_DIVISION, DIVISIONS, clubsIn, divisionName, inRelegationZone, userDivision } from "./divisions";
+import { playerValue, windowOpen } from "./transfers";
+import { seasonRounds, table } from "./season";
 
 export const STORY_CHANCE = 0.25;
 /** Rounds a pending event waits before it settles itself with the last choice. */
@@ -38,7 +40,7 @@ export const SCOUT_TIP_COST = 3;
 export const AWAY_BUS_COST = 2;
 export const PHYSIO_COST = 3;
 
-export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut"];
+export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear"];
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -58,7 +60,23 @@ function flag(s: GameState, key: string): boolean {
 
 // ------------------------------------------------------------------ templates
 
-interface Draft { title: string; text: string; choices: StoryChoice[]; playerId?: string; playerId2?: string; staffId?: string; amount?: number }
+interface Draft { title: string; text: string; choices: StoryChoice[]; playerId?: string; playerId2?: string; staffId?: string; amount?: number; clubId?: number }
+
+/** The squad member a bigger club would come asking about: the best of the ones that can be sold. */
+const starPlayer = (me: Club): SquadPlayer | undefined =>
+  [...me.squad].filter((p) => !p.onLoan && p.loanFrom === undefined && p.injuryDays === 0)
+    .sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role))[0];
+
+/** How many points off safety the user is, when they are in the drop zone. */
+function pointsToSafety(s: GameState): number {
+  const rows = table(s);
+  const safeIdx = rows.length - 3; // the last position that stays up
+  const safe = rows[safeIdx], me = rows.find((r) => r.club === s.userClub);
+  return safe && me ? Math.max(0, safe.pts - me.pts) : 0;
+}
+
+/** Rounds still to play in the user's season. */
+const roundsLeft = (s: GameState): number => Math.max(0, seasonRounds(s) - s.round);
 
 const assistantOf = (me: Club): { id: string; name: string; rating: number; wage: number } | undefined => (me.staff ?? []).filter((m) => m.role === "assistant").sort((a, b) => b.rating - a.rating)[0];
 const squadPool = (me: Club): SquadPlayer[] => me.squad.filter((p) => !p.onLoan);
@@ -78,6 +96,11 @@ function applicable(s: GameState, me: Club, t: StoryTemplateId): boolean {
     case "injuryCrisis": return me.squad.filter((p) => p.injuryDays > 0).length >= 3;
     case "mediaCriticism": return s.round >= 5 && formPoints(s, s.userClub) <= 4;
     case "youthDebut": return squadPool(me).some((p) => isYouthProduct(p) && p.stats.apps === 0 && p.injuryDays === 0);
+    // A club above only comes calling when there is a division above to come from, a window to deal
+    // in, and somebody worth asking about.
+    case "topFlightBid": return userDivision(s) > 1 && windowOpen(s) && !!starPlayer(me) && clubsIn(s, userDivision(s) - 1).length > 0;
+    // The run-in, in the drop zone, with the drop still real.
+    case "relegationFear": return userDivision(s) < DIVISIONS && s.round >= seasonRounds(s) - 4 && roundsLeft(s) > 0 && inRelegationZone(s, s.userClub);
   }
 }
 
@@ -126,6 +149,39 @@ function draft(s: GameState, me: Club, t: StoryTemplateId, rng: Rng): Draft | nu
       return { title: "부상 위기", text: `부상자가 ${n}명입니다. 의무 팀장이 외부 재활 전문가 초빙(${PHYSIO_COST}억)을 건의했습니다.`, amount: PHYSIO_COST, choices: [{ label: `전문가 초빙 (${PHYSIO_COST}억)`, hint: "모든 부상자 회복 −7일" }, { label: "참는다", hint: "변화 없음" }] };
     }
     case "mediaCriticism": return { title: "미디어 비판", text: `한 칼럼니스트가 "${s.managerName} 감독의 전술은 시대에 뒤떨어졌다"고 썼습니다. 기자들이 반응을 묻습니다.`, choices: [{ label: "정면 반박한다", hint: "팬 +2, 선수단 사기 +2, 이사회 −1" }, { label: "결과로 답하겠다", hint: "변화 없음" }] };
+    case "topFlightBid": {
+      const p = starPlayer(me)!;
+      // the bidder: a club from the division above, the stronger ones more likely to come calling
+      const above = [...clubsIn(s, userDivision(s) - 1)].sort((a, b) => b.reputation - a.reputation);
+      const from = above[Math.floor(rng.next() * rng.next() * above.length)] ?? above[0]!;
+      const fee = Math.max(1, Math.round(playerValue(p) * (1.15 + rng.next() * 0.4)));
+      const raise = Math.max(0.1, Math.round(p.wage * 0.4 * 10) / 10);
+      return {
+        title: `${divisionName(userDivision(s) - 1)}의 제안`,
+        text: `${from.name}이(가) ${p.name}에게 관심을 보이며 ${fee}억을 제시했습니다. ${p.name}은(는) "${divisionName(userDivision(s) - 1)}에서 뛰고 싶다"는 말을 숨기지 않습니다.`,
+        playerId: p.id, amount: fee, clubId: from.id,
+        choices: [
+          { label: `${fee}억에 판다`, hint: `예산 +${fee}억, 선수단 사기 −4, 팬 −5` },
+          { label: "거절한다", hint: `${p.name} 사기 −15, 이적 요구 가능성` },
+          { label: `재계약으로 붙잡는다 (연봉 +${raise}억)`, hint: `${p.name} 사기 +12, 예산 −${raise}억, 팬 +3` },
+        ],
+      };
+    }
+    case "relegationFear": {
+      const gap = pointsToSafety(s);
+      const left = roundsLeft(s);
+      const below = divisionName(userDivision(s) + 1);
+      return {
+        title: `강등권, 남은 ${left}경기`,
+        text: `${left}경기를 남기고 강등권입니다. 잔류까지 승점 ${gap}점 차. 훈련장 공기가 무겁고, 선수들이 실수를 두려워하는 게 눈에 보입니다. ${below} 이야기는 아무도 꺼내지 않습니다.`,
+        amount: gap,
+        choices: [
+          { label: "베테랑을 앞세운다", hint: "고참 사기 +8, 어린 선수 −5, 이사회 +1" },
+          { label: "젊은 선수에게 맡긴다", hint: "23세 이하 사기 +10·성장 +, 고참 −6, 팬 +2" },
+          { label: "부담을 덜어 준다", hint: "선수단 전체 사기 +5, 팬 −3, 이사회 −1" },
+        ],
+      };
+    }
     case "youthDebut": {
       const p = pick(pool.filter((q) => isYouthProduct(q) && q.stats.apps === 0 && q.injuryDays === 0));
       if (!p) return null;
@@ -256,6 +312,56 @@ export function resolveEvent(s: GameState, eventId: string, choice: number, auto
       if (choice === 0) { adjustMood(me, 2); adjustSquadMorale(me, 2); boardAdd(s, -1); out = "감독의 반박이 화제가 됐습니다. 팬과 선수는 통쾌해했고 이사회는 조용히 하길 바랍니다."; }
       else out = "감독은 말을 아꼈습니다.";
       break;
+    case "topFlightBid": {
+      const from = ev.clubId !== undefined ? clubOf(s, ev.clubId) : null;
+      if (!p) { out = "그 선수는 이미 팀을 떠났습니다."; break; }
+      if (choice === 0) {
+        const fee = ev.amount ?? 0;
+        money(me, fee);
+        me.squad = me.squad.filter((q) => q.id !== p.id);
+        me.selection.starters = me.selection.starters.filter((id) => id !== p.id);
+        me.selection.bench = me.selection.bench.filter((id) => id !== p.id);
+        if (from) from.squad.push(p);
+        adjustSquadMorale(me, -4);
+        adjustMood(me, -5);
+        out = `${p.name}이(가) ${from?.shortName ?? "상위 리그"}로 떠났습니다. ${fee}억이 들어왔지만 라커룸은 조용합니다.`;
+      } else if (choice === 1) {
+        adjustMorale(p, -15);
+        // an ambitious player held against his will starts pushing for the move himself
+        if (personalityOf(p).ambition > 0.6) p.transferRequest = true;
+        out = `제안을 거절했습니다. ${p.name}은(는) 납득하지 못한 표정입니다.${p.transferRequest ? " 이적을 공식 요구했습니다." : ""}`;
+      } else {
+        const raise = Math.max(0.1, Math.round(p.wage * 0.4 * 10) / 10);
+        p.wage = Math.round((p.wage + raise) * 10) / 10;
+        money(me, -raise);
+        adjustMorale(p, 12);
+        adjustMood(me, 3);
+        p.transferRequest = false;
+        out = `${p.name}이(가) 재계약에 서명했습니다 (연봉 +${raise}억). 팬들은 구단이 에이스를 지켰다며 반겼습니다.`;
+      }
+      break;
+    }
+    case "relegationFear": {
+      const squad = squadPool(me);
+      if (choice === 0) {
+        for (const q of squad) adjustMorale(q, q.age >= 29 ? 8 : q.age <= 22 ? -5 : 0);
+        boardAdd(s, 1);
+        out = "고참들이 앞으로 나섰습니다. 젊은 선수들은 밀려난 기분입니다.";
+      } else if (choice === 1) {
+        for (const q of squad) {
+          if (q.age <= 23) { adjustMorale(q, 10); if (overall(q.attrs, q.role) < q.potential) q.growth += 0.15; }
+          else if (q.age >= 29) adjustMorale(q, -6);
+        }
+        adjustMood(me, 2);
+        out = "어린 선수들이 눈을 반짝입니다. 고참들의 표정은 굳었지만, 팬들은 이 결정을 좋아했습니다.";
+      } else {
+        adjustSquadMorale(me, 5);
+        adjustMood(me, -3);
+        boardAdd(s, -1);
+        out = "선수들의 어깨가 조금 가벼워졌습니다. 다만 밖에서는 위기감이 없어 보인다는 말이 나옵니다.";
+      }
+      break;
+    }
     case "youthDebut":
       if (!p) { out = "선수는 이미 팀을 떠났습니다."; break; }
       if (choice === 0) { adjustMorale(p, 8); out = `${p.name}이(가) 밝은 얼굴로 훈련장으로 돌아갔습니다. 기회를 기다립니다.`; }

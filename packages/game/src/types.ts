@@ -113,7 +113,7 @@ export interface Interview {
   round: number;
 }
 
-export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut";
+export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut" | "topFlightBid" | "relegationFear";
 
 export interface StoryChoice { label: string; hint: string }
 
@@ -131,6 +131,8 @@ export interface StoryEvent {
   staffId?: string;
   /** money or target figure the template quotes */
   amount?: number;
+  /** another club the template is about (topFlightBid: the bidder) */
+  clubId?: number;
   /** settles itself with the last choice once s.round reaches this */
   expiresRound: number;
   resolved?: { choice: number; outcome: string; round: number; auto?: true };
