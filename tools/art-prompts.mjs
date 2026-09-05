@@ -188,7 +188,7 @@ const POSITION = {
         ball: 'volleyball just in front of the striking palm',
         camera: 'low angle 15 degrees, dynamic angle, foreshortening, three-quarter view from the right',
         note: '' },
-  OP: { accent: 'long legs, broad shoulders', nlBody: 'long-legged and broad-shouldered', nlAction: 'mid back-row attack — a long horizontal leap, body stretched forward on a diagonal, striking arm fully extended, the other arm reaching forward for balance', nlBall: 'the ball in front of her striking hand', nlCamera: 'shot at eye level from a three-quarter side view, wide enough that the attack line on the floor behind her is visible',
+  OP: { accent: 'long legs, broad shoulders', nlBody: 'long-legged and broad-shouldered', nlAction: 'mid back-row attack — a long horizontal leap, body stretched forward on a diagonal, striking arm fully extended, the other arm reaching forward for balance', nlBall: 'the ball in front of her striking hand', nlCamera: 'shot at eye level from a three-quarter side view, the attack line on the floor behind her visible',
         pose: 'back row attack, long horizontal jump, body stretched forward at a 30 degree diagonal, striking arm fully extended, other arm reaching forward for balance, front knee bent',
         ball: 'volleyball in front of the striking hand',
         camera: 'eye level, three-quarter side view, attack line visible on the floor behind the jump',
@@ -198,7 +198,7 @@ const POSITION = {
         ball: 'volleyball just in front of both palms, partly hidden by the hands',
         camera: 'low angle 10 degrees, front view from the opposite court, net band crossing at chest height',
         note: '손끝이 세이프 영역 상단선에 닿게 — 장신 강조(3.2④)' },
-  L:  { accent: '', nlAction: 'digging — a very low stance, one leg extended far to the side, the other knee bent deep near the floor, torso leaning forward, both forearms joined into a flat platform with hands clasped', nlBall: 'the ball meeting the center of her forearm platform', nlCamera: 'shot from very low near the floor in three-quarter view, framing her whole body',
+  L:  { accent: '', nlAction: 'digging — a very low stance, one leg extended far to the side, the other knee bent deep near the floor, torso leaning forward, both forearms joined into a flat platform with hands clasped', nlBall: 'the ball meeting the center of her forearm platform', nlCamera: 'shot from very low near the floor in three-quarter view',
         pose: 'digging, very low stance, one leg extended far to the side, other knee deeply bent near the floor, torso leaning forward, both forearms joined into a flat platform, hands clasped with thumbs side by side',
         ball: 'volleyball touching the center of the forearm platform',
         camera: 'very low angle near the floor, three-quarter view',
@@ -207,12 +207,12 @@ const POSITION = {
 
 /** 등급 → 6.4 연출 태그 · 3.5 강도. */
 const RARITY = {
-  N:   { nlLight: 'soft even lighting against a plain background', light: 'soft even lighting, simple background',
+  N:   { nlLight: 'lit evenly and plainly with no dramatic effects, the background quiet and dark behind her', light: 'soft even lighting, simple background',
          extra: 'standing, upper body, holding a volleyball at the hip',
          drop: 'rim light, lens flare, motion lines' },
-  R:   { nlLight: 'soft gym lighting against a simple background', light: 'soft lighting, simple background', extra: 'sweat drop', drop: 'rim light, lens flare, light particles, motion lines' },
-  SR:  { nlLight: 'a clear rim light along her silhouette, with wind and motion in her hair and jersey', light: 'rim light, motion lines, wind', extra: 'hair and fabric in motion, sweat drop', drop: 'lens flare, light particles' },
-  SSR: { nlLight: 'a dramatic rim light and an overhead spotlight, lens flare and drifting light particles, the crowd behind her blurred into shallow depth of field', light: 'dramatic rim light, spotlight, lens flare, light particles, motion blur background, depth of field',
+  R:   { nlLight: 'a single overhead light picking her out, the background dark behind her', light: 'soft lighting, simple background', extra: 'sweat drop', drop: 'rim light, lens flare, light particles, motion lines' },
+  SR:  { nlLight: 'a clear rim light along her silhouette, wind and motion in her hair and jersey, the background dark behind her', light: 'rim light, motion lines, wind', extra: 'hair and fabric in motion, sweat drop', drop: 'lens flare, light particles' },
+  SSR: { nlLight: 'a dramatic rim light and an overhead spotlight, lens flare and drifting light particles, the crowd dissolved into deep bokeh behind her', light: 'dramatic rim light, spotlight, lens flare, light particles, motion blur background, depth of field',
          extra: 'hair and fabric in strong motion, sweat drops', drop: '' },
 };
 
@@ -446,6 +446,9 @@ function hairPhrase(styleTag, colorTag) {
  * 두 프레이밍을 다 쓴다: 카드는 미디엄 샷(리스트에서 얼굴이 읽혀야 한다),
  * 선수 상세 화면은 전신(점프의 박력을 크게 본다).
  */
+/** 낮은 자세 포즈는 카메라가 자연히 가까워진다 — 문반디(디그)가 머리 31% 로 나왔다. 거리를 명시한다. */
+const LOW_STANCE = ['L', 'S'];
+
 const FRAMING = {
   card: 'MEDIUM SHOT / WAIST-UP CROP. The bottom edge of the frame cuts her off at mid-thigh — her lower legs and feet are NOT in the picture. Her head, shoulders and torso fill most of the frame; her head alone is about one fifth of the total image height. This is a close hero portrait, not a full-body shot.',
   hero: 'FULL BODY ACTION SHOT. Her whole body is in frame, from her raised hand down to her feet, airborne with space around her — the dramatic full-figure illustration shown large on the player detail screen.',
@@ -464,6 +467,9 @@ function buildCardNatural(p, d, kind) {
 
   return [
     FRAMING[kind === 'hero' ? 'hero' : 'card'],
+    ...(kind !== 'hero' && LOW_STANCE.includes(p.position)
+      ? [`Because this pose is low to the floor, stand the camera a few steps further back than a close-up: her head, her torso and both arms all sit comfortably inside the frame with clear space above her head. Her head must not fill more than a fifth of the frame height.`]
+      : []),
     // 이 문장이 화풍을 결정한다. 초기 판은 태그형과 같은 `cel shading, flat colors, clean lineart` 를 썼는데,
     // 범용 모델(Nano Banana 등)은 그걸 **문자 그대로** 받아 초등학생 만화처럼 그렸다. 반대로 지시한다.
     `Ultra-detailed semi-realistic anime illustration, the quality of a high-end painted key visual for a premium mobile game — rendering pushed close to realism. Skin has real texture, soft subsurface scattering and a faint flush of exertion. Hair is drawn strand by strand in layered clumps with sharp specular highlights and stray flyaway hairs. Fabric behaves like real fabric: visible weave, stitched seams, stretch across the shoulder, creases where the body twists. Anatomically accurate athletic musculature. Hands fully articulated with correct fingers. Individual sweat droplets catching the light. Cinematic volumetric lighting, shallow depth of field, high dynamic range. NOT flat cel shading, NOT simple anime, NOT thick uniform outlines, NOT a cartoon.`,
@@ -476,11 +482,14 @@ function buildCardNatural(p, d, kind) {
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
     // 1.4.1 — 금지선이 아니라 **요구 사항**이다. 12세 판에서 이걸 잃어 카드가 밋밋해졌다.
     // 리베로는 바닥에서 디그한다 — 전 포지션에 "점프 최고점"을 붙이면 프롬프트가 자기 모순이 된다.
-    `Give it the intensity of a real match: ${p.position === 'L'
-      ? 'she is fully extended into the dig, body low and driving across the floor, the near-floor angle showing how far she has thrown herself'
+    `Give it the intensity of a real match: ${
+      p.position === 'L' ? 'she is fully extended into the dig, body low and driving across the floor, the near-floor angle showing how far she has thrown herself'
+      : p.position === 'S' ? 'she is stretched up onto her toes with her whole body loaded under the ball, every joint lined up for the set'
       : 'she is at the very top of her jump with her feet clearly off the floor, the low angle exaggerating her height and reach'}; an athlete's muscle definition visible in her arms and shoulders; a fierce competitive expression with her eyes locked on the ball; hair, jersey and beads of sweat all streaming in the direction of the motion.`,
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
-    `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
+    `Indoor arena at night with the volleyball net behind her, ${rar.nlLight}.`,
+    // 등급 차등은 **효과의 세기**로만 준다. 배경 밝기까지 차등하면 R 카드만 흰 판처럼 튄다(art-pipeline 11).
+    `The background stays consistently dark in every card — a dim arena at night — no matter how bright the highlights on her are. Never a bright daylit gymnasium.`,
     `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
     // 얼굴 크기는 카드가 96px 로 줄었을 때 읽히느냐의 문제다(4.2). 정숙 규정이 아니라 가독성 규정이라 남긴다.
     kind === 'hero'

@@ -1,25 +1,25 @@
 {
-  "pid": "p007",
+  "pid": "p002",
   "team": "t01",
-  "position": "L",
-  "rarity": "R",
-  "height_cm": 168,
-  "jersey": 2,
+  "position": "OP",
+  "rarity": "SSR",
+  "height_cm": 187,
+  "jersey": 4,
   "skin": "A",
   "hair": {
-    "style": "사이드 브레이드",
-    "color": "체스트넛 브라운",
-    "palette": 3
+    "style": "픽시 숏컷",
+    "color": "와인 레드",
+    "palette": 8
   },
   "eye": {
-    "shape": "neutral",
-    "color": "앰버"
+    "shape": "tsurime",
+    "color": "다크 그레이"
   },
   "card": {
     "face": {
-      "cx": 315,
-      "cy": 563,
-      "h": 229
+      "cx": 405,
+      "cy": 205,
+      "h": 169
     }
   },
   "stand": {
@@ -38,11 +38,11 @@
     "seed_stand": null
   },
   "source": {
-    "file": "p007.png",
+    "file": "p002.png",
     "size": "1760x2352",
     "crop": {
       "x": 0,
-      "y": 5,
+      "y": 0,
       "w": 1760,
       "h": 2347
     },
