@@ -15,7 +15,7 @@ export interface CelebrationSpec {
 }
 
 /** The trophy illustration each kind of celebration opens with; a clinch by another club keeps the emoji. */
-const ART: Partial<Record<CelebrationSpec["kind"], string>> = { league: "./art/trophy-league.svg", cup: "./art/trophy-cup.svg", promotion: "./art/trophy-promotion.svg" };
+const ART: Partial<Record<CelebrationSpec["kind"], string>> = { league: "./art/trophy-league.webp", cup: "./art/trophy-cup.webp", promotion: "./art/trophy-promotion.webp" };
 
 export function celebrate(spec: CelebrationSpec): Promise<void> {
   return new Promise((resolve) => {

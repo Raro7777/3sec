@@ -1011,7 +1011,7 @@ export class Game {
     const log = (s.eventLog ?? []).slice(0, 10);
     const h: string[] = [];
     for (const ev of pending) {
-      h.push(`<div class="card evCard" data-story-card="event" style="border-left:3px solid var(--warn)"><img class="evArt" src="./art/event-${ev.template}.svg" alt="" loading="lazy"><h3>📜 ${ev.title} <span>R${ev.round + 1}</span></h3>
+      h.push(`<div class="card evCard" data-story-card="event" style="border-left:3px solid var(--warn)"><img class="evArt" src="./art/event-${ev.template}.webp" alt="" loading="lazy"><h3>📜 ${ev.title} <span>R${ev.round + 1}</span></h3>
         <div class="hint" style="color:var(--text);margin-bottom:6px">${ev.text}</div>
         <div class="todo">${ev.choices.map((c, i) => `<button class="todoRow" data-story="event" data-id="${ev.id}" data-choice="${i}" style="border-left-color:var(--accent)"><span><b>${c.label}</b>${c.hint ? `<br><small>${c.hint}</small>` : ""}</span><b>›</b></button>`).join("")}</div>
         <div class="hint">${Math.max(1, ev.expiresRound - s.round)}라운드 안에 결정하지 않으면 마지막 선택으로 처리됩니다.</div></div>`);
@@ -2483,7 +2483,7 @@ export class Game {
     // What the season earned, in the order a manager would rank them: the title, the cup, going up.
     const trophyArt = pos === 1 ? "trophy-league" : s.cup.holder === me.id ? "trophy-cup" : inPromotionZone(s, me.id) ? "trophy-promotion" : null;
     h.push(`<div class="card review"><h3>시즌 ${s.season} 결산 <span class="mgr">감독 ${s.managerName}</span><span>${me.name}</span></h3>
-      ${trophyArt ? `<img class="rvArt" src="./art/${trophyArt}.svg" alt="">` : ""}
+      ${trophyArt ? `<img class="rvArt" src="./art/${trophyArt}.webp" alt="">` : ""}
       <div class="rvTitle">${pos}위 <small>/ ${n}팀 · ${mine.pts}점</small></div>
       <div class="hint">${verdict}</div>
       <div class="stats">
