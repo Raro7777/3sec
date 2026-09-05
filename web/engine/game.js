@@ -12,6 +12,7 @@ import { roundHalfEven } from './mathx.js';
 import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
 import { SKILL_BY_NAME } from './skills.js';
+import { archetypeOf } from './commentary.js';
 import {
   ROOKIES, ROOKIE_LOOKS, createRookieWorld, growRookieWorld, rookiesUpTo,
   slotOccupant, slotSince, genericSlotCount, rookieSummary,
@@ -801,6 +802,8 @@ export function trainingOptions(session) {
     treating: session.isTreating, treatmentTurnsLeft: tr.treatmentTurnsLeft,
     isEvalTurn: isEvalTurn(cfg, session.turn),
     injuries: tr.injuries, severeInjuries: tr.severeInjuries,
+    personality: (tr.card && tr.card.personality) || [],     // 캠프 헤더 성격 태그(표현 전용)
+    archetype: archetypeOf(tr.card && tr.card.personality),
   };
   if (session.phase === PHASE.Graduated) {
     return { ...head, kind: 'graduated', options: [], event: null };
@@ -850,6 +853,7 @@ export function applyTrainingChoice(session, choiceId) {
     const beforeTurn = session.turn;
     const rec = session.apply(action);
     events.push(turnEvent(session, rec, beforeTurn));
+    if (rec.bond) events.push({ type: 'bond', kind: rec.bond.kind, title: rec.bond.title, text: rec.bond.text, supporterName: rec.bond.supporterName, supporterId: rec.bond.supporterId });
     if (rec.event) {
       const e = rec.event;
       events.push({
@@ -996,7 +1000,7 @@ export function releaseInstance(state, instanceId) {
 }
 
 // ---------------------------------------------------------------- 라인업
-function instanceToPlayer(inst, teamId, season) {
+function instanceToPlayer(inst, teamId, season, state) {
   const p = makePlayer({
     id: inst.instanceId, name: inst.name, teamId, pos: inst.pos, rarity: inst.rarity,
     jersey: inst.jersey, heightCm: inst.heightCm, age: inst.age,
@@ -1006,6 +1010,8 @@ function instanceToPlayer(inst, teamId, season) {
     skillLevel: inst.skillLevel | 0,
   });
   p.cardId = inst.cardId;                  // 그림 키(카드 아트·초상) — 판정에는 쓰이지 않는다
+  const src = CARD_BY_ID.get(inst.cardId) || (state ? cardById(state, inst.cardId) : null);
+  p.personality = (src && src.personality) || [];   // 해설·컷인 양념(commentary.js) — 판정 무관
   return agedPlayer(p, season, true);      // A.3.6 노화 — 전성기 이후 실효 스탯 하락
 }
 
@@ -1017,7 +1023,7 @@ export function myRoster(state) {
   const list = [];
   for (const i of representatives(state)) {
     if (isRetiredAge(i.age, i.pos, state.season)) continue;
-    list.push(instanceToPlayer(i, state.clubId, state.season));
+    list.push(instanceToPlayer(i, state.clubId, state.season, state));
   }
   for (const f of state.fillers) list.push(f);
   return list;
@@ -1320,7 +1326,7 @@ export function formatMatchResult(result, home, away, mySide, seed) {
   const players = {};
   // cardId/look 은 뷰어의 초상·컷인용 그림 키(art-pipeline 16절). 판정에는 쓰이지 않는다.
   const entry = (p, side) => ({ id: p.id, name: p.name, jersey: p.jersey, pos: p.pos, side,
-    cardId: p.cardId || null, look: p.look || null });
+    cardId: p.cardId || null, look: p.look || null, personality: p.personality || null, clubId: p.teamId || null });
   for (const p of home.roster) players[p.id] = entry(p, SIDE.HOME);
   for (const p of away.roster) players[p.id] = entry(p, SIDE.AWAY);
   const lineupIds = ts => (ts.lineup ? ts.lineup.startingIds.concat(ts.lineup.liberoId ? [ts.lineup.liberoId] : []) : []);

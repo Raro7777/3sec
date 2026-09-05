@@ -53,7 +53,7 @@ export {
   SEASON_CONFIG, PHASE as SEASON_PHASE,
 } from './engine/season.js';
 
-export { renderCommentary, ga } from './engine/commentary.js';
+export { renderCommentary, ga, josa, fillName, shortName, archetypeOf, personalityQuip, ARCHETYPE_KO } from './engine/commentary.js';
 
 // 참조 데이터·열거형(UI 표기용)
 export {

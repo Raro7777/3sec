@@ -9,7 +9,7 @@ import {
   isTraining, ovrOf, gradeOf, isRival, skillLevelForHints,
   isEvalTurn, evalRound, isStoryTurn, storyIndex, isSeniorTurn,
 } from './training-config.js';
-import { storyEvent, seniorEvent, randomStatBranchEvent, randomStatEvent, randomFatigueEvent, randomConditionEvent, flavorOf, effect } from './training-events.js';
+import { storyEvent, seniorEvent, randomStatBranchEvent, randomStatEvent, randomFatigueEvent, randomConditionEvent, flavorOf, effect, bondMoment } from './training-events.js';
 import { Rng } from './rng.js';
 import { roundHalfEven, sigmoid } from './mathx.js';
 import { generateTeamState } from './generator.js';
@@ -614,6 +614,8 @@ export class TrainingSession {
     rec.fatigueAfter = tr.fatigue;
     rec.conditionAfter = tr.condition;
     rec.flavor = flavorOf(rec.action, this.turn);
+    // 인연 순간(T7) — 서사만 붙인다. 난수·효과가 없어 아래 afterAction 의 판정 순서는 그대로다.
+    if (this.turn === cfg.bondTurn && this.support.count > 0) rec.bond = bondMoment(this.support, tr.card.name);
     this.log.push(rec);
     this._currentRecord = rec;
     this.afterAction();
@@ -643,7 +645,7 @@ export class TrainingSession {
   afterAction() {
     const cfg = this.cfg, tr = this.trainee;
     if (isStoryTurn(cfg, this.turn)) {
-      this.pendingEvent = storyEvent(storyIndex(cfg, this.turn), tr.pos, cfg);
+      this.pendingEvent = storyEvent(storyIndex(cfg, this.turn), tr.pos, cfg, tr.card);
       this.phase = PHASE.AwaitEventChoice;
       return;
     }

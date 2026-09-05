@@ -1,5 +1,6 @@
 // 육성 이벤트 카탈로그. TrainingEvent.cs 의 EventCatalog 전체를 텍스트까지 그대로 옮겼다.
 import { STAT, STAT_NAMES_KO } from './domain.js';
+import { archetypeOf, fillName, josa } from './commentary.js';
 
 export const EVENT_KIND = { Story: 0, Senior: 1, Random: 2, Bond: 3 };
 
@@ -32,27 +33,71 @@ function choice(label, onSuccess, successRate = 1.0, onFail = null) {
   return { label, successRate, onSuccess, onFail, isBranch: successRate < 1.0 };
 }
 
-/** TrainingEvent.cs:94 EventCatalog.Story */
-export function storyEvent(index, pos, cfg) {
+/**
+ * 카드 스토리 3컷(docs/training-mode.md 6.3) — 캠프 초·중·후반의 단면. 텍스트는 카드의 성격 아키타입(commentary.js)으로
+ * 갈라지고, 선택지·효과는 아키타입과 무관하게 같다(TrainingEvent.cs 원본 그대로 → 육성 캘리브레이션 불변).
+ */
+const STORY_TEXT = {
+  fire: [
+    '"감독님, 저 여기서 제일 세지려고 왔어요." 첫날부터 공을 제일 많이 때린 사람은 {n}이다. 그런데 밤에는 혼자 발목을 만지고 있다.',
+    '같은 코스로 세 번 막혔다. {n}은 더 세게 때리는 것으로 답한다. 손목이 붉다. "한 번만 더요."',
+    '최종 평가전 전날. {n}은 테이핑을 두 겹으로 감았다. "감독님, 저 내일 이길 수 있을까요." 처음 듣는 질문이다.',
+  ],
+  ice: [
+    '{n}은 첫날 캠프 일정표를 전부 외웠다. "쓸데없는 훈련이 셋 있네요." 말투는 차갑지만 노트는 빼곡하다.',
+    '수치는 다 맞는데 공이 안 넘어간다. {n}이 처음으로 노트를 덮었다. "…계산이 아닌 것 같아요."',
+    '{n}이 상대 팀 분석 노트를 건넸다. 마지막 장에 한 줄. "그래도 떨립니다." 글씨가 조금 흔들렸다.',
+  ],
+  sun: [
+    '첫날부터 숙소가 시끄럽다. {n}이 전원의 이름을 외우고 별명까지 붙였다. 정작 본인 침대 위에는 아직 못 푼 가방.',
+    '{n}이 사흘째 같은 실수를 한다. 웃음은 그대로인데 목소리가 작아졌다. 숙소 불이 늦게 꺼진다.',
+    '평가전 전날 숙소가 조용하다. {n}이 제일 먼저 잠자리에 들었다. 불 꺼진 뒤 작게, "…이기고 싶다."',
+  ],
+  rock: [
+    '{n}은 제일 먼저 체육관에 와서 제일 늦게 나간다. "잘하는 게 아니라, 오래 하는 거예요." 손바닥에 벌써 굳은살.',
+    '{n}은 안 되는 걸 횟수로 이긴다고 믿었다. 공 300개째, 처음으로 멈춰 섰다. "…왜 안 되지."',
+    '{n}은 마지막 날에도 같은 100개를 때렸다. 라커룸에서 혼자 앉아 있다. "감독님, 저… 이길 수 있을까요."',
+  ],
+  shy: [
+    '{n}은 사흘째 말을 거의 안 했다. 그런데 남이 놓친 공은 전부 {n}이 주워 온다. "…제가 정말 여기 있어도 되는 걸까요."',
+    '실수 뒤에 {n}이 먼저 사과한다. 열 번째 사과에서 코치가 손을 들었다. "사과 말고 공을 봐."',
+    '{n}이 처음으로 먼저 말을 걸었다. "감독님… 저, 내일 세게 때려도 돼요?" 눈은 바닥이지만 주먹은 쥐어져 있다.',
+  ],
+  show: [
+    '{n}은 첫 훈련부터 시선을 모은다. 본인도 안다. "잘 보이는 자리에서 하는 게 편해요." 그런데 실수 뒤의 표정은 아무도 못 봤다.',
+    '관중 없는 체육관에서 {n}의 공이 죽는다. "보는 사람이 없으면 이상하게 힘이 안 들어가요." 본인도 당황한 얼굴.',
+    '{n}이 거울 앞에서 표정을 연습한다. 이기는 표정, 지는 표정. "지는 표정은 안 쓸 거예요." 그리고 조용히, "…쓸 수도 있겠죠."',
+  ],
+};
+const STORY_GENERIC = [
+  '숙소 불이 꺼진 뒤에도 잠들지 못한다. "제가 정말 여기 있어도 되는 걸까요."',
+  '같은 실수가 사흘째 반복된다. 공을 주우며 중얼거린다. "왜 안 되지…"',
+  '최종 평가전을 앞두고 라커룸에 혼자 앉아 있다. "감독님, 저… 이길 수 있을까요."',
+];
+export function storyText(index, card) {
+  const i = Math.max(0, Math.min(2, index | 0));
+  if (!card || !card.name || !card.personality || !card.personality.length) return STORY_GENERIC[i];
+  return fillName(STORY_TEXT[archetypeOf(card.personality)][i], card.name);
+}
+
+/** TrainingEvent.cs:94 EventCatalog.Story — card 가 있으면 성격에 맞는 텍스트, 효과는 동일. */
+export function storyEvent(index, pos, cfg, card) {
   const core = cfg.core3[pos];
-  const ev = { kind: EVENT_KIND.Story, id: `story${index + 1}`, title: '', text: '', choices: [], oracleChoice: 0, supporterName: null };
+  const ev = { kind: EVENT_KIND.Story, id: `story${index + 1}`, title: '', text: storyText(index, card), choices: [], oracleChoice: 0, supporterName: null };
   if (index === 0) {
     ev.title = '스토리 #1 · 입소 첫 주';
-    ev.text = '숙소 불이 꺼진 뒤에도 잠들지 못한다. "제가 정말 여기 있어도 되는 걸까요."';
     ev.choices = [
       choice('네가 뽑힌 이유를 말해 준다', txt(hin(st(effect(), STAT.mental, 2), 1), '"…알겠습니다. 내일부터 제대로 할게요." 눈빛이 달라졌다.')),
       choice('일단 푹 자라고 한다', txt(con(effect(), 1), '다음 날 아침, 조금은 개운한 얼굴.')),
     ];
   } else if (index === 1) {
     ev.title = '스토리 #2 · 벽';
-    ev.text = '같은 실수가 사흘째 반복된다. 공을 주우며 중얼거린다. "왜 안 되지…"';
     ev.choices = [
       choice('기본으로 돌아가자', txt(hin(st(st(effect(), core[1], 2), core[0], 1), 1), '가장 쉬운 공 100개. 소리가 조금씩 달라진다.')),
       choice('하루 쉬고 다시 보자', txt(st(effect(), STAT.mental, 2), '"…네." 다음 날, 표정이 조금 풀렸다.')),
     ];
   } else {
     ev.title = '스토리 #3 · 각오';
-    ev.text = '최종 평가전을 앞두고 라커룸에 혼자 앉아 있다. "감독님, 저… 이길 수 있을까요."';
     ev.choices = [
       choice('네 무기를 믿어라', txt(hin(st(st(effect(), core[0], 2), STAT.mental, 1), 1), '고개를 끄덕인다. "제 무기, 알고 있어요."')),
       choice('져도 괜찮다', txt(con(st(effect(), core[1], 1), 1), '"…그래도 이기고 싶어요." 웃는다.')),
@@ -182,3 +227,24 @@ export function flavorOf(action, turn) {
   const pool = FLAVOR[action];
   return pool[(turn * 7 + action * 3) % pool.length];
 }
+
+/**
+ * 인연 순간(docs/training-mode.md 6.4, T7). 서포터 중 동문·라이벌이 있으면 그 사람과의 장면 하나.
+ * **효과도 난수도 없다** — 선택지 없이 피드에 흐르는 서사라 육성 캘리브레이션이 그대로다. 효과는 하네스로 정한 뒤 붙인다.
+ */
+export function bondMoment(support, traineeName) {
+  if (!support || !support.supporters || !support.supporters.length) return null;
+  let pick = -1, kind = '';
+  for (let i = 0; i < support.supporters.length; i++) {
+    const tag = support.tags[i] || '';
+    if (tag.indexOf('동문') >= 0) { pick = i; kind = 'alumni'; break; }
+    if (pick < 0 && tag.indexOf('라이벌') >= 0) { pick = i; kind = 'rival'; }
+  }
+  if (pick < 0) return null;
+  const s = support.supporters[pick].name, n = traineeName || '';
+  const text = kind === 'alumni'
+    ? `동문 ${s} 선배가 훈련 뒤 ${josa(n, '을', '를')} 불렀다. "네가 뛰던 코트, 나도 알아." 밤늦게까지 이어진 이야기. 다음 날 ${n}의 발이 조금 가벼웠다.`
+    : `라이벌 구단 출신 ${s} 선배가 네트 건너편에 섰다. "우리 팀이 왜 너희를 싫어했는지 알려 줄게." 그날 ${n}의 서브는 유난히 세게 들어갔다.`;
+  return { kind, supporterName: s, supporterId: support.supporters[pick].id, title: (kind === 'alumni' ? '인연 · 동문 ' : '인연 · 라이벌 ') + s, text };
+}
+

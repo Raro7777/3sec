@@ -100,9 +100,17 @@ check('육성할 카드가 있다', (await count('[data-pick]')) > 0);
 await tap('[data-pick]', 400);
 if (await page.$('[data-act="startcamp"]')) await tap('[data-act="startcamp"]', 350);
 
-let turns = 0, stuck = false;
+let turns = 0, stuck = false, sawStoryName = false, sawEventBust = false;
+const traineeName = await text('.camp-head b').catch(() => '');
+check('캠프 헤더에 성격 아키타입 배지가 있다', (await count('.camp-head .tagrow .arch')) === 1);
+check('캠프 헤더가 상반신 그림이다', (await count('.camp-head .bust img')) === 1);
 for (let i = 0; i < 60; i++) {
-  if ((await viewText()).includes('졸업')) break;
+  const vt = await viewText();
+  if (vt.includes('졸업')) break;
+  if (vt.includes('스토리 #')) {
+    if (traineeName && vt.includes(traineeName)) sawStoryName = true;
+    if ((await count('.evbox.vn .bust img')) > 0) sawEventBust = true;
+  }
   const moved = await tap('[data-choice]', 130);
   if (!moved) {
     // 선택지가 없다 = 막다른 골목. 부상 치료 턴 소프트락이 이 검사에 걸린다.
@@ -112,6 +120,19 @@ for (let i = 0; i < 60; i++) {
 check('캠프가 막히지 않고 끝까지 간다', !stuck, stuck ? `${turns}턴에서 진행 불가` : `${turns}턴 진행`);
 check('졸업 화면이 나온다', (await viewText()).includes('졸업'));
 check('졸업 능력치 부호가 올바르다', !(await viewText()).includes('+-'), '"+-6" 형태 금지');
+check('카드 스토리 컷에 선수 이름이 들어간다', sawStoryName, `이름 ${traineeName}`);
+check('스토리 컷 옆에 상반신 초상이 붙는다', sawEventBust);
+check('졸업 화면이 실물 카드 + 등급 도장이다', (await count('.rcard')) === 1 && /^[SABCD]$/.test((await text('.stamp')).trim()));
+check('성격 양념 문장이 이름을 채운다', (await page.evaluate(() => window.VS.personalityQuip('fire', 'ace', '서하율', 0))).includes('서하율'));
+check('조사 처리 — 받침에 따라 은/는', (await page.evaluate(() => window.VS.fillName('{n}은', '유청아') + '|' + window.VS.fillName('{n}은', '탁세온'))) === '유청아는|탁세온은');
+// 경기 전 서사: 졸업생의 원소속 구단과 붙으면 '친정' 줄이 나온다
+{
+  const line = await page.evaluate(() => {
+    const E = window.VS; const g = E.loadGame(JSON.parse(localStorage.getItem('bloom-manager-save-v1')));
+    const rep = E.representatives(g)[0]; return rep ? (window.BLOOM_UI.matchStory(rep.clubId) || []).join(' / ') : '';
+  });
+  check('경기 전 서사에 친정 대결 줄이 나온다', line.includes('친정'), line);
+}
 
 // --- 4. 로스터 · 선수 상세
 await tap('[data-tab="roster"]', 350);

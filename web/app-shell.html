@@ -355,6 +355,27 @@ details[open] summary::after{content:"▴"}
 .intro .row{display:flex;justify-content:center;gap:5px}
 .intro .row .ava{width:38px;height:38px}
 .intro .vs{text-align:center;font-family:"Barlow Condensed",sans-serif;font-size:30px;font-weight:700;letter-spacing:.1em;color:var(--ink3)}
+/* ---- 선수 B: 성격·인연·스토리 표현 + 남은 그림 자리(art-pipeline 16.4) */
+.bust{display:block;overflow:hidden;border-radius:10px;background:var(--panel2);line-height:0;aspect-ratio:4/5;border:1px solid var(--line2);flex:none}
+.bust img{display:block;max-width:none}
+.bust.sm{width:46px} .bust.inj{filter:sepia(.5) hue-rotate(-30deg) saturate(1.5)}
+.evbox.vn{display:flex;gap:12px;align-items:flex-start} .evbox.vn .bust{width:84px} .evbox.vn .vt{flex:1;min-width:0}
+.tagrow{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.tagrow span{font-size:11px;line-height:1.5;padding:1px 7px;border-radius:5px;background:var(--panel3);color:var(--ink2)}
+.tagrow span.arch{color:var(--court);background:var(--court-bg);font-weight:700}
+.stamp{position:absolute;right:7%;top:7%;width:31%;aspect-ratio:1;border-radius:50%;border:3px solid currentColor;display:flex;align-items:center;justify-content:center;
+  font-family:"Barlow Condensed",sans-serif;font-size:36px;font-weight:700;transform:rotate(-14deg);background:rgba(10,16,23,.6);line-height:1}
+.ava.gray img,.ava.gray svg{filter:grayscale(1) brightness(.72)}
+.ava.decline img,.ava.decline svg{filter:saturate(.4)}
+.ava.peak{border-color:var(--ssr)!important;box-shadow:0 0 0 1px rgba(233,185,73,.35)}
+.rcard.hall .fc>img,.rcard.hall .fc>svg{filter:sepia(.35) saturate(.7) brightness(.9)}
+.mvpb{position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:10px;margin-top:9px;background:var(--panel2)}
+.mvpb img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 14%}
+.mvpb .cap{position:absolute;left:0;right:0;bottom:0;padding:24px 11px 9px;background:linear-gradient(to top,rgba(10,16,23,.92),transparent);font-weight:800;font-size:16px}
+.mvpb .cap small{display:block;font-size:11.5px;font-weight:600;color:var(--ink2);font-family:"Barlow Condensed",sans-serif;letter-spacing:.05em}
+.mstory{margin-top:9px;padding:8px 10px;border-left:2px solid var(--hot);background:var(--panel2);border-radius:6px;font-size:12.5px;color:var(--ink2);line-height:1.5}
+.mstory+.mstory{margin-top:5px}
+.intro .st{text-align:center;font-size:12.5px;color:var(--ink2);line-height:1.5;padding:0 10px}
 @media (prefers-reduced-motion:no-preference){
   .rcard.anim{animation:flip .85s cubic-bezier(.2,.7,.2,1) both}
   .rcard.anim.SSR .shine{animation:shine 1.1s ease-out .9s both}
@@ -390,6 +411,7 @@ details[open] summary::after{content:"▴"}
 (function(){
 'use strict';
 var E = window.VS;
+window.BLOOM_UI = { matchStory: function(oppId){ return matchStory(oppId, G && G.league ? E.seasonView(G) : null); } };   // app-test 용 훅(표현 계층)
 var SAVE_KEY = 'bloom-manager-save-v1';
 
 // ---------------------------------------------------------------- state
@@ -936,7 +958,7 @@ function pcard(inst, plain, tapId){
   var attr = tapId ? ' class="pcard tap" data-detail="'+tapId+'"' : ' class="pcard"';
   var col = clubColor[inst.clubId] || '#3E8FE0';
   var rar = E.RARITIES ? (typeof inst.rarity==='number' ? ['N','R','SR','SSR'][inst.rarity] : inst.rarity) : 'R';
-  return '<'+tag+attr+'><span class="ava" style="border-color:'+col+'">'+portraitSvg(inst,44)+'</span>'+
+  return '<'+tag+attr+'><span class="ava'+phaseClass(inst)+'" style="border-color:'+col+'">'+portraitSvg(inst,44)+'</span>'+
     '<div style="flex:1;min-width:0">'+
       '<div class="pname">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
       '<div class="pmeta">'+(inst.grade!==undefined?'등급 <span class="grade g-'+['S','A','B','C','D'][inst.grade]+'">'+['S','A','B','C','D'][inst.grade]+'</span> · ':'')+
@@ -1243,10 +1265,11 @@ function vTrainTurn(){
 
   var head =
    '<div class="camp-head">'+
-     '<div class="spread"><div style="display:flex;align-items:center;gap:9px">'+
-       '<span class="ava" style="width:36px;height:36px">'+portraitSvg(card,36)+'</span>'+
-       '<div><b style="font-size:16px">'+esc(card.name)+'</b> <span class="pill pos">'+POSK[card.pos]+'</span></div></div>'+
-       '<div class="num" style="font-size:19px">'+o.ovr.toFixed(1)+' <span style="font-size:12px;color:var(--good)">+'+(o.ovr-o.initialOvr).toFixed(1)+'</span></div></div>'+
+     '<div class="spread"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+
+       bustBox(card, 'sm' + (o.treating ? ' inj' : ''), 36)+
+       '<div style="min-width:0"><b style="font-size:16px">'+esc(card.name)+'</b> <span class="pill pos">'+POSK[card.pos]+'</span>'+
+         tagRow(o.personality)+'</div></div>'+
+       '<div class="num" style="font-size:19px;flex:none">'+o.ovr.toFixed(1)+' <span style="font-size:12px;color:var(--good)">+'+(o.ovr-o.initialOvr).toFixed(1)+'</span></div></div>'+
      '<div class="turnbar">'+Array.from({length:o.totalTurns},function(_,i){
         var n=i+1, cls = n<o.turn?'done':(n===o.turn?'now':((n%4===0)?'eval':''));
         return '<i class="'+cls+'"></i>'; }).join('')+'</div>'+
@@ -1266,7 +1289,10 @@ function vTrainTurn(){
 
   var body;
   if (o.kind === 'event') {
-    body = '<div class="evbox"><div class="evtitle">'+esc(o.event.title)+'</div><div class="evtext">'+esc(o.event.text)+'</div></div>'+
+    // 스토리 컷은 육성 선수의 상반신, 선배 이벤트는 그 선배의 초상(art-pipeline 16.4)
+    var who = card, whoCls = '';
+    if (o.event.supporterName) { var sup = repByName(o.event.supporterName); if (sup) who = sup; }
+    body = '<div class="evbox vn">'+bustBox(who, whoCls, 56)+'<div class="vt"><div class="evtitle">'+esc(o.event.title)+'</div><div class="evtext">'+esc(o.event.text)+'</div></div></div>'+
       o.options.map(function(c){
         return '<button class="act" data-choice="'+c.id+'"><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+'</span>'+
           '<span class="right"><span class="tiny">'+esc(c.effect||'')+(c.isBranch?' · 성공 '+Math.round(c.successRate*100)+'%':'')+'</span></span></button>';
@@ -1320,9 +1346,10 @@ function vTrainGrad(){
   var gc = ['S','A','B','C','D'][inst.grade];
   return h('<h2>졸업</h2>'+
     '<div class="card" style="text-align:center;border-color:var(--line2)">'+
-      '<span class="ava" style="width:88px;height:88px;margin:0 auto 8px;border-color:'+(clubColor[inst.clubId]||'var(--court)')+'">'+portraitSvg(inst,88)+'</span>'+
+      '<div class="rv rone" style="width:58%;position:relative;margin-bottom:8px">'+cardFace(inst, ['N','R','SR','SSR'][inst.rarity], { eager:true, sub: POSK[inst.pos]+' · OVR '+g.ovr.toFixed(1) })+
+        '<span class="stamp g-'+gc+'">'+gc+'</span></div>'+
       '<div class="pname" style="font-size:19px">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span></div>'+
-      '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:52px;font-weight:700;line-height:1.05;margin:6px 0" class="g-'+gc+'">'+gc+'</div>'+
+      '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:40px;font-weight:700;line-height:1.05;margin:4px 0" class="g-'+gc+'">'+gc+'</div>'+
       '<div class="num" style="font-size:20px">OVR '+g.ovr.toFixed(1)+'</div>'+
       '<div class="tiny" style="margin-top:6px">완성도 '+Math.round(g.completion*100)+'% · 스킬 Lv'+g.skillLevel+' · '+esc(g.camp)+'</div>'+
       '<div class="muted" style="margin-top:10px;font-size:13px">'+esc(g.roster)+'</div>'+
@@ -1502,6 +1529,56 @@ function vDexFocus(){
     '<button class="btn ghost" data-act="dexback">'+(dexBack==='scout' ? '스카우트로' : '도감으로')+'</button>');
 }
 
+// ---------- 선수 B: 성격·인연·서사 (docs/world.md 3·6절, training-mode 6.3·6.4) — 전부 표현 계층, 판정 무관
+/** 성격 태그 줄: 아키타입 배지 + 태그. 태그가 없으면 빈 문자열. */
+function tagRow(tags){
+  if (!tags || !tags.length) return '';
+  var arch = E.archetypeOf(tags), ko = (E.ARCHETYPE_KO && E.ARCHETYPE_KO[arch]) || '';
+  return '<div class="tagrow">'+(ko ? '<span class="arch">'+esc(ko)+'</span>' : '')+
+    tags.slice(0, 3).map(function(t){ return '<span>'+esc(t)+'</span>'; }).join('')+'</div>';
+}
+/** 나이 단계에 따른 초상 상태 클래스(하락기 채도↓ · 은퇴 흑백 · 전성기 금테). 그림 없이 CSS 필터로. */
+function phaseClass(inst){
+  var a; try { a = E.instanceAgeInfo(G, inst); } catch(e){ return ''; }
+  return a.phase === 'retired' ? ' gray' : (a.phase === 'decline' ? ' decline' : (a.phase === 'peak' ? ' peak' : ''));
+}
+/** 상반신 상자. 그림이 없으면 원형 초상으로 대신한다. */
+function bustBox(p, cls, size){
+  var b = artBust(p, p && p.name);
+  if (b) return '<span class="bust '+(cls||'')+'">'+b+'</span>';
+  return '<span class="ava" style="width:'+(size||44)+'px;height:'+(size||44)+'px">'+portraitSvg(p, size||44)+'</span>';
+}
+/** 인스턴스 이름으로 대표 찾기(서포터·MVP 표시용). */
+function repByName(name){
+  try { return E.representatives(G).filter(function(i){ return i.name === name; })[0] || null; } catch(e){ return null; }
+}
+/**
+ * 경기 전 서사 한두 줄 — 친정 대결 · 숙적 · 선두 다툼 · 이번 시즌 전적. 있는 데이터(원소속 구단, 라이벌 표, 순위, 일정)만 쓴다.
+ */
+function matchStory(oppId, sv){
+  var lines = [];
+  var club = clubOf(oppId); if (!club) return lines;
+  var cname = club.name.split(' ')[0];
+  var reps = []; try { reps = E.representatives(G).filter(function(i){ try { return E.instanceAgeInfo(G, i).phase !== 'retired'; } catch(e){ return true; } }); } catch(e){}
+  var home = reps.filter(function(i){ return i.clubId === oppId; });
+  if (home.length) lines.push(E.josa(home.slice(0, 2).map(function(i){ return i.name; }).join('·'), '', '') + '의 친정 ' + E.josa(cname, '과', '와') + '의 경기입니다.');
+  var rivalOf = RIVALS[oppId];
+  var foe = reps.filter(function(i){ return i.clubId === rivalOf; });
+  if (foe.length) { var oc = clubOf(rivalOf); lines.push(foe[0].name + '에게 ' + E.josa(cname, '은', '는') + ' 원소속 ' + (oc ? oc.name.split(' ')[0] : '') + '의 숙적입니다.'); }
+  if (sv && sv.standings && sv.matchday > 0) {
+    var me = sv.standings.filter(function(r){ return r.isMe; })[0], op = sv.standings.filter(function(r){ return r.teamId === oppId; })[0];
+    if (me && op) {
+      if (me.rank <= 2 && op.rank <= 2) lines.push('선두 다툼입니다. ' + me.rank + '위와 ' + op.rank + '위의 맞대결.');
+      else if (Math.abs(me.rank - op.rank) === 1) lines.push('순위표에서 바로 ' + (op.rank < me.rank ? '위' : '아래') + ' 팀입니다. 이기면 자리가 바뀝니다.');
+    }
+    var w = 0, l = 0;
+    try { E.schedule(G).forEach(function(md){ var f = md.mine; if (!f || !f.result) return; if (f.home !== oppId && f.away !== oppId) return;
+      var mineHome = f.home === G.clubId; var won = mineHome ? f.result.homeSets > f.result.awaySets : f.result.awaySets > f.result.homeSets; if (won) w++; else l++; }); } catch(e){}
+    if (w + l) lines.push('이번 시즌 ' + E.josa(cname, '과', '와') + ' ' + w + '승 ' + l + '패.');
+  }
+  return lines.slice(0, 2);
+}
+
 /** ⑱ 계약 선수 수 게이지 — 무료 슬롯을 넘으면 초과 인원당 운영비가 붙는다. */
 function squadGauge(){
   var n = 0, free = 42, per = 200;
@@ -1586,6 +1663,7 @@ function vMatchdayNow(sv){
          '<div style="flex:1;min-width:0"><div class="pname">'+esc(nx.opponentName)+'</div>'+
            '<div class="tiny">'+esc(opp?opp.identity.split('.')[0]:'')+'</div></div>'+
        '</div>'+
+       matchStory(nx.opponentId, sv).map(function(l){ return '<div class="mstory">'+esc(l)+'</div>'; }).join('')+
        (sv.canTrain
          ? '<div class="tiny" style="margin:11px 0 7px;color:var(--hot)">이번 매치데이에 육성 기회가 '+sv.trainingsLeft+'번 남았습니다. 경기 전에 키우면 바로 전력이 됩니다.</div>'+
            '<button class="btn ghost" data-go="train">먼저 육성하기</button>'+
@@ -1718,10 +1796,11 @@ function vSettle(){
   var st = lastSettle || (G.league && G.league.settlement);
   if (!st) return '<div class="empty">…</div>';
   return h('<h2>시즌 '+st.season+' 결산</h2>'+
-    '<div class="card" style="text-align:center;border-color:'+(st.champion?'var(--ssr)':'var(--line2)')+'">'+
+    '<div class="card" style="text-align:center;border-color:'+(st.isChampion?'var(--ssr)':'var(--line2)')+'">'+
       '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:46px;font-weight:700;line-height:1">'+st.rank+'위</div>'+
       '<div class="muted">'+st.myStats.wins+'승 '+st.myStats.losses+'패 · 승점 '+st.myStats.points+'</div>'+
-      (st.champion?'<div style="margin-top:8px;color:var(--ssr);font-weight:800">우승!</div>':'')+
+      (st.isChampion?'<div style="margin-top:8px;color:var(--ssr);font-weight:800">우승!</div>'
+        : (st.championName?'<div class="tiny" style="margin-top:6px">우승 '+esc(st.championName)+'</div>':''))+
     '</div>'+
     '<div class="card"><div class="muted" style="margin-bottom:7px">보상</div>'+
       st.rewards.breakdown.map(function(b){
@@ -1733,8 +1812,7 @@ function vSettle(){
     '</div>'+
     upkeepBlock(st)+
     investBlock()+
-    (st.mvp ? '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(st.mvp.teamName||'')+'</div></div>'+
-      '<div class="pname" style="margin-top:4px">'+esc(st.mvp.playerName)+'</div></div>' : '')+
+    (st.mvp ? mvpBlock(st.mvp) : '')+
     rookieBlock(st)+
     retireBlock()+
     '<div class="card"><div class="legend">'+
@@ -1765,23 +1843,38 @@ function investBlock(){
   return '<div class="card"><div class="spread"><div><b>구단에 투자</b> '+prestigeBadge()+'<div class="tiny" style="margin-top:3px">골드 '+fmtGold(fv.gold)+' · 예비비 '+fmtGold(fv.reserve)+' 를 빼면 <b>'+fmtGold(fv.spendable)+'</b> 을 쓸 수 있습니다</div></div></div>'+
     '<button class="btn ghost" data-act="facility-settle" style="margin-top:10px">시설 보기</button></div>';
 }
-/** 결산에서 새로 명단에 오르는 신인 세대를 보여 준다. */
+/** 시즌 MVP — 전신(hero)이 있으면 배너로, 없으면 카드 상단 크롭. (art-pipeline 16.4) */
+function mvpBlock(mvp){
+  var p = null;
+  try {
+    p = E.representatives(G).filter(function(i){ return i.instanceId === mvp.playerId; })[0] || E.cardById(G, mvp.playerId);
+    if (!p && mvp.teamId && mvp.teamId !== G.clubId) p = E.clubTeamState(G, mvp.teamId).roster.filter(function(x){ return x.id === mvp.playerId; })[0] || null;
+    if (!p) p = E.myRoster(G).filter(function(x){ return x.id === mvp.playerId; })[0] || null;
+  } catch(e){}
+  var src = p ? (artOf(p, 'hero') || artOf(p, 'card')) : null;
+  return '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(mvp.teamName||'')+'</div></div>'+
+    (src ? '<div class="mvpb"><img src="'+src+'" alt="" loading="lazy" decoding="async"><div class="cap">'+esc(mvp.playerName)+'<small>SEASON MVP · '+(mvp.value||0)+'득점</small></div></div>'
+         : '<div class="pname" style="margin-top:4px">'+esc(mvp.playerName)+'</div>')+
+  '</div>';
+}
+/** 결산에서 새로 명단에 오르는 신인 세대 — 드래프트 카드 공개(2열, 차례 뒤집기). 그림을 먼저 디코드한 뒤 뒤집는다(16.1). */
+var draftReady = {};
 function rookieBlock(st){
   var list = st && st.rookies;
   if (!list || !list.length) return '';
+  var pend = !draftReady[st.season];
+  if (pend) preloadArt(list, 2500, function(){ draftReady[st.season] = true; if (view === 'settle' || view === 'match') render(); });
   return '<div class="card" style="border-color:var(--good)">'+
-    '<div class="spread" style="margin-bottom:8px"><b style="color:var(--good)">신인 명단 등록</b>'+
+    '<div class="spread" style="margin-bottom:8px"><b style="color:var(--good)">신인 드래프트</b>'+
       '<span class="tiny">'+list.length+'명 · 명단 '+(st.cardPool||'')+'명</span></div>'+
-    list.map(function(r){
-      var col = clubColor[r.teamId] || 'var(--good)';
+    '<div class="rv rgrid">'+list.map(function(r, i){
       var rar = typeof r.rarity==='number' ? ['N','R','SR','SSR'][r.rarity] : r.rarity;
-      return '<div class="bx"><span class="ava sm" style="border-color:'+col+'">'+portraitSvg(r,28)+'</span>'+
-        '<span class="pill rar-'+rar+'">'+rar+'</span>'+
-        '<span class="nm">'+esc(r.name)+'</span>'+
-        '<span class="st2">'+POSK[r.pos!==undefined?r.pos:0]+' · '+(r.heightCm||'')+'cm</span>'+
-        '<span class="pt" style="font-size:11px;color:var(--ink3)">'+(r.age||'')+'세</span></div>';
-    }).join('')+
-    '<div class="tiny" style="padding:6px 11px 2px">스카우트 명단에 새로 오릅니다. 은퇴한 자리를 메우는 세대입니다.</div>'+
+      var pos = typeof r.pos === 'string' ? r.pos : POSK[r.pos||0];
+      var club = clubOf(r.clubId || r.teamId);
+      return '<button class="rbtn" data-dex="'+r.id+'">'+cardFace(r, rar, { anim:true, eager:true, pend:pend, delay:(i*0.13).toFixed(2), tag:'rk', tagText:'신인 '+(r.age||'')+'세',
+        sub: pos+' · '+(club ? club.name.split(' ')[0] : '')+' · '+(r.heightCm||'')+'cm' })+'</button>';
+    }).join('')+'</div>'+
+    '<div class="tiny" style="padding:8px 2px 2px">스카우트 명단에 새로 오릅니다. 은퇴한 자리를 메우는 세대입니다. 카드를 누르면 도감 상세.</div>'+
   '</div>';
 }
 
@@ -1798,15 +1891,21 @@ function retireBlock(){
     });
   } catch(e){}
   if (!list.length && !soon.length) return '';
-  return '<div class="card" style="border-color:var(--line2)">'+
+  var hallLv = 0; try { hallLv = E.facilityLevel(G, 'hall'); } catch(e){}
+  return '<div class="card" style="border-color:'+(hallLv && list.length ? 'var(--ssr)' : 'var(--line2)')+'">'+
     (list.length
-      ? '<div class="spread" style="margin-bottom:7px"><div class="muted">은퇴 · 헌액</div>'+hallBadge()+'</div>'+
-        list.map(function(i){
-          return '<div class="bx"><span class="ava sm">'+portraitSvg(i,28)+'</span>'+
-            '<span class="nm">'+esc(i.name)+'</span>'+
-            '<span class="st2">'+POSK[i.pos]+' · 통산 OVR '+i.ovr.toFixed(1)+'</span>'+
-            '<span class="pt" style="font-size:11px;color:var(--ink3)">코치</span></div>';
-        }).join('')+
+      ? '<div class="spread" style="margin-bottom:7px"><div class="muted">'+(hallLv ? '명예의 전당' : '은퇴')+'</div>'+hallBadge()+'</div>'+
+        (hallLv
+          // 전당이 있으면 카드 벽(세피아 톤) — 시설 등급의 보이는 보상(E.5 ⑲ · art-pipeline 16.4)
+          ? '<div class="dex">'+list.map(function(i){
+              return cardFace(i, ['N','R','SR','SSR'][i.rarity], { tag:'ret', tagText:'헌액', sub: POSK[i.pos]+' · 통산 OVR '+i.ovr.toFixed(1) }).replace('class="rcard ', 'class="rcard hall ');
+            }).join('')+'</div>'
+          : list.map(function(i){
+              return '<div class="bx"><span class="ava sm gray">'+portraitSvg(i,28)+'</span>'+
+                '<span class="nm">'+esc(i.name)+'</span>'+
+                '<span class="st2">'+POSK[i.pos]+' · 통산 OVR '+i.ovr.toFixed(1)+'</span>'+
+                '<span class="pt" style="font-size:11px;color:var(--ink3)">코치</span></div>';
+            }).join(''))+
         '<div class="tiny" style="padding:6px 11px 2px">코트를 떠나지만 서포터(코치)로 남아 다음 세대를 돕습니다.</div>'
       : '')+
     (soon.length
@@ -2010,7 +2109,7 @@ function paintLive(ti){
     if (ended && r.point) {
       var last = r.touches[r.touches.length - 1];
       if (last && last.side === r.point.side && (last.outcome === 2 || last.outcome === 3 || last.outcome === 5 || last.outcome === 7))
-        ct = { p: last.player, side: last.side, title: OUTN[last.outcome], name: last.name };
+        ct = { p: last.player, side: last.side, title: OUTN[last.outcome], name: last.name, outcome: last.outcome, clutch: !!r.point.clutch, seq: mv.ri };
     } else if (ti < r.touches.length) {
       var tt = r.touches[ti];
       if (tt && tt.skills && tt.skills.length) ct = { p: tt.player, side: tt.side, title: tt.skills[0].skillName, name: tt.name, skill: true };
@@ -2026,9 +2125,15 @@ function showCut(el, ct){
   var bust = artBust(ct.p, ct.name);
   if (!bust) return;
   var mine = ct.side === mySide;
+  // 성격 양념(commentary.js) — 클러치 강타·에이스·블로킹에 그 선수의 말투로 한 줄. 없으면 이름만.
+  var sub = ct.name || '';
+  if (!ct.skill && ct.p && ct.p.personality && ct.p.personality.length) {
+    var kind = ct.outcome === 2 ? 'ace' : (ct.outcome === 5 ? 'block' : (ct.clutch ? 'clutchKill' : ''));
+    if (kind) { var q = E.personalityQuip(E.archetypeOf(ct.p.personality), kind, ct.name, ct.seq || 0); if (q) sub = q; }
+  }
   el.className = 'cut show ' + (mine ? 'home' : 'away') + (ct.skill ? ' sk' : '');
   el.innerHTML = '<div class="band"></div><div class="bust">'+bust+'</div>'+
-    '<div class="lbl">'+esc(ct.title || '')+'<small>'+esc(ct.name || '')+'</small></div>';
+    '<div class="lbl">'+esc(ct.title || '')+'<small>'+esc(sub)+'</small></div>';
   clearTimeout(cutTimer);
   cutTimer = setTimeout(function(){ el.className = 'cut'; }, Math.max(500, 1100 / sp));
 }
@@ -2039,8 +2144,10 @@ function showIntro(){
   var row = function(ids){
     return '<div class="row">'+ids.map(function(id){ var p = m.ctx.players[id]; return p ? '<span class="ava">'+portraitSvg(p, 38)+'</span>' : ''; }).join('')+'</div>';
   };
+  var oppId = m.ctx.homeId === G.clubId ? m.ctx.awayId : m.ctx.homeId;
+  var story = []; try { story = matchStory(oppId, G.league ? E.seasonView(G) : null); } catch(e){}
   el.innerHTML = '<div class="tm a"><b>'+esc(m.ctx.awayName)+'</b>'+row(m.ctx.awayLineup)+'</div>'+
-    '<div class="vs">VS</div>'+
+    '<div class="vs">VS</div>'+(story.length ? '<div class="st">'+esc(story[0])+'</div>' : '')+
     '<div class="tm h"><b>'+esc(m.ctx.homeName)+'</b>'+row(m.ctx.homeLineup)+'</div>';
   el.className = 'intro show';
   return Math.round(2000 / ((mv && mv.speed) || 1));
@@ -2210,6 +2317,8 @@ function pushFeed(ev){
     cls='ev';
     html = '<b>'+esc(ev.title||'이벤트')+'</b> ‘'+esc(ev.choice||'')+'’ ' + esc(ev.badge||'') +
            (ev.resultText ? ' — '+esc(ev.resultText) : '');
+  } else if (ev.type === 'bond') {
+    cls='ev'; html = '<b>'+esc(ev.title||'인연')+'</b> — '+esc(ev.text||'');
   } else if (ev.type === 'evaluation') {
     cls='eval'; html = esc(ev.text||'');
   } else if (ev.type === 'graduated') {
