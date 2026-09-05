@@ -21,8 +21,8 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 - `web/app-shell.html` — 모바일 앱 셸(화면). `web/court-render.js` — 쿼터뷰 코트 렌더러
 - `data/` — 6구단·42명 런칭 로스터. 신인 세대는 시드에서 런타임 생성한다
 - `tools/` — 파이썬 보조 시뮬레이터 + `art-prompts.mjs`(캐릭터별 프롬프트 생성). **권위는 `web/` 하네스에 있다**
-- `art/` — 아트 에셋. 런칭 42명 **카드·썸네일 완성**(`04_export/{pid}/`, 빌드가 data: URI 로 인라인).
-  전신(hero)은 p001 한 장뿐. `docs/art-pipeline.md`
+- `art/` — 아트 에셋. 런칭 42명 **카드·썸네일·전신 완성**(`04_export/{pid}/`, 빌드가 data: URI 로 인라인, 8.8MB).
+  신인 세대는 아직 SVG 플레이스홀더. `docs/art-pipeline.md`
 - `sim/` — C# 참고 구현(아카이브). 경기·육성만 있고 리그·스킬·노화·신인은 없다. `sim/README.md` 참조
 
 ### 빌드·검증

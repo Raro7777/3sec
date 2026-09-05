@@ -452,6 +452,8 @@ const LOW_STANCE = ['L', 'S'];
 const FRAMING = {
   card: 'MEDIUM SHOT / WAIST-UP CROP. The bottom edge of the frame cuts her off at mid-thigh — her lower legs and feet are NOT in the picture. Her head, shoulders and torso fill most of the frame; her head alone is about one fifth of the total image height. This is a close hero portrait, not a full-body shot.',
   hero: 'FULL BODY ACTION SHOT. Her whole body is in frame, from her raised hand down to her feet, airborne with space around her — the dramatic full-figure illustration shown large on the player detail screen.',
+  // 리베로·세터는 몸이 낮다 — "airborne" 은 디그·세트와 모순이라 낮은 자세용 문장을 따로 둔다.
+  heroLow: 'FULL BODY ACTION SHOT. Her whole body is in frame, from the top of her head down to both feet planted wide on the floor, with space around her — the dramatic full-figure illustration shown large on the player detail screen.',
 };
 
 function buildCardNatural(p, d, kind) {
@@ -466,7 +468,7 @@ function buildCardNatural(p, d, kind) {
     : `a plain ${club.primary} volleyball jersey with ${club.secondary} trim`;
 
   return [
-    FRAMING[kind === 'hero' ? 'hero' : 'card'],
+    FRAMING[kind === 'hero' ? (LOW_STANCE.includes(p.position) ? 'heroLow' : 'hero') : 'card'],
     ...(kind !== 'hero' && LOW_STANCE.includes(p.position)
       ? [`Because this pose is low to the floor, stand the camera a few steps further back than a close-up: her head, her torso and both arms all sit comfortably inside the frame with clear space above her head. Her head must not fill more than a fifth of the frame height.`]
       : []),
