@@ -275,7 +275,7 @@ export class Game {
   private renderOnboarding(): void {
     const stars = (n: number) => `<span class="stars" title="전력 ${n}/5">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
     const h: string[] = [];
-    h.push(`<div class="card onb-welcome"><h3>환영합니다</h3>
+    h.push(`<div class="card onb-welcome"><img class="onbArt" src="./art/splash.webp" alt=""><h3>환영합니다</h3>
       <div class="onb-title">가난한자의 FM에 오신 것을 환영합니다</div>
       <div class="hint">1부·2부 각각 12개 구단이 22라운드 리그를 치릅니다. 매 시즌 1부 하위 2팀이 강등되고 2부 상위 2팀이 승격합니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요.</div>
       <div class="hint" style="color:var(--accent)">커리어 모드 추천: 평판 낮은 구단에서 시작하세요. 기대를 넘는 성적은 감독 평판을 빠르게 올리고, 시즌 중 큰 구단의 감독직 제안으로 이어집니다.</div>
