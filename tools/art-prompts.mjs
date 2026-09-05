@@ -191,7 +191,7 @@ const POSITION = {
   OP: { accent: 'long legs, broad shoulders', nlBody: 'long-legged and broad-shouldered', nlAction: 'mid back-row attack — a long horizontal leap, body stretched forward on a diagonal, striking arm fully extended, the other arm reaching forward for balance', nlBall: 'the ball in front of her striking hand', nlCamera: 'shot at eye level from a three-quarter side view, wide enough that the attack line on the floor behind her is visible',
         pose: 'back row attack, long horizontal jump, body stretched forward at a 30 degree diagonal, striking arm fully extended, other arm reaching forward for balance, front knee bent',
         ball: 'volleyball in front of the striking hand',
-        camera: 'eye level, three-quarter side view, wide framing, attack line visible on the floor behind the jump',
+        camera: 'eye level, three-quarter side view, attack line visible on the floor behind the jump',
         note: '바닥의 3m 어택 라인이 보여야 "후위 공격"으로 읽힌다(3.2③)' },
   MB: { accent: 'long arms', nlBody: 'long-limbed', nlAction: 'blocking at the net — a straight vertical jump, torso upright, both arms extended straight up and over the net, palms open toward the viewer with thumbs close together', nlBall: 'the ball just in front of her palms, partly hidden by her hands', nlCamera: 'shot from a low angle head-on from the opposite court, the net band crossing at her chest',
         pose: 'blocking at the net, vertical jump, torso straight, both arms extended straight up and over the net, palms open facing the viewer, thumbs close together',
@@ -201,7 +201,7 @@ const POSITION = {
   L:  { accent: '', nlAction: 'digging — a very low stance, one leg extended far to the side, the other knee bent deep near the floor, torso leaning forward, both forearms joined into a flat platform with hands clasped', nlBall: 'the ball meeting the center of her forearm platform', nlCamera: 'shot from very low near the floor in three-quarter view, framing her whole body',
         pose: 'digging, very low stance, one leg extended far to the side, other knee deeply bent near the floor, torso leaning forward, both forearms joined into a flat platform, hands clasped with thumbs side by side',
         ball: 'volleyball touching the center of the forearm platform',
-        camera: 'very low angle near the floor, three-quarter view, full body framing',
+        camera: 'very low angle near the floor, three-quarter view',
         note: '리베로는 구단 대비색 유니폼 — 이 카드만 봐도 리베로여야 한다(3.2⑤ · 5.4)' },
 };
 
@@ -475,7 +475,10 @@ function buildCardNatural(p, d, kind) {
     `She wears ${jersey}, ${club.shorts} volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings — a real athletic kit, fitted to her body, not a loose t-shirt.`,
     `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
     // 1.4.1 — 금지선이 아니라 **요구 사항**이다. 12세 판에서 이걸 잃어 카드가 밋밋해졌다.
-    `Give it the intensity of a real match: she is at the very top of her jump with her feet clearly off the floor, the low angle exaggerating her height and reach; an athlete's muscle definition visible in her arms, shoulders and thighs; a fierce competitive expression with her eyes locked on the ball; hair, jersey and beads of sweat all streaming in the direction of the motion.`,
+    // 리베로는 바닥에서 디그한다 — 전 포지션에 "점프 최고점"을 붙이면 프롬프트가 자기 모순이 된다.
+    `Give it the intensity of a real match: ${p.position === 'L'
+      ? 'she is fully extended into the dig, body low and driving across the floor, the near-floor angle showing how far she has thrown herself'
+      : 'she is at the very top of her jump with her feet clearly off the floor, the low angle exaggerating her height and reach'}; an athlete's muscle definition visible in her arms and shoulders; a fierce competitive expression with her eyes locked on the ball; hair, jersey and beads of sweat all streaming in the direction of the motion.`,
     `${pos.nlCamera.charAt(0).toUpperCase() + pos.nlCamera.slice(1)}.`,
     `Indoor gymnasium with the volleyball net behind her, ${rar.nlLight}.`,
     `The ball is a plain white volleyball with mint green and coral panel stripes — not any real brand's color pattern.`,
