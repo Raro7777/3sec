@@ -35,6 +35,7 @@ import {
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
 import { emblemSvg } from "./emblem";
+import { portraitSvg } from "./portrait";
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
@@ -125,6 +126,10 @@ export function managerPreview(m: Manager, myClub: Club, opp?: Club): string {
 }
 
 /** Manager name + tags for an opponent line; the user's own club has none. */
+/** A player's face, collar in the club colour (portrait.ts). Deterministic per player, no asset to load. */
+const face = (p: { id: string; age: number }, club: { color: string } | null | undefined, size: number): string =>
+  portraitSvg({ id: p.id, age: p.age, color: club?.color }, size);
+
 const managerLabel = (c: Club): string => c.manager ? `${c.manager.name} 감독${managerTags(c.manager).length ? ` <small>(${managerTags(c.manager).join(" · ")})</small>` : ""}` : "";
 
 /** 1..5 잠재력 stars from the exact potential (≤10 → 1, 17+ → 5). */
@@ -1063,7 +1068,7 @@ export class Game {
     const m = opp.manager;
     if (!m) return "";
     const since = m.since < this.state.season ? ` · ${this.state.season - m.since}시즌째` : " · 부임 첫 시즌";
-    return `<div class="hint">상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</div>`;
+    return `<div class="hint" style="display:flex;gap:8px;align-items:flex-start">${portraitSvg({ id: m.id, age: m.age, color: opp.color }, 34)}<span>상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</span></div>`;
   }
 
   /** One-line cup status for the home card: next stage and the user's tie / 탈락 / 부전승. */
@@ -1498,7 +1503,7 @@ export class Game {
       : isPicked ? `<button disabled>비교 대상 ✓</button><button data-sheet="unpick" ${ds}>해제</button>`
       : `<button data-sheet="pick" ${ds}>비교 대상으로</button>`;
     return `<div class="pc">
-      <div class="pcHead"><div class="pcNum">${p.number}</div>
+      <div class="pcHead"><div class="pcNum">${face(p, club, 44)}<small>${p.number}</small></div>
         <div class="pcMain"><div class="pcName">${p.name}</div><div class="hint">${p.role} · ${p.age}세 · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? " <small>(타 구단)</small>" : ""}</div></div>
         <div class="pcOvr"><b style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</b><small><span class="stars">${"★".repeat(stars)}<i>${"★".repeat(5 - stars)}</i></span></small></div></div>
       <div class="pcStats"><div>가치<b>${playerValue(p)}억</b></div><div>연봉 · 계약<b>${p.wage}억</b><small>~시즌 ${p.contractUntil}${p.contractUntil <= s.season ? " 만료" : ""}</small></div><div>컨디션<b style="color:${cond > 70 ? "var(--good)" : cond > 45 ? "var(--warn)" : "var(--bad)"}">${cond}%</b></div><div>상태<b style="color:${statusColor}">${status}</b></div></div>
@@ -1660,7 +1665,7 @@ export class Game {
     const career = p.career ?? [];
     const h: string[] = [];
     h.push(`<div class="card profile"><div class="actions"><button id="pfBack">← 돌아가기</button></div>
-      <div class="pfHead"><div class="pfNum">${p.number}</div><div class="pfMain"><div class="pfName">${p.name}</div>
+      <div class="pfHead"><div class="pfNum">${face(p, club, 60)}<small>${p.number}</small></div><div class="pfMain"><div class="pfName">${p.name}</div>
         <div class="hint">${p.role} · ${p.age}세 · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? ' <small style="opacity:.7">(타 구단)</small>' : ""}</div></div>
         <div class="pfOvr"><b style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</b><small>능력</small></div></div>
       <div class="stats">
@@ -1719,7 +1724,7 @@ export class Game {
       const status = p.onLoan ? "임대 중" : p.loanFrom !== undefined ? `임대 (${clubOf(this.state, p.loanFrom).shortName})` : p.injuryDays > 0 ? `부상 ${p.injuryDays}일` : p.ban > 0 ? `출장정지 ${p.ban}` : p.seasonYellows % 5 === 4 ? "경고 누적 4" : p.contractUntil <= this.state.season ? "계약 만료 예정" : p.age <= 23 && p.potential - ovr >= 1.5 ? `잠재 ${p.potential.toFixed(0)}` : "";
       const roleText = slotRole && slotRole !== p.role ? `${slotRole}<span style="opacity:.5">(${p.role})</span>` : p.role;
       return `<div class="row wide ${this.selA === p.id ? "sel" : ""} ${isAvailable(p) ? "" : "off"}" data-id="${p.id}">
-        <span class="num">${p.number}</span><span class="role">${roleText}</span>
+        <span class="num face">${face(p, me, 28)}<i>${p.number}</i></span><span class="role">${roleText}</span>
         <span class="name" title="${p.name}">${p.name}</span>
         <span class="ovr" style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</span>
         <span class="age">${p.age}세</span>
@@ -2023,14 +2028,14 @@ export class Game {
     const sched = `<div class="card"><h3>내 일정 <span>${clubOf(s, s.userClub).name}</span></h3>${this.scheduleHtml()}</div>`;
     const records = `<div class="grid2">
       <div class="card"><h3>득점 순위</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>도움</th><th>골</th></tr></thead><tbody>${scorers
-        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.assists ?? 0}</td><td><b>${x.player.stats.goals}</b></td></tr>`)
+        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${face(x.player, x.club, 22)}</span>${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.assists ?? 0}</td><td><b>${x.player.stats.goals}</b></td></tr>`)
         .join("")}</tbody></table>` : `<div class="hint">아직 득점이 없습니다.</div>`}</div>
       <div class="card"><h3>도움 순위</h3>${assists.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th><th>도움</th></tr></thead><tbody>${assists
-        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.goals}</td><td><b>${x.player.stats.assists ?? 0}</b></td></tr>`)
+        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${face(x.player, x.club, 22)}</span>${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.goals}</td><td><b>${x.player.stats.assists ?? 0}</b></td></tr>`)
         .join("")}</tbody></table>` : `<div class="hint">아직 도움이 없습니다.</div>`}</div>
       </div>
       <div class="card"><h3>평점 순위 <span>${RATING_MIN_APPS}경기 이상 출전</span></h3>${ratings.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th><th>도움</th><th>MOTM</th><th>평점</th></tr></thead><tbody>${ratings
-        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.goals}</td><td>${x.player.stats.assists ?? 0}</td><td>${x.player.stats.motm ?? 0}</td><td><b style="color:${ratingColor(x.rating)}">${fmtRating(x.rating)}</b></td></tr>`)
+        .map((x, i) => `<tr class="${x.club.id === s.userClub ? "me" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${face(x.player, x.club, 22)}</span>${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td>${x.player.stats.goals}</td><td>${x.player.stats.assists ?? 0}</td><td>${x.player.stats.motm ?? 0}</td><td><b style="color:${ratingColor(x.rating)}">${fmtRating(x.rating)}</b></td></tr>`)
         .join("")}</tbody></table>` : `<div class="hint">${RATING_MIN_APPS}경기 이상 출전한 선수가 아직 없습니다.</div>`}</div>`;
     this.el.table.innerHTML = this.subTabs("table", [
       { id: "standings", label: "순위", html: standings },
@@ -2092,7 +2097,7 @@ export class Game {
     if (this.pendingBid && !clubOf(s, this.pendingBid.clubId).squad.some((p) => p.id === this.pendingBid!.playerId)) this.pendingBid = null;
     const btn = 'style="padding:3px 8px;font-size:12px"';
     const fmtRow = (p: SquadPlayer, clubName: string, right: string, clubId: number = me.id) => `<div class="row tr" style="cursor:default">
-        <span class="num">${p.number}</span><span class="role">${p.role}</span>
+        <span class="num face">${face(p, clubOf(s, clubId), 28)}<i>${p.number}</i></span><span class="role">${p.role}</span>
         <span class="name" title="${p.name}" data-open="${clubId}:${p.id}" style="cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
         <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
         <span class="val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
@@ -2172,7 +2177,7 @@ export class Game {
         .map((p) => {
           const exp = p.contractUntil <= s.season;
           const t1 = renewalTerms(p, 1), t3 = renewalTerms(p, 3);
-          return `<div class="row tr" style="cursor:default"><span class="num">${p.number}</span><span class="role">${p.role}</span>
+          return `<div class="row tr" style="cursor:default"><span class="num face">${face(p, me, 28)}<i>${p.number}</i></span><span class="role">${p.role}</span>
             <span class="name">${p.name} <span style="opacity:.55;font-size:11px">연봉 ${p.wage}억${p.onLoan ? " · 임대 중" : ""}</span></span>
             <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
             <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;color:${exp ? "var(--warn)" : "var(--muted)"}">~S${p.contractUntil}</span>
@@ -2481,7 +2486,7 @@ export class Game {
     h.push(`<div class="grid2">`);
     h.push(`<div class="card"><h3>최종 순위 <span>하위 2팀 강등권</span></h3>${this.tableHtml(rows).replace(/<tr class="([^"]*)"><td>(\d+)<\/td>/g, (_m, cls: string, p: string) => `<tr class="${cls}${Number(p) > n - 2 ? " rel" : ""}"><td>${p}${Number(p) > n - 2 ? '<small class="relTag">강등권</small>' : ""}</td>`)}</div>`);
     h.push(`<div class="card"><h3>리그 득점 TOP 3</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th></tr></thead><tbody>${scorers
-      .map((x, i) => `<tr class="${x.club.id === me.id ? "me" : ""}"><td>${i + 1}</td><td class="l">${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`).join("")}</tbody></table>` : '<div class="hint">득점 기록이 없습니다.</div>'}
+      .map((x, i) => `<tr class="${x.club.id === me.id ? "me" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${face(x.player, x.club, 22)}</span>${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`).join("")}</tbody></table>` : '<div class="hint">득점 기록이 없습니다.</div>'}
       <h3 style="margin-top:10px">시즌 소식 하이라이트</h3><div class="news">${highlights.map((x) => `<div>${x}</div>`).join("") || "<div>특별한 소식이 없었습니다.</div>"}</div></div>`);
     h.push(`</div>`);
     // --- market, venue split, finances, injuries, history

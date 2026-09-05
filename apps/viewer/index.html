@@ -143,7 +143,7 @@
       .fmBtn.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; color:var(--accent); }
       .fmBtn:disabled { opacity:.5; cursor:default; }
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
-      .row { display:grid; grid-template-columns: 26px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
+      .row { display:grid; grid-template-columns: 30px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px 24px; }
       .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px 24px; }
       .row .info, .of-acts .info { padding:0; width:22px; height:22px; border-radius:50%; font-size:12px; line-height:20px; text-align:center; color:var(--muted); background:transparent; border-color:var(--line); justify-self:end; }
@@ -186,6 +186,12 @@
       .row.sel { border-color:var(--accent); background:#1d2733; }
       .row.off { opacity:.45; }
       .row .num { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:12px; }
+      /* a face in the number's cell: the number rides along underneath, small, so the row keeps its grid */
+      .row .num.face { display:flex; flex-direction:column; align-items:center; gap:1px; line-height:1; }
+      .row .num.face i { font-style:normal; font-size:9px; opacity:.85; }
+      .row.off .num.face .pt { filter:grayscale(1); opacity:.55; }
+      .pcNum, .pfNum { display:flex; flex-direction:column; align-items:center; gap:2px; }
+      .pcNum small, .pfNum small { font-size:12px; font-weight:600; }
       .row .role { font-size:11px; color:var(--muted); letter-spacing:.04em; }
       .row .name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .row .ovr { font-family:"IBM Plex Mono", monospace; font-weight:600; text-align:right; }
