@@ -22,6 +22,14 @@ const REPLAY_INTRO_MS = 900;
 /** replay zoom ramps from the first to the second value over the clip */
 const REPLAY_ZOOM_FROM = 1.15;
 const REPLAY_ZOOM_TO = 1.6;
+/** A drawn box the name-tag layout has to keep clear of. */
+interface Rect { x0: number; x1: number; y0: number; y1: number }
+/** One name waiting to be placed under its player. */
+interface TagRequest { px: number; y: number; r: number; name: string; selected: boolean; priority: boolean; own: Rect }
+
+/** Legs only start showing on the pitch past this; below it the ring would be permanent clutter. */
+const FATIGUE_SHOW_AT = 0.45;
+
 const GOAL_CAM_MS = 1200;
 const GOAL_CAM_ZOOM = 1.5;
 /** camera easing time constants (ms): position and zoom */
@@ -157,6 +165,8 @@ export class MatchScreen {
   private readonly btnHaptics = document.getElementById("btnHaptics") as HTMLButtonElement | null;
   /** the live 0..1 danger score of the current frame, shared by the auto pacing and the crowd bed */
   private dangerNow = 0;
+  /** Unit direction the ball is travelling, kept between frames so the trail points the right way. */
+  private ballDir: { x: number; y: number } | null = null;
   /** wall-clock time of the last ambient update, so the bed is nudged ~8x a second, not 60x */
   private ambAt = 0;
   private readonly btnReplay = document.getElementById("btnReplay") as HTMLButtonElement | null;
@@ -965,6 +975,8 @@ export class MatchScreen {
       }
     }
 
+    const tags: TagRequest[] = [];
+    const numBoxes: Rect[] = [];
     for (const p of s.players) {
       if (p.sentOff || !p.onPitch) continue;
       const team = match.teams[p.team];
@@ -997,24 +1009,21 @@ export class MatchScreen {
       ctx.moveTo(px, py);
       ctx.lineTo(px + Math.cos(p.facing) * r * 1.3, py + Math.sin(p.facing) * r * 1.3);
       ctx.stroke();
-      const tag = tagsFor === "all" || (tagsFor === "user" && p.team === this.userTeam) ? def.name : null;
-      this.drawNumber(px, py, r, def.number, kit, this.selected === p.id, tag);
+      // Tiredness, on the player rather than only in the panel: the substitution decision is made
+      // while watching, and having to open a screen to find out who is gone is the wrong moment.
+      if (p.team === this.userTeam && p.fatigue > FATIGUE_SHOW_AT) this.drawFatigueArc(px, py, r, p.fatigue);
+      const { tagY, box } = this.drawNumber(px, py, r, def.number, kit, this.selected === p.id);
+      numBoxes.push(box);
+      const named = tagsFor === "all" || (tagsFor === "user" && p.team === this.userTeam);
+      if (named) tags.push({ px, y: tagY, r, name: def.name, selected: this.selected === p.id, priority: this.selected === p.id || s.ball.owner === p.id, own: box });
     }
+    this.drawTags(tags, numBoxes);
 
     const b = s.ball;
     const [bx, by] = toPx(b.pos.x, b.pos.y);
-    const br = Math.max(2.5, 0.45 * v.scale) * (1 + b.z * 0.12);
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.beginPath();
-    ctx.ellipse(bx + 1, by + 1.5, br * 0.9, br * 0.55, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(bx, by - b.z * v.scale * 0.5, br, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#333";
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    const bspeed = Math.hypot(b.vel.x, b.vel.y);
+    this.ballDir = bspeed > 0.5 ? { x: b.vel.x / bspeed, y: b.vel.y / bspeed } : this.ballDir;
+    this.drawBall(bx, by, b.z, bspeed, v);
 
     if (s.restart) {
       const [rx, ry] = toPx(s.restart.pos.x, s.restart.pos.y);
@@ -1164,13 +1173,15 @@ export class MatchScreen {
    * with a thin counter-outline so it survives stripes), else just below it. The optional name
    * tag goes under the disc, or under the number when that sits below the disc.
    */
-  private drawNumber(px: number, py: number, r: number, num: number, kit: Kit, selected: boolean, tag: string | null = null): void {
+  private drawNumber(px: number, py: number, r: number, num: number, kit: Kit, selected: boolean): { tagY: number; box: Rect } {
     const ctx = this.ctx;
     const text = String(num);
     let tagY: number;
+    let numBox: Rect;
     if (r >= 5.5) {
       const size = Math.max(7, r * (text.length > 1 ? 1.05 : 1.3));
       ctx.font = `700 ${size}px 'IBM Plex Mono', ui-monospace, monospace`;
+      const w = ctx.measureText(text).width;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const fill = kitTextColor(kit);
@@ -1183,9 +1194,11 @@ export class MatchScreen {
       ctx.fillStyle = fill;
       ctx.fillText(text, px, py + 0.5);
       tagY = py + r + 1.5;
+      numBox = { x0: px - w / 2, x1: px + w / 2, y0: py - size / 2, y1: py + size / 2 };
     } else {
       const size = Math.max(8, r * 1.6);
       ctx.font = `700 ${size}px 'IBM Plex Mono', ui-monospace, monospace`;
+      const w = ctx.measureText(text).width;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.lineJoin = "round";
@@ -1195,8 +1208,44 @@ export class MatchScreen {
       ctx.fillStyle = selected ? "#ffd166" : "#ffffff";
       ctx.fillText(text, px, py + r + 1);
       tagY = py + r + 1 + size + 1;
+      numBox = { x0: px - w / 2, x1: px + w / 2, y0: py + r + 1, y1: tagY };
     }
-    if (tag) this.drawTag(px, tagY, r, tag, selected);
+    return { tagY, box: numBox };
+  }
+
+  /**
+   * Place the name tags collected while drawing the players.
+   *
+   * Drawn as they came, tags of players standing close together printed on top of one another and
+   * neither could be read — exactly in the goalmouth scrambles where you most want to know who is
+   * who. Tags are laid out top-down instead: each is pushed below any tag already placed that it
+   * would collide with, and one that cannot find room within two rows is dropped rather than
+   * scribbled over its neighbour. The ball carrier and the selected player are placed first so they
+   * always keep their name.
+   */
+  private drawTags(tags: TagRequest[], obstacles: Rect[] = []): void {
+    const ctx = this.ctx;
+    // shirt numbers are already on the pitch: a name printed across one is as unreadable as two names
+    // printed across each other, so they are obstacles from the start
+    const order = [...tags].sort((a, b) => Number(b.priority) - Number(a.priority) || a.y - b.y);
+    const placed: Rect[] = [];
+    for (const t of order) {
+      // every number except this player's own: a name sits directly under its own shirt number by
+      // construction, so treating that one as an obstacle would reject every tag on the pitch
+      const blocked = [...placed, ...obstacles.filter((o) => o !== t.own)];
+      const size = Math.max(8, Math.min(13, t.r * 1.15));
+      ctx.font = `600 ${size}px 'IBM Plex Sans KR', system-ui, sans-serif`;
+      const w = ctx.measureText(t.name).width;
+      const step = size + 2;
+      let y = t.y;
+      let rows = 0;
+      const hits = (yy: number) =>
+        blocked.some((q) => t.px - w / 2 < q.x1 + 2 && t.px + w / 2 > q.x0 - 2 && yy < q.y1 + 1 && yy + size > q.y0 - 1);
+      while (hits(y) && rows < 3) { y += step; rows++; }
+      if (hits(y)) continue; // no room: better nothing than an unreadable pile
+      placed.push({ x0: t.px - w / 2, x1: t.px + w / 2, y0: y, y1: y + size });
+      this.drawTag(t.px, y, t.r, t.name, t.selected);
+    }
   }
 
   /** Name tag: small white text with a dark outline, centred under (px, y). */
@@ -1214,11 +1263,83 @@ export class MatchScreen {
     ctx.fillText(name, px, y);
   }
 
+  /**
+   * The ball.
+   *
+   * A 3px white dot on a green pitch is the hardest thing on the screen to follow, and it is the one
+   * thing you are always looking for. Three cues, none of them decoration: a tapered trail behind it
+   * while it is travelling, so a driven pass reads as a line rather than a dot that teleports; a
+   * shadow that stays on the ground and tightens as the ball climbs, which is what separates a cross
+   * from a ground pass at a glance; and a dark rim that keeps it visible against a white kit.
+   */
+  private drawBall(bx: number, by: number, z: number, speed: number, v: View): void {
+    const ctx = this.ctx;
+    const br = Math.max(2.5, 0.45 * v.scale) * (1 + z * 0.12);
+    const lift = z * v.scale * 0.5;
+
+    // trail: only while it is genuinely moving, and only as long as the speed earns
+    if (speed > 6) {
+      const len = Math.min(28, (speed - 6) * 1.5) * (v.scale / 6);
+      const dir = this.ballDir;
+      if (dir) {
+        const g = ctx.createLinearGradient(bx, by - lift, bx - dir.x * len, by - dir.y * len - lift);
+        g.addColorStop(0, "rgba(255,255,255,0.5)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.strokeStyle = g;
+        ctx.lineWidth = br * 1.5;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(bx, by - lift);
+        ctx.lineTo(bx - dir.x * len, by - dir.y * len - lift);
+        ctx.stroke();
+      }
+    }
+
+    // shadow stays on the ground and shrinks with height, so the two separate as the ball rises
+    const shrink = 1 / (1 + z * 0.35);
+    ctx.fillStyle = `rgba(0,0,0,${0.4 * shrink})`;
+    ctx.beginPath();
+    ctx.ellipse(bx + 1, by + 1.5, br * 0.9 * shrink, br * 0.55 * shrink, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(bx, by - lift, br, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(20,24,28,0.85)";
+    ctx.lineWidth = Math.max(1, br * 0.32);
+    ctx.stroke();
+  }
+
+  /**
+   * A wearing-down ring around one of my players: an arc that shrinks as the legs go, amber at first
+   * and red once they are spent. Drawn under the disc's own outline so it reads as a state of the
+   * player rather than another object on the pitch.
+   */
+  private drawFatigueArc(px: number, py: number, r: number, fatigue: number): void {
+    const ctx = this.ctx;
+    // remap so the ring is full at the threshold and empty at exhaustion, not a stub that barely moves
+    const spent = Math.min(1, (fatigue - FATIGUE_SHOW_AT) / (1 - FATIGUE_SHOW_AT));
+    const sweep = Math.PI * 2 * spent;
+    if (sweep < 0.05) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1.6, r * 0.28);
+    ctx.strokeStyle = spent > 0.66 ? "rgba(239,71,111,0.95)" : "rgba(255,209,102,0.9)";
+    ctx.beginPath();
+    // grows clockwise from the top, so a glance reads "how much of the ring is gone"
+    ctx.arc(px, py, r + ctx.lineWidth * 0.75, -Math.PI / 2, -Math.PI / 2 + sweep);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** Replay scene: players and ball from a recorded frame. Name tags are always on here. */
   private drawFrame(f: Frame, v: View): void {
     const ctx = this.ctx;
     const match = this.match;
     const r = Math.max(5, 1.45 * v.scale);
+    const replayTags: TagRequest[] = [];
+    const replayBoxes: Rect[] = [];
     for (const p of f.players) {
       const def = match.def(p.id);
       const kit = this.kitOf(p.team, def.role === "GK");
@@ -1230,15 +1351,13 @@ export class MatchScreen {
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(p.f) * r * 1.3, py + Math.sin(p.f) * r * 1.3); ctx.stroke();
-      this.drawNumber(px, py, r, def.number, kit, false, this.showTags ? def.name : null);
+      const { tagY, box } = this.drawNumber(px, py, r, def.number, kit, false);
+      replayBoxes.push(box);
+      if (this.showTags) replayTags.push({ px, y: tagY, r, name: def.name, selected: false, priority: f.owner === p.id, own: box });
     }
+    this.drawTags(replayTags, replayBoxes);
     const bx = v.ox + f.bx * v.scale, by = v.oy + f.by * v.scale;
-    const br = Math.max(2.5, 0.45 * v.scale) * (1 + f.bz * 0.12);
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.beginPath(); ctx.ellipse(bx + 1, by + 1.5, br * 0.9, br * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.beginPath(); ctx.arc(bx, by - f.bz * v.scale * 0.5, br, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.stroke();
+    this.drawBall(bx, by, f.bz, 0, v);
   }
 
   /** REPLAY badge, slow-motion note and the event caption. */
