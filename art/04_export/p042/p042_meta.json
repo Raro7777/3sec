@@ -1,0 +1,51 @@
+{
+  "pid": "p042",
+  "team": "t06",
+  "position": "L",
+  "rarity": "R",
+  "height_cm": 165,
+  "jersey": 2,
+  "skin": "A",
+  "hair": {
+    "style": "컬리 보브",
+    "color": "라이트 브라운",
+    "palette": 4
+  },
+  "eye": {
+    "shape": "tsurime",
+    "color": "블루"
+  },
+  "card": {
+    "face": {
+      "cx": 455,
+      "cy": 360,
+      "h": 240
+    }
+  },
+  "stand": {
+    "face_rect": {
+      "x": 464,
+      "y": 200,
+      "w": 512,
+      "h": 512
+    },
+    "has_hair_front": null
+  },
+  "gen": {
+    "model": null,
+    "lora": null,
+    "seed_card": null,
+    "seed_stand": null
+  },
+  "source": {
+    "file": "p042.png",
+    "size": "1760x2352",
+    "crop": {
+      "x": 177,
+      "y": 120,
+      "w": 1583,
+      "h": 2110
+    },
+    "imported": "2026-09-05"
+  }
+}

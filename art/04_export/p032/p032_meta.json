@@ -1,0 +1,51 @@
+{
+  "pid": "p032",
+  "team": "t05",
+  "position": "OP",
+  "rarity": "SR",
+  "height_cm": 183,
+  "jersey": 8,
+  "skin": "A",
+  "hair": {
+    "style": "커튼 뱅 미디엄 스트레이트",
+    "color": "다크 브라운",
+    "palette": 2
+  },
+  "eye": {
+    "shape": "tsurime",
+    "color": "앰버"
+  },
+  "card": {
+    "face": {
+      "cx": 450,
+      "cy": 360,
+      "h": 240
+    }
+  },
+  "stand": {
+    "face_rect": {
+      "x": 464,
+      "y": 200,
+      "w": 512,
+      "h": 512
+    },
+    "has_hair_front": null
+  },
+  "gen": {
+    "model": null,
+    "lora": null,
+    "seed_card": null,
+    "seed_stand": null
+  },
+  "source": {
+    "file": "p032.png",
+    "size": "1760x2352",
+    "crop": {
+      "x": 333,
+      "y": 189,
+      "w": 1410,
+      "h": 1880
+    },
+    "imported": "2026-09-05"
+  }
+}

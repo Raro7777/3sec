@@ -72,19 +72,24 @@ const check = (name, ok, detail) => {
 };
 
 /**
- * 검사 대상 pid.
+ * 검사 대상 pid — **실물 선수와 겹치지 않는 합성 id 를 쓴다.**
  *
- * **이미 실물 아트가 들어와 있는 pid 는 건드리지 않는다.** 초기 판에서는 42명 전원에 검사용 파일을 썼는데,
- * webp 우선순위를 보려고 `{pid}_thumb.webp` 를 만들면 **실물 썸네일을 덮어쓰고 지웠다**(실제로 한 번 날렸다).
- * 테스트가 저장소의 자산을 지우는 일은 없어야 하므로, 아트가 있는 폴더는 아예 후보에서 뺀다.
+ * 두 가지를 동시에 지켜야 한다.
+ *   ① 실물 아트를 건드리지 않는다. 초기 판에서는 42명 전원에 검사용 파일을 썼는데, webp 우선순위를 보려고
+ *      `{pid}_thumb.webp` 를 만들면 **실물 썸네일을 덮어쓰고 지웠다**(실제로 한 번 날렸다).
+ *   ② 42명 전원에 아트가 들어와도 돈다. ①의 첫 해법은 "아트가 없는 선수 pid 를 빌려 쓰기" 였는데,
+ *      카드 42장이 다 들어오자 빌릴 자리가 없어져 **하네스가 아예 못 돌게 됐다**(13절).
+ *
+ * 그래서 선수 id 가 아닌 id 를 만들어 쓴다. `art-pack` 은 폴더 이름을 그대로 키로 삼으므로 이것으로 충분하고,
+ * 화면 검사(5)는 ART_PID 가 아니라 "화면에 인라인된 그림이 나오는가"를 보므로 실물 아트로 성립한다.
  */
 const ALL_PIDS = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'players.json'), 'utf8')).map(p => p.id);
 const hasRealArt = pid => fs.existsSync(path.join(EXPORT, pid)) &&
   fs.readdirSync(path.join(EXPORT, pid)).some(f => /\.(webp|png|jpe?g)$/i.test(f));
 const REAL = ALL_PIDS.filter(hasRealArt);
-const PIDS = ALL_PIDS.filter(pid => !hasRealArt(pid));
-if (!PIDS.length) { console.error('42명 전원에 실물 아트가 있어 검사할 빈 자리가 없습니다.'); process.exit(1); }
-const ART_PID = PIDS[0];
+const ART_PID = 'zzz-arttest';
+if (ALL_PIDS.includes(ART_PID)) { console.error(`${ART_PID} 가 실제 선수 id 가 됐습니다 — 검사용 id 를 바꾸세요.`); process.exit(1); }
+const PIDS = [ART_PID];
 /** 검사 시작 시점의 04_export 스냅샷 — 끝나고 그대로 돌아왔는지 본다. */
 const snapshot = () => fs.existsSync(EXPORT)
   ? fs.readdirSync(EXPORT).flatMap(d => {
