@@ -36,6 +36,7 @@ import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
 import { emblemSvg } from "./emblem";
 import { portraitSvg } from "./portrait";
+import { managerArt, userArt } from "./manager-art";
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
@@ -668,7 +669,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">${userArt(s, 22, me.color)} 감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
     h.push(this.todoHtml());
     h.push(this.careerStripHtml());
     // the pending interview (press.ts) and the story events with their choices (story.ts)
@@ -899,7 +900,7 @@ export class Game {
       if (c && contractExpiring(s) && seasonOver(s)) talk = `<div class="hint" style="margin-top:6px;color:var(--warn)">계약이 올 시즌으로 끝나지만 이사회가 아직 재계약을 제안하지 않았습니다 (신뢰도 35 미만이면 제안이 없습니다).</div>`;
       else if (c) talk = `<div class="hint" style="margin-top:6px">계약은 시즌 ${c.until}까지입니다. 만료 시즌이 끝나면 이사회가 평판과 성적에 따라 재계약을 제안합니다.</div>`;
     }
-    return `<div class="card review"><h3>감독 커리어 <span class="mgr">감독 ${s.managerName}</span></h3>
+    return `<div class="card review"><h3>감독 커리어 <span class="mgr">${userArt(s, 26)} 감독 ${s.managerName}</span></h3>
       <div class="stats">
         ${stat("감독 평판", `<span class="stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span> <small>${rep} / 20 · ${repLabel(rep)}</small>`)}
         ${stat("계약", c ? `~S${c.until} <small>연봉 ${c.wage}억</small>` : "없음")}
@@ -1068,7 +1069,7 @@ export class Game {
     const m = opp.manager;
     if (!m) return "";
     const since = m.since < this.state.season ? ` · ${this.state.season - m.since}시즌째` : " · 부임 첫 시즌";
-    return `<div class="hint" style="display:flex;gap:8px;align-items:flex-start">${portraitSvg({ id: m.id, age: m.age, color: opp.color }, 34)}<span>상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</span></div>`;
+    return `<div class="hint" style="display:flex;gap:8px;align-items:flex-start">${managerArt(this.state, m, 40, opp.color)}<span>상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</span></div>`;
   }
 
   /** One-line cup status for the home card: next stage and the user's tie / 탈락 / 부전승. */
@@ -1180,7 +1181,7 @@ export class Game {
     h.push(`<div class="card" id="skOfferList" hidden><h3>감독 제안 <span>${offers.length}곳</span></h3>
       <div class="hint">감독 자리가 비었거나 이사회 압박이 큰 구단들이 연락해 왔습니다. 수락하면 그 구단의 감독이 되고, 신뢰도 55에서 새로 시작합니다.</div>
       ${offers.length ? offers.map((c) => `<div class="offer"><div class="of-main"><b><span class="dot" style="background:${c.color}"></span>${c.name}</b> <span class="role">${posOf.get(c.id)}위 · 예산 ${c.budget}억 · 전력 ${stars(clubStars(c.reputation))}</span>
-          <div class="hint">${c.manager ? `${c.manager.name} 감독 경질 예정 · 이사회 압박 ${c.pressure ?? 0}` : "감독 공석"} · 스쿼드 ${c.squad.length}명</div></div>
+          <div class="hint">${c.manager ? `${managerArt(s, c.manager, 20, c.color)} ${c.manager.name} 감독 경질 예정 · 이사회 압박 ${c.pressure ?? 0}` : "감독 공석"} · 스쿼드 ${c.squad.length}명</div></div>
         <div class="of-acts"><button class="primary" data-job="${c.id}">수락</button></div></div>`).join("") : '<div class="hint">지금은 제안이 없습니다.</div>'}</div>`);
     this.el.sacked.innerHTML = h.join("");
     document.getElementById("skOffers")!.addEventListener("click", () => { const l = document.getElementById("skOfferList")!; l.hidden = false; l.scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -1631,7 +1632,7 @@ export class Game {
     }
     this.openSheet(`<div class="pc">
       <div class="pcHead"><div class="pcNum" style="font-size:22px;line-height:0">${emblemSvg(c, 34)}</div>
-        <div class="pcMain"><div class="pcName">${c.name}</div><div class="hint">${f.mgr} 감독${f.tags.length ? ` · <span style="color:var(--accent)">${f.tags.join(" · ")}</span>` : ""}</div></div>
+        <div class="pcMain"><div class="pcName">${c.name}</div><div class="hint" style="display:flex;align-items:center;gap:6px">${c.id === s.userClub ? userArt(s, 24, c.color) : c.manager ? managerArt(s, c.manager, 24, c.color) : ""}<span>${f.mgr} 감독${f.tags.length ? ` · <span style="color:var(--accent)">${f.tags.join(" · ")}</span>` : ""}</span></div></div>
         <div class="pcOvr"><b>${f.pos}위</b><small>${f.pts}점 · ${f.played}경기</small></div></div>
       <div class="hint">${clubLore(c.id).founded}년 창단 · "${clubLore(c.id).nickname}" · 우승 ${clubLore(c.id).honours}회${clubLore(c.id).rival >= 0 ? ` · 라이벌 <b data-clubcard="${clubLore(c.id).rival}" style="cursor:pointer">${clubOf(s, clubLore(c.id).rival).name}</b> (${clubLore(c.id).derby})` : ""}</div>
       <div class="hint" style="margin-bottom:6px">${clubLore(c.id).history}</div>

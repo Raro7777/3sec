@@ -98,7 +98,7 @@
       .club-card .cc-form { font-family:"IBM Plex Mono", monospace; color:var(--muted); }
       .club-card .cc-blurb { font-size:12px; color:var(--muted); line-height:1.45; }
       .onb-actions { align-items:center; }
-      .card h3 .mgr { color:var(--accent); margin-left:6px; margin-right:auto; }
+      .card h3 .mgr { color:var(--accent); margin-left:6px; margin-right:auto; display:inline-flex; align-items:center; gap:5px; }
       .chal summary { list-style:none; } .chal summary::-webkit-details-marker { display:none; }
       .chalList { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
       .chalRow { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.02); }
@@ -125,6 +125,7 @@
       .bracket .tie > span:last-child { text-align:right; }
       /* illustrations (public/art): bleed to the card's edges so they read as the card's header */
       .evCard { overflow:hidden; }
+      .mgrArt { border-radius:50%; object-fit:cover; vertical-align:middle; flex:none; background:#0b1014; }
       .evArt { display:block; width:calc(100% + 28px); margin:-12px -14px 10px; aspect-ratio:16/9; object-fit:cover; }
       .rvArt { display:block; width:calc(100% + 28px); margin:-4px -14px 10px; aspect-ratio:16/7; object-fit:cover; border-radius:0; }
       .review .rvTitle { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:40px; line-height:1; color:var(--accent); margin:4px 0; }
