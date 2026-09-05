@@ -166,14 +166,16 @@ const tap = async (sel, ms = 300) => {
 await tap('[data-tab="scout"]');
 await tap('[data-act="scout"]', 500);
 const viewHtml = await page.evaluate(() => document.getElementById('view').innerHTML);
-check('스카우트 결과에 카드 아트 <img> 가 있다', /<img[^>]+src="data:image\/png/.test(viewHtml));
+// MIME 을 png 로 못 박지 않는다 — 넣는 그림이 webp 라 실물 아트가 늘면 png 만 찾다 헛짚는다.
+// 검사의 뜻은 "SVG 플레이스홀더가 아니라 인라인된 그림이 나온다" 이다(art-pipeline 12).
+check('스카우트 결과에 카드 아트 <img> 가 있다', /<img[^>]+src="data:image\/(png|webp)/.test(viewHtml));
 check('카드아트에 등급 프레임이 남는다', /border:2\.5px solid #(E9B949|A97BE8|5B9BE0|6A7C8E)/.test(viewHtml),
   viewHtml.match(/border:2\.5px solid #\w+/)?.[0] || '프레임 없음');
 
 // 육성 목록 = 원형 초상이 여러 개 나오는 곳
 await tap('[data-tab="train"]', 400);
 const trainHtml = await page.evaluate(() => document.getElementById('view').innerHTML);
-check('육성 목록의 원형 초상이 <img> 다', /class="ava[^"]*"[^>]*>\s*<img[^>]+src="data:image\/png/.test(trainHtml));
+check('육성 목록의 원형 초상이 <img> 다', /class="ava[^"]*"[^>]*>\s*<img[^>]+src="data:image\/(png|webp)/.test(trainHtml));
 
 // **디코딩까지 되는가** — data: URI 가 깨져 있으면 여기서 잡힌다
 const imgs = await page.evaluate(() => {
