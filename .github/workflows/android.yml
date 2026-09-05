@@ -50,6 +50,7 @@ jobs:
           body: |
             자동 빌드된 디버그 APK입니다. `3sec-fm-latest.apk`를 내려받아 설치하세요 (설정에서 "출처를 알 수 없는 앱" 허용 필요).
             커밋: ${{ github.sha }} · 브랜치: ${{ github.ref_name }}
-          files: |
-            3sec-fm-latest.apk
-            3sec-fm-*.apk
+          # One pattern only. Listing 3sec-fm-latest.apk explicitly as well made the glob match it a
+          # second time, and the action's second delete of the pre-existing asset came back 404 —
+          # the whole step read as failed although both APKs had already uploaded (runs 16 and 18).
+          files: 3sec-fm-*.apk
