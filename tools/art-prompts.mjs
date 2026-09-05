@@ -28,6 +28,9 @@ const META_OUT = path.join(ROOT, 'art', '00_guide', 'meta_seed');
 const ARGV = process.argv.slice(2);
 const CHECK = ARGV.includes('--check');
 const ONE = (() => { const i = ARGV.indexOf('--id'); return i >= 0 ? ARGV[i + 1] : null; })();
+/** --look rk01 : 신인 외형 풀 한 종의 카드 프롬프트만 출력한다(art-pipeline 15). --looks : 60종 전부. */
+const LOOK = (() => { const i = ARGV.indexOf('--look'); return i >= 0 ? ARGV[i + 1] : null; })();
+const LOOKS_ALL = ARGV.includes('--looks');
 
 // ────────────────────────────────────────────────────────────── 어휘 매핑
 // 값 출처: data/players.json · web/engine/rookies.js 의 HAIR_STYLES / HAIR_COLORS_* / EYE_COLORS / BODY_TYPES.
@@ -502,6 +505,43 @@ function buildCardNatural(p, d, kind) {
   ].join(' ');
 }
 
+/**
+ * 신인 외형 풀 카드 (art-pipeline 15).
+ *
+ * 선수 카드와 **같은 화풍 블록·같은 조명·같은 프레이밍**이되 세 가지가 다르다.
+ *   ① 유니폼이 아니라 중립 연습복(회색) — 풀 하나가 6구단을 다 받아야 한다.
+ *   ② 포지션 포즈가 아니라 **대기 자세**(서브 리시브 준비) — 어느 포지션의 신인에도 붙을 수 있어야 한다.
+ *   ③ 등급 조명은 R(단일 조명) 고정 — 신인 카드의 희귀도는 그림이 아니라 프레임이 말한다.
+ * 60종이 같은 자세라 지루해지지 않게 카메라 좌우·표정을 인덱스로 돌린다(결정적).
+ */
+function buildRookieNatural(look, idx) {
+  const hair = hairPhrase(HAIR_STYLE[look.hairStyle], HAIR_COLOR[look.hairColor].tag);
+  const eyeColor = EYE_COLOR[look.eyeColor].split(',')[0].trim().replace(/\s*eyes$/, '');
+  const shape = ['tsurime', 'neutral', 'tareme'][idx % 3];
+  const eyes = `${EYE_SHAPE_NL[shape]} ${eyeColor} eyes`;
+  const side = idx % 2 === 0 ? 'from her left' : 'from her right';
+  const face = [
+    'a focused, hungry expression — a rookie who wants the ball',
+    'a calm, steady expression, jaw set, breathing through her nose',
+    'a fierce half-grin, eyes narrowed across the net',
+  ][idx % 3];
+  return [
+    FRAMING.card,
+    `Ultra-detailed semi-realistic anime illustration, the quality of a high-end painted key visual for a premium mobile game — rendering pushed close to realism. Skin has real texture, soft subsurface scattering and a faint flush of exertion. Hair is drawn strand by strand in layered clumps with sharp specular highlights and stray flyaway hairs. Fabric behaves like real fabric: visible weave, stitched seams, stretch across the shoulder, creases where the body twists. Anatomically accurate athletic musculature. Hands fully articulated with correct fingers. Individual sweat droplets catching the light. Cinematic volumetric lighting, shallow depth of field, high dynamic range. NOT flat cel shading, NOT simple anime, NOT thick uniform outlines, NOT a cartoon.`,
+    `ABSOLUTELY NO TEXT anywhere in the picture: no words, letters, numbers, captions, titles, logos, watermarks or signage of any kind, on the uniform, the shoes, the walls or as an overlay.`,
+    `A young, evenly athletic woman in her late teens with ${SKIN_NL[look.skin]} skin and ${eyes}. HER HAIR: ${hair} — exactly this and nothing else.`,
+    `She is in a defensive ready stance waiting for the serve — knees bent, weight forward on the balls of her feet, both arms relaxed and open in front of her at waist height, eyes up and locked across the net. There is no ball in the frame.`,
+    `She wears a plain heather grey practice jersey with white trim — a rookie's training kit, not a club uniform — black volleyball shorts, black knee pads, white socks and plain white volleyball shoes with no markings — a real athletic kit, fitted to her body, not a loose t-shirt.`,
+    `The jersey is completely blank — no logo, number, text or pattern of any kind.`,
+    `Give it the tension of a real match: every muscle loaded and still, an athlete's definition visible in her arms and shoulders; ${face}; a sheen of sweat catching the light.`,
+    `Seen from slightly below at chest height, three-quarter view ${side}.`,
+    `Indoor arena at night with the volleyball net behind her, ${RARITY.R.nlLight}.`,
+    `The background stays consistently dark in every card — a dim arena at night — no matter how bright the highlights on her are. Never a bright daylit gymnasium.`,
+    `Vertical 3:4 composition: her face sits about 30% down from the top edge and stays clearly readable when the picture is shrunk to a tiny thumbnail.`,
+    `Keep it within a 15+ sports rating: she stays fully in her uniform — no nudity, no underwear, no see-through fabric, no upskirt angle and no sexual posing. The pose comes from the volleyball action itself.`,
+  ].join(' ');
+}
+
 function section(title, body) { return `\n──────── ${title}\n${body}\n`; }
 
 function renderPack(p, d, warn) {
@@ -617,6 +657,35 @@ console.log(`- 구단별 최소 톤 수: ${Math.min(...clubTones)} (규칙: 2 �
 if (missing.length) {
   console.error('\n어휘 누락:\n  ' + missing.join('\n  '));
   process.exit(1);
+}
+// 5) 신인 외형 풀 — 런칭 42 조합과 겹치지 않고, 풀 안에서도 조합이 유일해야 한다(rookies.js ROOKIE_LOOKS)
+const { ROOKIE_LOOKS } = await import(path.join(ROOT, 'web', 'engine', 'rookies.js'));
+{
+  const launchPairs = new Set(players.map(p => p.appearance.hairStyle + '|' + p.appearance.hairColor));
+  const seen = new Set(), bad = [];
+  for (const l of ROOKIE_LOOKS) {
+    const k = l.hairStyle + '|' + l.hairColor;
+    if (launchPairs.has(k)) bad.push(`${l.id}: 런칭 선수와 같은 조합 ${k}`);
+    if (seen.has(k)) bad.push(`${l.id}: 풀 안에서 중복 ${k}`);
+    seen.add(k);
+    for (const [what, table, v] of [['헤어스타일', HAIR_STYLE, l.hairStyle], ['헤어컬러', HAIR_COLOR, l.hairColor], ['눈 색', EYE_COLOR, l.eyeColor]])
+      if (table[v] === undefined) bad.push(`${l.id}: ${what} "${v}" 매핑 없음`);
+    if (!SKIN_NL[l.skin]) bad.push(`${l.id}: 피부톤 "${l.skin}"`);
+  }
+  const vivid = ROOKIE_LOOKS.filter(l => HAIR_COLOR[l.hairColor] && listOf('HAIR_COLORS_VIVID').includes(l.hairColor)).length;
+  console.log(`\n## 신인 외형 풀 (rookies.js ROOKIE_LOOKS)\n`);
+  console.log(`- ${ROOKIE_LOOKS.length}종 · 색 ${new Set(ROOKIE_LOOKS.map(l => l.hairColor)).size}가지 · 파스텔 ${vivid} · 런칭 42 조합과 겹침 ${bad.filter(b => /런칭/.test(b)).length}건 · 풀 내 중복 ${bad.filter(b => /풀 안/.test(b)).length}건`);
+  if (bad.length) { console.error('\n신인 외형 풀 오류:\n  ' + bad.join('\n  ')); process.exit(1); }
+}
+if (LOOK || LOOKS_ALL) {
+  const list = LOOKS_ALL ? ROOKIE_LOOKS : ROOKIE_LOOKS.filter(l => l.id === LOOK);
+  if (!list.length) { console.error(`${LOOK} 을 찾을 수 없습니다.`); process.exit(1); }
+  for (const l of list) {
+    const idx = ROOKIE_LOOKS.indexOf(l);
+    console.log(`\n# ${l.id} — ${l.hairStyle} / ${l.hairColor} / ${l.eyeColor} 눈 / 피부 ${l.skin}`);
+    console.log(section('ROOKIE CARD — POSITIVE · 자연어형 · 미디엄 샷 (Seedream 5 Pro · 3:4 · 2k)', buildRookieNatural(l, idx)));
+  }
+  process.exit(0);
 }
 if (ONE) {
   const p = players.find(x => x.id === ONE);

@@ -86,7 +86,10 @@ const check = (name, ok, detail) => {
 const ALL_PIDS = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'players.json'), 'utf8')).map(p => p.id);
 const hasRealArt = pid => fs.existsSync(path.join(EXPORT, pid)) &&
   fs.readdirSync(path.join(EXPORT, pid)).some(f => /\.(webp|png|jpe?g)$/i.test(f));
-const REAL = ALL_PIDS.filter(hasRealArt);
+// 실물 아트 폴더 — 선수 pid 뿐 아니라 신인 외형 풀(rk*) 폴더도 art-pack 이 세므로 폴더 기준으로 센다.
+const REAL = fs.existsSync(EXPORT)
+  ? fs.readdirSync(EXPORT).filter(d => fs.statSync(path.join(EXPORT, d)).isDirectory() && hasRealArt(d))
+  : [];
 const ART_PID = 'zzz-arttest';
 if (ALL_PIDS.includes(ART_PID)) { console.error(`${ART_PID} 가 실제 선수 id 가 됐습니다 — 검사용 id 를 바꾸세요.`); process.exit(1); }
 const PIDS = [ART_PID];
@@ -118,23 +121,23 @@ function cleanup() {
 
 process.on('exit', () => { if (!KEEP) cleanup(); });
 
-// 1) 검사용 아트를 넣는다 — 눈에 확 띄는 단색
-const THUMB = png(64, 64, [230, 40, 160]), CARD = png(60, 80, [40, 200, 230]);
-for (const pid of PIDS) { put(pid, 'thumb', '.png', THUMB); put(pid, 'card', '.png', CARD); }
+// 1) 검사용 아트를 넣는다 — 눈에 확 띄는 단색. 썸네일 파일은 없다 — 초상은 카드에서 오린다(art-pipeline 15.2).
+const CARD = png(60, 80, [40, 200, 230]);
+for (const pid of PIDS) put(pid, 'card', '.png', CARD);
 
 // 2) art-pack 이 잡아내는가
 const { collectArt } = await import('./art-pack.mjs?t=' + Date.now());
 const packed = collectArt();
 check('art-pack 이 넣은 아트를 전부 찾는다', Object.keys(packed.art).length === PIDS.length + REAL.length,
   Object.keys(packed.art).length + '/' + (PIDS.length + REAL.length) + (REAL.length ? ` (실물 ${REAL.length}명 포함)` : ''));
-check('썸네일·카드 둘 다 잡힌다', !!packed.art[ART_PID]?.thumb && !!packed.art[ART_PID]?.card);
-check('data: URI 로 만든다', /^data:image\/png;base64,/.test(packed.art[ART_PID]?.thumb || ''));
+check('카드와 얼굴 상자(f) 둘 다 잡힌다', !!packed.art[ART_PID]?.card && Array.isArray(packed.art[ART_PID]?.f) && packed.art[ART_PID].f.length === 3);
+check('data: URI 로 만든다', /^data:image\/png;base64,/.test(packed.art[ART_PID]?.card || ''));
 
 // 3) webp 우선순위 — 같은 이름의 webp 가 있으면 그쪽을 쓴다
-put(ART_PID, 'thumb', '.webp', Buffer.from('RIFF____WEBPVP8 ', 'ascii'));
+put(ART_PID, 'card', '.webp', Buffer.from('RIFF____WEBPVP8 ', 'ascii'));
 const packed2 = collectArt();
-check('webp 가 png 보다 우선한다', /^data:image\/webp;/.test(packed2.art[ART_PID]?.thumb || ''),
-  (packed2.art[ART_PID]?.thumb || '').slice(0, 24));
+check('webp 가 png 보다 우선한다', /^data:image\/webp;/.test(packed2.art[ART_PID]?.card || ''),
+  (packed2.art[ART_PID]?.card || '').slice(0, 24));
 fs.rmSync(made.pop(), { force: true });                       // webp 는 가짜라 브라우저 검사에서 빼둔다
 
 // 4) 빌드가 인라인하는가

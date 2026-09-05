@@ -29,13 +29,34 @@ const GRID = process.argv.includes('--grid');
 const players = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'players.json'), 'utf8'));
 const CLUB = { t01: '가온', t02: '해솔', t03: '태령', t04: '적동', t05: '연화', t06: '라온' };
 const FRAME = { N: '#6A7C8E', R: '#5B9BE0', SR: '#A97BE8', SSR: '#E9B949' };
+/** --rookies: 선수 대신 신인 외형 풀(rk*)을 본다. */
+const POOL = process.argv.includes('--rookies');
 
-const rows = players
+/** 원형 초상 — 앱(app-shell `artThumb`)과 같은 계산으로 카드에서 오린다. 별도 썸네일 파일은 없다(15.2). */
+function thumbImg(card, f) {
+  const side = 2.2 * f[2], sw = side * 4 / 3;
+  const x = Math.max(0, Math.min(1 - sw, f[0] - sw / 2));
+  const y = Math.max(0, Math.min(1 - side, f[1] + 0.15 * f[2] - side / 2));
+  return `<img src="${card}" style="width:${(100 / sw).toFixed(2)}%;height:auto;max-width:none;` +
+    `margin-left:-${(100 * x / sw).toFixed(2)}%;margin-top:-${(100 * y * 4 / 3 / sw).toFixed(2)}%">`;
+}
+function faceOf(id) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(EXPORT, id, `${id}_meta.json`), 'utf8'));
+    const fc = m.card.face, W = 900, H = 1200;            // art-import 기본 카드 크기와 같은 비율이면 충분하다
+    const s = m.source && m.source.crop ? 1 : 1;
+    return [fc.cx / (m.card.w || W), fc.cy / (m.card.h || H), fc.h / (m.card.h || H)];
+  } catch { return [0.5, 0.30, 0.20]; }
+}
+
+const subjects = POOL
+  ? fs.readdirSync(EXPORT).filter(d => /^rk\d+$/.test(d)).sort().map(id => ({ id, name: id, position: '신인 풀', rarity: 'R', teamId: '' }))
+  : players;
+const rows = subjects
   .filter(p => fs.existsSync(path.join(EXPORT, p.id, `${p.id}_card.webp`)))
   .map(p => {
-    const b64 = k => 'data:image/webp;base64,' +
-      fs.readFileSync(path.join(EXPORT, p.id, `${p.id}_${k}.webp`)).toString('base64');
-    return { p, card: b64('card'), thumb: b64('thumb') };
+    const card = 'data:image/webp;base64,' + fs.readFileSync(path.join(EXPORT, p.id, `${p.id}_card.webp`)).toString('base64');
+    return { p, card, thumb: thumbImg(card, faceOf(p.id)) };
   });
 
 if (!rows.length) { console.error('들어온 아트가 없습니다.'); process.exit(1); }
@@ -44,7 +65,7 @@ const cells = rows.map(({ p, card, thumb }) => `
  <div class=c>
    <div class=cardbox style="border-color:${FRAME[p.rarity] || '#5B9BE0'}"><img src="${card}">${GRID ? '<div class=g></div>' : ''}</div>
    ${GRID ? `<div class=pid>${p.id}</div>` : ''}
-   <div class=meta><div class=av><img src="${thumb}"></div>
+   <div class=meta><div class=av>${thumb}</div>
      <div><b>${p.name}</b><span>${p.id} · ${p.position} · ${p.rarity} · ${CLUB[p.teamId] || p.teamId}</span></div></div>
  </div>`).join('');
 
@@ -60,11 +81,11 @@ h1{font-size:17px;margin:0 0 3px}p{color:#8A97A6;font-size:12px;margin:0 0 18px}
 .cardbox img{width:100%;height:100%;object-fit:cover;display:block}
 .meta{display:flex;align-items:center;gap:7px;margin-top:6px}
 .av{width:44px;height:44px;border-radius:50%;overflow:hidden;border:2px solid #2A3644;flex:none}
-.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av img{display:block}
 .meta b{display:block;font-size:12.5px}.meta span{color:#8A97A6;font-size:10.5px}
 </style>
-<h1>아트 대조 시트 — ${rows.length} / ${players.length}명</h1>
-<p>카드(등급 프레임) · 44px 원형 초상. 초상이 얼굴을 못 잡았으면 그 카드는 --face 를 손으로 줘야 한다.</p>
+<h1>아트 대조 시트 — ${rows.length} / ${subjects.length}${POOL ? '종(신인 풀)' : '명'}</h1>
+<p>카드(등급 프레임) · 44px 원형 초상(카드에서 오림). 초상이 얼굴을 못 잡았으면 그 카드는 --face 를 손으로 줘야 한다.</p>
 <div class=grid>${cells}</div>`;
 
 const tmp = path.join(path.dirname(OUT), '.sheet.html');

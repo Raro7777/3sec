@@ -7,11 +7,13 @@
  *   빌드 산출물(web/dist/bloom.html)은 **단일 HTML 한 장**이다. 아티팩트로 게시하면 외부 이미지가
  *   CSP 로 막히고, 휴대폰에 파일 하나만 넘겨도 그림이 보여야 한다. 그래서 data: URI 로 넣는다.
  *
- * 규칙(art-style-guide 4.9):
+ * 규칙(art-style-guide 4.9 · art-pipeline 15.2):
  *   art/04_export/{pid}/{pid}_card.{webp,png}   — 카드 일러스트 3:4
- *   art/04_export/{pid}/{pid}_thumb.{webp,png}  — 썸네일 1:1 (원형 초상에 쓴다)
- *   art/04_export/{pid}/{pid}_meta.json         — 얼굴 좌표 등(있으면 읽고, 없어도 동작한다)
+ *   art/04_export/{pid}/{pid}_hero.{webp,png}   — 전신 3:4 (선수 상세)
+ *   art/04_export/{pid}/{pid}_meta.json         — 얼굴 좌표(card.face). 원형 초상은 **카드에서 오린다** —
+ *                                                  별도 썸네일 파일을 두지 않는다(42명 × 32KB = 1.3MB 절약).
  *   webp 가 있으면 webp 를 쓴다(같은 화질에 png 의 30~40%).
+ *   {pid} 는 선수 id(p001~) 또는 신인 외형 풀 id(rk01~) 다.
  *
  * 파일이 하나도 없으면 빈 팩을 돌려준다 — 그때 앱은 지금처럼 SVG 플레이스홀더를 그린다.
  */
@@ -37,10 +39,11 @@ const PREFER = ['.webp', '.png', '.jpg', '.jpeg'];
  *   hero = 전신 액션. 선수 상세 화면에서 크게 본다. 없으면 카드로 대신한다.
  */
 export const SPEC = {
-  thumb: { ratio: 1,     tol: 0.02, ideal: '512×512',   what: '썸네일' },
   card:  { ratio: 3 / 4, tol: 0.02, ideal: '2048×2732', what: '카드 일러스트(미디엄 샷)' },
   hero:  { ratio: 3 / 4, tol: 0.04, ideal: '1600×2133', what: '전신 일러스트' },
 };
+/** 얼굴 상자 기본값(4.2 규격: 얼굴 중심 (50%, 30%) · 머리 높이 20%). meta.json 이 없을 때만 쓴다. */
+export const FACE_DEFAULT = [0.5, 0.30, 0.20];
 
 /** PNG·WebP 헤더에서 크기를 읽는다(외부 의존 없이). 못 읽으면 null. */
 function dimensions(buf) {
@@ -82,9 +85,9 @@ export function collectArt() {
   for (const pid of fs.readdirSync(EXPORT_DIR).sort()) {
     const dir = path.join(EXPORT_DIR, pid);
     if (!fs.statSync(dir).isDirectory()) continue;
-    const row = { pid, thumb: 0, card: 0, hero: 0, dim: {} };
+    const row = { pid, card: 0, hero: 0, dim: {} };
     const one = {};
-    for (const kind of ['thumb', 'card', 'hero']) {
+    for (const kind of ['card', 'hero']) {
       const hit = pick(dir, pid, kind);
       if (!hit) continue;
       const { uri, bytes: n, dim } = dataUri(hit);
@@ -96,6 +99,19 @@ export function collectArt() {
       if (!dim) problems.push(`${pid} ${spec.what}: 크기를 읽을 수 없습니다(${path.basename(hit.file)})`);
       else if (Math.abs(dim.w / dim.h - spec.ratio) > spec.tol)
         problems.push(`${pid} ${spec.what}: 비율 ${dim.w}×${dim.h} — 규격은 ${spec.ideal} (${spec.ratio === 1 ? '1:1' : '3:4'})`);
+    }
+    if (one.card) {
+      // 얼굴 상자 — 카드 좌표계의 비율 [cx, cy, h]. 원형 초상은 이 상자를 2.2×h 정사각형으로 오려 만든다(4.3).
+      const metaFile = path.join(dir, `${pid}_meta.json`);
+      let f = FACE_DEFAULT;
+      if (fs.existsSync(metaFile)) {
+        try {
+          const m = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+          const fc = m.card && m.card.face, d = row.dim.card;
+          if (fc && d) f = [fc.cx / d.w, fc.cy / d.h, fc.h / d.h].map(v => Math.round(v * 1000) / 1000);
+        } catch { problems.push(`${pid}: meta.json 을 읽을 수 없습니다`); }
+      }
+      one.f = f;
     }
     if (Object.keys(one).length) { art[pid] = one; entries.push(row); }
     else problems.push(`${pid}: 폴더는 있는데 ${PREFER.join('/')} 파일이 없습니다`);
@@ -116,22 +132,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
   const dim = d => d ? `${d.w}×${d.h}` : '?';
-  console.log('| pid | 썸네일 | 카드 | 크기 | 전신 | 크기 |');
+  console.log('| id | 카드 | 크기 | 전신 | 크기 | 얼굴 |');
   console.log('|---|---|---|---|---|---|');
   for (const e of entries)
-    console.log(`| ${e.pid} | ${kb(e.thumb)} | ${kb(e.card)} | ${dim(e.dim.card)} | ${kb(e.hero)} | ${dim(e.dim.hero)} |`);
+    console.log(`| ${e.pid} | ${kb(e.card)} | ${dim(e.dim.card)} | ${kb(e.hero)} | ${dim(e.dim.hero)} | ${(art[e.pid].f || []).join(',')} |`);
   const mb = bytes / 1024 / 1024;
-  console.log(`\n${entries.length}명 · 합계 ${mb.toFixed(2)}MB / 예산 ${ART_BUDGET_MB}MB` +
-    (mb > ART_BUDGET_MB ? ' — **초과**' : ''));
-
-  // 42명 전원으로 늘렸을 때의 추정 — 지금 넣은 것의 1인당 평균 × 42.
-  // 예산을 넘길지는 3명쯤 넣었을 때 이미 알 수 있어야 한다(다 만들고 나서 알면 늦다).
-  const per = bytes / entries.length;
-  const proj = per * 42 / 1024 / 1024;
-  console.log(`1인당 평균 ${(per / 1024).toFixed(0)}KB → **42명이면 약 ${proj.toFixed(1)}MB**` +
-    (proj > ART_BUDGET_MB
-      ? ` — 예산 ${ART_BUDGET_MB}MB 초과. 전신을 SR 이상만 넣거나 품질을 낮춰야 한다`
-      : ` (예산 ${ART_BUDGET_MB}MB 안)`));
+  const launch = entries.filter(e => /^p\d/.test(e.pid)), pool = entries.filter(e => /^rk/.test(e.pid));
+  const sum = list => list.reduce((a, e) => a + e.card + e.hero, 0) / 1024 / 1024;
+  console.log(`\n선수 ${launch.length}명 ${sum(launch).toFixed(2)}MB · 신인 풀 ${pool.length}종 ${sum(pool).toFixed(2)}MB` +
+    ` · 합계 ${mb.toFixed(2)}MB / 예산 ${ART_BUDGET_MB}MB` + (mb > ART_BUDGET_MB ? ' — **초과**' : ''));
   if (problems.length) {
     console.log(`\n## 규격 확인 — ${problems.length}건\n`);
     for (const p of problems) console.log(`- ${p}`);

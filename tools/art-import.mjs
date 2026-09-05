@@ -30,7 +30,7 @@ const VALUED = ['face', 'quality', 'cardw', 'headfrac', 'kind'];
 const [pid, src] = ARGV.filter((a, i) => !a.startsWith('--') && !VALUED.includes((ARGV[i - 1] || '').replace('--', '')));
 
 if (!pid || !src) {
-  console.error('사용법: node tools/art-import.mjs <pid> <원본> [--kind card|hero] [--face cx,cy,h] [--headfrac 0.20] [--dry]');
+  console.error('사용법: node tools/art-import.mjs <pid> <원본> [--kind card|hero] [--face cx,cy,h] [--headfrac 0.20] [--cardw 900] [--dry]');
   process.exit(1);
 }
 if (!fs.existsSync(src)) { console.error(`원본을 찾을 수 없습니다: ${src}`); process.exit(1); }
@@ -47,10 +47,13 @@ if (KIND !== 'card' && KIND !== 'hero') { console.error("--kind 는 card 또는 
 const CARD_W = +opt('cardw', KIND === 'hero' ? 1000 : 900);
 /** 카드 높이에서 머리가 차지할 비율. 주면 그 크기가 되도록 잘라 낸다(4.2 는 0.18~0.23). */
 const HEADFRAC = opt('headfrac', null) ? +opt('headfrac') : null;
+/** (참고용) 썸네일 변 — 파일은 더 이상 쓰지 않는다. 원형 초상은 앱이 카드에서 오린다(art-pipeline 15.2). */
 const THUMB_W = 512;
 /** 용량 상한 — 42명 × (카드+썸네일)이 인라인 예산 11MB 안에 들어야 한다. */
 const BUDGET = { card: 200 * 1024, thumb: 60 * 1024, hero: 160 * 1024 };
-const QUALITIES = [0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55];
+/** 시작 품질 — 예산을 넘기면 한 단계씩 내린다. `--quality 0.8` 로 시작점을 낮출 수 있다(신인 풀은 0.8·600px, art-pipeline 15.3). */
+const Q0 = +opt('quality', 0.85);
+const QUALITIES = [0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55].filter(q => q <= Q0 + 1e-9);
 
 // ── 원본 크기 (PNG/WebP 헤더에서 직접 읽는다)
 const buf = fs.readFileSync(src);
@@ -176,7 +179,9 @@ if (KIND === 'hero') {
     await render(card, CARD_W, Math.round(CARD_W * 4 / 3), BUDGET.hero, '전신 '));
 } else {
   fs.writeFileSync(path.join(dir, `${pid}_card.webp`), await render(card, CARD_W, Math.round(CARD_W * 4 / 3), BUDGET.card, '카드 '));
-  fs.writeFileSync(path.join(dir, `${pid}_thumb.webp`), await render(thumb, THUMB_W, THUMB_W, BUDGET.thumb, '썸네일'));
+  // 썸네일 파일은 만들지 않는다 — 앱과 대조 시트가 meta.json 의 얼굴 상자로 카드에서 직접 오린다(15.2).
+  // 옛 썸네일이 남아 있으면 지운다(빌드가 더 이상 읽지 않으니 남겨 두면 헷갈린다).
+  fs.rmSync(path.join(dir, `${pid}_thumb.webp`), { force: true });
 }
 await browser.close();
 
@@ -197,5 +202,5 @@ meta.source = { file: path.basename(src), size: `${SW}x${SH}`, crop: card, impor
 delete meta._note;
 fs.writeFileSync(path.join(dir, `${pid}_meta.json`), JSON.stringify(meta, null, 2) + '\n');
 
-console.log(`\n→ art/04_export/${pid}/ 에 카드·썸네일·meta.json 을 넣었습니다.`);
+console.log(`\n→ art/04_export/${pid}/ 에 카드·meta.json 을 넣었습니다(초상은 카드에서 오린다).`);
 console.log(`   확인: node web/art-pack.mjs · 빌드: node web/build.mjs`);

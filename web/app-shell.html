@@ -496,15 +496,38 @@ function personG(p, uid){
  * 그림이 들어온 카드는 실제 이미지를, 아직 없는 카드는 아래의 SVG 플레이스홀더를 그린다.
  * 둘은 **같은 상자·같은 비율**이라 아트가 한 명씩 들어와도 레이아웃이 흔들리지 않는다.
  * 신인 세대 카드(런타임 생성)는 당연히 아트가 없고, 그때도 이 경로로 자연스럽게 SVG 로 떨어진다. */
-function artOf(p, kind){
+function artEntry(p){
   var A = window.BLOOM_ART;
   if (!A) return null;
   var id = p.cardId || p.id || '';
   var e = A[id];
-  return (e && e[kind]) || null;
+  if (!e) {                              // 신인 세대 카드 — 외형 풀(rk*)의 그림을 가리킨다(art-pipeline 15)
+    var look = p.look;
+    if (!look) { try { var c = E.cardById(G, id); look = c && c.look; } catch(err){} }
+    if (look) e = A[look];
+  }
+  return e || null;
 }
+function artOf(p, kind){ var e = artEntry(p); return (e && e[kind]) || null; }
 function artImg(src, alt){
   return '<img src="'+src+'" alt="'+(alt||'').replace(/"/g,'')+'" loading="lazy" decoding="async">';
+}
+/**
+ * 원형 초상 = 카드에서 얼굴을 오린 것. 별도 썸네일 파일이 없다(art-pipeline 15.2).
+ * 얼굴 상자 f = [cx, cy, h](카드 비율) → 4.3 규격대로 2.2h 정사각형을 (cx, cy+0.15h) 중심으로 잡는다.
+ * 컨테이너가 정사각형이라 margin % 는 전부 컨테이너 폭 기준이다 — 세로 오프셋에는 카드 비율(4/3)이 곱해진다.
+ */
+function artThumb(p, alt){
+  var e = artEntry(p);
+  if (!e || !e.card) return null;
+  var f = e.f || [0.5, 0.30, 0.20];
+  var side = 2.2 * f[2];                       // 정사각형 변(카드 높이 비율)
+  var sw = side * 4 / 3;                       // 같은 변을 카드 폭 비율로
+  var x = Math.max(0, Math.min(1 - sw, f[0] - sw / 2));
+  var y = Math.max(0, Math.min(1 - side, f[1] + 0.15 * f[2] - side / 2));
+  return '<img src="'+e.card+'" alt="'+(alt||'').replace(/"/g,'')+'" loading="lazy" decoding="async" '+
+    'style="width:'+(100 / sw).toFixed(2)+'%;height:auto;max-width:none;'+
+    'margin-left:-'+(100 * x / sw).toFixed(2)+'%;margin-top:-'+(100 * y * 4 / 3 / sw).toFixed(2)+'%">';
 }
 
 /** 전신 일러스트 배너 — 선수 상세 화면 상단. 없으면 null 을 돌려주고 기존 레이아웃으로 떨어진다. */
@@ -521,8 +544,8 @@ function heroBanner(p, name){
 
 /** 원형 흉상 초상. */
 function portraitSvg(p, size){
-  var real = artOf(p, 'thumb');
-  if (real) return artImg(real, p.name || '');
+  var real = artThumb(p, p.name || '');
+  if (real) return real;
   var uid = 'p' + hashId((p.cardId||p.id||'') + (p.instanceId||'')).toString(36);
   var g = personG(p, uid);
   return '<svg viewBox="0 0 100 100" width="'+size+'" height="'+size+'" aria-hidden="true">'+
@@ -850,7 +873,7 @@ function scoutResult(r){
     '<div class="spread"><div class="pname" style="font-size:18px">'+esc(c.name)+'</div>'+
     '<span class="pill rar-'+r.rarity+'">'+r.rarity+'</span></div>'+
     '<div class="pmeta">'+POSK[c.pos]+' · '+esc(club?club.name:'')+'<br>#'+c.jersey+' · '+c.heightCm+'cm · '+cardAge(c)+'세'+
-      (E.isRookieCard && E.isRookieCard(G, c.id) ? ' <span class="agb" style="color:var(--good)">신인</span>' : '')+'</div>'+
+      (E.isRookieCard && E.isRookieCard(E.cardById(G, c.id)) ? ' <span class="agb" style="color:var(--good)">신인</span>' : '')   /* isRookieCard(card) — (state, id) 로 부르면 항상 false 라 배지가 안 붙었다 */+'</div>'+
     '</div></div>'+
     (c.skillName?'<div class="tiny" style="margin-top:6px;color:var(--ssr)">고유 스킬 · '+esc(c.skillName)+'</div>':'')+
     '<div class="stats">'+c.stats.map(function(v,i){

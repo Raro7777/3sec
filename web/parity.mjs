@@ -577,7 +577,13 @@ const SEC8 = '신인 세대 생성기 (docs/rookies.md)';
     G.rookieCards(mk(1, 3), 3).length === 0 && G.activeCardPool(mk(1, 3)).length === G.LAUNCH_CARDS.length);
 
   // --- 8.2 유일성 (world.md 6.1 · 6.2 · art-style-guide 1.3) ---
+  // 외형은 미리 그린 풀(ROOKIE_LOOKS, docs/art-pipeline.md 15절)에서 고르므로 **풀이 활동 신인 수를 덮는 동안**
+  // 자유 조합 때의 규칙(조합 유일·구단 내 컬러 유일·파스텔 상한)이 그대로 성립해야 하고, 풀이 바닥난 뒤에는
+  // "같은 구단 안에서는 같은 그림이 없다"만 남는다. 풀 크기 60 은 시즌 15(장기 목표 지평)까지를 덮는다.
+  const { ROOKIE_LOOKS } = await import('./engine/rookies.js');
+  const LOOK_IDS = new Set(ROOKIE_LOOKS.map(l => l.id));
   let dupName = 0, dupSurnameInClub = 0, dupHair = 0, dupColorInClub = 0, vividOver = 0, dupJersey = 0;
+  let noLook = 0, dupLookInClub = 0, poolOutAt = Infinity, poolSeasons = 0;
   for (const seed of [1, 7, 42, 20260904]) {
     const g = mk(seed, HORIZON);
     const jerseyEver = new Map();          // 구단별 등번호는 역대 전체에서 유일해야 한다
@@ -590,31 +596,43 @@ const SEC8 = '신인 세대 생성기 (docs/rookies.md)';
     for (let n = 1; n <= HORIZON; n++) {   // 나머지는 "그 시즌에 살아 있는 카드" 기준
       g.season = n;
       const active = G.activeCardPool(g);
+      const rookiesActive = active.filter(c => G.isRookieCard(c)).length;
+      const poolOk = rookiesActive <= ROOKIE_LOOKS.length;    // 풀이 덮는 동안만 자유 조합 규칙을 요구한다
+      if (!poolOk && n < poolOutAt) poolOutAt = n;
+      if (poolOk) poolSeasons++;
       const names = new Set(), hair = new Set();
-      const clubSur = new Map(), clubColor = new Map(), clubVivid = new Map();
+      const clubSur = new Map(), clubColor = new Map(), clubVivid = new Map(), clubLook = new Map();
       for (const c of active) {
         if (names.has(c.name)) dupName++;
         names.add(c.name);
         const a = c.appearance || {};
         const combo = a.hairStyle + '|' + a.hairColor;
-        if (hair.has(combo)) dupHair++;
+        if (poolOk && hair.has(combo)) dupHair++;
         hair.add(combo);
         const sur = c.name.slice(0, 1);
-        if (!clubSur.has(c.teamId)) { clubSur.set(c.teamId, new Set()); clubColor.set(c.teamId, new Set()); clubVivid.set(c.teamId, 0); }
+        if (!clubSur.has(c.teamId)) { clubSur.set(c.teamId, new Set()); clubColor.set(c.teamId, new Set()); clubVivid.set(c.teamId, 0); clubLook.set(c.teamId, new Set()); }
         if (clubSur.get(c.teamId).has(sur)) dupSurnameInClub++;
         clubSur.get(c.teamId).add(sur);
-        if (clubColor.get(c.teamId).has(a.hairColor)) dupColorInClub++;
+        if (poolOk && clubColor.get(c.teamId).has(a.hairColor)) dupColorInClub++;
         clubColor.get(c.teamId).add(a.hairColor);
         if (HAIR_COLORS_VIVID.indexOf(a.hairColor) >= 0) clubVivid.set(c.teamId, clubVivid.get(c.teamId) + 1);
+        if (G.isRookieCard(c)) {
+          if (!c.look || !LOOK_IDS.has(c.look)) noLook++;
+          else { if (clubLook.get(c.teamId).has(c.look)) dupLookInClub++; clubLook.get(c.teamId).add(c.look); }
+        }
       }
-      for (const v of clubVivid.values()) if (v > G.ROOKIES.vividPerClub) vividOver++;
+      if (poolOk) for (const v of clubVivid.values()) if (v > G.ROOKIES.vividPerClub) vividOver++;
     }
   }
   must(SEC8, '8.2 이름 중복 0 (활성 카드 전체 · 시드 4종 × 20시즌)', dupName === 0, `중복 ${dupName}`);
   must(SEC8, '8.2 구단 내 성 중복 0', dupSurnameInClub === 0, `중복 ${dupSurnameInClub}`);
-  must(SEC8, '8.2 헤어스타일+컬러 조합 중복 0', dupHair === 0, `중복 ${dupHair}`);
-  must(SEC8, '8.2 구단 내 헤어 컬러 중복 0', dupColorInClub === 0, `중복 ${dupColorInClub}`);
-  must(SEC8, `8.2 파스텔·원색 헤어 구단당 ≤ ${G.ROOKIES.vividPerClub}`, vividOver === 0, `초과 ${vividOver}`);
+  must(SEC8, `8.2 헤어스타일+컬러 조합 중복 0 (외형 풀 ${ROOKIE_LOOKS.length}종이 덮는 시즌)`, dupHair === 0, `중복 ${dupHair}`);
+  must(SEC8, '8.2 구단 내 헤어 컬러 중복 0 (같은 범위)', dupColorInClub === 0, `중복 ${dupColorInClub}`);
+  must(SEC8, `8.2 파스텔·원색 헤어 구단당 ≤ ${G.ROOKIES.vividPerClub} (같은 범위)`, vividOver === 0, `초과 ${vividOver}`);
+  must(SEC8, '8.2 신인 전원이 외형 풀의 그림(look)을 가리킨다', noLook === 0, `없음 ${noLook}`);
+  must(SEC8, '8.2 같은 구단 안에 같은 그림 0 (풀 소진 뒤에도 · 20시즌)', dupLookInClub === 0, `중복 ${dupLookInClub}`);
+  must(SEC8, '8.2 외형 풀이 시즌 15(장기 목표 지평)까지 활동 신인을 덮는다', poolOutAt > 15, `소진 시즌 ${poolOutAt === Infinity ? '없음' : 'S' + poolOutAt}`);
+  info(SEC8, '8.2 외형 풀 소진 시점 (시드 4종 × 20시즌)', poolOutAt === Infinity ? '20시즌 안에 소진 없음' : `S${poolOutAt} 부터 다른 구단끼리 같은 그림이 생긴다`);
   must(SEC8, '8.2 구단 내 등번호 중복 0 (역대 전체)', dupJersey === 0, `중복 ${dupJersey}`);
 
   // --- 8.3 스탯·신장·나이 범위 (world.md 6.3 체크리스트) ---

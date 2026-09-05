@@ -122,6 +122,97 @@ export const EYE_COLORS = [
   '그린', '그레이', '브라운', '라이트 블루', '아이스 블루', '다크 그린', '마젠타', '오렌지 앰버',
   '레드 브라운', '실버 그레이', '딥 그린', '블루',
 ];
+/**
+ * 신인 외형 풀 — **그림이 있는 외형만** 쓴다(docs/art-pipeline.md 15절).
+ *
+ * 왜 풀인가: 신인은 런타임 생성이라 저장소에 pid 가 없고, 웹 프로토타입은 단일 HTML 이라 그림을 인라인해야
+ * 한다. 외형을 자유 조합하면 그림이 있을 수 없다. 그래서 (헤어스타일, 헤어 컬러, 눈 색, 피부톤) 조합을
+ * 72종으로 미리 정하고 각각 카드를 만들어 둔다(썸네일은 카드에서 오린다). 신인 카드는 이 중 하나를 `card.look` 으로 가리킨다.
+ *
+ * 규칙(world.md 6.2 · art-style-guide 1.3)은 그대로다 — 조합은 활동 중인 선수 사이에서 유일, 구단 안 헤어 컬러
+ * 중복 금지, 파스텔·원색은 구단당 vividPerClub 명. 72 는 시즌 15 의 활동 신인 수(59~60)를 덮고도 구단별 컬러·파스텔 규칙을 지킬 여유가 있는 크기다
+ * (60 으로는 시즌 13 부터 규칙이 깨졌다 — parity 8.2). 풀이 다 차면(시즌 18+) 다른 구단끼리만 겹친다.
+ * 런칭 42명의 (스타일|컬러) 조합과는 겹치지 않는다 — tools/art-prompts.mjs --check 가 검사한다.
+ *
+ * 그림은 구단 유니폼이 아니라 **중립 연습복(회색)** 이다. 풀 하나가 6구단을 다 받아야 하기 때문이다.
+ */
+export const ROOKIE_LOOKS = [
+  { id: 'rk01', hairStyle: '롱 하이 포니테일',        hairColor: '블랙',          eyeColor: '그레이 블루', skin: 'A' },
+  { id: 'rk02', hairStyle: '픽시 숏컷',               hairColor: '다크 브라운',   eyeColor: '브라운',      skin: 'A' },
+  { id: 'rk03', hairStyle: '로우 포니테일',           hairColor: '민트 그린',     eyeColor: '실버 그레이', skin: 'B' },
+  { id: 'rk04', hairStyle: '숏 보브',                 hairColor: '체스트넛 브라운', eyeColor: '다크 브라운', skin: 'A' },
+  { id: 'rk05', hairStyle: '일자 뱅 단발',            hairColor: '라이트 브라운', eyeColor: '라이트 블루', skin: 'A' },
+  { id: 'rk06', hairStyle: '트윈 번',                 hairColor: '애쉬 브라운',   eyeColor: '딥 그린',     skin: 'C' },
+  { id: 'rk07', hairStyle: '사이드 브레이드',         hairColor: '애쉬 그레이',   eyeColor: '골드',        skin: 'A' },
+  { id: 'rk08', hairStyle: '안쪽 컬 숏 보브',         hairColor: '네이비 블루',   eyeColor: '아이스 블루', skin: 'B' },
+  { id: 'rk09', hairStyle: '롱 싱글 브레이드',        hairColor: '차콜 그레이',   eyeColor: '블루',        skin: 'A' },
+  { id: 'rk10', hairStyle: '하프업 미디엄',           hairColor: '로즈 브라운',   eyeColor: '앰버',        skin: 'B' },
+  { id: 'rk11', hairStyle: '롱 스트레이트',           hairColor: '밀크티 베이지', eyeColor: '다크 그린',   skin: 'A' },
+  { id: 'rk12', hairStyle: '로우 트윈테일',           hairColor: '골든 브라운',   eyeColor: '바이올렛',    skin: 'A' },
+  { id: 'rk13', hairStyle: '울프컷 미디엄',           hairColor: '화이트',        eyeColor: '딥 블루',     skin: 'B' },
+  { id: 'rk14', hairStyle: '픽시 숏컷 정돈형',        hairColor: '허니 블론드',   eyeColor: '마젠타',      skin: 'A' },
+  { id: 'rk15', hairStyle: '사이드 포니테일 미디엄',  hairColor: '오번',          eyeColor: '다크 그레이', skin: 'A' },
+  { id: 'rk16', hairStyle: '하이 번',                 hairColor: '플래티넘 블론드', eyeColor: '그린',        skin: 'C' },
+  { id: 'rk17', hairStyle: '헤어밴드 롱 스트레이트',  hairColor: '와인 레드',     eyeColor: '오렌지 앰버', skin: 'A' },
+  { id: 'rk18', hairStyle: '시스루 뱅 단발',          hairColor: '화이트 실버',   eyeColor: '헤이즐',      skin: 'B' },
+  { id: 'rk19', hairStyle: '미디엄 웨이브',           hairColor: '애쉬 그레이',   eyeColor: '그레이',      skin: 'A' },
+  { id: 'rk20', hairStyle: '프렌치 브레이드',         hairColor: '차콜 그레이',   eyeColor: '레드 브라운', skin: 'B' },
+  { id: 'rk21', hairStyle: '짧은 트윈테일',           hairColor: '로즈 브라운',   eyeColor: '그레이 블루', skin: 'A' },
+  { id: 'rk22', hairStyle: '사이드 뱅 레이어드 미디엄', hairColor: '밀크티 베이지', eyeColor: '브라운',      skin: 'A' },
+  { id: 'rk23', hairStyle: '크롭 숏컷',               hairColor: '코랄 핑크',     eyeColor: '실버 그레이', skin: 'B' },
+  { id: 'rk24', hairStyle: '미디엄 하이 포니테일',    hairColor: '골든 브라운',   eyeColor: '다크 브라운', skin: 'A' },
+  { id: 'rk25', hairStyle: '롱 웨이브',               hairColor: '허니 블론드',   eyeColor: '라이트 블루', skin: 'A' },
+  { id: 'rk26', hairStyle: '턱선 단발 보브',          hairColor: '오번',          eyeColor: '딥 그린',     skin: 'C' },
+  { id: 'rk27', hairStyle: '트윈 브레이드',           hairColor: '플래티넘 블론드', eyeColor: '골드',        skin: 'A' },
+  { id: 'rk28', hairStyle: '사이드 핀 픽시 숏컷',     hairColor: '크림슨 레드',   eyeColor: '아이스 블루', skin: 'B' },
+  { id: 'rk29', hairStyle: '히메컷 롱 스트레이트',    hairColor: '와인 레드',     eyeColor: '블루',        skin: 'A' },
+  { id: 'rk30', hairStyle: '롱 웨이브 로우 포니테일', hairColor: '블랙',          eyeColor: '앰버',        skin: 'B' },
+  { id: 'rk31', hairStyle: '롱 웨이브 로우 포니테일', hairColor: '다크 브라운',   eyeColor: '다크 그린',   skin: 'A' },
+  { id: 'rk32', hairStyle: '커튼 뱅 미디엄 스트레이트', hairColor: '체스트넛 브라운', eyeColor: '바이올렛',    skin: 'A' },
+  { id: 'rk33', hairStyle: '귀 뒤로 넘긴 단발 보브',  hairColor: '선셋 오렌지',   eyeColor: '딥 블루',     skin: 'B' },
+  { id: 'rk34', hairStyle: '짧은 사이드 포니테일',    hairColor: '라이트 브라운', eyeColor: '마젠타',      skin: 'A' },
+  { id: 'rk35', hairStyle: '컬리 숏',                 hairColor: '애쉬 브라운',   eyeColor: '다크 그레이', skin: 'A' },
+  { id: 'rk36', hairStyle: '레이어드 숏 보브',        hairColor: '허니 블론드',   eyeColor: '그린',        skin: 'C' },
+  { id: 'rk37', hairStyle: '스포츠 하이 포니테일',    hairColor: '오번',          eyeColor: '오렌지 앰버', skin: 'A' },
+  { id: 'rk38', hairStyle: '롱 웨이브 하프업',        hairColor: '라벤더 퍼플',   eyeColor: '헤이즐',      skin: 'B' },
+  { id: 'rk39', hairStyle: '웨이비 보브',             hairColor: '플래티넘 블론드', eyeColor: '그레이',      skin: 'A' },
+  { id: 'rk40', hairStyle: '풀어 내린 롱 스트레이트', hairColor: '와인 레드',     eyeColor: '레드 브라운', skin: 'B' },
+  { id: 'rk41', hairStyle: '로우 번',                 hairColor: '블랙',          eyeColor: '그레이 블루', skin: 'A' },
+  { id: 'rk42', hairStyle: '컬리 보브',               hairColor: '다크 브라운',   eyeColor: '브라운',      skin: 'A' },
+  { id: 'rk43', hairStyle: '안쪽 컬 숏 보브',         hairColor: '스카이 블루',   eyeColor: '실버 그레이', skin: 'B' },
+  { id: 'rk44', hairStyle: '롱 싱글 브레이드',        hairColor: '체스트넛 브라운', eyeColor: '다크 브라운', skin: 'A' },
+  { id: 'rk45', hairStyle: '하프업 미디엄',           hairColor: '라이트 브라운', eyeColor: '라이트 블루', skin: 'A' },
+  { id: 'rk46', hairStyle: '롱 스트레이트',           hairColor: '애쉬 브라운',   eyeColor: '딥 그린',     skin: 'C' },
+  { id: 'rk47', hairStyle: '로우 트윈테일',           hairColor: '애쉬 그레이',   eyeColor: '골드',        skin: 'A' },
+  { id: 'rk48', hairStyle: '울프컷 미디엄',           hairColor: '피치 핑크',     eyeColor: '아이스 블루', skin: 'B' },
+  { id: 'rk49', hairStyle: '픽시 숏컷 정돈형',        hairColor: '차콜 그레이',   eyeColor: '블루',        skin: 'A' },
+  { id: 'rk50', hairStyle: '사이드 포니테일 미디엄',  hairColor: '로즈 브라운',   eyeColor: '앰버',        skin: 'B' },
+  { id: 'rk51', hairStyle: '하이 번',                 hairColor: '밀크티 베이지', eyeColor: '다크 그린',   skin: 'A' },
+  { id: 'rk52', hairStyle: '헤어밴드 롱 스트레이트',  hairColor: '골든 브라운',   eyeColor: '바이올렛',    skin: 'A' },
+  { id: 'rk53', hairStyle: '시스루 뱅 단발',          hairColor: '민트 그린',     eyeColor: '딥 블루',     skin: 'B' },
+  { id: 'rk54', hairStyle: '미디엄 웨이브',           hairColor: '다크 브라운',   eyeColor: '마젠타',      skin: 'A' },
+  { id: 'rk55', hairStyle: '프렌치 브레이드',         hairColor: '체스트넛 브라운', eyeColor: '다크 그레이', skin: 'A' },
+  { id: 'rk56', hairStyle: '짧은 트윈테일',           hairColor: '라이트 브라운', eyeColor: '그린',        skin: 'C' },
+  { id: 'rk57', hairStyle: '사이드 뱅 레이어드 미디엄', hairColor: '애쉬 브라운',   eyeColor: '오렌지 앰버', skin: 'A' },
+  { id: 'rk58', hairStyle: '크롭 숏컷',               hairColor: '네이비 블루',   eyeColor: '헤이즐',      skin: 'B' },
+  { id: 'rk59', hairStyle: '미디엄 하이 포니테일',    hairColor: '애쉬 그레이',   eyeColor: '그레이',      skin: 'A' },
+  { id: 'rk60', hairStyle: '롱 웨이브',               hairColor: '차콜 그레이',   eyeColor: '레드 브라운', skin: 'B' },
+  { id: 'rk61', hairStyle: '턱선 단발 보브',          hairColor: '로즈 브라운',   eyeColor: '그레이 블루', skin: 'A' },
+  { id: 'rk62', hairStyle: '트윈 브레이드',           hairColor: '밀크티 베이지', eyeColor: '브라운',      skin: 'A' },
+  { id: 'rk63', hairStyle: '사이드 핀 픽시 숏컷',     hairColor: '화이트',        eyeColor: '실버 그레이', skin: 'B' },
+  { id: 'rk64', hairStyle: '히메컷 롱 스트레이트',    hairColor: '골든 브라운',   eyeColor: '다크 브라운', skin: 'A' },
+  { id: 'rk65', hairStyle: '아시메트릭 보브',         hairColor: '허니 블론드',   eyeColor: '라이트 블루', skin: 'A' },
+  { id: 'rk66', hairStyle: '롱 웨이브 로우 포니테일', hairColor: '오번',          eyeColor: '딥 그린',     skin: 'C' },
+  { id: 'rk67', hairStyle: '커튼 뱅 미디엄 스트레이트', hairColor: '플래티넘 블론드', eyeColor: '골드',        skin: 'A' },
+  { id: 'rk68', hairStyle: '귀 뒤로 넘긴 단발 보브',  hairColor: '화이트 실버',   eyeColor: '아이스 블루', skin: 'B' },
+  { id: 'rk69', hairStyle: '짧은 사이드 포니테일',    hairColor: '와인 레드',     eyeColor: '블루',        skin: 'A' },
+  { id: 'rk70', hairStyle: '컬리 숏',                 hairColor: '블랙',          eyeColor: '앰버',        skin: 'B' },
+  { id: 'rk71', hairStyle: '레이어드 숏 보브',        hairColor: '차콜 그레이',   eyeColor: '다크 그린',   skin: 'A' },
+  { id: 'rk72', hairStyle: '스포츠 하이 포니테일',    hairColor: '로즈 브라운',   eyeColor: '바이올렛',    skin: 'A' },
+];
+const LOOK_BY_ID = new Map(ROOKIE_LOOKS.map(l => [l.id, l]));
+const isVivid = c => HAIR_COLORS_VIVID.indexOf(c) >= 0;
+
 /** 체형 — 포지션별 신장 경향이 실루엣에 남게 한다(GDD 9.1 3중 구분). */
 const BODY_TYPES = [
   /* S  */['표준 슬림', '표준 균형형', '표준 애슬레틱', '표준'],
@@ -275,34 +366,33 @@ function makeRookie(W, seed, spec) {
   W.usedGiven.add(given);
   clubSurnames.add(surname);
 
-  // ---- 외형: hairStyle+hairColor 조합은 전체 유일, 구단 안에서 헤어 컬러 중복 금지,
-  //      파스텔·원색은 구단당 vividPerClub 명까지(world.md 6.2 · art-style-guide 1.3)
+  // ---- 외형: 미리 만든 외형 풀(ROOKIE_LOOKS)에서 고른다 — 그림이 있는 외형만 쓴다.
+  //      규칙은 자유 조합 때와 같다: hairStyle+hairColor 는 활동 중인 선수 사이에서 유일, 구단 안 헤어 컬러
+  //      중복 금지, 파스텔·원색은 구단당 vividPerClub 명까지(world.md 6.2 · art-style-guide 1.3).
+  //      단계별로 조건을 풀어 가며 고른다 — 풀이 다 차면(활동 신인 > 풀 크기) 다른 구단과 겹치는 것만 허용한다.
+  //      이 블록은 rngLook 만 쓴다. 뽑는 횟수가 달라져도 능력치 스트림(rng)에는 닿지 않는다.
   const clubColors = W.clubHairColors.get(clubId);
+  const clubLooks = W.clubLooks.get(clubId);
   const vividLeft = ROOKIES.vividPerClub - (W.clubVivid.get(clubId) || 0);
-  const colorPool = [];
-  for (const c of HAIR_COLORS_NATURAL) if (!clubColors.has(c)) colorPool.push(c);
-  if (vividLeft > 0) for (const c of HAIR_COLORS_VIVID) if (!clubColors.has(c)) colorPool.push(c);
-  const colors = colorPool.length > 0 ? colorPool : HAIR_COLORS_NATURAL;
-  let hairColor = colors[rngLook.nextInt(colors.length)];
-  let hairStyle = null;
-  for (let tries = 0; tries < 96 && hairStyle === null; tries++) {
-    const st = pickUnused(rngLook, HAIR_STYLES, W.usedStyles);
-    if (!W.usedHair.has(st + '|' + hairColor)) hairStyle = st;
-    else if (tries % 24 === 23) hairColor = colors[rngLook.nextInt(colors.length)];   // 색을 바꿔 다시 시도
+  const tiers = [
+    l => !W.usedLooks.has(l.id) && !W.usedStyles.has(l.hairStyle) && !clubColors.has(l.hairColor) && (vividLeft > 0 || !isVivid(l.hairColor)),
+    l => !W.usedLooks.has(l.id) && !clubColors.has(l.hairColor) && (vividLeft > 0 || !isVivid(l.hairColor)),
+    l => !W.usedLooks.has(l.id),
+    l => !clubLooks.has(l.id),
+    () => true,
+  ];
+  let look = null;
+  for (const ok of tiers) {
+    const cand = ROOKIE_LOOKS.filter(ok);
+    if (cand.length > 0) { look = cand[rngLook.nextInt(cand.length)]; break; }
   }
-  if (hairStyle === null) {           // 이론상 도달하지 않는다(42 스타일 × 14 색) — 그래도 남은 조합을 훑는다
-    outer:
-    for (const st of HAIR_STYLES) {
-      for (const c of colors) {
-        if (!W.usedHair.has(st + '|' + c)) { hairStyle = st; hairColor = c; break outer; }
-      }
-    }
-    if (hairStyle === null) hairStyle = HAIR_STYLES[rngLook.nextInt(HAIR_STYLES.length)];
-  }
+  const hairStyle = look.hairStyle, hairColor = look.hairColor;
   W.usedHair.add(hairStyle + '|' + hairColor);
   W.usedStyles.add(hairStyle);
+  W.usedLooks.add(look.id);
+  clubLooks.add(look.id);
   clubColors.add(hairColor);
-  if (HAIR_COLORS_VIVID.indexOf(hairColor) >= 0) W.clubVivid.set(clubId, (W.clubVivid.get(clubId) || 0) + 1);
+  if (isVivid(hairColor)) W.clubVivid.set(clubId, (W.clubVivid.get(clubId) || 0) + 1);
 
   // ---- 스탯: (희귀도 × 포지션) 런칭 평균 프로파일 + 노이즈 → 평균을 런칭 평균 아래로 내려 고정
   const prof = PROFILE[rarity][pos], dprof = POT_DELTA[rarity][pos];
@@ -366,7 +456,8 @@ function makeRookie(W, seed, spec) {
     id: spec.id, name, teamId: clubId, pos, rarity, jersey, heightCm, age: baseAge,
     stats, potential, skillName, skillDesc,
   });
-  card.appearance = { hairStyle, hairColor, eyeColor: EYE_COLORS[rngLook.nextInt(EYE_COLORS.length)], bodyType: pickWeighted(rngLook, BODY_TYPES[pos]) };
+  card.appearance = { hairStyle, hairColor, eyeColor: look.eyeColor, bodyType: pickWeighted(rngLook, BODY_TYPES[pos]) };
+  card.look = look.id;          // 그림 키 — art/04_export/{look}/ (art-pipeline 15)
   card.personality = personality;
   card.isRookieCard = true;
   card.debutSeason = debutSeason;
@@ -399,8 +490,8 @@ export function createRookieWorld(cfg) {
     byId: new Map(),
     // 유일성 장부
     usedNames: new Set(), usedSurnames: new Set(), usedGiven: new Set(),
-    usedHair: new Set(), usedStyles: new Set(),
-    clubSurnames: new Map(), clubHairColors: new Map(), clubVivid: new Map(), clubJerseys: new Map(),
+    usedHair: new Set(), usedStyles: new Set(), usedLooks: new Set(),
+    clubSurnames: new Map(), clubHairColors: new Map(), clubVivid: new Map(), clubJerseys: new Map(), clubLooks: new Map(),
     skillHolders: new Map(),
     // 구단 슬롯 승계
     slots: new Map(),               // clubId -> [{ id(런칭 카드 id), pos, occupant, since }]
@@ -414,6 +505,7 @@ export function createRookieWorld(cfg) {
     W.clubHairColors.set(id, new Set());
     W.clubVivid.set(id, 0);
     W.clubJerseys.set(id, new Set());
+    W.clubLooks.set(id, new Set());
     W.stock.set(id, []);
     W.slots.set(id, []);
   }
@@ -473,7 +565,8 @@ const FALLBACK_PLAN = [POS.OH, POS.MB, POS.S, POS.OH, POS.MB, POS.OP, POS.L];
 function refreshActiveLedgers(W, season) {
   W.usedHair = new Set();
   W.usedStyles = new Set();
-  for (const id of W.clubIds) { W.clubHairColors.set(id, new Set()); W.clubVivid.set(id, 0); W.clubSurnames.set(id, new Set()); }
+  W.usedLooks = new Set();
+  for (const id of W.clubIds) { W.clubHairColors.set(id, new Set()); W.clubVivid.set(id, 0); W.clubSurnames.set(id, new Set()); W.clubLooks.set(id, new Set()); }
   const consider = (c, debut) => {
     if (debut > season) return;
     if (W.cfg.retired(c, season)) return;
@@ -487,6 +580,7 @@ function refreshActiveLedgers(W, season) {
         if (HAIR_COLORS_VIVID.indexOf(a.hairColor) >= 0) W.clubVivid.set(c.teamId, W.clubVivid.get(c.teamId) + 1);
       }
     }
+    if (c.look) { W.usedLooks.add(c.look); const cl = W.clubLooks.get(c.teamId); if (cl) cl.add(c.look); }
     const cs = W.clubSurnames.get(c.teamId);
     if (cs) cs.add(c.name.slice(0, 1));
   };
@@ -602,6 +696,6 @@ export function rookieSummary(W, season) {
   return list.map(c => ({
     id: c.id, name: c.name, clubId: c.teamId, pos: POS_CODES[c.pos], rarity: RARITIES[c.rarity],
     jersey: c.jersey, heightCm: c.heightCm, age: c.debutAge, skillName: c.skillName,
-    appearance: c.appearance,
+    appearance: c.appearance, look: c.look,
   }));
 }
