@@ -74,8 +74,15 @@ const gold0 = +(await text('#rGold'));
 check('지정 스카우트 비용이 표시된다', (await viewText()).includes('골드 ' + gold0) || /골드\s*\d/.test(await viewText()));
 await tap('[data-act="scout"]', 400);
 check('스카우트 결과가 나온다', (await viewText()).includes('이 선수 키우기'));
+check('스카우트 결과가 실물 카드로 공개된다', (await count('.rcard')) === 1);
 await tap('[data-act="scout10"]', 700);
 check('10연 결과가 나온다', (await viewText()).includes('10연속 결과'));
+check('10연 결과가 카드 10장 그리드다', (await count('.rgrid .rcard')) === 10);
+// 카드를 누르면 도감 상세, 돌아오면 10연 결과가 그대로
+await tap('[data-dex]', 400);
+check('10연 카드가 도감 상세로 열린다', (await count('.rcard')) === 1 && (await viewText()).includes('보유'));
+await tap('[data-act="dexback"]', 400);
+check('도감 상세에서 스카우트 결과로 돌아온다', (await viewText()).includes('10연속 결과'));
 
 // 지정 스카우트: 골드가 실제로 줄어드는가
 const goldBefore = +(await text('#rGold'));
@@ -109,6 +116,17 @@ check('졸업 능력치 부호가 올바르다', !(await viewText()).includes('+
 // --- 4. 로스터 · 선수 상세
 await tap('[data-tab="roster"]', 350);
 check('로스터에 졸업생이 있다', (await count('[data-detail]')) > 0);
+check('연습생 초상이 그림이다(신인 외형 풀)', (await count('.pcard .ava img')) >= 7, `img ${await count('.pcard .ava img')}`);
+// 도감 — 런칭 42명 전부, 미보유는 실루엣, 보유만 필터
+await tap('[data-go="album"]', 500);
+check('도감이 42장을 그린다', (await count('.dex .rcard')) === 42, `${await count('.dex .rcard')}장`);
+check('미보유 카드는 실루엣이다', (await count('.dex .rcard.off')) >= 20 && (await count('.dex .rcard:not(.off)')) >= 1);
+await tap('[data-dexown="1"]', 350);
+check('보유만 필터에 실루엣이 없다', (await count('.dex .rcard')) >= 1 && (await count('.dex .rcard.off')) === 0);
+await tap('[data-dexclub="t01"]', 300);
+check('구단 필터가 걸린다', (await count('.dex .rcard')) <= 7);
+await tap('[data-dexclub="all"]', 200); await tap('[data-dexown="1"]', 200);
+await tap('[data-go="roster"]', 350);
 await tap('[data-detail]', 400);
 const detail = await viewText();
 check('선수 상세가 열린다', detail.includes('OVR') && detail.includes('능력치'));
@@ -133,8 +151,23 @@ await page.waitForTimeout(300);
 check('경기 뷰어가 뜬다', inMatch);
 if (inMatch) {
   check('처음에는 건너뛰기가 잠겨 있다', (await count('[data-mv="skipset"]')) === 0);
+  check('경기 인트로에 양 팀 얼굴이 선다', (await count('#lvIntro.show .ava')) >= 12, `ava ${await count('#lvIntro.show .ava')}`);
+  await tap('#lvIntro', 200);
+  check('인트로를 탭하면 바로 시작한다', (await count('#lvIntro.show')) === 0);
   const sp = await page.$('[data-mv="speed"]');
-  if (sp) { await sp.click(); await page.waitForTimeout(100); await sp.click(); await page.waitForTimeout(120); }
+  if (sp) { await sp.click(); await page.waitForTimeout(120); }
+  // 2배속에서 컷인(득점·스킬)과 랠리 칩 초상이 한 번은 나와야 한다(4배속은 컷인을 띄우지 않는다)
+  let sawCut = false, sawFace = false;
+  for (let i = 0; i < 120; i++) {
+    await page.waitForTimeout(200);
+    if (!sawCut && (await count('#lvCut.show')) > 0) sawCut = true;
+    if (!sawFace && (await count('.tch .ava img')) > 0) sawFace = true;
+    if (sawCut && sawFace) break;
+    if ((await count('#lvCanvas')) === 0) break;
+  }
+  check('득점·스킬 컷인이 뜬다', sawCut);
+  check('랠리 칩에 초상이 붙는다', sawFace);
+  if (sp) { await sp.click(); await page.waitForTimeout(120); }
   check('속도를 4배까지 올릴 수 있다', (await text('[data-mv="speed"]')).includes('4'));
 
   let unlocked = false;

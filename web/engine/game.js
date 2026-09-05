@@ -13,7 +13,7 @@ import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
 import { SKILL_BY_NAME } from './skills.js';
 import {
-  ROOKIES, createRookieWorld, growRookieWorld, rookiesUpTo,
+  ROOKIES, ROOKIE_LOOKS, createRookieWorld, growRookieWorld, rookiesUpTo,
   slotOccupant, slotSince, genericSlotCount, rookieSummary,
 } from './rookies.js';
 import {
@@ -306,7 +306,8 @@ export function allCards(state, season) {
 export function cardById(state, id) {
   const c = CARD_BY_ID.get(id);
   if (c) return c;
-  const w = state && state._rookieWorld ? state._rookieWorld : (state ? rookieWorld(state) : null);
+  // 캐시가 있어도 state.season 까지 자라 있어야 한다 — 세이브 복원처럼 시즌이 뒤늦게 올라간 경우가 있다.
+  const w = state ? rookieWorld(state) : null;
   return w ? (w.byId.get(id) || null) : null;
 }
 /** 신인 생성기가 만든 카드인가. */
@@ -340,6 +341,28 @@ function hashString(s) {
 
 const FILLER_PLAN = [POS.S, POS.OH, POS.OH, POS.MB, POS.MB, POS.OP, POS.L]; // GameState.cs:73
 
+/** 시즌 n 까지 데뷔한 신인 카드가 쓰는 그림(look) 집합 — 생성 선수가 같은 얼굴을 피하게 한다. 결정적(시드·시즌만 의존). */
+function rookieLooksUpTo(world, season) {
+  const s = new Set();
+  for (const c of world.all) if (c.debutSeason <= season && c.look) s.add(c.look);
+  return s;
+}
+/**
+ * 생성 선수(연습생 · 결원 대체 · 즉시전력 영입 · 구단 자체 신인)에게 신인 외형 풀의 그림을 붙인다(docs/art-pipeline.md 16절).
+ * 스탯 RNG 를 소비하지 않고 id 해시로 고른다 → 스탯·세이브·캘리브레이션은 비트 단위로 그대로다.
+ * `taken` 안의 그림은 피하고(같은 묶음에서 같은 얼굴 방지), 풀이 모자라면 겹침을 허용한다.
+ */
+export function assignGeneratedLook(p, taken) {
+  const n = ROOKIE_LOOKS.length;
+  const k = hashString('look/' + p.id) % n;
+  for (let i = 0; i < n; i++) {
+    const id = ROOKIE_LOOKS[(k + i) % n].id;
+    if (!taken || !taken.has(id)) { p.look = id; if (taken) taken.add(id); return p; }
+  }
+  p.look = ROOKIE_LOOKS[k].id;
+  return p;
+}
+
 /**
  * 연습생 7명(N 카드 수준). 시드에서 항상 같은 결과가 나오므로 저장하지 않고 재생성한다. GameState.cs:71
  * league-and-economy.md A.5.3: 시즌마다 신규 세대로 교체. overall 44 → 시즌당 +1, 상한 48.
@@ -350,6 +373,8 @@ export function createFillers(state) {
   const rng = new Rng(season === 1 ? derivedSeed(state.seed, 0) : mixSeed(state.seed, 0x1F11, season));
   const overall = Math.min(ECONOMY.fillerCap, ECONOMY.fillerOverall + (season - 1) * ECONOMY.fillerPerSeason);
   const list = [];
+  // 얼굴: 그 시즌까지 데뷔한 신인 카드의 그림은 피한다(스카우트해 온 신인과 연습생이 같은 얼굴이 되지 않게).
+  const taken = season >= ROOKIES.firstSeason ? rookieLooksUpTo(rookieWorld(state, season), season) : new Set();
   for (let i = 0; i < FILLER_PLAN.length; i++) {
     const p = generatePlayer(rng, `${state.clubId}-t${String(i + 1).padStart(2, '0')}`, state.clubId, FILLER_PLAN[i], 90 + i, overall, 3.0);
     p.rarity = RARITY.N;
@@ -357,6 +382,7 @@ export function createFillers(state) {
     p.name = '연습생 ' + p.name;
     p.skillName = '';
     p.skillDesc = '';
+    assignGeneratedLook(p, taken);
     list.push(p);
   }
   return list;
@@ -979,6 +1005,7 @@ function instanceToPlayer(inst, teamId, season) {
     // 육성 힌트로 해금한 고유 스킬 레벨(0~3)이 그대로 경기 판정에 들어간다. docs/skills.md 3절
     skillLevel: inst.skillLevel | 0,
   });
+  p.cardId = inst.cardId;                  // 그림 키(카드 아트·초상) — 판정에는 쓰이지 않는다
   return agedPlayer(p, season, true);      // A.3.6 노화 — 전성기 이후 실효 스탯 하락
 }
 
@@ -1145,6 +1172,7 @@ export function clubTeamState(state, clubId, opts = {}) {
   // A.3.6.4 세대교체 승계표 — 슬롯(런칭 카드)마다 그 시즌의 점유자를 미리 정해 둔다(docs/rookies.md 4절).
   const world = rookieWorld(state, season);
   const roster = [];
+  const takenLooks = rookieLooksUpTo(world, season);   // 생성 선수의 얼굴 — 활동 신인·같은 구단끼리 겹치지 않게
   let gone = 0;
   for (const p of pool) {
     // 점유자: p 자신(현역) / 승계한 신인 카드 / null(교체 대상인데 붙일 신인이 없다)
@@ -1166,6 +1194,7 @@ export function clubTeamState(state, clubId, opts = {}) {
         sign.name = sign.name + ' (영입)';
         sign.isSubstitute = true;
         sign.isSigning = true;
+        assignGeneratedLook(sign, takenLooks);
         roster.push(sign);
         continue;
       }
@@ -1174,6 +1203,7 @@ export function clubTeamState(state, clubId, opts = {}) {
       sub.age = AGING.clubRecruitAge;
       sub.name = sub.name + ' (육성 선수)';
       sub.isSubstitute = true;
+      assignGeneratedLook(sub, takenLooks);
       roster.push(sub);
       continue;
     }
@@ -1204,6 +1234,7 @@ export function clubTeamState(state, clubId, opts = {}) {
         rec.rarity = RARITY.N;
         rec.age = AGING.clubRecruitAge;
         rec.name = rec.name + ' (신인)';
+        assignGeneratedLook(rec, takenLooks);
       }
       // 신인의 세기는 "떠난 선수의 사다리 OVR + clubRecruitOvrDelta" 로 맞춘다.
       // generatePlayer 는 포지션 표준 프로필이라 같은 스탯 평균이어도 포지션 가중 OVR 이 낮게 나온다
@@ -1287,9 +1318,14 @@ export function formatMatchResult(result, home, away, mySide, seed) {
   box.opponent = isHome ? box.away : box.home;
 
   const players = {};
-  for (const p of home.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
-  for (const p of away.roster) players[p.id] = { id: p.id, name: p.name, jersey: p.jersey };
-  const ctx = { players, homeName: home.team.name, awayName: away.team.name };
+  // cardId/look 은 뷰어의 초상·컷인용 그림 키(art-pipeline 16절). 판정에는 쓰이지 않는다.
+  const entry = (p, side) => ({ id: p.id, name: p.name, jersey: p.jersey, pos: p.pos, side,
+    cardId: p.cardId || null, look: p.look || null });
+  for (const p of home.roster) players[p.id] = entry(p, SIDE.HOME);
+  for (const p of away.roster) players[p.id] = entry(p, SIDE.AWAY);
+  const lineupIds = ts => (ts.lineup ? ts.lineup.startingIds.concat(ts.lineup.liberoId ? [ts.lineup.liberoId] : []) : []);
+  const ctx = { players, homeName: home.team.name, awayName: away.team.name,
+    homeId: home.team.id, awayId: away.team.id, homeLineup: lineupIds(home), awayLineup: lineupIds(away) };
   const won = (result.winner === SIDE.HOME) === isHome;
 
   return {

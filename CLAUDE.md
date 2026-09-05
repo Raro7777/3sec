@@ -22,14 +22,14 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 - `data/` — 6구단·42명 런칭 로스터. 신인 세대는 시드에서 런타임 생성한다
 - `tools/` — 파이썬 보조 시뮬레이터 + `art-prompts.mjs`(캐릭터별 프롬프트 생성). **권위는 `web/` 하네스에 있다**
 - `art/` — 아트 에셋. 런칭 42명 **카드·전신** + 신인 외형 풀 **72종**(`04_export/{pid|rkNN}/`, 빌드가 data: URI 로 인라인, 9.75MB).
-  썸네일 파일은 없다 — 초상은 카드에서 오린다. `docs/art-pipeline.md`
+  썸네일 파일은 없다 — 초상·상반신·코트 얼굴은 카드에서 오린다. 연습생·결원 대체 선수도 풀의 얼굴을 쓴다. `docs/art-pipeline.md`(화면 활용은 16절)
 - `sim/` — C# 참고 구현(아카이브). 경기·육성만 있고 리그·스킬·노화·신인은 없다. `sim/README.md` 참조
 
 ### 빌드·검증
 
 ```bash
 node web/build.mjs                # web/dist/bloom.html
-node web/app-test.mjs             # 화면 흐름 회귀 53건 (playwright 필요)
+node web/app-test.mjs             # 화면 흐름 회귀 66건 (playwright 필요)
 node web/parity.mjs               # 경기·육성 지표 정합
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 7건
 node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건

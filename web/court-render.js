@@ -159,7 +159,7 @@ function create(canvas, opts) {
     // 관중 밀도 0~1 — 홈구장 시설 등급(E.5 ⑲). 0 이면 빈 체육관, 1 이면 만원. 외형뿐이라 판정과 무관하다.
     crowd: Math.max(0, Math.min(1, (opts && opts.crowd) || 0)),
     t: 0, idx: 0, playing: false, speed: 1, raf: 0, last: 0,
-    onTouch: null, onEnd: null, impact: 0, shake: 0, ended: false, endHold: 0,
+    onTouch: null, onEnd: null, faceOf: null, impact: 0, shake: 0, ended: false, endHold: 0,
     trail: [], bursts: []   // 스킬 발동 이펙트 {x,y,side,name,t}
   };
 
@@ -411,7 +411,7 @@ function create(canvas, opts) {
         var p = zonePos(side, zone), t = byKey[side + '-' + zone];
         var isActor = !!(actor && actor.side === side && actor.pos === zone);
         out.push({ side:side, pos:zone, x:p.x, y:p.y,
-                   name: isActor && t ? t.name : '', jersey: t ? t.jersey : 0,
+                   name: isActor && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
                    known: !!t, active: isActor, type: isActor ? actor.type : 0 });
       });
     });
@@ -446,16 +446,29 @@ function create(canvas, opts) {
     c.moveTo(sho.sx - armX, armY); c.lineTo(sho.sx, sho.sy); c.lineTo(sho.sx + armX, armY);
     c.stroke();
 
-    c.fillStyle = col;
-    c.beginPath(); c.arc(head.sx, head.sy, Math.max(2.6, 0.15 * s), 0, 6.284); c.fill();
+    // 얼굴 마커(art-pipeline 16.2) — 앱이 R.faceOf(pid) 로 64px 원형 비트맵을 주면 머리 자리에 그린다. 없으면 점.
+    var face = (p.pid !== null && p.pid !== undefined && R.faceOf) ? R.faceOf(p.pid) : null;
+    var fr = 0;
+    if (face) {
+      fr = Math.max(7, 0.45 * s);                  // 폰에서 알아볼 최소 크기(지름 14px 이상)
+      var fy = head.sy - 0.10 * s;
+      c.save(); c.beginPath(); c.arc(head.sx, fy, fr, 0, 6.284); c.closePath(); c.clip();
+      c.drawImage(face, head.sx - fr, fy - fr, fr * 2, fr * 2); c.restore();
+      c.beginPath(); c.arc(head.sx, fy, fr, 0, 6.284);
+      c.lineWidth = Math.max(1.5, 0.06 * s); c.strokeStyle = col; c.stroke();
+    } else {
+      c.fillStyle = col;
+      c.beginPath(); c.arc(head.sx, head.sy, Math.max(2.6, 0.15 * s), 0, 6.284); c.fill();
+    }
 
     c.globalAlpha = 1;
     if (p.active && p.name) {
+      var ly = face ? (head.sy - 0.10 * s - fr - 5) : (head.sy - 0.30 * s - 5);
       c.font = '600 11px "Gothic A1",sans-serif'; c.textAlign = 'center';
       c.fillStyle = 'rgba(233,240,247,.94)';
       c.strokeStyle = 'rgba(6,14,22,.85)'; c.lineWidth = 3;
-      c.strokeText(p.name, head.sx, head.sy - 0.30*s - 5);
-      c.fillText(p.name, head.sx, head.sy - 0.30*s - 5);
+      c.strokeText(p.name, head.sx, ly);
+      c.fillText(p.name, head.sx, ly);
     }
   }
   function drawShadow(c, cam, b) {

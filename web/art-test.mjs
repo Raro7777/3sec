@@ -172,13 +172,16 @@ const tap = async (sel, ms = 300) => {
 
 // 스카우트 결과 화면 = 카드 아트가 가장 크게 나오는 곳
 await tap('[data-tab="scout"]');
-await tap('[data-act="scout"]', 500);
+await tap('[data-act="scout"]', 300);
+// 공개 연출은 카드 아트를 먼저 디코드하는 동안 뒷면(.pend)으로 놓여 있다(art-pipeline 16.1) — 뒤집힌 뒤에 본다.
+await page.waitForSelector('.rcard:not(.pend)', { timeout: 5000 }).catch(() => {});
 const viewHtml = await page.evaluate(() => document.getElementById('view').innerHTML);
 // MIME 을 png 로 못 박지 않는다 — 넣는 그림이 webp 라 실물 아트가 늘면 png 만 찾다 헛짚는다.
 // 검사의 뜻은 "SVG 플레이스홀더가 아니라 인라인된 그림이 나온다" 이다(art-pipeline 12).
 check('스카우트 결과에 카드 아트 <img> 가 있다', /<img[^>]+src="data:image\/(png|webp)/.test(viewHtml));
-check('카드아트에 등급 프레임이 남는다', /border:2\.5px solid #(E9B949|A97BE8|5B9BE0|6A7C8E)/.test(viewHtml),
-  viewHtml.match(/border:2\.5px solid #\w+/)?.[0] || '프레임 없음');
+// 프레임은 인라인 색이 아니라 실물 카드(.rcard)의 등급 클래스 + .fr 테두리로 그린다(art-pipeline 16).
+check('카드아트에 등급 프레임이 남는다', /class="rcard (N|R|SR|SSR)[^"]*"/.test(viewHtml) && /class="fr"/.test(viewHtml),
+  viewHtml.match(/class="rcard [^"]+"/)?.[0] || '프레임 없음');
 
 // 육성 목록 = 원형 초상이 여러 개 나오는 곳
 await tap('[data-tab="train"]', 400);
