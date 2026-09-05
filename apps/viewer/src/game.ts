@@ -1011,7 +1011,7 @@ export class Game {
     const log = (s.eventLog ?? []).slice(0, 10);
     const h: string[] = [];
     for (const ev of pending) {
-      h.push(`<div class="card" data-story-card="event" style="border-left:3px solid var(--warn)"><h3>📜 ${ev.title} <span>R${ev.round + 1}</span></h3>
+      h.push(`<div class="card evCard" data-story-card="event" style="border-left:3px solid var(--warn)"><img class="evArt" src="./art/event-${ev.template}.svg" alt="" loading="lazy"><h3>📜 ${ev.title} <span>R${ev.round + 1}</span></h3>
         <div class="hint" style="color:var(--text);margin-bottom:6px">${ev.text}</div>
         <div class="todo">${ev.choices.map((c, i) => `<button class="todoRow" data-story="event" data-id="${ev.id}" data-choice="${i}" style="border-left-color:var(--accent)"><span><b>${c.label}</b>${c.hint ? `<br><small>${c.hint}</small>` : ""}</span><b>›</b></button>`).join("")}</div>
         <div class="hint">${Math.max(1, ev.expiresRound - s.round)}라운드 안에 결정하지 않으면 마지막 선택으로 처리됩니다.</div></div>`);
@@ -1119,7 +1119,24 @@ export class Game {
       case "review": this.renderReview(); this.show("review"); break;
       case "sacked": this.renderSacked(); this.show("sacked"); break;
       // The snapshot goes first so the timer it resets keeps `save` from taking a second, near-identical one.
-      case "nextSeason": startNextSeason(this.state); this.backupNow(); this.save(); this.renderAll(); this.afterAdvance("home"); break;
+      case "nextSeason": {
+        const before = userDivision(this.state);
+        startNextSeason(this.state);
+        this.backupNow(); this.save(); this.renderAll();
+        // Going up was a news line while a title win filled the screen; it is the bigger moment for
+        // the clubs that start in the second division, so it gets the same treatment.
+        const after = userDivision(this.state);
+        if (after < before) {
+          void celebrate({
+            kind: "promotion",
+            title: `${divisionName(after)} 승격!`,
+            subtitle: `${this.me.name} · 시즌 ${this.state.season}부터 ${divisionName(after)}`,
+            lines: [`${divisionName(before)}를 ${SWAP}위 안으로 마쳤습니다.`, "상금과 관중, 그리고 상대가 달라집니다."],
+            color: "#ffd166",
+          }).then(() => this.afterAdvance("home"));
+        } else this.afterAdvance("home");
+        break;
+      }
       case "newGame":
         if (confirm("현재 진행 상황을 지우고 새 게임을 시작할까요?")) {
           if (this.current === "match") this.screen.leave();
@@ -2463,7 +2480,10 @@ export class Game {
     const myExpected = expectedPositions(s).get(me.id)!;
     const stat = (label: string, value: string) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
     const h: string[] = [];
+    // What the season earned, in the order a manager would rank them: the title, the cup, going up.
+    const trophyArt = pos === 1 ? "trophy-league" : s.cup.holder === me.id ? "trophy-cup" : inPromotionZone(s, me.id) ? "trophy-promotion" : null;
     h.push(`<div class="card review"><h3>시즌 ${s.season} 결산 <span class="mgr">감독 ${s.managerName}</span><span>${me.name}</span></h3>
+      ${trophyArt ? `<img class="rvArt" src="./art/${trophyArt}.svg" alt="">` : ""}
       <div class="rvTitle">${pos}위 <small>/ ${n}팀 · ${mine.pts}점</small></div>
       <div class="hint">${verdict}</div>
       <div class="stats">

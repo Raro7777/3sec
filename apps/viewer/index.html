@@ -123,6 +123,10 @@
       .bracket .tie .sc { font-family:"IBM Plex Mono", monospace; text-align:center; display:flex; flex-direction:column; }
       .bracket .tie .sc small { font-size:10px; color:var(--accent); }
       .bracket .tie > span:last-child { text-align:right; }
+      /* illustrations (public/art): bleed to the card's edges so they read as the card's header */
+      .evCard { overflow:hidden; }
+      .evArt { display:block; width:calc(100% + 28px); margin:-12px -14px 10px; aspect-ratio:16/9; object-fit:cover; }
+      .rvArt { display:block; width:calc(100% + 28px); margin:-4px -14px 10px; aspect-ratio:16/7; object-fit:cover; border-radius:0; }
       .review .rvTitle { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:40px; line-height:1; color:var(--accent); margin:4px 0; }
       .review .rvTitle small { font-size:16px; color:var(--muted); margin-left:6px; font-family:"IBM Plex Sans KR", sans-serif; font-weight:600; }
       .review .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-top:8px; }

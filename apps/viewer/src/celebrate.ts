@@ -3,14 +3,19 @@
  * Pure DOM/canvas, no dependencies; respects prefers-reduced-motion.
  */
 export interface CelebrationSpec {
-  kind: "league" | "cup" | "clinch";
+  kind: "league" | "cup" | "clinch" | "promotion";
   title: string;
   subtitle: string;
   lines: string[];
   color: string;
   /** button label; resolves when dismissed */
   button?: string;
+  /** illustration shown in place of the emoji; defaults by kind (public/art) */
+  art?: string;
 }
+
+/** The trophy illustration each kind of celebration opens with; a clinch by another club keeps the emoji. */
+const ART: Partial<Record<CelebrationSpec["kind"], string>> = { league: "./art/trophy-league.svg", cup: "./art/trophy-cup.svg", promotion: "./art/trophy-promotion.svg" };
 
 export function celebrate(spec: CelebrationSpec): Promise<void> {
   return new Promise((resolve) => {
@@ -21,9 +26,14 @@ export function celebrate(spec: CelebrationSpec): Promise<void> {
     canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
     root.appendChild(canvas);
     const card = document.createElement("div");
-    card.style.cssText = `position:relative;max-width:min(92vw,440px);width:100%;background:#121a21;border:1px solid ${spec.color};border-radius:16px;padding:22px 20px 18px;text-align:center;box-shadow:0 0 60px ${spec.color}55;transform:scale(.92);opacity:0;transition:transform .5s cubic-bezier(.2,.9,.3,1.2),opacity .4s`;
+    card.style.cssText = `position:relative;max-width:min(92vw,440px);width:100%;background:#121a21;border:1px solid ${spec.color};border-radius:16px;padding:22px 20px 18px;text-align:center;overflow:hidden;box-shadow:0 0 60px ${spec.color}55;transform:scale(.92);opacity:0;transition:transform .5s cubic-bezier(.2,.9,.3,1.2),opacity .4s`;
+    const art = spec.art ?? ART[spec.kind];
     const trophy = spec.kind === "cup" ? "🏆" : spec.kind === "clinch" ? "🎉" : "👑";
-    card.innerHTML = `<div style="font-size:56px;line-height:1;margin-bottom:6px">${trophy}</div>
+    // the illustration bleeds to the card's edges so it reads as the card's own header, not a picture in a box
+    const head = art
+      ? `<img src="${art}" alt="" style="display:block;width:calc(100% + 40px);margin:-22px -20px 12px;aspect-ratio:16/9;object-fit:cover;border-radius:15px 15px 0 0">`
+      : `<div style="font-size:56px;line-height:1;margin-bottom:6px">${trophy}</div>`;
+    card.innerHTML = `${head}
       <div style="font-family:'Barlow Condensed','IBM Plex Sans KR',sans-serif;font-size:34px;font-weight:700;color:${spec.color};letter-spacing:.02em">${spec.title}</div>
       <div style="font-size:15px;color:#e7edf2;margin:4px 0 12px">${spec.subtitle}</div>
       <div style="font-size:13px;color:#93a4b3;line-height:1.7;text-align:left;display:inline-block">${spec.lines.map((l) => `<div>${l}</div>`).join("")}</div>
