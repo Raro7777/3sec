@@ -131,6 +131,10 @@ export function managerPreview(m: Manager, myClub: Club, opp?: Club): string {
 const face = (p: { id: string; age: number }, club: { color: string } | null | undefined, size: number): string =>
   portraitSvg({ id: p.id, age: p.age, color: club?.color }, size);
 
+/** The home ground as a painted strip (public/art/stadium-NN.webp, by club id) with its name and seats. */
+const venueHtml = (c: Club, seats: number): string =>
+  `<div class="venue"><img class="venueArt" src="./art/stadium-${String(c.id).padStart(2, "0")}.webp" alt="" loading="lazy"><span class="venueCap">${c.stadiumName ?? stadiumFor(c.baseName ?? c.name).name} · ${seats.toLocaleString("ko-KR")}석</span></div>`;
+
 const managerLabel = (c: Club): string => c.manager ? `${c.manager.name} 감독${managerTags(c.manager).length ? ` <small>(${managerTags(c.manager).join(" · ")})</small>` : ""}` : "";
 
 /** 1..5 잠재력 stars from the exact potential (≤10 → 1, 17+ → 5). */
@@ -695,6 +699,7 @@ export class Game {
       const stage = CUP_STAGE_LABEL[s.cup.stage] ?? "";
       if (tie) {
         const home = clubOf(s, tie.home), away = clubOf(s, tie.away);
+        h.push(venueHtml(home, clubCapacity(home)));
         h.push(`<div class="fixture cup">
           <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="embWrap">${emblemSvg(home, 26)}</span>${home.name}<small>${tie.home === me.id ? "홈" : "상대"} · 최근 ${this.form(home.id)}</small></div>
           <div class="vs"><span class="cupTag">${CUP_NAME}</span>${stage}<b>vs</b></div>
@@ -715,6 +720,7 @@ export class Game {
       const oppId = fx.home === me.id ? fx.away : fx.home;
       const oppPos = rows.findIndex((r) => r.club === oppId) + 1;
       const form = (c: Club) => this.form(c.id);
+      h.push(venueHtml(home, clubCapacity(home)));
       h.push(`<div class="fixture">
         <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="embWrap">${emblemSvg(home, 26)}</span>${home.name}<small>${fx.home === me.id ? "홈" : `${oppPos}위`} · 최근 ${form(home)}</small></div>
         <div class="vs">R${fx.round + 1}<b>vs</b></div>
@@ -1631,6 +1637,7 @@ export class Game {
       return;
     }
     this.openSheet(`<div class="pc">
+      ${venueHtml(c, f.capacity)}
       <div class="pcHead"><div class="pcNum" style="font-size:22px;line-height:0">${emblemSvg(c, 34)}</div>
         <div class="pcMain"><div class="pcName">${c.name}</div><div class="hint" style="display:flex;align-items:center;gap:6px">${c.id === s.userClub ? userArt(s, 24, c.color) : c.manager ? managerArt(s, c.manager, 24, c.color) : ""}<span>${f.mgr} 감독${f.tags.length ? ` · <span style="color:var(--accent)">${f.tags.join(" · ")}</span>` : ""}</span></div></div>
         <div class="pcOvr"><b>${f.pos}위</b><small>${f.pts}점 · ${f.played}경기</small></div></div>
