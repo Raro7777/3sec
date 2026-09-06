@@ -7,7 +7,18 @@ export interface View {
   scale: number; // px per meter
   ox: number; // px of x=0
   oy: number; // px of y=0
+  /** portrait: the pitch stands on end (world +x is screen up, world +y is screen right) */
+  rot?: boolean;
 }
+
+/** World metres → canvas px, honouring a rotated view. */
+export const project = (v: View, x: number, y: number): [number, number] => (v.rot ? [v.ox + y * v.scale, v.oy - x * v.scale] : [v.ox + x * v.scale, v.oy + y * v.scale]);
+
+/** Canvas px → world metres (inverse of `project`). */
+export const unproject = (v: View, px: number, py: number): [number, number] => (v.rot ? [(v.oy - py) / v.scale, (px - v.ox) / v.scale] : [(px - v.ox) / v.scale, (py - v.oy) / v.scale]);
+
+/** A world angle as drawn on the canvas (facing lines, trails). */
+export const screenAngle = (v: View, a: number): number => (v.rot ? a - Math.PI / 2 : a);
 
 /** Camera state in pitch metres plus a zoom factor (1 = the whole pitch). */
 export interface Camera { x: number; y: number; zoom: number }
@@ -21,13 +32,15 @@ export function applyCamera(ctx: CanvasRenderingContext2D, v: View, focus: { x: 
   const z = Math.max(1, zoom);
   if (z === 1) return;
   const spare = 1 - 1 / z;
-  const maxX = (v.w / 2) * spare / v.scale;
-  const maxY = (v.h / 2) * spare / v.scale;
+  // world x runs along the canvas height when the pitch stands on end
+  const maxX = ((v.rot ? v.h : v.w) / 2) * spare / v.scale;
+  const maxY = ((v.rot ? v.w : v.h) / 2) * spare / v.scale;
   const fx = Math.max(-maxX, Math.min(maxX, focus.x));
   const fy = Math.max(-maxY, Math.min(maxY, focus.y));
+  const [px, py] = project(v, fx, fy);
   ctx.translate(v.w / 2, v.h / 2);
   ctx.scale(z, z);
-  ctx.translate(-(v.ox + fx * v.scale), -(v.oy + fy * v.scale));
+  ctx.translate(-px, -py);
 }
 
 /** grass apron beyond the touch/goal lines (m) */
@@ -48,6 +61,16 @@ const cache: CacheEntry[] = [];
 const CACHE_MAX = 4;
 
 export function drawPitch(ctx: CanvasRenderingContext2D, v: View, stadium: Stadium = DEFAULT_STADIUM, awayColor?: string): void {
+  if (v.rot) {
+    // paint the landscape stadium and stand it on end around the pitch centre
+    ctx.save();
+    ctx.translate(v.ox, v.oy);
+    ctx.rotate(-Math.PI / 2);
+    ctx.translate(-v.h / 2, -v.w / 2);
+    drawPitch(ctx, { w: v.h, h: v.w, scale: v.scale, ox: v.h / 2, oy: v.w / 2, rot: false }, stadium, awayColor);
+    ctx.restore();
+    return;
+  }
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
   const key = stadiumKey(stadium, v.w, v.h, dpr) + (awayColor ? `|${awayColor}` : "");
   let hit = cache.find((c) => c.key === key);

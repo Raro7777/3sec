@@ -689,6 +689,7 @@ export class Game {
     h.push(this.interviewHtml());
     h.push(this.eventsHtml());
     const expiring = expiringContracts(s);
+    if (expiring.length && over) h.push(`<div class="hint" style="color:var(--bad);border:1px solid var(--bad);border-radius:8px;padding:8px 10px">⚠ 재계약하지 않은 선수 ${expiring.length}명(${expiring.slice(0, 4).map((p) => p.name).join(", ")}${expiring.length > 4 ? " 외" : ""})이 <b>다음 시즌 시작</b>을 누르면 떠납니다. 이적 탭 → 판매·계약에서 지금 재계약할 수 있습니다.</div>`);
     if (false && expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
 
     h.push(this.boardHtml());
@@ -1072,7 +1073,11 @@ export class Game {
     const banned = me.squad.filter((p) => p.ban > 0);
     if (banned.length) items.push({ text: `출장 정지: ${banned.map((p) => `${p.name} ${p.ban}경기`).join(", ")}`, screen: "squad", tab: ["squad", "sel"], color: "var(--muted)" });
     const expiring = expiringContracts(s);
-    if (expiring.length && s.round >= 12) items.push({ text: `계약 만료 예정 ${expiring.length}명: ${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " …" : ""}`, screen: "transfers", tab: ["transfers", "sell"], color: "var(--warn)" });
+    if (expiring.length && s.round >= 12) {
+      const starters = expiring.filter((p) => me.selection.starters.includes(p.id)).length;
+      const late = s.round >= seasonRounds(s) - 4;
+      items.push({ text: `${late ? "⚠ " : ""}계약 만료 예정 ${expiring.length}명${starters ? ` (주전 ${starters}명)` : ""}: ${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " …" : ""}${late ? " — 재계약하지 않으면 시즌이 끝날 때 떠납니다" : ""}`, screen: "transfers", tab: ["transfers", "sell"], color: late || starters ? "var(--bad)" : "var(--warn)" });
+    }
     const staffExp = expiringStaff(s);
     if (staffExp.length && s.round >= 12) items.push({ text: `코치 계약 만료 예정 ${staffExp.length}명`, screen: "squad", tab: ["squad", "train"], color: "var(--warn)" });
     if (me.budget < 0) items.push({ text: "예산 적자: 연봉이 매주 빠져나갑니다. 선수를 팔거나 상금을 기다리세요.", screen: "transfers", tab: ["transfers", "sell"], color: "var(--bad)" });
@@ -2751,6 +2756,7 @@ export class Game {
     this.renderAll();
     await celebrate({
       kind: "clinch",
+      quiet: true,
       title: `${club.shortName} 우승 확정`,
       subtitle: `시즌 ${s.season} 리그 챔피언 · ${club.name}`,
       color: "#93a4b3",

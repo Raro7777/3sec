@@ -1,5 +1,5 @@
 import { DT, PITCH, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
-import { applyCamera, drawPitch, type Camera, type View } from "./render";
+import { applyCamera, drawPitch, type Camera, type View, project, unproject, screenAngle } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
 import { Sfx } from "./sfx";
@@ -374,8 +374,10 @@ export class MatchScreen {
   private autoImmersive(): void {
     if (this.immersiveByUser !== null) return;
     const active = document.getElementById("screen-match")!.classList.contains("active");
-    const landscapePhone = window.innerWidth > window.innerHeight && window.innerHeight < 560;
-    const want = active && landscapePhone && !this.finished;
+    // a phone in either orientation: landscape gets the wide pitch, portrait the pitch standing on end,
+    // both filling the screen with the controls in a side column and the manager panel as a drawer
+    const phone = Math.min(window.innerWidth, window.innerHeight) < 560;
+    const want = active && phone && !this.finished;
     if (want !== document.body.classList.contains("immersive")) this.setImmersive(want, false);
   }
 
@@ -894,13 +896,18 @@ export class MatchScreen {
     const pad = document.body.classList.contains("immersive") ? 0 : 16;
     const maxW = Math.max(200, stage.clientWidth - pad);
     const maxH = Math.max(140, stage.clientHeight - pad);
-    const ratio = (PITCH.length + 8) / (PITCH.width + 8);
+    // a stage taller than it is wide (a phone held upright) gets the pitch standing on end
+    const portrait = maxH > maxW;
+    const ratio = portrait ? (PITCH.width + 8) / (PITCH.length + 8) : (PITCH.length + 8) / (PITCH.width + 8);
     let w = maxW;
     let h = w / ratio;
     if (h > maxH) {
       h = maxH;
       w = h * ratio;
     }
+    // immersive: the canvas takes the whole stage and the stadium painting (stands, surround) fills
+    // what the pitch's aspect ratio leaves over, instead of black bands either side
+    if (document.body.classList.contains("immersive")) { w = maxW; h = maxH; }
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.syncBitmap(true);
@@ -925,16 +932,16 @@ export class MatchScreen {
   private view(): View {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
-    const scale = Math.min(w / (PITCH.length + 8), h / (PITCH.width + 8));
-    return { w, h, scale, ox: w / 2, oy: h / 2 };
+    const rot = h > w;
+    const scale = rot ? Math.min(w / (PITCH.width + 8), h / (PITCH.length + 8)) : Math.min(w / (PITCH.length + 8), h / (PITCH.width + 8));
+    return { w, h, scale, ox: w / 2, oy: h / 2, rot };
   }
 
   private pick(e: PointerEvent): void {
     if (!this.match) return;
     const v = this.view();
     const rect = this.canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - v.ox) / v.scale;
-    const y = (e.clientY - rect.top - v.oy) / v.scale;
+    const [x, y] = unproject(v, e.clientX - rect.left, e.clientY - rect.top);
     let best: string | null = null;
     let bestD = 2.5;
     for (const p of this.match.state.players) {
@@ -971,7 +978,7 @@ export class MatchScreen {
     this.updateCamera(now, rp);
     applyCamera(ctx, v, this.cam, this.cam.zoom);
     drawPitch(ctx, v, this.stadium, this.kits.outfield[1].primary);
-    const toPx = (x: number, y: number): [number, number] => [v.ox + x * v.scale, v.oy + y * v.scale];
+    const toPx = (x: number, y: number): [number, number] => project(v, x, y);
     const debug = this.debugChk.checked && !rp;
     if (rp && frame) {
       this.drawFrame(frame, v);
@@ -987,13 +994,13 @@ export class MatchScreen {
     if (debug) {
       for (const team of [0, 1] as TeamId[]) {
         const line = match.offsideLine(team) * match.dirOf(team);
-        const [lx] = toPx(line, 0);
+        const [ax, ay] = toPx(line, -PITCH.halfWidth), [bx2, by2] = toPx(line, PITCH.halfWidth);
         ctx.strokeStyle = match.teams[team].color;
         ctx.setLineDash([4, 6]);
         ctx.globalAlpha = 0.5;
         ctx.beginPath();
-        ctx.moveTo(lx, v.oy - PITCH.halfWidth * v.scale);
-        ctx.lineTo(lx, v.oy + PITCH.halfWidth * v.scale);
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx2, by2);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
@@ -1032,7 +1039,7 @@ export class MatchScreen {
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(px, py);
-      ctx.lineTo(px + Math.cos(p.facing) * r * 1.3, py + Math.sin(p.facing) * r * 1.3);
+      ctx.lineTo(px + Math.cos(screenAngle(v, p.facing)) * r * 1.3, py + Math.sin(screenAngle(v, p.facing)) * r * 1.3);
       ctx.stroke();
       // Tiredness, on the player rather than only in the panel: the substitution decision is made
       // while watching, and having to open a screen to find out who is gone is the wrong moment.
@@ -1047,7 +1054,8 @@ export class MatchScreen {
     const b = s.ball;
     const [bx, by] = toPx(b.pos.x, b.pos.y);
     const bspeed = Math.hypot(b.vel.x, b.vel.y);
-    this.ballDir = bspeed > 0.5 ? { x: b.vel.x / bspeed, y: b.vel.y / bspeed } : this.ballDir;
+    // the trail direction is kept in screen space so it follows a rotated view
+    this.ballDir = bspeed > 0.5 ? (v.rot ? { x: b.vel.y / bspeed, y: -b.vel.x / bspeed } : { x: b.vel.x / bspeed, y: b.vel.y / bspeed }) : this.ballDir;
     this.drawBall(bx, by, b.z, bspeed, v);
 
     if (s.restart) {
@@ -1368,20 +1376,20 @@ export class MatchScreen {
     for (const p of f.players) {
       const def = match.def(p.id);
       const kit = this.kitOf(p.team, def.role === "GK");
-      const px = v.ox + p.x * v.scale, py = v.oy + p.y * v.scale;
+      const [px, py] = project(v, p.x, p.y);
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(px + 1, py + 2, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
       drawKitDisc(ctx, kit, px, py, r);
       ctx.lineWidth = 1.2; ctx.strokeStyle = f.owner === p.id ? "#fff" : "rgba(0,0,0,0.5)";
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(p.f) * r * 1.3, py + Math.sin(p.f) * r * 1.3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(screenAngle(v, p.f)) * r * 1.3, py + Math.sin(screenAngle(v, p.f)) * r * 1.3); ctx.stroke();
       const { tagY, box } = this.drawNumber(px, py, r, def.number, kit, false);
       replayBoxes.push(box);
       if (this.showTags) replayTags.push({ px, y: tagY, r, name: def.name, selected: false, priority: f.owner === p.id, own: box });
     }
     this.drawTags(replayTags, replayBoxes);
-    const bx = v.ox + f.bx * v.scale, by = v.oy + f.by * v.scale;
+    const [bx, by] = project(v, f.bx, f.by);
     this.drawBall(bx, by, f.bz, 0, v);
   }
 

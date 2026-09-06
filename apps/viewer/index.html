@@ -447,8 +447,9 @@
         #topbar #score { order:0; } #topbar #clock { order:1; } #topbar #phase { order:2; flex-basis:100%; min-height:0; }
         #stats { gap:10px; font-size:11px; }
         #others { gap:10px; }
-        #main { flex-direction:column; overflow-y:auto; }
-        #stage { flex:none; height:52vw; max-height:60vh; }
+        /* phone, non-immersive: the screen itself scrolls, so a tall standing pitch is never clipped by #main */
+        #main { flex:none; flex-direction:column; overflow:visible; }
+        #stage { flex:none; height:min(calc(100dvh - 250px), 150vw); max-height:none; }
         #panel { width:auto; border-left:0; border-top:1px solid var(--line); }
         #score { font-size:20px; min-width:140px; }
         #log { height:100px; }

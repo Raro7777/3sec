@@ -12,7 +12,11 @@ export interface CelebrationSpec {
   button?: string;
   /** illustration shown in place of the emoji; defaults by kind (public/art) */
   art?: string;
+  /** somebody else's moment: no confetti, a smaller card, and it closes itself after a few seconds */
+  quiet?: boolean;
 }
+
+const QUIET_MS = 4500;
 
 /** The trophy illustration each kind of celebration opens with; a clinch by another club keeps the emoji. */
 const ART: Partial<Record<CelebrationSpec["kind"], string>> = { league: "./art/trophy-league.webp", cup: "./art/trophy-cup.webp", promotion: "./art/trophy-promotion.webp" };
@@ -49,7 +53,7 @@ export function celebrate(spec: CelebrationSpec): Promise<void> {
     resize();
     window.addEventListener("resize", resize);
     const palette = [spec.color, "#ffd166", "#e7edf2", "#5fd38a", "#4cc9f0", "#ff8fab"];
-    const N = reduce ? 0 : spec.kind === "clinch" ? 90 : 160;
+    const N = reduce || spec.quiet ? 0 : spec.kind === "clinch" ? 90 : 160;
     const parts = Array.from({ length: N }, () => ({
       x: Math.random() * innerWidth, y: -20 - Math.random() * innerHeight * 0.6,
       vx: (Math.random() - 0.5) * 60, vy: 80 + Math.random() * 120, w: 6 + Math.random() * 6, h: 8 + Math.random() * 10,
@@ -79,5 +83,11 @@ export function celebrate(spec: CelebrationSpec): Promise<void> {
       setTimeout(() => { root.remove(); resolve(); }, 300);
     };
     card.querySelector("button")!.addEventListener("click", done);
+    if (spec.quiet) {
+      card.style.maxWidth = "min(88vw, 360px)";
+      root.style.background = "rgba(5,8,11,.55)";
+      root.style.backdropFilter = "none";
+      setTimeout(() => { if (alive) done(); }, QUIET_MS);
+    }
   });
 }
