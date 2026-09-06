@@ -416,6 +416,7 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     lineupStarters: null,
     lineupLibero: null,
     history: [],
+    career: {},                 // 대표 인스턴스별 통산 기록 (육성→코트 연결 연출) — recordCareer
     winsByClub: {},
     lossesByClub: {},
     useClubTactics,
@@ -514,6 +515,7 @@ export function saveGame(state) {
     // 골드 소비처 (B.6) — 시설 등급표와 리포트를 산 카드 목록
     fc: state.facilities || null,
     rp: state.reports || [],
+    ca: state.career || {},
   };
 }
 
@@ -604,6 +606,7 @@ export function loadGame(json) {
   // B.6 골드 소비처 — 구 세이브에는 없다(둘 다 빈 상태로 시작하면 도입 전과 동작이 같다).
   state.facilities = j.fc || null;
   state.reports = j.rp || [];
+  state.career = j.ca || {};
   state.fillers = createFillers(state);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
   return state;
@@ -1310,7 +1313,67 @@ export function playMatch(state, opponentTeamId, opts = {}) {
   const view = formatMatchResult(result, home, away, SIDE.HOME, seed);
   view.reward = reward;
   view.opponent = { id: club.id, name: club.name };
+  if (opts.record !== false) recordCareer(state, view);
   return view;
+}
+
+// ---------------------------------------------------------------- 통산 기록 — 육성→코트 연결 연출
+// "캠프에서 내린 결정이 코트에서 보인다" 를 위한 표현 계층. 판정·RNG 와 무관하며 경기 뒤 박스스코어를 읽기만 한다.
+// state.career[instanceId] = { m 경기, pts 득점, k 공격 득점, b 블로킹, a 에이스, d 디그, best 한 경기 최다, debut {season, opp, oppName, won, pts} }
+
+/**
+ * 내 경기 결과를 대표 인스턴스의 통산 기록에 더하고, 이번 경기의 데뷔·통산 첫 기록을 view.career 로 돌려준다.
+ * 라인업(선발 6 + 리베로)에 선 졸업생만 센다 — 연습생·대체 선수는 통산 기록이 없다.
+ */
+export function recordCareer(state, view) {
+  if (!state.career) state.career = {};
+  const lineup = view.isHome ? view.ctx.homeLineup : view.ctx.awayLineup;
+  const played = new Set(lineup || []);
+  const debut = [], firsts = [];
+  for (const b of (view.box.mine || [])) {
+    if (!played.has(b.playerId)) continue;
+    if (!state.instances.some(i => i.instanceId === b.playerId)) continue;
+    let c = state.career[b.playerId];
+    const isDebut = !c;
+    if (!c) c = state.career[b.playerId] = { m: 0, pts: 0, k: 0, b: 0, a: 0, d: 0, best: 0, debut: null };
+    const before = { pts: c.pts, k: c.k, b: c.b, a: c.a, d: c.d, best: c.best };
+    c.m++; c.pts += b.points; c.k += b.kills; c.b += b.blockKills; c.a += b.aces; c.d += b.digs;
+    if (b.points > c.best) c.best = b.points;
+    if (isDebut) {
+      c.debut = { season: state.season, opp: view.opponent.id, oppName: view.opponent.name, won: view.won, pts: b.points };
+      debut.push(b.playerId);
+    }
+    const f = [];
+    if (before.pts === 0 && b.points > 0) f.push(isDebut ? '데뷔전 첫 득점' : '통산 첫 득점');
+    if (before.b === 0 && b.blockKills > 0) f.push('통산 첫 블로킹');
+    if (before.a === 0 && b.aces > 0) f.push('통산 첫 서브 에이스');
+    if (before.best < 10 && b.points >= 10) f.push('첫 두 자릿수 득점');
+    if (c.m === 10 || c.m === 50) f.push(`통산 ${c.m}경기`);
+    if (before.pts < 100 && c.pts >= 100) f.push('통산 100득점');
+    for (const what of f) firsts.push({ playerId: b.playerId, name: b.name, what });
+  }
+  view.career = { debut, firsts };
+  return view.career;
+}
+
+/** 인스턴스의 통산 기록(없으면 null). */
+export function careerOf(state, instanceId) { return (state.career && state.career[instanceId]) || null; }
+
+/**
+ * 박스스코어 한 줄에 "캠프에서 키운 그 능력치" 를 붙인다 — { stat, from, to, delta } 또는 null.
+ * 오늘 한 일이 큰 순서(공격 득점 → 스파이크, 블로킹 → 블로킹, 에이스 → 서브, 디그 → 디그)로 보고,
+ * 캠프 상승이 5 미만이면 다음 항목으로. 하나도 없으면 null(연출을 띄우지 않는다).
+ */
+export function campTrace(inst, b) {
+  if (!inst || !inst.initialStats || !inst.finalStats) return null;
+  const cands = [[b.kills | 0, 3 /* 스파이크 */], [b.blockKills | 0, 4 /* 블로킹 */], [b.aces | 0, 0 /* 서브 */], [(b.digs | 0) * 0.5, 5 /* 디그 */]];   // STAT (domain.js) 인덱스
+  cands.sort((x, y) => y[0] - x[0]);
+  for (const [n, si] of cands) {
+    if (n <= 0) break;
+    const from = inst.initialStats[si], to = inst.finalStats[si];
+    if (to - from >= 5) return { stat: si, from: Math.round(from), to: Math.round(to), delta: Math.round(to - from) };
+  }
+  return null;
 }
 
 /**

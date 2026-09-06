@@ -20,6 +20,7 @@ export {
   representatives, representativeOf, promoteInstance, releaseInstance,
   canScout, scoutCost, departedCardIds, growthFor,
   addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
+  recordCareer, careerOf, campTrace,          // 통산 기록·캠프 흔적 (육성→코트 연결 연출)
   CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
   CLUB_SKILL_LEVEL, clubSkillLevelFor,
   // 노화·전성기·은퇴 (league-and-economy.md A.3.6)

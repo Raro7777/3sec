@@ -159,7 +159,7 @@ function create(canvas, opts) {
     // 관중 밀도 0~1 — 홈구장 시설 등급(E.5 ⑲). 0 이면 빈 체육관, 1 이면 만원. 외형뿐이라 판정과 무관하다.
     crowd: Math.max(0, Math.min(1, (opts && opts.crowd) || 0)),
     t: 0, idx: 0, playing: false, speed: 1, raf: 0, last: 0,
-    onTouch: null, onEnd: null, faceOf: null, impact: 0, shake: 0, ended: false, endHold: 0,
+    onTouch: null, onEnd: null, faceOf: null, markOf: null, impact: 0, shake: 0, ended: false, endHold: 0,
     trail: [], bursts: []   // 스킬 발동 이펙트 {x,y,side,name,t}
   };
 
@@ -459,6 +459,13 @@ function create(canvas, opts) {
     } else {
       c.fillStyle = col;
       c.beginPath(); c.arc(head.sx, head.sy, Math.max(2.6, 0.15 * s), 0, 6.284); c.fill();
+    }
+    // 강조 링 — 앱이 R.markOf(pid) 로 색을 주면(데뷔전 선수 등) 머리 둘레에 한 겹 더 그린다. 표현 전용.
+    var mk = (p.pid !== null && p.pid !== undefined && R.markOf) ? R.markOf(p.pid) : null;
+    if (mk) {
+      var my = face ? (head.sy - 0.10 * s) : head.sy, mr = (face ? fr : Math.max(2.6, 0.15 * s)) + Math.max(3, 0.12 * s);
+      c.beginPath(); c.arc(head.sx, my, mr, 0, 6.284);
+      c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke();
     }
 
     c.globalAlpha = 1;

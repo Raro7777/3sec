@@ -11,7 +11,7 @@ import {
   CLUBS, CLUB_BY_ID, ECONOMY, REWARDS, SEASON_GROWTH, growthFor,
   myTeamState, myTeam, clubTeamState, departedCardIds, activeCardPool,
   formatMatchResult, nextSeed, addHistory, addTickets, addGold, addFragments,
-  createFillers, newClubRecords, TRAINING_CFG, rookieClassOf,
+  createFillers, newClubRecords, TRAINING_CFG, rookieClassOf, recordCareer,
 } from './game.js';
 // 골드 소비처(B.6) — 결산에서 구단 운영비를 정산한다.
 import { payUpkeep, facilityUpkeep, clubPrestige } from './facility.js';
@@ -404,6 +404,7 @@ export function advanceMatchday(state, opts = {}) {
       const rw = rewardMatch(state, won, myMatch.myScore, mine.isHome);
       myMatch.reward = rw.text;
       myMatch.rewardDetail = rw;
+      recordCareer(state, myMatch);
       addHistory(state, `MD${md} vs ${myMatch.opponent.name}(${mine.isHome ? '홈' : '원정'}): ${won ? '승' : '패'} ${myMatch.myScore}-${myMatch.oppScore}`);
     } else {
       otherResults.push({
@@ -532,6 +533,7 @@ export function advancePlayoff(state, opts = {}) {
     const rw = rewardMatch(state, won, myMatch.myScore, homeId === state.clubId);
     myMatch.reward = rw.text;
     myMatch.rewardDetail = rw;
+    recordCareer(state, myMatch);
     addHistory(state, `${s.name} ${gameIndex + 1}차전 vs ${myMatch.opponent.name}: ${won ? '승' : '패'} ${myMatch.myScore}-${myMatch.oppScore}`);
   }
 

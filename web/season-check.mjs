@@ -714,6 +714,29 @@ function must(label, ok, note) { invariants.push({ label, ok, note: note || '' }
   must('재육성: 더 좋은 결과는 대표 교체', better === null || (better.g.ovr >= better.g.prevOvr && Math.abs(better.rep - better.g.ovr) < 0.05),
     better ? `새 ${better.g.ovr} ≥ 기존 ${better.g.prevOvr}` : '표본 없음');
 }
+{
+  // 통산 기록(육성→코트 연결 연출): 라인업에 선 졸업생만, 박스스코어와 일치, 저장→복원, 데뷔는 한 번
+  const gc = E.createGame({ seed: 5151 });
+  const cid = E.CARD_POOL[2].id;
+  gc.ownedCards[cid] = 0;
+  const sc = E.startTraining(gc, cid, []);
+  let guard = 0;
+  while (sc.phase !== 2) { if (++guard > 200) break; if (sc.phase === 0) sc.apply(POLICIES.optimal.choose(sc)); else sc.resolveEvent(sc.pendingEvent.oracleChoice); }
+  const grad = E.graduate(sc, 'best');
+  const id = grad.instance.instanceId;
+  const m1 = E.playMatch(gc, 't02', { collectEvents: false });
+  const b1 = m1.box.mine.find(b => b.playerId === id);
+  const c1 = E.careerOf(gc, id);
+  must('통산: 첫 경기가 데뷔로 기록된다', !!c1 && c1.m === 1 && m1.career.debut.length === 1 && m1.career.debut[0] === id && c1.debut && c1.debut.opp === 't02');
+  must('통산: 득점·블로킹·에이스가 박스스코어와 같다', !!c1 && !!b1 && c1.pts === b1.points && c1.b === b1.blockKills && c1.a === b1.aces);
+  must('통산: 연습생은 기록하지 않는다', Object.keys(gc.career).length === 1);
+  const m2 = E.playMatch(gc, 't03', { collectEvents: false });
+  must('통산: 두 번째 경기는 데뷔가 아니다', m2.career.debut.length === 0 && E.careerOf(gc, id).m === 2);
+  const gc2 = E.loadGame(JSON.parse(JSON.stringify(E.saveGame(gc))));
+  must('통산: 저장→복원', JSON.stringify(gc2.career) === JSON.stringify(gc.career));
+  const tr = E.campTrace(grad.instance, b1);
+  must('캠프 흔적: 상승 5 이상인 능력치만 잇는다', tr === null || (tr.delta >= 5 && grad.instance.finalStats[tr.stat] - grad.instance.initialStats[tr.stat] >= 5));
+}
 const invFail = invariants.filter(i => !i.ok).length;
 
 // ---------------------------------------------------------------- 출력

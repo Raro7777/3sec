@@ -207,6 +207,7 @@ check('경기 뷰어가 뜬다', inMatch);
 if (inMatch) {
   check('처음에는 건너뛰기가 잠겨 있다', (await count('[data-mv="skipset"]')) === 0);
   check('경기 인트로에 양 팀 얼굴이 선다', (await count('#lvIntro.show .ava')) >= 12, `ava ${await count('#lvIntro.show .ava')}`);
+  check('인트로가 졸업생의 데뷔전을 알린다', (await count('#lvIntro.show .avw .dbt')) >= 1 && (await text('#lvIntro')).includes('데뷔전'));
   await tap('#lvIntro', 200);
   check('인트로를 탭하면 바로 시작한다', (await count('#lvIntro.show')) === 0);
   const sp = await page.$('[data-mv="speed"]');
@@ -242,6 +243,8 @@ await page.waitForFunction(() => {
 const res = await viewText();
 check('경기 결과가 나온다', res.includes('승리') || res.includes('패배'));
 check('박스스코어가 있다', res.includes('우리 팀 기록'));
+check('경기 결과에 데뷔전 카드가 있다', res.includes('데뷔전') && /\d+득점 · 공격 \d+\/\d+/.test(res));
+check('통산 기록이 세이브에 들어간다', await page.evaluate(() => { const j = JSON.parse(localStorage.getItem('bloom-manager-save-v1') || '{}'); return !!j.ca && Object.keys(j.ca).length >= 1; }));
 
 // --- 7. 저장 · 복원
 const before = await page.evaluate(() => ({
@@ -296,6 +299,9 @@ check('육성 목록이 졸업생을 재육성으로 표시한다', /로스터 O
 check('육성 목록이 재육성은 초기화가 아니라고 말한다', (await viewText()).includes('초기화가 아닙니다'));
 await tap('[data-tab="roster"]', 400);
 check('로스터에 계약 인원 게이지가 있다', /계약 \d+\/42/.test(await viewText()));
+await tap('[data-detail]', 400);
+check('선수 상세에 통산 기록이 있다', /통산 기록[\s\S]*\d+경기 · \d+득점/.test(await viewText()) && (await viewText()).includes('데뷔전'));
+await tap('[data-go="roster"]', 300);
 
 // --- 9. 결산의 운영비·강등·투자 (E.5 ⑬·⑭)
 // 시즌 하나를 화면으로 다 도는 대신 앱이 노출한 엔진(window.VS)으로 빨리 감아 결산 직전 세이브를 만든다.
