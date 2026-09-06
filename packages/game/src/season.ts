@@ -1,6 +1,7 @@
 import { Match, Rng, autoRoles, normalizeTactics, type MatchOptions, type PlayerDef, type Tactics, type TeamDef, type TeamId } from "@3sec/engine";
 import type { Club, Fixture, GameState, SeasonRecord, SquadPlayer, TableRow } from "./types";
 import { DIFFICULTIES, difficultyOf, isUserClub, type Difficulty } from "./difficulty";
+import { applyRoster, type RosterPack } from "./roster";
 import { buildClubs } from "./world";
 import { autoUserTactics, injuryFactor, injuryDaysFactor, recoveryBonus, staffWageBill } from "./staff";
 import { buildFixtures, roundsPerSeason } from "./fixtures";
@@ -32,15 +33,17 @@ export interface RecordOptions {
 
 export const DEFAULT_MANAGER_NAME = "감독";
 
-export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME, difficulty: Difficulty = "normal"): GameState {
+export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME, difficulty: Difficulty = "normal", roster: RosterPack | null = null): GameState {
   const clubs = buildClubs(seed);
+  // the player's own roster pack (roster.ts) renames clubs and replaces squads before anything else is derived
+  if (roster) applyRoster(clubs, roster, seed);
   const prof = DIFFICULTIES[difficulty];
   // Difficulty touches the human's club only: the world is the same on every setting.
   const mine = clubs[userClub]!;
   mine.budget = Math.round(mine.budget * prof.startBudget);
   mine.seasonStartBudget = mine.budget;
   const name = managerName.trim() || DEFAULT_MANAGER_NAME;
-  const s: GameState = { version: 1, seed, difficulty, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildAllFixtures(clubs), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard(prof.startConfidence) };
+  const s: GameState = { version: 1, seed, difficulty, roster: roster?.name, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildAllFixtures(clubs), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard(prof.startConfidence) };
   clearUserManager(s);
   newCup(s);
   for (const c of clubs) resetSeasonCounters(c);

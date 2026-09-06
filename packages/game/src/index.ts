@@ -90,3 +90,4 @@ export {
 } from "./stadium";
 export { CLUB_NAME_MAX, SHORT_NAME_MIN, SHORT_NAME_MAX, STADIUM_NAME_MAX, KIT_PATTERNS, KIT_PATTERN_LABEL, renameClub, renameStadium, setClubKit, resetClubKit } from "./customize";
 export { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, isDifficulty, type Difficulty, type DifficultyProfile } from "./difficulty";
+export { ROSTER_FORMAT, ROSTER_SLOTS, ROSTER_MIN_SQUAD, ROSTER_MAX_SQUAD, parseRoster, applyRoster, rosterTemplate, type RosterPack, type RosterClub, type RosterPlayer } from "./roster";

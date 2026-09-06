@@ -503,6 +503,8 @@ export interface GameState {
   seed: number;
   /** chosen at onboarding, fixed for the career; absent on older saves (= normal) */
   difficulty?: "easy" | "normal" | "hard";
+  /** name of the roster pack the game was started with (roster.ts); absent for the fictional world */
+  roster?: string;
   season: number;
   /** index of the next round to play (0-based); === roundsPerSeason when the season is over */
   round: number;

@@ -37,7 +37,14 @@ import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./ki
 import { emblemSvg } from "./emblem";
 import { portraitSvg } from "./portrait";
 import { managerArt, userArt } from "./manager-art";
-import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, type Difficulty } from "@3sec/game";
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, type Difficulty, parseRoster, rosterTemplate, buildClubs, type RosterPack } from "@3sec/game";
+
+const ROSTER_KEY = "3sec.roster";
+const escHtml = (x: string): string => x.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+/** The roster pack kept on this device (settings screen), or null for the fictional world. */
+function loadRosterPack(): RosterPack | null {
+  try { const raw = localStorage.getItem(ROSTER_KEY); if (!raw) return null; return parseRoster(raw).pack; } catch { return null; }
+}
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
@@ -274,6 +281,37 @@ export class Game {
     this.show("onboarding");
   }
 
+  /** Settings: the roster pack on this device (roster.ts). Applies to new games only. */
+  private rosterCardHtml(): string {
+    const pack = loadRosterPack();
+    const cur = this.state.roster;
+    return `<div class="card"><h3>로스터 팩 <span>${pack ? `${pack.name} · ${pack.clubs.length}개 구단` : "없음"}</span></h3>
+      <div class="hint">구단·선수 이름을 담은 JSON 파일을 불러오면 <b>새 게임</b>을 시작할 때 적용됩니다. 진행 중인 게임${cur ? `(현재: ${cur})` : ""}은 바뀌지 않습니다. 파일은 이 기기에만 저장되고, 게임에는 가상의 구단과 선수만 들어 있습니다. 만드는 법은 저장소의 tools/roster를 보세요.</div>
+      <div class="actions"><label style="cursor:pointer"><input type="file" id="setRosterFile" accept=".json,application/json" style="display:none"><span style="border:1px solid #2c3d4b;border-radius:6px;padding:6px 10px;background:#1a2530;color:var(--text)">로스터 파일 불러오기</span></label><button data-set="rosterTemplate">템플릿 복사</button>${pack ? '<button class="danger" data-set="rosterClear">해제</button>' : ""}</div>
+      <div class="hint" id="rosterMsg"></div></div>`;
+  }
+
+  private bindRosterCard(): void {
+    const root = this.el.settings;
+    const msg = () => root.querySelector<HTMLElement>("#rosterMsg")!;
+    root.querySelector<HTMLInputElement>("#setRosterFile")?.addEventListener("change", async (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0];
+      if (!f) return;
+      const text = await f.text();
+      const { pack, errors } = parseRoster(text);
+      if (!pack) { msg().innerHTML = `<span style="color:var(--bad)">불러오지 못했습니다:</span><br>${errors.slice(0, 6).map(escHtml).join("<br>")}${errors.length > 6 ? `<br>… 외 ${errors.length - 6}건` : ""}`; return; }
+      try { localStorage.setItem(ROSTER_KEY, JSON.stringify(pack)); } catch { msg().textContent = "저장 공간이 부족합니다."; return; }
+      this.renderSettings();
+      this.el.settings.querySelector<HTMLElement>("#rosterMsg")!.textContent = `"${pack.name}" 적용 준비 완료. 설정의 새 게임 시작으로 시작하세요.`;
+    });
+    root.querySelector('[data-set="rosterClear"]')?.addEventListener("click", () => { try { localStorage.removeItem(ROSTER_KEY); } catch { /* ignore */ } this.renderSettings(); });
+    root.querySelector('[data-set="rosterTemplate"]')?.addEventListener("click", async () => {
+      const text = JSON.stringify(rosterTemplate(buildClubs(1)), null, 1);
+      try { await navigator.clipboard.writeText(text); msg().textContent = "24개 슬롯 템플릿을 클립보드에 복사했습니다. 이름을 채워 JSON 파일로 저장하세요."; }
+      catch { msg().textContent = "클립보드에 복사하지 못했습니다."; }
+    });
+  }
+
   private renderOnboarding(): void {
     const stars = (n: number) => `<span class="stars" title="전력 ${n}/5">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
     const h: string[] = [];
@@ -286,7 +324,14 @@ export class Game {
       <div class="onb-diff-title">난이도 <small>시작 후에는 바꿀 수 없습니다</small></div>
       <div class="onb-diff">${DIFFICULTY_ORDER.map((d) => `<button type="button" class="diff-card${this.pickedDifficulty === d ? " sel" : ""}" data-diff="${d}"><b>${DIFFICULTIES[d].label}</b><small>${DIFFICULTIES[d].blurb}</small></button>`).join("")}</div></div>`);
     // Both divisions are on offer: starting below is the harder career, with promotion to chase.
-    const world = [...CLUBS.map((c) => ({ c, d: 1 })), ...CLUBS_D2.map((c) => ({ c, d: 2 }))];
+    // A roster pack on this device renames the slots it covers (settings → 로스터 팩).
+    const pack = loadRosterPack();
+    const packed = new Map((pack?.clubs ?? []).map((c) => [c.slot, c]));
+    if (pack) h.push(`<div class="card" style="border-color:var(--accent)"><h3>로스터 팩 <span>${pack.clubs.length}개 구단</span></h3><div class="hint">"${pack.name}"이(가) 적용됩니다. 이 기기에만 저장된 파일이며 게임에 기본 포함된 것이 아닙니다. 설정에서 해제할 수 있습니다.</div></div>`);
+    const world = [...CLUBS.map((c) => ({ c, d: 1 })), ...CLUBS_D2.map((c) => ({ c, d: 2 }))].map(({ c, d }, i) => {
+      const r = packed.get(i);
+      return { d, c: r ? { ...c, name: r.name, shortName: r.shortName, color: r.color ?? c.color, reputation: r.reputation ?? c.reputation } : c };
+    });
     for (const d of [1, 2]) {
       h.push(`<div class="card"><h3>${divisionName(d)} <span>${d === 1 ? "카드를 눌러 선택" : "어려운 시작 · 승격이 목표"}</span></h3><div class="club-grid">`);
       world.forEach(({ c, d: cd }, i) => {
@@ -295,7 +340,7 @@ export class Game {
         h.push(`<button type="button" class="club-card${this.pickedClub === i ? " sel" : ""}" data-club="${i}" style="--club:${c.color}">
           <div class="cc-head">${emblemSvg({ id: i, name: c.name, shortName: c.shortName, color: c.color }, 22)}<b>${c.name}</b><small>${c.shortName}</small></div>
           <div class="cc-meta">${stars(n)}<span class="cc-form">${c.formation}</span></div>
-          <div class="cc-blurb">${CLUB_BLURBS[i] ?? ""}</div>
+          <div class="cc-blurb">${packed.has(i) ? "로스터 팩" : CLUB_BLURBS[i] ?? ""}</div>
         </button>`);
       });
       h.push(`</div></div>`);
@@ -324,7 +369,7 @@ export class Game {
   }
 
   private finishOnboarding(club: number, name: string): void {
-    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독", this.pickedDifficulty);
+    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독", this.pickedDifficulty, loadRosterPack());
     prepareRound(this.state);
     this.live = null;
     this.pickedClub = null;
@@ -572,6 +617,7 @@ export class Game {
       <textarea id="setImportText" placeholder='{"version":1, ...}'></textarea>
       <div class="actions"><button data-set="importText">텍스트에서 불러오기</button></div></div>
     <div class="card"><h3>난이도 <span>${difficultyOf(s).label}</span></h3><div class="hint">${difficultyOf(s).blurb} 난이도는 새 게임을 시작할 때만 고를 수 있습니다.</div></div>
+    ${this.rosterCardHtml()}
     <div class="card"><h3>구단 꾸미기 <span>${s.clubs[s.userClub]?.name ?? ""}</span></h3><div class="actions"><button data-set="customize">🎨 유니폼 · 구단명 · 홈구장</button></div><div class="hint">유니폼 색과 패턴, 구단명, 구장 이름을 바꾸고 예산으로 좌석을 늘립니다. 홈 화면의 구단명을 눌러도 열립니다.</div></div>
     <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯, 자동 백업을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
@@ -584,6 +630,7 @@ export class Game {
     this.el.settings.querySelectorAll<HTMLButtonElement>("button[data-fs]").forEach((b) => b.addEventListener("click", () => { this.applyFontSize(b.dataset.fs as "s" | "m" | "l"); this.renderSettings(); }));
     q('[data-set="newGame"]').addEventListener("click", () => this.act("newGame"));
     q('[data-set="customize"]').addEventListener("click", () => this.openCustomizeSheet());
+    this.bindRosterCard();
     for (const { n } of slots) {
       this.el.settings.querySelector(`[data-slot-save="${n}"]`)!.addEventListener("click", () => {
         const existing = this.slotInfo(n);
