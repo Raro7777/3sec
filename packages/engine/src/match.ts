@@ -3,6 +3,8 @@ import { TUNING } from "./tuning";
 import { normalizeTactics } from "./teams";
 import { ROLES, applyInstructions, type RoleDef } from "./ai/roles";
 
+/** Ticks a shot stays "the last shot" for goal attribution after a save or block (4 s). */
+const RECENT_SHOT_TICKS = 20 * 4;
 const TACTIC_LABEL: Partial<Record<keyof Tactics, string>> = { mentality: "멘탈리티", defensiveLine: "수비라인", pressing: "프레싱", directness: "직접성", width: "폭", tempo: "템포", counter: "역습", engageLine: "압박선", offsideTrap: "오프사이드 트랩", formation: "포메이션" };
 import { PITCH, goalCenter, inPenaltyArea, penaltySpot } from "./pitch";
 import { FORMATIONS, isWingBackSlot, roleDistance, slotToPitch } from "./formation";
@@ -164,6 +166,8 @@ export class Match {
     }
   }
   shot: ShotInFlight | null = null;
+  /** The last shot taken, kept a few seconds past a save or block so a parry that trickles in is still the shooter's goal. */
+  private recentShot: { shooterId: string; team: TeamId; tick: number } | null = null;
   /** simple per-player decision throttle */
   private nextDecision = new Map<string, number>();
   /** optional debug hooks (used by tuning scripts) */
@@ -1265,6 +1269,7 @@ export class Match {
     s.stats[shooter.team].shots++;
     s.stats[shooter.team].xg += xg;
     this.shot = { shooterId: shooter.id, team: shooter.team, xg, saveAttempted: false, onTargetCounted: false };
+    this.recentShot = { shooterId: shooter.id, team: shooter.team, tick: this.state.tick };
     this.emit("SHOT", shooter.team, shooter.id, `${this.name(shooter.id)} ${header ? "헤딩 슛" : "슛"} (xG ${xg.toFixed(2)})`, shooter.pos);
   }
 
@@ -1442,8 +1447,14 @@ export class Match {
     s.score[scoringTeam]++;
     s.stats[scoringTeam].goals++;
     let scorer = b.lastTouch;
-    // A shot deflected in off a defender or fumbled in by the keeper belongs to the shooter.
-    if (scorer !== null && this.teamOf.get(scorer) === defendingTeam && this.shot && this.shot.team === scoringTeam) scorer = this.shot.shooterId;
+    // A shot deflected in off a defender or fumbled in by the keeper belongs to the shooter. The live
+    // `shot` is cleared by a save or a block, so the memory of the last shot covers a parry or a
+    // deflection that rolls in within the next few seconds; only an unforced defensive touch is an own goal.
+    const recent = this.recentShot && this.recentShot.team === scoringTeam && s.tick - this.recentShot.tick < RECENT_SHOT_TICKS ? this.recentShot : null;
+    if (scorer !== null && this.teamOf.get(scorer) === defendingTeam) {
+      if (this.shot && this.shot.team === scoringTeam) scorer = this.shot.shooterId;
+      else if (recent) scorer = recent.shooterId;
+    }
     const ownGoal = scorer !== null && this.teamOf.get(scorer) === defendingTeam;
     if (ownGoal) {
       this.emit("OWN_GOAL", scoringTeam, scorer, `자책골! ${this.name(scorer!)} – ${this.scoreline()}`, b.pos);
