@@ -63,6 +63,18 @@ page.on('console', m => { if (m.type() === 'error' && !/net::ERR/.test(m.text())
 await page.goto('file://' + APP);
 await page.waitForTimeout(700);
 
+// --- 0. 첫 안내 · 코치 (테스터 피드백 "게임을 어떻게 하는지 모르겠다")
+check('첫 실행에 안내가 뜬다', (await count('#intro .guide')) === 1);
+check('안내가 목표(우승)를 말한다', (await text('#intro')).includes('우승'));
+await tap('[data-act="intronext"]', 200);
+check('안내 둘째 장이 세 가지 루프다', /스카우트[\s\S]*육성[\s\S]*리그/.test(await text('#intro')));
+await tap('[data-act="intronext"]', 200);
+check('안내 셋째 장에 시작하기가 있다', (await count('[data-act="introdone"]')) === 1);
+await tap('[data-act="introdone"]', 300);
+check('안내가 닫힌다', await page.$eval('#intro', el => el.hidden));
+check('코치 배너가 스카우트를 가리킨다', (await text('#coach')).includes('스카우트') && (await count('.coach-target[data-go="scout"]')) === 1);
+check('코치 배너 글자가 14px 이상이다', (await page.$eval('#coach', el => parseFloat(getComputedStyle(el).fontSize))) >= 14);
+
 // --- 1. 첫 실행
 check('첫 화면이 뜬다', (await viewText()).length > 20);
 check('시작 티켓이 표시된다', +(await text('#rTickets')) > 0, '티켓 ' + await text('#rTickets'));
@@ -75,6 +87,7 @@ check('지정 스카우트 비용이 표시된다', (await viewText()).includes(
 await tap('[data-act="scout"]', 400);
 check('스카우트 결과가 나온다', (await viewText()).includes('이 선수 키우기'));
 check('스카우트 결과가 실물 카드로 공개된다', (await count('.rcard')) === 1);
+check('코치가 이 선수 키우기를 가리킨다', (await count('.coach-target[data-trainthis]')) === 1);
 check('첫 스카우트 미션이 조각을 준다', /^3\/12/.test(await text('#rFrag')), '조각 ' + await text('#rFrag'));
 check('시작 티켓 5장으로는 10연이 잠긴다', await page.$eval('[data-act="scout10"]', b => b.disabled));
 // 시작 티켓은 엔진 기본 5장(league-and-economy B.6.7 — 온보딩에 티켓을 더 주면 시즌 1 난이도가 무너진다).
@@ -116,6 +129,14 @@ let turns = 0, stuck = false, sawStoryName = false, sawEventBust = false;
 const traineeName = await text('.camp-head b').catch(() => '');
 check('캠프 헤더에 성격 아키타입 배지가 있다', (await count('.camp-head .tagrow .arch')) === 1);
 check('캠프 헤더가 상반신 그림이다', (await count('.camp-head .bust img')) === 1);
+check('캠프에 추천 표시가 하나 있다', (await count('[data-rec="1"] .rec')) === 1);
+check('캠프 버튼 범례가 있다', (await viewText()).includes('적성'));
+check('코치가 추천을 가리킨다', (await count('.coach-target[data-rec="1"]')) === 1);
+await page.waitForTimeout(400);   // 코치가 추천 버튼까지 부드럽게 스크롤한다
+check('코치가 가리키는 버튼이 화면 안에 있다', await page.evaluate(() => {
+  const t = document.querySelector('.coach-target'); if (!t) return false;
+  const r = t.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight;
+}));
 for (let i = 0; i < 60; i++) {
   const vt = await viewText();
   if (vt.includes('졸업')) break;
@@ -131,6 +152,7 @@ for (let i = 0; i < 60; i++) {
 }
 check('캠프가 막히지 않고 끝까지 간다', !stuck, stuck ? `${turns}턴에서 진행 불가` : `${turns}턴 진행`);
 check('졸업 화면이 나온다', (await viewText()).includes('졸업'));
+check('코치가 경기하러 가기를 가리킨다', (await count('.coach-target[data-go="match"]')) === 1);
 check('졸업 능력치 부호가 올바르다', !(await viewText()).includes('+-'), '"+-6" 형태 금지');
 check('카드 스토리 컷에 선수 이름이 들어간다', sawStoryName, `이름 ${traineeName}`);
 check('스토리 컷 옆에 상반신 초상이 붙는다', sawEventBust);
@@ -339,6 +361,20 @@ await tap('[data-go="feedback"]', 400);
   check('피드백 본문에 최근 오류가 붙는다', body.includes('최근 오류') && body.includes('테스트용 오류'));
   check('도움말에서 들어가면 화면이 도움말로 적힌다', body.includes('화면 도움말'));
   await tap('[data-act="fbback"]', 300);
+}
+// 코치 안내는 끌 수 있고, 도움말에서 다시 켜면 첫 안내부터 다시 나온다
+{
+  await page.evaluate(() => { localStorage.setItem('bloom-coach-v1', JSON.stringify({ on: true, intro: true, done: false })); });
+  await page.reload(); await page.waitForTimeout(800);
+  const shown = !(await page.$eval('#coach', el => el.hidden));
+  if (shown) { await tap('[data-act="coachoff"]', 300); check('코치 안내를 끌 수 있다', await page.$eval('#coach', el => el.hidden)); }
+  else check('가이드를 마친 저장에는 배너가 없다', true);
+  await tap('[data-act="help"]', 400);
+  check('도움말에 코치 안내 다시 보기가 있다', (await count('[data-act="coachon"]')) === 1);
+  await tap('[data-act="coachon"]', 400);
+  check('다시 보기를 누르면 첫 안내가 나온다', (await count('#intro .guide')) === 1);
+  await tap('[data-act="introskip"]', 300);
+  check('건너뛰기로 안내가 닫힌다', await page.$eval('#intro', el => el.hidden));
 }
 
 // --- 10. 전역 조건

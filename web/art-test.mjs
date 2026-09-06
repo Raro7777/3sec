@@ -170,6 +170,7 @@ const tap = async (sel, ms = 300) => {
   return true;
 };
 
+await tap('[data-act="introskip"]', 200);   // 첫 안내(코치)를 닫는다
 // 스카우트 결과 화면 = 카드 아트가 가장 크게 나오는 곳
 await tap('[data-tab="scout"]');
 await tap('[data-act="scout"]', 300);

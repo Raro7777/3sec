@@ -282,6 +282,38 @@ details[open] summary::after{content:"▴"}
 .fx.mine{background:var(--court-bg)}
 .fx .riv{font-size:10.5px;color:var(--hot);font-family:"Barlow Condensed",sans-serif;letter-spacing:.05em}
 
+/* ---------- 코치 가이드: 첫 플레이에서 "목표가 뭔지 · 지금 뭘 누르는지" 를 화면이 직접 말한다 ---------- */
+.coach{position:sticky;z-index:19;background:var(--hot-bg);border-bottom:1px solid rgba(233,161,59,.35);
+  padding:9px 10px 9px 14px;display:flex;align-items:flex-start;gap:9px;font-size:14.5px;line-height:1.45;color:var(--ink)}
+.coach .ic{flex:none;font-size:17px;line-height:1.35}
+.coach .tx{flex:1;min-width:0}
+.coach .tx b{color:var(--hot)}
+.coach .x{flex:none;min-width:40px;min-height:40px;margin:-8px -4px -8px 0;color:var(--ink3);font-size:20px}
+.coach-target{position:relative;box-shadow:0 0 0 3px var(--hot) !important}
+.coach-target::after{content:"👆 여기";position:absolute;top:-11px;right:10px;z-index:1;background:var(--hot);color:#1A1200;
+  font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:9px;line-height:1.4;pointer-events:none;white-space:nowrap}
+.nav .coach-target{box-shadow:inset 0 0 0 3px var(--hot) !important}
+.nav .coach-target::after{top:2px;right:auto;left:50%;transform:translateX(-50%);font-size:10.5px}
+.rec{font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;padding:0 6px;border-radius:4px;background:var(--hot);color:#1A1200;margin-left:6px;vertical-align:2px}
+.guide-ov{position:fixed;inset:0;z-index:60;background:rgba(10,16,23,.97);display:flex;flex-direction:column;justify-content:flex-end;
+  padding:20px 16px calc(22px + env(safe-area-inset-bottom,0));overflow-y:auto}
+.guide{background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:22px 20px 16px;max-width:520px;margin:0 auto;width:100%}
+.guide .em{font-size:44px;line-height:1;margin-bottom:12px}
+.guide h2{font-size:22px;margin:0 0 10px;line-height:1.3}
+.guide p{font-size:16px;line-height:1.6;color:var(--ink2);margin:0 0 10px}
+.guide .loop{display:grid;gap:9px;margin:4px 0 12px}
+.guide .loop > div{display:flex;gap:11px;align-items:flex-start;background:var(--panel2);border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.45}
+.guide .loop > div > div{flex:1;min-width:0}
+.guide .loop b{color:var(--ink)}
+.guide .loop span{font-size:22px;flex:none;line-height:1.2}
+.guide .dots{display:flex;gap:6px;justify-content:center;margin:12px 0 12px}
+.guide .dots i{width:7px;height:7px;border-radius:50%;background:var(--line2)}
+.guide .dots i.on{background:var(--hot)}
+.guide .skip{display:block;width:100%;margin-top:4px;padding:12px;color:var(--ink3);font-size:14px;text-align:center;min-height:44px}
+@media (prefers-reduced-motion:no-preference){
+  .coach-target{animation:coachpulse 1.4s ease-in-out infinite}
+  @keyframes coachpulse{0%,100%{box-shadow:0 0 0 3px var(--hot)}50%{box-shadow:0 0 0 7px rgba(233,161,59,.3)}}
+}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:50;
   background:var(--panel3);border:1px solid var(--line2);border-radius:10px;
   padding:10px 16px;font-size:13.5px;font-weight:600;max-width:88%;text-align:center;
@@ -409,9 +441,11 @@ details[open] summary::after{content:"▴"}
       <span>조각<b id="rFrag">0</b></span>
     </div>
   </div>
+  <div class="coach" id="coach" hidden></div>
   <main id="view"></main>
   <nav class="nav" id="nav"></nav>
 </div>
+<div id="intro" hidden></div>
 
 <!--ENGINE-->
 
@@ -457,6 +491,11 @@ var SKIP_KEY = 'bloom-skip-unlocked-v1';
 var MISSION_KEY = 'bloom-missions-v1';
 var autoUnlocked = false, usedAutoThisCamp = false, skipUnlocked = false;
 var claimed = {};          // 달성해서 보상을 받은 미션 id
+// 코치 가이드 — 테스터 피드백 "게임을 어떻게 하는지 모르겠다" 에 대한 답. 첫 안내 3장 + 상태에서 계산한 "지금 누를 버튼".
+var COACH_KEY = 'bloom-coach-v1';
+var coach = { on:true, intro:false, done:false };   // on: 배너 표시 · intro: 첫 안내를 봤다 · done: 가이드를 마쳤다(정식 선수 3명 + 경기 1회)
+var coachLastKey = null, introPage = 0;
+function saveCoach(){ try { localStorage.setItem(COACH_KEY, JSON.stringify(coach)); } catch(e){} }
 var STARTING_TICKETS = E.ONBOARDING.startingTickets; // 온보딩 시작 티켓 — 엔진(missions.js)에 있어 season-check --app 이 같은 값을 잰다
 
 // ---------------------------------------------------------------- 미션
@@ -811,6 +850,7 @@ function boot(){
     autoUnlocked = localStorage.getItem(AUTO_KEY) === '1';
     skipUnlocked = localStorage.getItem(SKIP_KEY) === '1';
     claimed = JSON.parse(localStorage.getItem(MISSION_KEY) || '{}');
+    coach = JSON.parse(localStorage.getItem(COACH_KEY) || 'null') || { on:true, intro:false, done:false };
     meta = JSON.parse(localStorage.getItem(META_KEY) || 'null') || { firstOpen: Date.now(), opens: 0 };
     meta.opens = (meta.opens | 0) + 1;
     localStorage.setItem(META_KEY, JSON.stringify(meta));
@@ -877,6 +917,139 @@ function render(){
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') mountCourt();
+  renderCoach();
+  renderIntro();
+}
+
+// ---------------------------------------------------------------- 코치 가이드
+/** 아직 캠프에 보내지 않은 보유 카드 수. */
+function untrainedCount(){
+  var trained = {};
+  (G.instances || []).forEach(function(i){ trained[i.cardId] = 1; });
+  return Object.keys(G.ownedCards || {}).filter(function(cid){
+    if (trained[cid]) return false;
+    try { return !E.isCardRetired(G, cid); } catch(e){ return true; }
+  }).length;
+}
+/** 캠프에서 코치가 권하는 선택 — 자동(최적) 정책과 같은 규칙. 상태를 바꾸지 않는다. */
+function coachRec(){
+  if (!ses) return null;
+  var o = E.trainingOptions(ses);
+  if (o.kind === 'event') { var r = o.options.filter(function(c){ return c.recommended; })[0]; return r ? r.id : null; }
+  if (o.kind !== 'action' || o.treating) return null;
+  var cfg = ses.cfg;
+  if (ses.specialAvailable && ses.injuryProbabilityOf(6) <= cfg.optimalSpecialMaxP) return 'special';
+  var best = ses.bestTrainingByEv();
+  if (ses.turn < cfg.turns && ses.injuryProbabilityOf(best) > cfg.optimalInjuryThreshold) return 'rest';
+  return ['serve','receive','set','spike','block'][best];
+}
+function coachShowRec(){ return coach.on && !coach.done; }
+/** 지금 상태에서 "다음에 누를 버튼" 하나. { key, text(html), sel } 또는 null. */
+function coachStep(){
+  var owned = Object.keys(G.ownedCards || {}).length;
+  var trained = G.trainingCount | 0, played = (G.wins | 0) + (G.losses | 0);
+  var untrained = untrainedCount();
+  if (trained >= 3 && played >= 1) {
+    coach.done = true; saveCoach();
+    setTimeout(function(){ toast('코치 안내를 마쳤습니다. 이제부터는 감독실의 "다음 목표"를 따라가세요.'); }, 400);
+    return null;
+  }
+  var pickLine = untrained > 0 ? { key:'pick', text:'아직 캠프에 안 보낸 선수가 있습니다. <b>육성</b> 탭에서 키우세요.', sel:'[data-tab="train"]' } : null;
+  // ① 캠프 안
+  if (ses) {
+    var o = E.trainingOptions(ses);
+    if (o.kind === 'event') return { key:'ev'+o.turn, text:'이야기 선택입니다. 마음 가는 쪽을 고르세요. 정답은 없고, <b>추천</b>은 무난한 쪽입니다.', sel:'[data-rec="1"]' };
+    if (o.treating) return { key:'treat'+o.turn, text:'부상 치료 턴입니다. 훈련은 못 하고 피로만 회복됩니다. <b>치료하고 다음 턴으로</b>를 누르세요.', sel:'[data-choice="rest"]' };
+    if (o.kind === 'action') {
+      if (o.turn === 1) return { key:'t1', text:'12턴 동안 훈련을 골라 키웁니다. 초록 글씨가 오르는 능력치, 오른쪽 숫자가 쌓이는 피로입니다. 지금은 <b>추천</b>을 누르세요.', sel:'[data-rec="1"]' };
+      if (o.isEvalTurn) return { key:'t'+o.turn, text:'이번 턴 끝에 평가전이 있습니다. 결과가 등급에 반영됩니다. 계속 <b>추천</b>을 따라가면 됩니다.', sel:'[data-rec="1"]' };
+      return { key:'t'+o.turn, text:'<b>추천</b>을 따라가면 됩니다. 피로가 45를 넘으면 부상 위험이 생겨 휴식이 추천됩니다.', sel:'[data-rec="1"]' };
+    }
+    return null;
+  }
+  // ② 선수가 한 명도 없다
+  if (owned === 0) {
+    if (view === 'scout') return G.tickets > 0
+      ? { key:'pull', text:'<b>스카우트 · 티켓 1</b>을 누르세요. 여섯 구단의 명단에서 신인 한 명이 옵니다.', sel:'[data-act="scout"]' }
+      : { key:'nopull', text:'티켓이 없습니다. 감독실 "처음부터 다시"로 새로 시작하세요.', sel:'[data-tab="home"]' };
+    return { key:'go-scout', text:'감독님, 먼저 선수가 필요합니다. <b>스카우트</b>로 가세요.', sel: view === 'home' ? '[data-go="scout"]' : '[data-tab="scout"]' };
+  }
+  // ③ 뽑았지만 아직 한 명도 안 키웠다
+  if (trained === 0) {
+    if (view === 'scout' && document.querySelector('[data-trainthis]')) return { key:'trainthis', text:'뽑은 선수는 아직 우리 팀이 아닙니다. <b>이 선수 키우기</b>로 12턴 캠프에 보내세요.', sel:'[data-trainthis]' };
+    if (view === 'train') return { key:'pick1', text:'키울 선수를 누르세요.', sel:'[data-pick]' };
+    if (view === 'trainSup') return { key:'campstart', text:'서포터는 나중에 생깁니다. <b>캠프 시작</b>을 누르세요.', sel:'[data-act="startcamp"]' };
+    return { key:'go-train', text:'뽑은 선수를 <b>육성</b> 탭에서 키워야 경기에 나갈 수 있습니다.', sel:'[data-tab="train"]' };
+  }
+  // ④ 키웠지만 아직 경기를 안 했다
+  if (played === 0) {
+    if (view === 'trainGrad') return { key:'grad', text:'졸업! 이제 우리 팀 선수입니다. <b>경기하러 가기</b>를 누르세요.', sel:'[data-go="match"]' };
+    if (view === 'match') return G.league
+      ? { key:'adv', text:'<b>경기 진행</b>을 누르면 오늘 경기를 합니다.', sel:'[data-act="advance"]' }
+      : { key:'season', text:'<b>시즌 시작</b>을 누르면 14매치데이 리그가 열립니다. 첫 시즌은 지는 게 정상입니다.', sel:'[data-act="startseason"]' };
+    if (view === 'matchLive') return { key:'live', text:'경기 중계입니다. <b>속도</b>로 빨리 볼 수 있고, 끝나면 결과가 나옵니다.', sel:null };
+    if (view === 'trainSup' || view === 'train') return { key:'pick2', text:'한 명 더 키워도 좋고, <b>리그</b> 탭에서 바로 경기해도 됩니다.', sel:'[data-tab="match"]' };
+    return { key:'go-match', text:'<b>리그</b> 탭에서 경기를 시작하세요.', sel:'[data-tab="match"]' };
+  }
+  // ⑤ 경기는 했고 정식 선수가 셋이 안 된다 — 여기까지 오면 루프를 안다. 셋을 채우게 한다.
+  if (view === 'matchResult') return { key:'result', text:'첫 경기를 치렀습니다. 연습생 대신 정식 선수가 셋은 있어야 이기기 시작합니다. <b>선수 키우러 가기</b>.', sel:'[data-go="train"]' };
+  if (view === 'matchLive') return { key:'live2', text:'경기 중계입니다. <b>속도</b>로 빨리 볼 수 있습니다.', sel:null };
+  if (view === 'train') return untrained > 0
+    ? { key:'pick3', text:'아직 안 키운 선수를 누르세요. 정식 선수 '+trained+'/3.', sel:'[data-pick]' }
+    : (G.tickets > 0 ? { key:'more', text:'키울 선수가 없습니다. <b>스카우트</b>에서 한 명 더 뽑으세요.', sel:'[data-tab="scout"]' }
+                     : { key:'earn', text:'티켓이 없습니다. <b>리그</b>에서 경기를 이어가세요. 경기마다 조각이 쌓여 12개면 티켓 1장입니다.', sel:'[data-tab="match"]' });
+  if (view === 'scout') return G.tickets > 0
+    ? { key:'pull2', text:'<b>스카우트</b>로 한 명 더 뽑으세요. 정식 선수 '+trained+'/3.', sel:'[data-act="scout"]' }
+    : (pickLine || { key:'earn2', text:'티켓은 경기 조각(12개 = 1장)과 시즌 순위 보상으로 옵니다. <b>리그</b>에서 경기를 이어가세요.', sel:'[data-tab="match"]' });
+  if (view === 'trainSup') return { key:'campstart2', text:'<b>캠프 시작</b>을 누르세요.', sel:'[data-act="startcamp"]' };
+  if (view === 'match' && G.league) {
+    var sv = null; try { sv = E.seasonView(G); } catch(e){}
+    if (untrained > 0 && sv && sv.canTrain && document.querySelector('[data-go="train"]')) return { key:'pretrain', text:'경기 전에 <b>먼저 육성하기</b>로 한 명 더 키우면 바로 전력이 됩니다.', sel:'[data-go="train"]' };
+    return { key:'adv2', text:'<b>경기 진행</b>으로 시즌을 이어가세요. 정식 선수 '+trained+'/3.', sel:'[data-act="advance"]' };
+  }
+  if (pickLine) return pickLine;
+  if (G.tickets > 0) return { key:'more2', text:'<b>스카우트</b> 탭에서 한 명 더 뽑으세요. 정식 선수 '+trained+'/3.', sel:'[data-tab="scout"]' };
+  return { key:'go-match2', text:'<b>리그</b> 탭에서 경기를 이어가세요. 조각 12개면 티켓 1장입니다.', sel:'[data-tab="match"]' };
+}
+function renderCoach(){
+  var el = document.getElementById('coach');
+  document.querySelectorAll('.coach-target').forEach(function(n){ n.classList.remove('coach-target'); });
+  var st = null;
+  if (coach.on && !coach.done && coach.intro) { try { st = coachStep(); } catch(e){ st = null; } }
+  if (!st) { el.hidden = true; coachLastKey = null; return; }
+  el.hidden = false;
+  el.style.top = document.querySelector('.topbar').offsetHeight + 'px';
+  el.innerHTML = '<span class="ic">🧭</span><div class="tx">'+st.text+'</div>'+
+    '<button class="x" data-act="coachoff" aria-label="코치 안내 끄기">×</button>';
+  var t = st.sel ? document.querySelector(st.sel) : null;
+  if (t) {
+    t.classList.add('coach-target');
+    if (st.key !== coachLastKey) setTimeout(function(){
+      var r = t.getBoundingClientRect(), top = el.offsetHeight + document.querySelector('.topbar').offsetHeight;
+      if (r.top < top + 8 || r.bottom > window.innerHeight - 90) { try { t.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){} }
+    }, 60);
+  }
+  coachLastKey = st.key;
+}
+var INTRO = [
+  { em:'🏐', h:'감독님, 환영합니다', p:'<p>새록 스프라우츠는 아직 정식 선수가 한 명도 없는 신생 구단입니다. 연습생 일곱 명으로 시작해서, 여섯 구단이 겨루는 <b style="color:var(--ink)">블룸 리그의 우승</b>이 목표입니다.</p>' },
+  { em:'🔁', h:'할 일은 세 가지의 반복입니다', p:'<div class="loop">'+
+      '<div><span>🔍</span><div><b>스카우트</b> — 티켓 1장으로 여섯 구단의 명단에서 선수를 데려옵니다.</div></div>'+
+      '<div><span>🏐</span><div><b>육성</b> — 12턴 캠프에서 훈련을 골라 키우면 우리 팀 선수가 됩니다.</div></div>'+
+      '<div><span>🏆</span><div><b>리그</b> — 키운 선수로 14매치데이 시즌을 치릅니다. 이기면 티켓과 골드가 들어옵니다.</div></div></div>' },
+  { em:'🧭', h:'처음엔 지는 게 정상입니다', p:'<p>정식 선수가 셋쯤 되면 이기기 시작합니다. 화면 위의 <b style="color:var(--hot)">코치 안내</b>가 다음에 누를 버튼을 알려 드립니다. 언제든 끌 수 있고, 도움말에서 다시 켤 수 있습니다.</p>' },
+];
+function renderIntro(){
+  var el = document.getElementById('intro');
+  if (coach.intro) { el.hidden = true; return; }
+  var i = Math.max(0, Math.min(INTRO.length - 1, introPage)), pg = INTRO[i], last = i === INTRO.length - 1;
+  el.hidden = false;
+  el.innerHTML = '<div class="guide-ov"><div class="guide">'+
+    '<div class="em">'+pg.em+'</div><h2>'+pg.h+'</h2>'+pg.p+
+    '<div class="dots">'+INTRO.map(function(_,k){ return '<i class="'+(k===i?'on':'')+'"></i>'; }).join('')+'</div>'+
+    (last ? '<button class="btn" data-act="introdone">시작하기</button>'
+          : '<button class="btn" data-act="intronext">다음</button><button class="skip" data-act="introskip">건너뛰기</button>')+
+  '</div></div>';
 }
 
 function vHome(){
@@ -1297,9 +1470,11 @@ function vTrainTurn(){
     // 스토리 컷은 육성 선수의 상반신, 선배 이벤트는 그 선배의 초상(art-pipeline 16.4)
     var who = card, whoCls = '';
     if (o.event.supporterName) { var sup = repByName(o.event.supporterName); if (sup) who = sup; }
+    var recEv = coachShowRec() ? coachRec() : null;
     body = '<div class="evbox vn">'+bustBox(who, whoCls, 56)+'<div class="vt"><div class="evtitle">'+esc(o.event.title)+'</div><div class="evtext">'+esc(o.event.text)+'</div></div></div>'+
       o.options.map(function(c){
-        return '<button class="act" data-choice="'+c.id+'"><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+'</span>'+
+        var isRec = recEv !== null && c.id === recEv;
+        return '<button class="act" data-choice="'+c.id+'"'+(isRec?' data-rec="1"':'')+'><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+(isRec?'<span class="rec">추천</span>':'')+'</span>'+
           '<span class="right"><span class="tiny">'+esc(c.effect||'')+(c.isBranch?' · 성공 '+Math.round(c.successRate*100)+'%':'')+'</span></span></button>';
       }).join('');
   } else if (o.treating) {
@@ -1310,14 +1485,18 @@ function vTrainTurn(){
         '피로는 회복되지만 캠프 기간을 그만큼 잃습니다.</div></div>'+
       '<button class="btn" data-choice="rest">치료하고 다음 턴으로</button>';
   } else {
-    body = o.options.map(function(op){
+    var rec = coachShowRec() ? coachRec() : null;
+    // 처음 보는 사람에게 버튼의 세 가지 표시(초록 능력치·적성 글자·피로 숫자)가 무엇인지 한 줄로.
+    body = '<div class="tiny" style="margin:0 2px 8px">초록 글씨 = 이번 훈련으로 오르는 능력치 · S~D = 이 선수의 훈련 적성(S가 최고) · 오른쪽 숫자 = 피로 변화</div>';
+    body += o.options.map(function(op){
       if (!op.available) return '';
       var gains = op.expectedGains.map(function(v,i){ return v>0.05 ? '<b>'+STATK[i]+'+'+v.toFixed(1)+'</b>' : null; })
                    .filter(Boolean).slice(0,3).join(' ');
       if (op.id==='rest') gains = '피로 회복 · 컨디션 상승 '+Math.round((op.restCondUpP||0)*100)+'%';
       if (op.id==='special') gains = '<b>특훈</b> 큰 상승 · 피로 많이';
-      return '<button class="act'+(op.id==='rest'?' rest':'')+'" data-choice="'+op.id+'">'+
-        '<span class="lbl">'+esc(op.label)+'</span>'+
+      var isRec = rec !== null && op.id === rec;
+      return '<button class="act'+(op.id==='rest'?' rest':'')+'" data-choice="'+op.id+'"'+(isRec?' data-rec="1"':'')+'>'+
+        '<span class="lbl">'+esc(op.label)+(isRec?'<span class="rec">추천</span>':'')+'</span>'+
         '<span class="gain">'+gains+'</span>'+
         '<span class="right">'+
           (op.hasAptitude?'<span class="apt '+op.aptitudeLabel+'">'+op.aptitudeLabel+'</span> ':'')+
@@ -2436,6 +2615,7 @@ function vHelp(){
      '<b>스태미나</b><span>세트가 길어져도 능력치가 덜 떨어짐</span>'+
    '</div></div>'+
    '<button class="btn" data-go="home">알겠습니다</button>'+
+   '<button class="btn ghost" data-act="coachon" style="margin-top:9px">코치 안내 다시 보기</button>'+
    '<button class="tiny" data-go="feedback" style="display:block;width:100%;margin-top:12px;padding:10px 0;text-decoration:underline;color:var(--ink2)">헷갈리는 게 있으면 · 피드백 보내기</button>');
 }
 
@@ -2542,15 +2722,19 @@ document.addEventListener('click', function(e){
   if (d.act === 'scout10') return doScout10();
   if (d.scoutpos !== undefined) return doScout(POSK[+d.scoutpos]);
   if (d.trainthis) { trainPick = d.trainthis; supPick = null;
-    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); } return; }
+    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); } return; }
   if (d.pick) { trainPick = d.pick; supPick = null;
-    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); } return; }
+    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); } return; }
   if (d.sup) {
     var i = supPick.indexOf(d.sup);
     if (i>=0) supPick.splice(i,1); else if (supPick.length<3) supPick.push(d.sup); else toast('서포터는 최대 3명');
     render(); return;
   }
-  if (d.act === 'startcamp') { startCamp(supPick); render(); return; }
+  if (d.act === 'startcamp') { startCamp(supPick); render(); window.scrollTo(0,0); return; }
+  if (d.act === 'coachoff') { coach.on = false; saveCoach(); renderCoach(); toast('코치 안내를 껐습니다. 도움말에서 다시 켤 수 있습니다.'); return; }
+  if (d.act === 'coachon') { coach = { on:true, intro:false, done:false }; introPage = 0; saveCoach(); go('home'); return; }
+  if (d.act === 'intronext') { introPage++; renderIntro(); return; }
+  if (d.act === 'introdone' || d.act === 'introskip') { coach.intro = true; introPage = 0; saveCoach(); render(); return; }
   if (d.choice) return applyChoice(d.choice);
   if (d.auto) return autoRun(d.auto);
   if (d.ltab) { leagueTab = d.ltab; render(); window.scrollTo(0,0); return; }
@@ -2597,6 +2781,7 @@ document.addEventListener('click', function(e){
     try { localStorage.removeItem(MISSION_KEY); } catch(err2){}
     claimed = {};
     G = newGame();
+    coach.on = true; coach.done = false; coachLastKey = null; saveCoach();
     ses=null; feed=[]; lastGrad=lastScout=lastMatch=null; save(); go('home'); return;
   }
 });

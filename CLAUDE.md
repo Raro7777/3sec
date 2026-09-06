@@ -29,7 +29,7 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 
 ```bash
 node web/build.mjs                # web/dist/bloom.html
-node web/app-test.mjs             # 화면 흐름 회귀 91건 (playwright 필요)
+node web/app-test.mjs             # 화면 흐름 회귀 108건 (playwright 필요)
 node web/parity.mjs               # 경기·육성 지표 정합
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 9건 (엔진 기본 경제)
 node web/season-check.mjs --app   # 같은 목표를 앱 경제(시작 티켓·온보딩 미션)로
