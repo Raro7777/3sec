@@ -162,7 +162,9 @@ function create(canvas, opts) {
     onTouch: null, onEnd: null, faceOf: null, markOf: null, impact: 0, shake: 0, ended: false, endHold: 0,
     trail: [], bursts: [],   // 스킬 발동 이펙트 {x,y,side,name,t}
     // 연출 1단계(art-pipeline 16.7): 카메라 줌·포커스, 슬로모션, 착지 충격, 네트 흔들림, 관중 환호, 시계
-    zoom: 1, zoomT: 1, fx: 0, fy: 0, fxT: 0, fyT: 0, slow: 1, land: null, netWobble: 0, cheer: null, clock: 0
+    zoom: 1, zoomT: 1, fx: 0, fy: 0, fxT: 0, fyT: 0, slow: 1, land: null, netWobble: 0, cheer: null, clock: 0,
+    // 선수 이동(16.8): 현재 위치와 이번 비행 동안의 이동 계획. 공을 만질 선수는 접점으로 뛰어가고, 친 뒤에는 자리로 돌아온다.
+    pp: {}, plan: {}
   };
   /** 득점 뒤 관중 반응 — 앱이 부른다. side 가 내 쪽이면 홈 관중이 들썩이고, 아니면 잠깐 조용해진다. */
   R.cheerFor = function (side) { R.cheer = { side: side, t: 0 }; };
@@ -181,6 +183,11 @@ function create(canvas, opts) {
     R.flights = buildFlights(R.touches, R.point, seed || 1);
     R.t = 0; R.idx = 0; R.ended = false; R.endHold = 0; R.trail.length = 0;
     R.bursts.length = 0; R.land = null; R.slow = 1;
+    R.pp = {};
+    [0,1].forEach(function (side) { [1,2,3,4,5,6].forEach(function (z) { var q = zonePos(side, z); R.pp[side + '-' + z] = { x: q.x, y: q.y, mv: 0 }; }); });
+    // 서브 직전: 서버는 이미 엔드라인 뒤에 서 있다
+    if (R.touches[0]) { var s0 = R.touches[0], c0 = contactPoint(s0); var k0 = s0.side + '-' + s0.pos; if (R.pp[k0]) { R.pp[k0].x = c0.x; R.pp[k0].y = c0.y; } }
+    planFlight(0);
     if (R.onTouch && R.touches.length) R.onTouch(0);
     if (R.touches.length) spawnBursts(R.touches[0]);
   };
@@ -245,11 +252,13 @@ function create(canvas, opts) {
       R.impact = 1; R.trail.length = 0;
       var nf = R.flights[R.idx];
       if (nf) {
+        planFlight(R.idx);
         if (R.onTouch) R.onTouch(R.idx);
         spawnBursts(R.touches[R.idx]);
         if (nf.from && nf.from.type === EV.Attack) R.shake = 0.6;
       } else {
         R.ended = true; R.slow = 1;
+        planReturn();
         var end = f.path[f.path.length - 1];
         var big = bigFinish();
         R.land = { x: end.x, y: end.y, z: end.z, t: 0, big: big };
@@ -541,8 +550,85 @@ function create(canvas, opts) {
     if (wob) c.restore();
   }
 
+  // ------------------------------------------------------------ 선수 이동 계획
+  function easeInOut(u) { u = Math.max(0, Math.min(1, u)); return u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; }
+  /** key → { fx, fy, tx, ty, d0, d1 }: 비행 진행도 d0 에서 출발해 d1 에 도착한다. */
+  function setPlan(key, tx, ty, d0, d1) {
+    var cur = R.pp[key]; if (!cur) return;
+    R.plan[key] = { fx: cur.x, fy: cur.y, tx: tx, ty: ty, d0: d0, d1: d1 };
+  }
+  /**
+   * idx 번째 비행(터치 idx → idx+1) 동안 열두 명이 어디로 움직이는가.
+   *  · 방금 친 선수: 접점에 잠시 있다가 자기 자리로 돌아온다
+   *  · 다음에 만질 선수: 자기 접점으로 달려가 공보다 먼저 도착한다(80%)
+   *  · 다다음이 블로킹이면 그 블로커는 미리 공격수 앞 네트로 옮겨 서고, 이웃 전위는 반쯤 따라간다(더블 블록)
+   *  · 나머지: 자기 자리에서 공의 낙하 방향으로 살짝 쏠린다
+   */
+  function planFlight(idx) {
+    var f = R.flights[idx]; if (!f) return;
+    var t0 = R.touches[idx], t1 = R.touches[idx + 1] || null, t2 = R.touches[idx + 2] || null;
+    var to = f.path[f.path.length - 1];
+    var taken = {};
+    [0,1].forEach(function (side) { [1,2,3,4,5,6].forEach(function (z) {
+      var key = side + '-' + z, home = zonePos(side, z);
+      var shade = 0;
+      if (to && side !== t0.side) shade = (to.x - COURT.width / 2) * 0.12;       // 수비 쪽은 공이 오는 방향으로 쏠린다
+      setPlan(key, home.x + shade, home.y, 0.15, 1);
+    }); });
+    // 방금 친 선수: 접점 → (35% 뒤) 자리로
+    var k0 = t0.side + '-' + t0.pos, c0 = contactPoint(t0), h0 = zonePos(t0.side, t0.pos);
+    R.pp[k0].x = c0.x; R.pp[k0].y = c0.y;
+    setPlan(k0, h0.x, h0.y, 0.35, 1); taken[k0] = 1;
+    // 다음 선수: 접점으로
+    if (t1) { var k1 = t1.side + '-' + t1.pos, c1 = contactPoint(t1); setPlan(k1, c1.x, c1.y, 0, 0.8); taken[k1] = 1; }
+    // 블로커 사전 배치
+    if (t2 && t2.type === EV.Block && t1 && t1.type === EV.Attack) {
+      var k2 = t2.side + '-' + t2.pos, c2 = contactPoint(t2), c1a = contactPoint(t1);
+      setPlan(k2, c1a.x, c2.y, 0, 0.9); taken[k2] = 1;
+      var mate = nearestFront(t2.side, c1a.x, k2);
+      if (mate) { var hm = zonePos(t2.side, mate.zone); setPlan(mate.key, (hm.x + c1a.x) / 2, c2.y, 0.1, 0.95); taken[mate.key] = 1; }
+    } else if (t1 && t1.type === EV.Attack && !t2) {
+      // 공격이 마지막 터치(득점·범실) — 상대 전위 하나가 늦게 따라가 본다
+      var opp = t1.side === 0 ? 1 : 0, c1b = contactPoint(t1);
+      var m2 = nearestFront(opp, c1b.x, null);
+      if (m2) setPlan(m2.key, c1b.x, opp === 0 ? COURT.net - 0.5 : COURT.net + 0.5, 0.2, 1);
+    }
+  }
+  /** side 의 전위(2·3·4존) 중 x 에 가장 가까운 선수. */
+  function nearestFront(side, x, excludeKey) {
+    var best = null;
+    [2,3,4].forEach(function (z) {
+      var key = side + '-' + z; if (key === excludeKey) return;
+      var q = R.pp[key]; if (!q) return;
+      var d = Math.abs(q.x - x);
+      if (!best || d < best.d) best = { key: key, zone: z, d: d };
+    });
+    return best;
+  }
+  /** 랠리가 끝나면 모두 자기 자리로. */
+  function planReturn() {
+    [0,1].forEach(function (side) { [1,2,3,4,5,6].forEach(function (z) {
+      var key = side + '-' + z, home = zonePos(side, z);
+      setPlan(key, home.x, home.y, 0.1, 1);
+    }); });
+  }
+  /** 이번 프레임의 위치 — 계획을 진행도로 보간하고 이동량을 기록한다(달리기 자세용). */
+  function advancePositions() {
+    var f = R.flights[R.idx], u;
+    if (R.ended) u = Math.min(1, R.endHold / 0.75);
+    else u = f ? Math.max(0, Math.min(1, R.t / f.T)) : 0;
+    for (var key in R.plan) {
+      var pl = R.plan[key], q = R.pp[key]; if (!q) continue;
+      var k = easeInOut((u - pl.d0) / Math.max(0.05, pl.d1 - pl.d0));
+      var nx = pl.fx + (pl.tx - pl.fx) * k, ny = pl.fy + (pl.ty - pl.fy) * k;
+      q.mv = Math.abs(nx - q.x) + Math.abs(ny - q.y);
+      q.x = nx; q.y = ny;
+    }
+  }
+
   function collectPlayers() {
     // 코트에는 항상 6인씩 선다. 공을 만진 선수만 이름과 동작을 얻는다. 다음에 만질 선수는 준비 자세를 잡는다.
+    advancePositions();
     var actor = R.touches[Math.min(R.idx, R.touches.length-1)] || null;
     var nextT = (!R.ended && R.idx + 1 < R.touches.length) ? R.touches[R.idx + 1] : null;
     var byKey = {};
@@ -553,10 +639,10 @@ function create(canvas, opts) {
     var out = [];
     [0,1].forEach(function (side) {
       [1,2,3,4,5,6].forEach(function (zone) {
-        var p = zonePos(side, zone), t = byKey[side + '-' + zone];
+        var q = R.pp[side + '-' + zone], p = q || zonePos(side, zone), t = byKey[side + '-' + zone];
         var isActor = !!(actor && actor.side === side && actor.pos === zone);
         var isNext = !!(nextT && nextT.side === side && nextT.pos === zone);
-        out.push({ side:side, pos:zone, x:p.x, y:p.y,
+        out.push({ side:side, pos:zone, x:p.x, y:p.y, moving: q ? q.mv > 0.004 : false,
                    name: isActor && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
                    known: !!t, active: isActor, type: isActor ? actor.type : 0,
                    next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0 });
@@ -603,11 +689,12 @@ function create(canvas, opts) {
     c.fillStyle = 'rgba(4,10,16,' + (0.38 * Math.max(0.3, 1 - jump * 0.8)) + ')';
     c.beginPath(); c.ellipse(base.sx, base.sy, 0.34 * s, 0.14 * s, 0, 0, 6.284); c.fill();
     c.lineCap = 'round'; c.lineJoin = 'round';
-    // 다리(반바지 색), 점프하면 모인다
+    // 다리(반바지 색), 점프하면 모이고, 달리면 앞뒤로 엇갈린다
     var spread = (jump > 0.1 ? 0.10 : 0.20) * s;
+    var run = (p.moving && jump < 0.1) ? Math.sin(R.clock * 15 + p.pos * 2) * 0.16 * s : 0;
     c.strokeStyle = dark; c.lineWidth = Math.max(3, 0.15 * s);
-    c.beginPath(); c.moveTo(hip.sx - 0.08 * s, hip.sy); c.lineTo(foot.sx - spread, foot.sy - 0.02 * s); c.stroke();
-    c.beginPath(); c.moveTo(hip.sx + 0.08 * s, hip.sy); c.lineTo(foot.sx + spread, foot.sy - 0.02 * s); c.stroke();
+    c.beginPath(); c.moveTo(hip.sx - 0.08 * s, hip.sy); c.lineTo(foot.sx - spread + run, foot.sy - 0.02 * s - Math.max(0, run) * 0.5); c.stroke();
+    c.beginPath(); c.moveTo(hip.sx + 0.08 * s, hip.sy); c.lineTo(foot.sx + spread - run, foot.sy - 0.02 * s - Math.max(0, -run) * 0.5); c.stroke();
     // 몸통(어깨가 넓은 사다리꼴, 둥근 모서리)
     var shw = 0.27 * s, hpw = 0.19 * s;
     c.fillStyle = col; c.strokeStyle = col; c.lineWidth = Math.max(2, 0.10 * s);
@@ -637,6 +724,7 @@ function create(canvas, opts) {
     else if (ready === EV.Set)        { lh = [-0.30 * A, -0.7 * A]; rh = [0.30 * A, -0.7 * A]; }
     else if (ready === EV.Attack)     { lh = [-0.45 * A, 0.1 * A]; rh = [0.45 * A, -0.4 * A]; }
     else if (ready)                   { lh = [-0.25 * A, 0.6 * A]; rh = [0.25 * A, 0.6 * A]; }
+    else if (p.moving)                { var sw2 = Math.sin(R.clock * 15 + p.pos * 2) * 0.35; lh = [-0.30 * A, (0.35 + sw2) * A]; rh = [0.30 * A, (0.35 - sw2) * A]; }
     else                              { lh = [-0.42 * A, 0.45 * A]; rh = [0.42 * A, 0.45 * A]; }
     c.strokeStyle = col; c.lineWidth = Math.max(2.5, 0.12 * s);
     var armAt = function (h, sign) {
