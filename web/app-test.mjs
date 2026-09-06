@@ -88,7 +88,7 @@ await tap('[data-act="scout"]', 400);
 check('스카우트 결과가 나온다', (await viewText()).includes('이 선수 키우기'));
 check('스카우트 결과가 실물 카드로 공개된다', (await count('.rcard')) === 1);
 check('코치가 이 선수 키우기를 가리킨다', (await count('.coach-target[data-trainthis]')) === 1);
-check('첫 스카우트 미션이 조각을 준다', /^3\/12/.test(await text('#rFrag')), '조각 ' + await text('#rFrag'));
+check('첫 스카우트 미션이 골드를 준다', +(await text('#rGold')) === gold0 + 50, '골드 ' + await text('#rGold'));
 check('시작 티켓 5장으로는 10연이 잠긴다', await page.$eval('[data-act="scout10"]', b => b.disabled));
 // 시작 티켓은 엔진 기본 5장(league-and-economy B.6.7 — 온보딩에 티켓을 더 주면 시즌 1 난이도가 무너진다).
 // 10연은 조각·순위 보상이 쌓인 뒤 열리므로, 화면 검사를 위해 세이브에 티켓을 넣어 준다.
@@ -292,6 +292,8 @@ await tap('[data-report]', 500);
 }
 await tap('[data-tab="train"]', 400);
 check('육성 목록에 리포트 배지가 있다', /잠재 \d|리포트/.test(await viewText()));
+check('육성 목록이 졸업생을 재육성으로 표시한다', /로스터 OVR [\d.]+ [SABCD] · 재육성/.test(await viewText()));
+check('육성 목록이 재육성은 초기화가 아니라고 말한다', (await viewText()).includes('초기화가 아닙니다'));
 await tap('[data-tab="roster"]', 400);
 check('로스터에 계약 인원 게이지가 있다', /계약 \d+\/42/.test(await viewText()));
 

@@ -33,39 +33,40 @@ function lineupRealSlots(state) {
  * 미션 표. reward 는 { tickets?, gold?, fragments? } — 종류를 섞을 수 있게 객체다.
  * progress(state) → 현재 진행값(goal 이상이면 달성).
  *
- * 보상은 골드·조각뿐이고 티켓은 없다(B.6.6 측정): 시즌 1 에 티켓이 1장 늘 때마다 우승률이 3%p 안팎 오른다.
- * 골드 합 2,650 · 조각 6 은 목표 9건을 기준선과 같은 여유로 통과한 조합(H3). 골드 5,300 은 첫 우승 시즌 2~3 누적이 49% 로 떨어졌다.
+ * 보상은 골드뿐이고 티켓·조각은 없다(B.6.7 측정): 시즌 1 에 티켓이 1장 늘 때마다 우승률이 3%p 안팎 오른다.
+ * 골드 합 1,425 는 재육성 'best' 규칙(graduate) 아래에서 seed 1·3·7 모두 목표 9건을 통과한 조합. 골드 2,850 은 seed 7 에서
+ * 첫 우승 시즌 2~3 누적이 47.8% 로 떨어졌고, 조각 6(티켓 0.5장)조차 'best' 규칙과 겹치면 시즌 1 우승률이 20.5% 로 목표를 넘겼다.
  */
 export const MISSIONS = [
   { id: 'scout1', title: '선수를 스카우트한다', desc: '명단에서 신인 한 명을 데려오세요.',
-    reward: { fragments: 3 }, goal: 1,
+    reward: { gold: 50 }, goal: 1,
     progress: s => Math.min(1, ownedCount(s)) },
   { id: 'grad1', title: '첫 선수를 키워낸다', desc: '캠프 12턴을 완주해 졸업시키세요.',
-    reward: { gold: 150 }, goal: 1,
+    reward: { gold: 75 }, goal: 1,
     progress: s => Math.min(1, s.trainingCount | 0) },
   { id: 'match1', title: '첫 경기를 치른다', desc: '구단 하나를 골라 경기를 해보세요.',
-    reward: { fragments: 3 }, goal: 1,
+    reward: { gold: 50 }, goal: 1,
     progress: s => Math.min(1, (s.wins | 0) + (s.losses | 0)) },
   { id: 'roster3', title: '주전을 셋 만든다', desc: '졸업시킨 선수 3명을 로스터에 채우세요.',
-    reward: { gold: 250 }, goal: 3,
+    reward: { gold: 125 }, goal: 3,
     progress: s => Math.min(3, representatives(s).length) },
   { id: 'win1', title: '첫 승리', desc: '여섯 구단 중 한 곳을 이기세요.',
-    reward: { gold: 300 }, goal: 1,
+    reward: { gold: 150 }, goal: 1,
     progress: s => Math.min(1, s.wins | 0) },
   { id: 'pos5', title: '모든 포지션을 갖춘다', desc: 'S · OH · OP · MB · L 을 한 명씩 보유하세요.',
-    reward: { gold: 300 }, goal: 5,
+    reward: { gold: 150 }, goal: 5,
     progress: s => { const set = new Set(); for (const i of representatives(s)) set.add(i.pos); return set.size; } },
   { id: 'gradA', title: 'A등급으로 졸업시킨다', desc: '캠프를 잘 굴려 A등급 이상을 만드세요.',
-    reward: { gold: 400 }, goal: 1,
+    reward: { gold: 200 }, goal: 1,
     progress: s => (representatives(s).some(i => i.grade <= 1) ? 1 : 0) },
   { id: 'team7', title: '한 팀을 완성한다', desc: '라인업 일곱 자리를 전부 정식 선수로 채우세요. 연습생 0명.',
-    reward: { gold: 500 }, goal: 7,
+    reward: { gold: 250 }, goal: 7,
     progress: s => lineupRealSlots(s) },
   { id: 'win3club', title: '세 구단을 격파한다', desc: '서로 다른 구단 세 곳에 승리하세요.',
-    reward: { gold: 500 }, goal: 3,
+    reward: { gold: 250 }, goal: 3,
     progress: s => { let n = 0; for (const k in (s.winsByClub || {})) if (s.winsByClub[k] > 0) n++; return Math.min(3, n); } },
   { id: 'sr1', title: 'SR 이상을 영입한다', desc: '희귀도 높은 카드를 뽑으세요. 천장이 보장합니다.',
-    reward: { gold: 250 }, goal: 1,
+    reward: { gold: 125 }, goal: 1,
     progress: s => (Object.keys(s.ownedCards || {}).some(id => { const c = cardById(s, id); return !!c && c.rarity >= 2; }) ? 1 : 0) },
 ];
 

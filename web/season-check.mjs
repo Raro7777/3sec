@@ -8,6 +8,7 @@
 //   node web/season-check.mjs --long          장기(시즌 1~15) 목표 + 신인 세대·카드 풀 검증 — 기본 실행에는 포함되지 않는다
 //                                             권장: node web/season-check.mjs --long --n 120  (약 2분)
 //   node web/season-check.mjs --app           앱 경제로(시작 티켓 + 온보딩 미션 보상, engine/missions.js) — B.6.7
+//   node web/season-check.mjs --replace-always  재육성 졸업을 옛 규칙(항상 교체)으로 — 'best' 도입 전 수치 재현용
 //   node web/season-check.mjs --eval sim      육성 평가전을 실제 시뮬로(느림, 정합 확인용)
 //   node web/season-check.mjs --json          기계 판독용 출력
 // 종료 코드 0 = 전 목표 충족.
@@ -39,6 +40,9 @@ if (NO_ROOKIES) E.ROOKIES.firstSeason = 1e9;
 if (argv.includes('--no-club-skill')) E.ROOKIES.clubSkill = false;
 /** --legacy-vacancy = 결원 판정을 옛 규칙(슬롯 점유 여부와 무관하게 카드 id 기준)으로 되돌린다. */
 if (argv.includes('--legacy-vacancy')) E.VACANCY_TUNING.onlyCurrentOccupant = false;
+/** --replace-always = 재육성 졸업을 옛 규칙(항상 대표 교체)으로 되돌린다. 기본은 앱과 같은 'best'(더 좋을 때만 교체) —
+ *  'best' 는 시즌 1~3 목표를 지키지만 시즌 9~15 우승률을 50~67% → 68~84% 로 올린다(D.2 열린 이슈). */
+const GRAD_DECISION = argv.includes('--replace-always') ? 0 : 'best';
 /** --app = 앱 경제로 잰다: 시작 티켓 ONBOARDING.startingTickets + 온보딩 미션 보상(engine/missions.js).
  *  기본 실행은 엔진 기본(티켓 5·미션 없음)이라 GDD 13절 "미션 티켓이 측정 밖" 을 이 스위치가 닫는다.
  *  --app-start N     시작 티켓을 N 으로(실험용)
@@ -197,7 +201,7 @@ function trainPhase(g, runs) {
       if (s.phase === 0) s.apply(POLICIES.optimal.choose(s));
       else s.resolveEvent(s.pendingEvent.oracleChoice);
     }
-    E.graduate(s, 0);
+    E.graduate(s, GRAD_DECISION);   // 앱과 같은 규칙: 재육성 결과가 기존 대표보다 나쁘면 로스터를 바꾸지 않는다
   }
 }
 
@@ -682,6 +686,33 @@ function must(label, ok, note) { invariants.push({ label, ok, note: note || '' }
     must('시설·리포트: 저장→복원',
       E.facilityLevel(gs2, 'hall') === 1 && E.hasScoutReport(gs2, E.CARD_POOL[3].id) && gs2.gold === gs.gold);
   }
+}
+{
+  // 재육성 'best': 더 나쁜 결과는 대표를 덮지 않고, 더 좋은 결과는 교체한다
+  const gb = E.createGame({ seed: 4242 });
+  const cid = E.CARD_POOL[0].id;
+  gb.ownedCards[cid] = 0;
+  const run = (pol) => {
+    const s = E.startTraining(gb, cid, []);
+    let guard = 0;
+    while (s.phase !== 2) { if (++guard > 200) break; if (s.phase === 0) s.apply(pol.choose(s)); else s.resolveEvent(s.pendingEvent.oracleChoice); }
+    return E.graduate(s, 'best');
+  };
+  const g1 = run(POLICIES.optimal);
+  const before = E.representativeOf(gb, cid).ovr;
+  let worse = null, better = null;
+  for (let i = 0; i < 6 && (worse === null || better === null); i++) {
+    const g = run(i % 2 ? POLICIES.optimal : POLICIES.random);
+    if (g.kept === 'stored' && worse === null) worse = { g, rep: E.representativeOf(gb, cid).ovr };
+    if (g.kept === 'replaced' && better === null) better = { g, rep: E.representativeOf(gb, cid).ovr };
+  }
+  must('재육성: 첫 졸업은 로스터에 편입', g1.kept === 'new' && g1.prevOvr === null);
+  must('재육성: 대표 OVR 은 재육성으로 내려가지 않는다', gb.instances.filter(i => i.isRepresentative && i.cardId === cid).length === 1
+    && E.representativeOf(gb, cid).ovr >= before);
+  must('재육성: 더 나쁜 결과는 보관함으로 (기존 대표 유지)', worse === null || (worse.g.ovr < worse.g.prevOvr && Math.abs(worse.rep - worse.g.prevOvr) < 0.05),
+    worse ? `새 ${worse.g.ovr} < 기존 ${worse.g.prevOvr}` : '표본 없음');
+  must('재육성: 더 좋은 결과는 대표 교체', better === null || (better.g.ovr >= better.g.prevOvr && Math.abs(better.rep - better.g.ovr) < 0.05),
+    better ? `새 ${better.g.ovr} ≥ 기존 ${better.g.prevOvr}` : '표본 없음');
 }
 const invFail = invariants.filter(i => !i.ok).length;
 

@@ -911,6 +911,11 @@ function turnEvent(session, rec, turn) {
  * 졸업 처리. decision: 0 대표 교체 / 1 보관 / 2 방출(대표가 이미 있을 때만 의미).
  * Game.cs:104 Graduate
  */
+/**
+ * 졸업 처리. decision: 0 = 대표 교체 · 1 = 보관함 · 2 = 방출 · 'best' = 새 결과가 기존 대표 이상일 때만 교체(아니면 보관함).
+ * 캠프는 매번 카드 초기치에서 새로 시작하므로(trainingCard) 재육성 결과가 더 나쁠 수 있다 — 'best' 가 아니면
+ * 나쁜 결과가 좋은 대표를 덮어쓴다. 앱과 season-check 는 'best' 를 쓴다(테스터 피드백 "다시 육성하니 초기화된 것 같다").
+ */
 export function graduate(session, decision = 0) {
   if (session.phase !== PHASE.Graduated) throw new Error('아직 캠프가 끝나지 않았습니다');
   const state = session.game;
@@ -922,22 +927,24 @@ export function graduate(session, decision = 0) {
   state.trainingCount++;
   inst.runIndex = state.trainingCount;
   const rep = representativeOf(state, inst.cardId);
-  let msg;
+  const prevOvr = rep ? Math.round(rep.ovr * 10) / 10 : null;
+  if (decision === 'best') decision = (rep === null || inst.ovr >= rep.ovr) ? 0 : 1;
+  let msg, kept;
   if (rep === null) {
     inst.isRepresentative = true;
     state.instances.push(inst);
-    msg = '로스터에 편입';
+    msg = '로스터에 편입'; kept = 'new';
   } else if (decision === 0) {
     rep.isRepresentative = false;
     inst.isRepresentative = true;
     state.instances.push(inst);
-    msg = `대표 교체 (기존 OVR ${rep.ovr.toFixed(1)} → 보관함)`;
+    msg = `대표 교체 (기존 OVR ${rep.ovr.toFixed(1)} → 보관함)`; kept = 'replaced';
   } else if (decision === 1) {
     inst.isRepresentative = false;
     state.instances.push(inst);
-    msg = '보관함에 보관';
+    msg = `보관함에 보관 (로스터는 기존 OVR ${rep.ovr.toFixed(1)} 유지)`; kept = 'stored';
   } else {
-    msg = '방출 (스카우트 조각 +1)' + (addFragment(state) ? ' → 조각 3개로 티켓 +1' : '');
+    msg = '방출 (스카우트 조각 +1)' + (addFragment(state) ? ` → 조각 ${ECONOMY.fragmentsPerTicket}개로 티켓 +1` : ''); kept = 'released';
   }
   // league-and-economy.md A.5.1 육성 졸업 보상: 등급별 골드 · 첫 완주 · 누적 마일스톤
   const gradeName = GRADE_NAMES[inst.grade];
@@ -976,6 +983,8 @@ export function graduate(session, decision = 0) {
     evaluations: r.evaluations,
     camp: campLine(r.camp),
     roster: msg,
+    kept,            // 'new' | 'replaced' | 'stored' | 'released'
+    prevOvr,         // 기존 대표 OVR(없으면 null) — 졸업 화면 비교 표기용
     summary: `${inst.name} ${POS_CODES[inst.pos]} · OVR ${inst.ovr.toFixed(1)} ${GRADE_NAMES[inst.grade]} · 완성도 ${(r.coreReach * 100).toFixed(0)}% · ${campLine(r.camp)} — ${r.comment}`,
   };
 }

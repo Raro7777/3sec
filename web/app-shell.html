@@ -961,7 +961,11 @@ function coachStep(){
     if (o.kind === 'event') return { key:'ev'+o.turn, text:'이야기 선택입니다. 마음 가는 쪽을 고르세요. 정답은 없고, <b>추천</b>은 무난한 쪽입니다.', sel:'[data-rec="1"]' };
     if (o.treating) return { key:'treat'+o.turn, text:'부상 치료 턴입니다. 훈련은 못 하고 피로만 회복됩니다. <b>치료하고 다음 턴으로</b>를 누르세요.', sel:'[data-choice="rest"]' };
     if (o.kind === 'action') {
-      if (o.turn === 1) return { key:'t1', text:'12턴 동안 훈련을 골라 키웁니다. 초록 글씨가 오르는 능력치, 오른쪽 숫자가 쌓이는 피로입니다. 지금은 <b>추천</b>을 누르세요.', sel:'[data-rec="1"]' };
+      if (o.turn === 1) {
+        var rep1 = null; try { rep1 = E.representativeOf(G, ses.trainee.card.id); } catch(e){}
+        if (rep1) return { key:'t1r', text:'재육성입니다. 캠프는 매번 처음부터 시작하고, 졸업 결과가 지금 로스터의 이 선수(OVR '+rep1.ovr.toFixed(1)+')보다 좋을 때만 교체됩니다. <b>추천</b>을 누르세요.', sel:'[data-rec="1"]' };
+        return { key:'t1', text:'12턴 동안 훈련을 골라 키웁니다. 초록 글씨가 오르는 능력치, 오른쪽 숫자가 쌓이는 피로입니다. 지금은 <b>추천</b>을 누르세요.', sel:'[data-rec="1"]' };
+      }
       if (o.isEvalTurn) return { key:'t'+o.turn, text:'이번 턴 끝에 평가전이 있습니다. 결과가 등급에 반영됩니다. 계속 <b>추천</b>을 따라가면 됩니다.', sel:'[data-rec="1"]' };
       return { key:'t'+o.turn, text:'<b>추천</b>을 따라가면 됩니다. 피로가 45를 넘으면 부상 위험이 생겨 휴식이 추천됩니다.', sel:'[data-rec="1"]' };
     }
@@ -1377,7 +1381,9 @@ function vTrain(){
   var retiredN = ownedAll.length - owned.length;
   if (!ownedAll.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   if (!owned.length) return '<h2>육성</h2><div class="empty">보유한 카드가 모두 은퇴했습니다.<br>스카우트로 새 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
+  var trainedN = owned.filter(function(cid){ return !!E.representativeOf(G, cid); }).length;
   return h('<h2>육성</h2><p class="sub">12턴 프리시즌 캠프. 훈련으로 능력치를 올리고, 피로를 관리하며, 평가전 3번을 거쳐 졸업시킵니다. 한 번에 5~10분.</p>'+
+    (trainedN ? '<div class="card flat"><div class="tiny"><b style="color:var(--ink2)">재육성</b>은 캠프를 처음부터 다시 도는 것입니다(초기화가 아닙니다). 졸업한 선수는 로스터에 그대로 있고, 새 결과가 더 좋을 때만 교체됩니다. 한계돌파가 있으면 천장이 높아져 더 좋게 나올 수 있습니다.</div></div>' : '')+
     (retiredN ? '<div class="card flat"><div class="tiny">은퇴한 카드 '+retiredN+'장은 목록에서 제외됩니다. 재육성해도 나이는 되돌아가지 않습니다.</div></div>' : '')+
     owned.map(function(cid){
       var c = E.trainingCard(G, cid);
@@ -1387,10 +1393,10 @@ function vTrain(){
       var rar = ['N','R','SR','SSR'][c.rarity];
       return '<button class="pcard tap" data-pick="'+cid+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(c,44)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
-        '<div class="pmeta">'+(rep?'대표 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]:'미육성')+
+        '<div class="pmeta">'+(rep?'<span style="color:var(--good)">로스터 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]+'</span> · 재육성':'미육성 · 첫 캠프')+
         ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+
         (rep?ageBadge(rep,true):'')+reportBadge(cid)+'</div></div>'+
-        '<div class="povr num">'+ovr.toFixed(1)+'<small>초기</small></div></button>';
+        '<div class="povr num">'+ovr.toFixed(1)+'<small>캠프 시작</small></div></button>';
     }).join(''));
 }
 
@@ -1432,6 +1438,13 @@ function startCamp(ids){
   view = 'trainTurn';
 }
 
+/** 재육성 캠프면 "지금 로스터의 그 선수" 를 헤더에 보여 준다 — 캠프 초기치가 로스터 초기화로 보이지 않게. */
+function retrainChip(card){
+  var rep = null; try { rep = E.representativeOf(G, card.id); } catch(e){}
+  if (!rep) return '';
+  return '<span class="zone" style="background:rgba(79,191,149,.14);color:var(--good);margin-right:6px" title="졸업 결과가 이보다 좋을 때만 교체">재육성 · 로스터 '+rep.ovr.toFixed(1)+'</span>';
+}
+
 // ---------- 육성: 턴
 function vTrainTurn(){
   var o = E.trainingOptions(ses);
@@ -1453,7 +1466,7 @@ function vTrainTurn(){
         return '<i class="'+cls+'"></i>'; }).join('')+'</div>'+
      '<div class="spread" style="margin-top:9px">'+
        '<div class="muted">캠프 <b class="num" style="color:var(--ink)">'+o.turn+'/'+o.totalTurns+'</b>'+(o.isEvalTurn?' · <span style="color:var(--hot)">평가전</span>':'')+'</div>'+
-       '<div class="row"><span class="zone '+zoneCls+'">'+o.zoneLabel+'</span></div>'+
+       '<div class="row">'+retrainChip(card)+'<span class="zone '+zoneCls+'">'+o.zoneLabel+'</span></div>'+
      '</div>'+
      '<div class="gauge '+(o.zone===2?'hot':'')+'"><span style="width:'+pct+'%"></span></div>'+
      '<div class="spread" style="margin-top:5px"><div class="tiny">피로 '+o.fatigue.toFixed(0)+' · 컨디션 '+o.conditionLabel+' '+o.conditionArrow+'</div>'+
@@ -1537,6 +1550,7 @@ function vTrainGrad(){
       '<div class="num" style="font-size:20px">OVR '+g.ovr.toFixed(1)+'</div>'+
       '<div class="tiny" style="margin-top:6px">완성도 '+Math.round(g.completion*100)+'% · 스킬 Lv'+g.skillLevel+' · '+esc(g.camp)+'</div>'+
       '<div class="muted" style="margin-top:10px;font-size:13px">'+esc(g.roster)+'</div>'+
+      gradCompare(g)+
     '</div>'+
     '<div class="card"><div class="muted" style="margin-bottom:8px">능력치 변화</div>'+
       '<div class="stats" style="grid-template-columns:1fr">'+g.deltas.map(function(d,i){
@@ -1546,6 +1560,16 @@ function vTrainGrad(){
       }).join('')+'</div></div>'+
     '<button class="btn" data-go="match">경기하러 가기</button>'+
     '<button class="btn ghost" data-go="train">한 명 더 키우기</button>');
+}
+
+/** 재육성이면 기존 대표와 비교해 "로스터가 어떻게 됐는지" 를 한 줄로. 캠프는 매번 처음부터라 이 줄이 없으면 초기화로 보인다. */
+function gradCompare(g){
+  if (g.prevOvr === null || g.prevOvr === undefined) return '';
+  var up = g.ovr - g.prevOvr;
+  if (g.kept === 'replaced') return '<div class="card flat" style="margin:12px 0 0;text-align:left"><b style="color:var(--good)">로스터 교체</b>'+
+    '<div class="tiny" style="margin-top:3px">기존 대표 OVR '+g.prevOvr.toFixed(1)+' → 이번 결과 '+g.ovr.toFixed(1)+' ('+(up>=0?'+':'')+up.toFixed(1)+'). 더 좋은 쪽이 로스터에 남습니다.</div></div>';
+  return '<div class="card flat" style="margin:12px 0 0;text-align:left"><b style="color:var(--hot)">로스터는 그대로</b>'+
+    '<div class="tiny" style="margin-top:3px">이번 결과 OVR '+g.ovr.toFixed(1)+'는 기존 대표 '+g.prevOvr.toFixed(1)+'보다 낮아 보관만 했습니다. 캠프는 매번 처음부터 시작하고, 더 좋은 결과가 나올 때만 로스터의 선수가 바뀝니다.</div></div>';
 }
 
 // ---------- 선수 상세
@@ -2514,7 +2538,7 @@ function pushFeed(ev){
 }
 
 function finishCamp(){
-  lastGrad = E.graduate(ses, 0);
+  lastGrad = E.graduate(ses, 'best');   // 재육성 결과가 기존 대표보다 나쁘면 로스터를 바꾸지 않는다
   var earned = !autoUnlocked && !usedAutoThisCamp;
   if (earned) {
     autoUnlocked = true;
