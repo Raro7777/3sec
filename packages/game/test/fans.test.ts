@@ -3,7 +3,7 @@ import { Rng, TUNING } from "@3sec/engine";
 import {
   CLUBS, CLUBS_D2, FAN_FRENZY_AT, FAN_PROTEST_BELOW, FAN_PROTEST_CONFIDENCE, FAN_PROTEST_WEEKS, FAN_START_MOOD, advanceRound, adjustMood, avgHomeAttendance, clubCapacity, createMatch,
   currentFixtures, deserialize, expectedAttendance, fanHomeEdge, fansCupResult, fansTransfer, fansWeek, financeSummary, gateReceipts, isStar, moodLabel, newGame, playerOf,
-  clubsIn, seasonRounds, seasonOver, serialize, simulateRound, startNextSeason, weeklyRevenue, type GameState,
+  clubsIn, divisionOf, seasonRounds, seasonOver, serialize, simulateRound, startNextSeason, weeklyRevenue, type GameState,
 } from "../src/index";
 import { advanceCupDay, simulateCupDay } from "../src/cup";
 
@@ -159,8 +159,14 @@ describe("fans: season", () => {
       expect(fin.gate).toBeLessThan(fin.revenue);
       // the old flat income was 0.6 + 0.35 × (reputation − 10) per week; fixed + gate should land in the same band
       const old = (0.6 + Math.max(0, c.reputation - 10) * 0.35) * rounds;
-      expect(fin.revenue).toBeGreaterThan(old * 0.7);
-      expect(fin.revenue).toBeLessThan(old * 1.45);
+      // the league's fixed money is a top-flight figure; the second division earns a fraction of it (divisions.ts)
+      if (divisionOf(c) === 1) {
+        expect(fin.revenue).toBeGreaterThan(old * 0.7);
+        expect(fin.revenue).toBeLessThan(old * 1.45);
+      } else {
+        expect(fin.revenue).toBeGreaterThan(old * 0.3);
+        expect(fin.revenue).toBeLessThan(old * 1.1);
+      }
       expect(weeklyRevenue(c, null)).toBeLessThan(0.6 + Math.max(0, c.reputation - 10) * 0.35);
     }
     const top = [...s.clubs].sort((a, b) => b.reputation - a.reputation)[0]!;

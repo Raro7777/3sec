@@ -23,7 +23,7 @@ import { storyMatch, storyRollover, storyWeek } from "./story";
 import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
 import { careerInit, careerRollover, careerWeek } from "./career";
-import { CLUBS_PER_DIVISION, DIVISIONS, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
+import { CLUBS_PER_DIVISION, DIVISIONS, DIVISION_REVENUE_FACTOR, PARACHUTE_FACTOR, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
 
 export interface RecordOptions {
   /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
@@ -344,6 +344,8 @@ export function startNextSeason(s: GameState): void {
   for (const { club, from } of swap.relegated) s.news.unshift(`${clubOf(s, club).name} ${divisionName(from)} 강등.`);
   if (swap.promoted.some((p) => p.club === s.userClub)) s.news.unshift(`승격했습니다. 다음 시즌은 ${divisionName(userDivision(s))}입니다.`);
   if (swap.relegated.some((r) => r.club === s.userClub)) s.news.unshift(`강등입니다. 다음 시즌은 ${divisionName(userDivision(s))}에서 다시 시작합니다.`);
+  if (swap.relegated.some((r) => r.club === s.userClub)) s.news.unshift(`강등 첫 시즌에는 낙하산 지원금으로 리그 고정 수입이 1부의 ${Math.round(PARACHUTE_FACTOR * 100)}%로 유지되고, 그다음 시즌부터 ${Math.round((DIVISION_REVENUE_FACTOR[2] ?? 0.5) * 100)}%가 됩니다. 연봉을 줄이세요.`);
+  if (swap.promoted.some((r) => r.club === s.userClub)) s.news.unshift(`승격과 함께 리그 고정 수입이 1부 기준으로 올라갑니다 (2부의 ${Math.round(1 / (DIVISION_REVENUE_FACTOR[2] ?? 0.5))}배).`);
   s.season++;
   s.round = 0;
   s.fixtures = buildAllFixtures(s.clubs);

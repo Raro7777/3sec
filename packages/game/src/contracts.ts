@@ -3,6 +3,7 @@ import { playerValue, MIN_SQUAD, releaseToMarket } from "./transfers";
 import { clubOf } from "./season";
 import { autoSelect, repairSelection } from "./selection";
 import { staffWageBill } from "./staff";
+import { revenueFactor } from "./divisions";
 
 /** Salary per season (억원) a player of this value expects. */
 export function wageFor(p: SquadPlayer): number {
@@ -57,7 +58,8 @@ export function renewContract(s: GameState, playerId: string, years: 1 | 2 | 3):
 export function weeklyRevenue(club: Club, position: number | null): number {
   const base = 0.5 + Math.max(0, club.reputation - 10) * 0.25;
   const pos = position === null ? 0 : Math.max(0, 12 - position) * 0.03;
-  return Math.round((base + pos) * 100) / 100;
+  // the league's money follows the division (divisions.ts); the gate follows the crowd and is booked apart
+  return Math.round((base + pos) * revenueFactor(club) * 100) / 100;
 }
 
 /** Every club banks its weekly fixed income and pays a week of wages (players, loanees and coaching staff); a poor club can slide into the red, which blocks buying. */

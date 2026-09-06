@@ -44,6 +44,20 @@ export const divisionName = (d: number): string => DIVISION_NAME[d] ?? `${d}부 
 export const DIVISION_PRIZE_FACTOR: Record<number, number> = { 1: 1, 2: 0.32 };
 export const prizeFactor = (division: number): number => DIVISION_PRIZE_FACTOR[division] ?? 0.32;
 
+/**
+ * Weekly fixed income (sponsors, broadcasting) by division. The gate is separate and already follows the
+ * crowd, so this is the part of a club's money that the league itself hands out: half of it goes when a
+ * club goes down. Without this a relegated club kept a top-flight income on a second-division wage bill and
+ * simply outspent the division; the season after the swap it was 6.6× richer than the club that came up.
+ */
+export const DIVISION_REVENUE_FACTOR: Record<number, number> = { 1: 1, 2: 0.5 };
+/**
+ * The season straight after relegation the league softens the fall: a parachute payment that holds the
+ * fixed income at three quarters of the top-flight figure while the wage bill is cut (the fire sale).
+ */
+export const PARACHUTE_FACTOR = 0.75;
+export const revenueFactor = (c: Club): number => (c.firesale ? PARACHUTE_FACTOR : DIVISION_REVENUE_FACTOR[divisionOf(c)] ?? 0.5);
+
 
 
 /**

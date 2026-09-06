@@ -144,3 +144,18 @@ describe("두 개의 디비전", () => {
     expect(new Set(back.fixtures.map((f) => f.id)).size).toBe(back.fixtures.length);
   });
 });
+
+describe("디비전과 돈", () => {
+  it("halves the league's fixed income in the second division and softens the first season down with a parachute", async () => {
+    const { weeklyRevenue, DIVISION_REVENUE_FACTOR, PARACHUTE_FACTOR } = await import("../src/index");
+    const s = newGame(11, 0);
+    const top = s.clubs[0]!, low = s.clubs[12]!;
+    // same reputation on paper: the second-division club earns the factor of what the top-flight club would
+    const twin = { ...low, reputation: top.reputation };
+    expect(weeklyRevenue(twin, null)).toBeCloseTo(Math.round(weeklyRevenue(top, null) * DIVISION_REVENUE_FACTOR[2]! * 100) / 100, 1);
+    // the season after relegation the parachute holds three quarters
+    const fallen = { ...twin, firesale: true };
+    expect(weeklyRevenue(fallen, null)).toBeCloseTo(Math.round(weeklyRevenue(top, null) * PARACHUTE_FACTOR * 100) / 100, 1);
+    expect(PARACHUTE_FACTOR).toBeGreaterThan(DIVISION_REVENUE_FACTOR[2]!);
+  });
+});
