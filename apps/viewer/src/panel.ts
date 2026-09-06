@@ -267,7 +267,9 @@ export class ManagerPanel {
       row.innerHTML = `<span class="lbl">${def.label}</span><input type="range" min="0" max="100" step="5" data-key="${def.key}" aria-label="${def.label}" title="${def.lo} ↔ ${def.hi}"><span class="val"></span>`;
       const input = row.querySelector("input")!;
       const val = row.querySelector(".val")!;
-      input.addEventListener("input", () => {
+      // the label follows the thumb; the engine hears the change once, on release, so one drag is one log line
+      input.addEventListener("input", () => { val.textContent = this.describe(def, Number(input.value) / 100); });
+      input.addEventListener("change", () => {
         const v = Number(input.value) / 100;
         this.match.setTactics(this.team, { [def.key]: v } as Partial<Tactics>);
         val.textContent = this.describe(def, v);

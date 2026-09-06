@@ -57,6 +57,12 @@ export interface MatchExtra {
   clubs?: [ClubLook, ClubLook];
   /** player id → age, for the substitution picker */
   ages?: Record<string, number>;
+  /**
+   * Finish the other grounds off the main thread (the worker pool replays them from kick-off; the engine is
+   * deterministic, so the scores the ticker showed so far still hold). Swaps each `others[].match` for the
+   * finished result. Without it "결과로" steps every match in-thread, which is six matches' worth of engine work.
+   */
+  finishOthers?: () => Promise<void>;
 }
 
 /** What the viewer needs of a club beyond the engine's team def. */
@@ -477,6 +483,15 @@ export class MatchScreen {
     return this.tactics?.report() ?? null;
   }
 
+  private ownDone(): boolean {
+    return this.match.state.phase === "FULL_TIME";
+  }
+
+  /** Step only my own match (the other grounds are being finished elsewhere). */
+  private stepOwn(n: number): void {
+    for (let i = 0; i < n && !this.ownDone(); i++) { this.match.step(); this.tactics?.sample(); }
+  }
+
   private allDone(): boolean {
     return this.match.state.phase === "FULL_TIME" && this.others.every((o) => o.match.state.phase === "FULL_TIME");
   }
@@ -484,12 +499,22 @@ export class MatchScreen {
   private async skipToEnd(): Promise<void> {
     this.setPlaying(false);
     this.btnSkip.disabled = true;
-    // from here the assistant runs my bench and tactics, as in an auto round
+    // from here the assistant runs my bench and tactics, as in an auto round; its changes are not "내 지시"
     this.match.enableAi(this.userTeam);
+    this.tactics?.handOver();
+    // the other grounds go to the worker pool while this thread finishes my own match
+    const others = this.extra.finishOthers?.();
     await this.runChunked(() => {
-      this.stepAll(20 * 30); // 30 match seconds per slice
-      return this.allDone();
-    }, "라운드 시뮬레이션 중…");
+      if (others) this.stepOwn(20 * 30);
+      else this.stepAll(20 * 30); // 30 match seconds per slice
+      return others ? this.ownDone() : this.allDone();
+    }, "경기 결과 계산 중…");
+    if (others) {
+      let ready = false;
+      void others.then(() => { ready = true; }, () => { ready = true; });
+      await this.runChunked(() => ready, "다른 구장 결과 기다리는 중…");
+      await others;
+    }
     this.render();
   }
 

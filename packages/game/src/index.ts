@@ -10,7 +10,7 @@ export {
 } from "./season";
 export {
   CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_D2_ENTRANTS, CUP_PRIZE, cupByes, cupField, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
-  currentCupTies, pendingCupTies, userCupTie, userCupStatus, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, type ShootoutKick, type ShootoutDetail, recordCupResult,
+  currentCupTies, pendingCupTies, userCupTie, userCupStatus, userEnteredCup, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, type ShootoutKick, type ShootoutDetail, recordCupResult,
   simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";

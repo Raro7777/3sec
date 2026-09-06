@@ -61,6 +61,21 @@ describe("내 지시 리포트", () => {
     expect(rep.changes[0]!.afterMinutes).toBe(rep.changes[1]!.minute - rep.changes[0]!.minute);
   });
 
+  it("leaves out changes made after the bench is handed to the assistant", () => {
+    const home = generateTeam({ id: 0, name: "H", shortName: "H", color: "#f00", formation: "4-3-3", quality: 12, seed: 11, tactics: { pressing: 0.25 } });
+    const away = generateTeam({ id: 1, name: "A", shortName: "A", color: "#00f", formation: "4-4-2", quality: 12, seed: 22 });
+    const m = new Match(home, away, { seed: 7, aiManaged: [1] });
+    const rec = new TacticsRecorder(m, 0);
+    let handed = false, poked = false;
+    while (m.state.phase !== "FULL_TIME") {
+      m.step(); rec.sample();
+      if (!handed && m.matchSeconds() >= 30 * 60) { rec.handOver(); m.enableAi(0); handed = true; }
+      // something an assistant would do after the hand-over
+      if (handed && !poked && m.matchSeconds() >= 50 * 60) { m.setTactics(0, { pressing: 0.95 }); poked = true; }
+    }
+    expect(rec.report()).toBeNull();
+  });
+
   it("declines to measure a change made too close to the whistle rather than reading noise", () => {
     const rep = play(13, [{ minute: 88, patch: { pressing: 0.95 } }])!;
     expect(rep.changes).toEqual([]);

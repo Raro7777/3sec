@@ -73,6 +73,8 @@ const per10 = (delta: number, minutes: number): number => (minutes > 0 ? (delta 
 export class TacticsRecorder {
   private samples: Sample[] = [];
   private lastMinute = -1;
+  /** match minute from which the assistant, not the manager, is making the changes (skip to result) */
+  private handedAt = Infinity;
 
   constructor(private readonly match: Match, private readonly userTeam: TeamId) {
     this.sample();
@@ -101,6 +103,16 @@ export class TacticsRecorder {
     });
   }
 
+  /**
+   * From here on the bench is the assistant's ("결과로" hands the match to the AI): later changes are not
+   * the manager's and are left out of the report, though the football after them still counts toward the
+   * windows of the changes the manager did make.
+   */
+  handOver(): void {
+    this.sample();
+    this.handedAt = Math.min(this.handedAt, Math.floor(this.match.matchSeconds() / 60));
+  }
+
   /** The finished report, or null when the manager changed nothing worth measuring. */
   report(): TacticsReport | null {
     this.sample();
@@ -120,7 +132,7 @@ export class TacticsRecorder {
       });
       if (a.trap !== b.trap) labels.push(`오프사이드 트랩 ${b.trap ? "켬" : "끔"}`);
       // labelled with the minute the manager was still on the old setting, which is when they moved it
-      if (labels.length) marks.push({ index: i, atMinute: a.minute, labels });
+      if (labels.length && a.minute < this.handedAt) marks.push({ index: i, atMinute: a.minute, labels });
     }
     if (!marks.length) return null;
 

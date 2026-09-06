@@ -92,6 +92,9 @@ export const userCupTie = (s: GameState): CupTie | null => currentCupTies(s).fin
 
 export type CupStatus = "playing" | "bye" | "out" | "holder" | "done";
 /** Where the user's club stands in this season's cup. */
+/** Did the user's club enter this season's cup at all? (Only the top flight and the second division's best four do.) */
+export const userEnteredCup = (s: GameState): boolean => cupEntrants(s, 0).includes(s.userClub);
+
 export function userCupStatus(s: GameState): CupStatus {
   if (cupDone(s)) return s.cup.holder === s.userClub ? "holder" : "done";
   if (userCupTie(s)) return "playing";

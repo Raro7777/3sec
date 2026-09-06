@@ -10,7 +10,7 @@ import {
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
-  tieWinner, userCupStatus, userCupTie, type CupTie,
+  tieWinner, userCupStatus, userEnteredCup, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
   managerTags, managerOfYear, expectedPositions, type Manager,
   ATTR_LABEL, RATING_MIN_APPS, avgRating, topAssists, topRatings,
@@ -721,8 +721,9 @@ export class Game {
         <div class="hint">단판 토너먼트입니다. 90분 무승부면 승부차기로 가립니다. 컵 경고는 리그 누적에 들어가지 않습니다. 상금: 8강 탈락 ${CUP_PRIZE.qfLoser}억 · 4강 탈락 ${CUP_PRIZE.sfLoser}억 · 준우승 ${CUP_PRIZE.runnerUp}억 · 우승 ${CUP_PRIZE.winner}억.</div>`);
       } else {
         const st = userCupStatus(s);
-        h.push(`<div class="fixture cup"><div class="team"><span class="cupTag">${CUP_NAME}</span> ${stage}<small>${st === "bye" ? "우리 팀은 부전승으로 8강에 직행합니다." : "우리 팀은 이미 탈락했습니다. 다른 팀들의 경기가 진행됩니다."}</small></div></div>`);
-        h.push(`<div class="actions"><button class="primary" data-act="cupSim">컵 라운드 진행 ⏩</button></div>`);
+        h.push(`<div class="fixture cup"><div class="team"><span class="cupTag">${CUP_NAME}</span> ${stage}<small>${st === "bye" ? "우리 팀은 부전승으로 8강에 직행합니다." : userEnteredCup(s) ? "우리 팀은 이미 탈락했습니다. 다른 팀들의 경기가 진행됩니다." : "이번 시즌 컵에는 나가지 않습니다 (1부 전 구단과 2부 상위 4팀만 출전). 다른 팀들의 경기가 진행됩니다."}</small></div></div>`);
+        // a day off for us: settle the cup alone, or roll straight on through the next league rounds
+        h.push(`<div class="actions"><button class="primary" data-act="cupSim">컵 라운드 진행 ⏩</button><button data-act="sim3" title="컵 라운드를 처리한 뒤 리그 3라운드를 이어서 자동 진행합니다">⏩ +3라운드</button><button data-act="sim5" title="컵 라운드를 처리한 뒤 리그 5라운드를 이어서 자동 진행합니다">⏩ +5라운드</button></div>`);
       }
     } else if (fx) {
       const home = clubOf(s, fx.home), away = clubOf(s, fx.away);
@@ -1100,7 +1101,7 @@ export class Game {
     if (tie) {
       const opp = clubOf(s, tie.home === me ? tie.away : tie.home);
       mine = `vs ${opp.name} (${tie.home === me ? "홈" : "원정"})`;
-    } else mine = st === "bye" ? "부전승 (8강 직행)" : st === "out" ? '<span style="color:var(--bad)">탈락</span>' : "대진 미정";
+    } else mine = st === "bye" ? "부전승 (8강 직행)" : st === "out" ? (userEnteredCup(s) ? '<span style="color:var(--bad)">탈락</span>' : '<span style="color:var(--muted)">미출전 (2부 상위 4팀만)</span>') : "대진 미정";
     return `<b>${CUP_NAME}</b> ${stage} · ${when} · ${mine}`;
   }
 
@@ -2644,6 +2645,19 @@ export class Game {
       live: this.liveKind === "league" ? { state: s, fixture: mine } : undefined,
       clubs: [this.clubLook(home), this.clubLook(away)],
       ages: Object.fromEntries([...home.squad, ...away.squad].map((p) => [p.id, p.age])),
+      finishOthers: async () => {
+        // replay the other grounds on the worker pool from kick-off (deterministic: same seeds, same AI, same result)
+        const items = this.live!.filter((x) => x !== user && x.match.state.phase !== "FULL_TIME");
+        if (!items.length) return;
+        const jobs = items.map((x) => (x.tie ? cupJob(s, x.tie) : leagueJob(s, x.fixture)));
+        const results = await getSimPool().run(jobs);
+        items.forEach((x, i) => {
+          const done = asMatch(results.get(jobs[i]!.id)!);
+          x.match = done;
+          const o = others.find((y) => y.fixture === x.fixture);
+          if (o) o.match = done;
+        });
+      },
     });
   }
 
