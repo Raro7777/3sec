@@ -164,7 +164,9 @@ function create(canvas, opts) {
     // 연출 1단계(art-pipeline 16.7): 카메라 줌·포커스, 슬로모션, 착지 충격, 네트 흔들림, 관중 환호, 시계
     zoom: 1, zoomT: 1, fx: 0, fy: 0, fxT: 0, fyT: 0, slow: 1, land: null, netWobble: 0, cheer: null, clock: 0,
     // 선수 이동(16.8): 현재 위치와 이번 비행 동안의 이동 계획. 공을 만질 선수는 접점으로 뛰어가고, 친 뒤에는 자리로 돌아온다.
-    pp: {}, plan: {}
+    pp: {}, plan: {},
+    // 박진감(16.9): 큰 득점·스킬 직전에 느려지고(예고), 때리는 순간 멈췄다가(히트스톱), 공은 빠르게 꽂힌다
+    hitstop: 0, pre: 0, anticip: 0
   };
   /** 득점 뒤 관중 반응 — 앱이 부른다. side 가 내 쪽이면 홈 관중이 들썩이고, 아니면 잠깐 조용해진다. */
   R.cheerFor = function (side) { R.cheer = { side: side, t: 0 }; };
@@ -188,6 +190,9 @@ function create(canvas, opts) {
     // 서브 직전: 서버는 이미 엔드라인 뒤에 서 있다
     if (R.touches[0]) { var s0 = R.touches[0], c0 = contactPoint(s0); var k0 = s0.side + '-' + s0.pos; if (R.pp[k0]) { R.pp[k0].x = c0.x; R.pp[k0].y = c0.y; } }
     planFlight(0);
+    R.hitstop = 0; R.anticip = 0;
+    var firstSkill = !!(R.touches[0] && R.touches[0].skills && R.touches[0].skills.length);
+    R.pre = (R.speed < 4 && ((bigFinish() && R.flights.length === 1) || firstSkill)) ? 0.55 : 0;   // 에이스·스킬 서브: 서브 전 숨 고르기
     if (R.onTouch && R.touches.length) R.onTouch(0);
     if (R.touches.length) spawnBursts(R.touches[0]);
   };
@@ -220,7 +225,7 @@ function create(canvas, opts) {
     R.last = now || 0;
     R.clock += raw;
     var dt = raw * R.speed * R.slow;
-    if (R.playing) step(dt);
+    if (R.playing) step(dt, raw);
     stepFx(raw * Math.max(1, R.speed));
     draw();
   }
@@ -231,22 +236,46 @@ function create(canvas, opts) {
     var pt = R.point; if (!pt) return false;
     return !!(pt.clutch || pt.reason === 1 || pt.reason === 3 || pt.reason === 5);
   }
-  function step(dt) {
+  /** 이 터치에서 스킬이 발동하는가. */
+  function hasSkill(t) { return !!(t && t.skills && t.skills.length); }
+  /** 결정적 터치 — 큰 득점을 만든 쪽의 마지막 터치(강타·서브·블로킹). 상대 블록 터치가 뒤에 붙어도 예고·히트스톱은 여기에 건다. */
+  function decisiveIndex() {
+    if (!bigFinish()) return -1;
+    var pt = R.point;
+    for (var i = R.touches.length - 1; i >= 0; i--) if (R.touches[i].side === pt.side) return i;
+    return -1;
+  }
+  /**
+   * 시간 배율. 원칙: 느려지는 건 "때리기 전", 때리는 순간은 멈추고, 공은 빠르다.
+   *  · 다음 터치가 큰 마무리(에이스·강타·블로킹·클러치)이거나 스킬 발동이면 이 비행의 마지막 35% 를 0.3배 (예고)
+   *  · 마무리 비행 자체는 1.35배
+   */
+  function timeScale() {
+    var f = R.flights[R.idx]; if (!f || R.speed >= 4) return 1;
+    var u = R.t / f.T, dec = decisiveIndex();
+    var nextT = R.touches[R.idx + 1];
+    if (((dec >= 0 && R.idx + 1 === dec) || hasSkill(nextT)) && u > 0.65) return 0.3;   // 예고: 결정적 터치·스킬 직전
+    if (dec >= 0 && R.idx >= dec) return 1.35;                                           // 결정적 터치 뒤로는 빠르게
+    return 1;
+  }
+  function step(dt, raw) {
     if (R.ended) {
       R.endHold += dt;
-      if (R.endHold > (bigFinish() && R.speed < 4 ? 1.0 : 0.75) && R.onEnd) { var cb = R.onEnd; R.onEnd = null; cb(); }
+      if (R.endHold > (bigFinish() && R.speed < 4 ? 0.7 : 0.75) && R.onEnd) { var cb = R.onEnd; R.onEnd = null; cb(); }
       R.impact = Math.max(0, R.impact - dt * 3);
       stepBursts(dt);
       return;
     }
+    // 서브 전 숨 고르기 / 히트스톱: 시간이 멈춘다
+    if (R.pre > 0) { R.pre -= raw; R.anticip = 1; return; }
+    if (R.hitstop > 0) { R.hitstop -= raw; return; }
     R.t += dt;
     R.impact = Math.max(0, R.impact - dt * 3);
     stepBursts(dt);
     var f = R.flights[R.idx];
     if (!f) { R.ended = true; return; }
-    // 마지막 비행 후반, 큰 득점이면 슬로모션 — 결말이 보이게
-    var isLast = R.idx === R.flights.length - 1;
-    R.slow = (isLast && bigFinish() && R.speed < 4 && R.t / f.T > 0.45) ? 0.42 : 1;   // 4배속은 훑어보기 — 슬로모션 없음
+    R.slow = timeScale();
+    R.anticip = R.slow < 1 ? 1 : 0;
     if (R.t >= f.T) {
       R.t -= f.T; R.idx++;
       R.impact = 1; R.trail.length = 0;
@@ -255,7 +284,11 @@ function create(canvas, opts) {
         planFlight(R.idx);
         if (R.onTouch) R.onTouch(R.idx);
         spawnBursts(R.touches[R.idx]);
-        if (nf.from && nf.from.type === EV.Attack) R.shake = 0.6;
+        var t = R.touches[R.idx], decNow = R.idx === decisiveIndex();
+        // 때리는 순간: 결정적 터치는 0.09초, 스킬 발동은 0.06초 멈춘다 — 그 뒤 공이 빠르게 나간다
+        if (R.speed < 4) R.hitstop = decNow ? 0.09 : (hasSkill(t) ? 0.06 : 0);
+        if (nf.from && nf.from.type === EV.Attack) R.shake = decNow ? 0.9 : 0.5;
+        R.slow = 1; R.anticip = 0;
       } else {
         R.ended = true; R.slow = 1;
         planReturn();
@@ -277,13 +310,16 @@ function create(canvas, opts) {
     // 카메라: 강타가 날아가는 동안 살짝 당기고, 공을 따라 미세하게 판다
     var f = R.flights[R.idx], b = ballAt();
     var zt = 1, fx = COURT.width / 2, fy = COURT.net;
-    if (f && !R.ended) {
+    var nt = R.touches[R.idx + (R.pre > 0 ? 0 : 1)];
+    var nq = nt ? R.pp[nt.side + '-' + nt.pos] : null;
+    if (R.anticip > 0 && nq) { zt = 1.2; fx = nq.x; fy = nq.y; }              // 예고: 때릴 선수에게 당긴다
+    else if (f && !R.ended) {
       var from = f.path[0], to = f.path[f.path.length - 1];
       if (f.from && f.from.type === EV.Attack) { zt = 1.13; fx = (from.x + to.x) / 2; fy = (from.y + to.y) / 2; }
       else if (f.from && f.from.type === EV.Set) { zt = 1.05; fx = b.x; fy = b.y; }
       else { zt = 1.02; fx = COURT.width / 2 + (b.x - COURT.width / 2) * 0.4; fy = COURT.net + (b.y - COURT.net) * 0.4; }
     } else if (R.ended && R.land) { zt = R.land.big ? 1.10 : 1.04; fx = R.land.x; fy = R.land.y; }
-    var k = Math.min(1, dt * 3.2);
+    var k = Math.min(1, dt * (R.anticip > 0 ? 6 : 3.2));
     R.zoom += (zt - R.zoom) * k;
     R.fx += (fx - R.fx) * k; R.fy += (fy - R.fy) * k;
   }
@@ -370,7 +406,7 @@ function create(canvas, opts) {
     drawBursts(c, cam);
     c.restore();
     // 슬로모션·큰 착지에는 가장자리를 어둡게 (비네트)
-    var vig = R.slow < 1 ? 0.45 : (R.land && R.land.big ? Math.max(0, 0.45 * (1 - R.land.t / 0.9)) : 0);
+    var vig = (R.slow < 1 || R.anticip > 0) ? 0.45 : (R.land && R.land.big ? Math.max(0, 0.45 * (1 - R.land.t / 0.9)) : 0);
     if (vig > 0) {
       var vg = c.createRadialGradient(w/2, h/2, Math.min(w, h) * 0.35, w/2, h/2, Math.max(w, h) * 0.75);
       vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + vig + ')');
@@ -631,6 +667,7 @@ function create(canvas, opts) {
     advancePositions();
     var actor = R.touches[Math.min(R.idx, R.touches.length-1)] || null;
     var nextT = (!R.ended && R.idx + 1 < R.touches.length) ? R.touches[R.idx + 1] : null;
+    var tellT = R.anticip > 0 ? (R.pre > 0 ? actor : nextT) : null;   // 예고 중 강조할 선수
     var byKey = {};
     for (var i = 0; i < R.touches.length; i++) {
       var t = R.touches[i];
@@ -642,8 +679,10 @@ function create(canvas, opts) {
         var q = R.pp[side + '-' + zone], p = q || zonePos(side, zone), t = byKey[side + '-' + zone];
         var isActor = !!(actor && actor.side === side && actor.pos === zone);
         var isNext = !!(nextT && nextT.side === side && nextT.pos === zone);
-        out.push({ side:side, pos:zone, x:p.x, y:p.y, moving: q ? q.mv > 0.004 : false,
-                   name: isActor && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
+        var isTell = !!(tellT && tellT.side === side && tellT.pos === zone);
+        out.push({ side:side, pos:zone, x:p.x, y:p.y, moving: q ? q.mv > 0.004 : false, tell: isTell,
+                   tellSkill: isTell && hasSkill(tellT) ? tellT.skills[0].skillName : '',
+                   name: (isActor || isTell) && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
                    known: !!t, active: isActor, type: isActor ? actor.type : 0,
                    next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0 });
       });
@@ -684,6 +723,15 @@ function create(canvas, opts) {
     var alpha = p.active ? 1 : (p.known ? 0.92 : 0.6);
     var faceUp = p.side === 0;                                        // 홈은 위(네트)를 본다 — 등번호는 뒤에서 보인다
     c.save();
+    // 예고 링: 곧 때릴 선수의 발밑에서 금색 링이 좁혀 들어온다 (스킬이면 스킬 이름)
+    if (p.tell) {
+      var ph = (R.clock * 2.2) % 1, rr0 = (0.55 + (1 - ph) * 0.9) * s;
+      c.globalAlpha = 0.25 + ph * 0.6; c.strokeStyle = p.tellSkill ? '#E9B949' : '#FFF'; c.lineWidth = Math.max(1.5, 0.07 * s);
+      c.beginPath(); c.ellipse(base.sx, base.sy, rr0, rr0 * 0.42, 0, 0, 6.284); c.stroke();
+      var gl = c.createRadialGradient(base.sx, base.sy, 1, base.sx, base.sy, 0.9 * s);
+      gl.addColorStop(0, p.tellSkill ? 'rgba(233,185,73,.35)' : 'rgba(255,255,255,.25)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
+      c.globalAlpha = 1; c.fillStyle = gl; c.fillRect(base.sx - s, base.sy - s * 0.6, s * 2, s * 1.2);
+    }
     c.globalAlpha = alpha;
     // 그림자 — 뛰면 작아진다
     c.fillStyle = 'rgba(4,10,16,' + (0.38 * Math.max(0.3, 1 - jump * 0.8)) + ')';
@@ -760,7 +808,13 @@ function create(canvas, opts) {
       c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke();
     }
     c.globalAlpha = 1;
-    if (p.active && p.name) {
+    if (p.tell && p.tellSkill) {                                          // 스킬 예고: 이름 위에 스킬명
+      var sy2 = fy - (face ? fr : Math.max(4, 0.22 * s)) - 20;
+      c.font = '700 12px "Gothic A1",sans-serif'; c.textAlign = 'center';
+      c.strokeStyle = 'rgba(6,14,22,.9)'; c.lineWidth = 3.5; c.strokeText(p.tellSkill, head.sx, sy2);
+      c.fillStyle = '#E9B949'; c.fillText(p.tellSkill, head.sx, sy2);
+    }
+    if ((p.active || p.tell) && (p.name || p.tell)) {
       var ly = fy - (face ? fr : Math.max(4, 0.22 * s)) - 6;
       c.font = '700 11px "Gothic A1",sans-serif'; c.textAlign = 'center';
       c.fillStyle = 'rgba(233,240,247,.96)';
@@ -804,6 +858,13 @@ function create(canvas, opts) {
       c.lineWidth = 2;
       c.beginPath(); c.arc(p.sx, p.sy, r + (1-R.impact)*16, 0, 6.284); c.stroke();
     }
+    if (R.hitstop > 0) {                         // 히트스톱: 타점에 섬광 + 방사선
+      var hg = c.createRadialGradient(p.sx, p.sy, r, p.sx, p.sy, r * 6);
+      hg.addColorStop(0, 'rgba(255,255,255,.85)'); hg.addColorStop(0.4, 'rgba(255,230,160,.35)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = hg; c.fillRect(p.sx - r * 6, p.sy - r * 6, r * 12, r * 12);
+      c.strokeStyle = 'rgba(255,245,210,.9)'; c.lineWidth = 2;
+      for (var k3 = 0; k3 < 8; k3++) { var a3 = k3 * 0.785 + 0.3; c.beginPath(); c.moveTo(p.sx + Math.cos(a3) * r * 2.2, p.sy + Math.sin(a3) * r * 2.2); c.lineTo(p.sx + Math.cos(a3) * r * 4.5, p.sy + Math.sin(a3) * r * 4.5); c.stroke(); }
+    }
   }
 
   R.resize();
@@ -844,8 +905,10 @@ function contactPoint(t) {
 }
 /** 마지막 터치의 낙하점 — 득점 사유가 곧 물리적 결말이 된다. */
 function landingPoint(t, point, rand) {
-  var opp = t.side === 0 ? 1 : 0;                  // 상대 진영
   var reason = point ? point.reason : 0;
+  // 득점(에이스·강타·블로킹)은 득점한 쪽의 반대 코트에 떨어진다 — 마지막 터치가 상대 블록 터치여도 공은 그쪽으로 넘어간 것이다
+  var scorer = (point && (reason === 1 || reason === 3 || reason === 5)) ? point.side : t.side;
+  var opp = scorer === 0 ? 1 : 0;                  // 상대 진영
   var inOpp = function (m) {                       // 상대 코트 안쪽 임의 지점
     var x = 1 + rand() * (COURT.width - 2);
     var y = opp === 0 ? 0.8 + rand() * (COURT.net - 2) : COURT.net + 1.2 + rand() * (COURT.net - 2);
@@ -862,10 +925,7 @@ function landingPoint(t, point, rand) {
       return rand() < 0.45
         ? { x: rand() < 0.5 ? -1.2 : COURT.width + 1.2, y: opp === 0 ? 2 + rand()*5 : COURT.net + 2 + rand()*5, z: PHY.ballR }
         : { x: 1 + rand()*(COURT.width-2), y: opp === 0 ? -1.5 : COURT.length + 1.5, z: PHY.ballR };
-    case 5: /* 블로킹 득점 */ {                    // 공격한 쪽 코트로 떨어진다
-      var y = t.side === 0 ? 1 + rand()*(COURT.net-2) : COURT.net + 1 + rand()*(COURT.net-2);
-      return { x: 1 + rand()*(COURT.width-2), y: y, z: PHY.ballR };
-    }
+    case 5: /* 블로킹 득점 */ return inOpp();    // 공격한 쪽(= 득점한 쪽의 상대) 코트로 떨어진다
     case 6: /* 블록 아웃 */
       return { x: rand() < 0.5 ? -1.6 : COURT.width + 1.6, y: (t.side===0 ? COURT.net + 1 : COURT.net - 1) + (rand()-0.5)*3, z: PHY.ballR };
     default: return inOpp();
