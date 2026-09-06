@@ -1,3 +1,4 @@
+import { difficultyOf } from "./difficulty";
 import type { Club, GameState, ManagerTraits, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
 import { scoutReport, staffWeek, type ScoutReport } from "./staff";
 import { overall } from "./rating";
@@ -257,7 +258,7 @@ export function refusalChanceBetween(s: GameState, from: Club, to: Club, p: Squa
 
 /** Reluctance to join the user's club, for the transfer screen. */
 export function refusalChance(s: GameState, from: Club, p: SquadPlayer): number {
-  return refusalChanceBetween(s, from, clubOf(s, s.userClub), p);
+  return Math.min(0.95, refusalChanceBetween(s, from, clubOf(s, s.userClub), p) * difficultyOf(s).refusal);
 }
 
 /** Is this club playing the season that follows its relegation? (divisions.ts sets the flag.) */
@@ -284,7 +285,7 @@ export function makeBid(s: GameState, fromClubId: number, playerId: string, fee:
   if (me.squad.length >= MAX_SQUAD) return err(`스쿼드 상한 ${MAX_SQUAD}명`);
   if (p.refusedSeason === s.season) return { status: "refused", text: `${p.name}은(는) 이번 시즌 ${me.shortName} 이적을 거부했습니다.` };
 
-  const threshold = Math.round(asking * acceptFactor(s, from));
+  const threshold = Math.round(asking * acceptFactor(s, from) * difficultyOf(s).askMarkup);
   let accepted = fee >= threshold || (prior !== undefined && fee >= prior.counter);
   if (!accepted && fee >= threshold * 0.8) {
     const p1 = (0.5 * (fee - threshold * 0.8)) / (threshold * 0.2) + (deadlineDay(s) ? 0.2 : 0);

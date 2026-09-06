@@ -17,6 +17,7 @@ export function koreanName(name: string): string {
 import { DEFAULT_MANAGER_NAME } from "./season";
 import { newCup } from "./cup";
 import { migrateStaff } from "./staff";
+import { isDifficulty } from "./difficulty";
 import { newBoard } from "./board";
 import { migrateFans } from "./fans";
 import { migrateAchievements } from "./achievements";
@@ -96,6 +97,8 @@ export function deserialize(json: string | null | undefined): GameState | null {
     // Saves from before the fans: capacity, content supporters and empty attendance counters.
     migrateFans(s);
     for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); migrateRatings(p); }
+    // Saves from before the difficulty setting play on normal.
+    if (!isDifficulty(s.difficulty)) s.difficulty = "normal";
     // Saves from before the user's board.
     if (!s.board || typeof s.board.confidence !== "number") s.board = newBoard();
     if (typeof s.board.warnings !== "number") s.board.warnings = 0;

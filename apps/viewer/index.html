@@ -125,6 +125,13 @@
       .bracket .tie > span:last-child { text-align:right; }
       /* illustrations (public/art): bleed to the card's edges so they read as the card's header */
       .evCard { overflow:hidden; }
+      .onb-diff-title { font-size:13px; font-weight:600; margin-top:6px; }
+      .onb-diff-title small { color:var(--muted); font-weight:400; margin-left:6px; }
+      .onb-diff { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .diff-card { display:flex; flex-direction:column; gap:3px; text-align:left; padding:8px 9px; background:#1a2530; border:1px solid var(--line); border-radius:8px; color:var(--text); cursor:pointer; font:inherit; }
+      .diff-card small { font-size:11px; color:var(--muted); line-height:1.4; }
+      .diff-card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+      .diff-card.sel b { color:var(--accent); }
       .onbArt { display:block; width:calc(100% + 28px); margin:-12px -14px 6px; aspect-ratio:16/9; object-fit:cover; object-position:50% 62%; border-radius:10px 10px 0 0; }
       .venue { position:relative; margin:0 -14px 10px; overflow:hidden; }
       .venueArt { display:block; width:100%; aspect-ratio:16/6; object-fit:cover; }

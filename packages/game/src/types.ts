@@ -501,6 +501,8 @@ export interface JobOffer { club: number; wage: number; years: number; expires: 
 export interface GameState {
   version: 1;
   seed: number;
+  /** chosen at onboarding, fixed for the career; absent on older saves (= normal) */
+  difficulty?: "easy" | "normal" | "hard";
   season: number;
   /** index of the next round to play (0-based); === roundsPerSeason when the season is over */
   round: number;

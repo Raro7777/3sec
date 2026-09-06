@@ -5,6 +5,7 @@ import { roundsPerSeason } from "./fixtures";
 import { MAX_FREE_MANAGERS, applyManagerPolicy, clearUserManager, expectedPositions, generateManager } from "./managers";
 import { careerOnNewJob } from "./career";
 import { CLUBS_PER_DIVISION } from "./divisions";
+import { difficultyOf } from "./difficulty";
 
 /** Weekly reviews start once this many rounds are played. */
 export const BOARD_FROM_ROUND = 5;
@@ -33,7 +34,8 @@ const round1 = (x: number): number => Math.round(x * 10) / 10;
 export const newBoard = (confidence = START_CONFIDENCE): Board => ({ confidence, warnings: 0, lastReview: -1, lowWeeks: 0 });
 
 /** Where the user's board expects the club to finish (rank by reputation, the same yardstick AI boards use). */
-export const userExpectation = (s: GameState): number => expectedPositions(s).get(s.userClub) ?? CLUBS_PER_DIVISION;
+export const userExpectation = (s: GameState): number =>
+  Math.max(1, Math.min(CLUBS_PER_DIVISION, (expectedPositions(s).get(s.userClub) ?? CLUBS_PER_DIVISION) + difficultyOf(s).expectationSlack));
 
 export const userPosition = (s: GameState): number => table(s).findIndex((r) => r.club === s.userClub) + 1;
 

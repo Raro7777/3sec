@@ -89,3 +89,4 @@ export {
   baseCapacity, expansionCostPer1000, expansionCost, maxExpansion, expansionProblem, expandStadium, applyExpansion, seasonSellouts, expansionAdvice, type ExpansionAdvice,
 } from "./stadium";
 export { CLUB_NAME_MAX, SHORT_NAME_MIN, SHORT_NAME_MAX, STADIUM_NAME_MAX, KIT_PATTERNS, KIT_PATTERN_LABEL, renameClub, renameStadium, setClubKit, resetClubKit } from "./customize";
+export { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, isDifficulty, type Difficulty, type DifficultyProfile } from "./difficulty";

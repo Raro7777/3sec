@@ -37,6 +37,7 @@ import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./ki
 import { emblemSvg } from "./emblem";
 import { portraitSvg } from "./portrait";
 import { managerArt, userArt } from "./manager-art";
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, type Difficulty } from "@3sec/game";
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
@@ -181,6 +182,7 @@ export class Game {
   private selA: string | null = null;
   private current: ScreenName = "home";
   private pickedClub: number | null = null;
+  private pickedDifficulty: Difficulty = "normal";
   /** where the profile screen returns to */
   private profileFrom: ScreenName = "squad";
   /** active sub-tab per screen (persisted) */
@@ -280,7 +282,9 @@ export class Game {
       <div class="hint">1부·2부 각각 12개 구단이 22라운드 리그를 치릅니다. 매 시즌 1부 하위 2팀이 강등되고 2부 상위 2팀이 승격합니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요.</div>
       <div class="hint" style="color:var(--accent)">커리어 모드 추천: 평판 낮은 구단에서 시작하세요. 기대를 넘는 성적은 감독 평판을 빠르게 올리고, 시즌 중 큰 구단의 감독직 제안으로 이어집니다.</div>
       <label style="margin-top:4px">감독 이름 <input id="onbName" type="text" placeholder="감독 이름" maxlength="12" autocomplete="off" /></label>
-      <div class="hint">비워두면 "감독"으로 불립니다.</div></div>`);
+      <div class="hint">비워두면 "감독"으로 불립니다.</div>
+      <div class="onb-diff-title">난이도 <small>시작 후에는 바꿀 수 없습니다</small></div>
+      <div class="onb-diff">${DIFFICULTY_ORDER.map((d) => `<button type="button" class="diff-card${this.pickedDifficulty === d ? " sel" : ""}" data-diff="${d}"><b>${DIFFICULTIES[d].label}</b><small>${DIFFICULTIES[d].blurb}</small></button>`).join("")}</div></div>`);
     // Both divisions are on offer: starting below is the harder career, with promotion to chase.
     const world = [...CLUBS.map((c) => ({ c, d: 1 })), ...CLUBS_D2.map((c) => ({ c, d: 2 }))];
     for (const d of [1, 2]) {
@@ -308,6 +312,10 @@ export class Game {
       startBtn.disabled = false;
       hint.textContent = `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`;
     }));
+    this.el.onboarding.querySelectorAll<HTMLButtonElement>(".diff-card").forEach((b) => b.addEventListener("click", () => {
+      this.pickedDifficulty = b.dataset.diff as Difficulty;
+      this.el.onboarding.querySelectorAll<HTMLElement>(".diff-card").forEach((x) => x.classList.toggle("sel", x === b));
+    }));
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) startBtn.click(); });
     startBtn.addEventListener("click", () => {
       if (this.pickedClub === null) return;
@@ -316,7 +324,7 @@ export class Game {
   }
 
   private finishOnboarding(club: number, name: string): void {
-    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독");
+    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독", this.pickedDifficulty);
     prepareRound(this.state);
     this.live = null;
     this.pickedClub = null;
@@ -384,7 +392,7 @@ export class Game {
       <li>이사회는 8라운드부터 매주 <b>평판 순 기대 순위</b>와 실제 순위를 비교합니다. 기대보다 4계단 이상 아래에 6주 연속 머물면 감독이 경질될 수 있고, 시즌 종료 시에도 같은 기준으로 판단합니다. 경질된 감독은 다른 구단이 다시 데려가기도 합니다.</li>
       <li>시즌 결산에서 기대 순위를 가장 크게 넘어선 감독이 <b>올해의 감독</b>이 됩니다. 당신도 후보입니다.</li></ul>`)}
     ${sec("이사회·평점·프로필", `<ul>
-      <li>홈 화면의 <b>이사회 신뢰도</b>(0~100, 시작 60)는 ${BOARD_FROM_ROUND}라운드부터 매주 움직입니다. 목표치는 <b>평판 순 기대 순위</b>와 실제 순위의 차이(한 계단 7점)와 최근 5경기 승점으로 정해지고, 매주 그 차이의 1/4만큼 다가갑니다. 컵에서 이기면 +5.</li>
+      <li>홈 화면의 <b>이사회 신뢰도</b>(0~100, 시작 60 · 난이도에 따라 55~65)는 ${BOARD_FROM_ROUND}라운드부터 매주 움직입니다. 목표치는 <b>평판 순 기대 순위</b>와 실제 순위의 차이(한 계단 7점)와 최근 5경기 승점으로 정해지고, 매주 그 차이의 1/4만큼 다가갑니다. 컵에서 이기면 +5.</li>
       <li>신뢰도가 ${WARN_BELOW} 아래로 3주 연속이면 <b>이사회 경고</b>, 경고 뒤 다시 3주 연속 아래이고 15 미만이면 <b>경질</b>됩니다. 시즌이 끝날 때 ${TRUST_AT} 이상이면 신임을, 35 미만이면 역시 경질을 통보받습니다. 경질되면 감독 자리가 빈 구단이나 압박이 큰 구단 두 곳에서 제안이 오고, 받아들이면 그 팀의 감독이 됩니다.</li>
       <li>선수마다 경기 <b>평점</b>(3.0~10.0)이 매겨집니다: 기본 6.0, 골 +1.0(자책 −1.0), 도움 +0.7, 60분 이상 뛴 GK·수비수의 무실점 +0.4, GK는 3개 넘는 선방마다 +0.2, 경고 −0.3, 퇴장 −1.0, 승리 +0.3/패배 −0.3. 30분 미만 교체 출전은 6.0 쪽으로 반만 반영됩니다. 경기 최고 평점은 <b>MOTM</b>이 되고, 순위 탭에 도움·평점(${RATING_MIN_APPS}경기 이상) 순위가 있습니다.</li>
       <li>스쿼드·이적 목록의 <b>ℹ</b> 버튼을 누르면 <b>선수 프로필</b>이 열립니다: 능력치 그래프, 시즌 기록, 최근 5경기 평점, 시즌별 경력이 보입니다. 잠재력은 ★ 1~5로 표시됩니다.</li></ul>`)}
@@ -563,6 +571,7 @@ export class Game {
       <div class="hint" style="margin-top:6px">붙여넣기로 불러오기: 저장 텍스트를 아래에 붙여 넣고 버튼을 누르세요.</div>
       <textarea id="setImportText" placeholder='{"version":1, ...}'></textarea>
       <div class="actions"><button data-set="importText">텍스트에서 불러오기</button></div></div>
+    <div class="card"><h3>난이도 <span>${difficultyOf(s).label}</span></h3><div class="hint">${difficultyOf(s).blurb} 난이도는 새 게임을 시작할 때만 고를 수 있습니다.</div></div>
     <div class="card"><h3>구단 꾸미기 <span>${s.clubs[s.userClub]?.name ?? ""}</span></h3><div class="actions"><button data-set="customize">🎨 유니폼 · 구단명 · 홈구장</button></div><div class="hint">유니폼 색과 패턴, 구단명, 구장 이름을 바꾸고 예산으로 좌석을 늘립니다. 홈 화면의 구단명을 눌러도 열립니다.</div></div>
     <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯, 자동 백업을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
