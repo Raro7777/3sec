@@ -50,12 +50,12 @@ export const prizeFactor = (division: number): number => DIVISION_PRIZE_FACTOR[d
  * club goes down. Without this a relegated club kept a top-flight income on a second-division wage bill and
  * simply outspent the division; the season after the swap it was 6.6× richer than the club that came up.
  */
-export const DIVISION_REVENUE_FACTOR: Record<number, number> = { 1: 1, 2: 0.5 };
+export const DIVISION_REVENUE_FACTOR: Record<number, number> = { 1: 1, 2: 0.7 };
 /**
  * The season straight after relegation the league softens the fall: a parachute payment that holds the
  * fixed income at three quarters of the top-flight figure while the wage bill is cut (the fire sale).
  */
-export const PARACHUTE_FACTOR = 0.75;
+export const PARACHUTE_FACTOR = 0.85;
 export const revenueFactor = (c: Club): number => (c.firesale ? PARACHUTE_FACTOR : DIVISION_REVENUE_FACTOR[divisionOf(c)] ?? 0.5);
 
 
