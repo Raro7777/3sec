@@ -22,7 +22,7 @@ import {
   EXPANSION_STEP, KIT_PATTERNS, KIT_PATTERN_LABEL, CLUB_NAME_MAX, SHORT_NAME_MAX, STADIUM_NAME_MAX, expandStadium, expansionAdvice, renameClub, renameStadium, resetClubKit, setClubKit, type ClubKit, type KitPatternName,
 } from "@3sec/game";
 import {
-  CLUBS_D2, DIVISIONS, SWAP, divisionName, userDivision, inPromotionZone, inRelegationZone,
+  CLUBS_D2, DIVISIONS, SWAP, divisionName, divisionOf, userDivision, inPromotionZone, inRelegationZone,
   MIN_WINDOW_MINUTES, formatValue, lineSwing, type TacticsReport,
 } from "@3sec/game";
 import {
@@ -2450,8 +2450,9 @@ export class Game {
       if (cupStage === 3 && s.cup.holder !== undefined) body += `<div class="hint" style="color:var(--accent);margin-top:6px">${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b></div>`;
       btn = "다음 라운드로 →";
     } else {
-      const fx = s.fixtures.filter((f) => f.round === round);
-      title = `라운드 ${round + 1} 결과`;
+      // my own division only: the other one is resolved as the round advances, and lives on the 순위 screen
+      const fx = s.fixtures.filter((f) => f.round === round && divisionOf(clubOf(s, f.home)) === userDivision(s));
+      title = `${divisionName(userDivision(s))} 라운드 ${round + 1} 결과`;
       body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm, f.attendance)).join("");
       btn = round + 1 >= seasonRounds(s) ? "시즌 결산 보기 →" : "다음 라운드로 →";
     }
@@ -2492,10 +2493,10 @@ export class Game {
     const cupSt = userCupStatus(s);
     const myLastTie = [...s.cup.ties].reverse().find((t) => t.score && (t.home === me.id || t.away === me.id));
     const cupText = cupSt === "holder" ? '<b style="color:var(--accent)">우승</b>' : myLastTie ? `${CUP_STAGE_LABEL[myLastTie.stage]} ${tieWinner(myLastTie) === me.id ? "진출" : "탈락"}` : "—";
-    const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? "강등권 성적입니다. 전력 보강이 시급합니다." : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
+    const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? (userDivision(s) < DIVISIONS ? "강등권 성적입니다. 전력 보강이 시급합니다." : "최하위권 시즌입니다. 전력 보강이 시급합니다.") : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
     const highlights = s.news.filter((x) => /우승|이적|퇴장|승부차기|영입|판매|경질|부임/.test(x)).slice(0, 8);
     const moy = managerOfYear(s);
-    const myExpected = expectedPositions(s).get(me.id)!;
+    const myExpected = userExpectation(s);
     const stat = (label: string, value: string) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
     const h: string[] = [];
     // What the season earned, in the order a manager would rank them: the title, the cup, going up.
@@ -2522,7 +2523,10 @@ export class Game {
       <div class="actions" style="margin-top:8px"><button class="primary" data-act="nextSeason">다음 시즌 시작 →</button><button data-act="shareCard" title="시즌 결산을 이미지 카드로 저장/공유">🖼 요약 카드 공유</button><button data-act="home">홈으로</button></div>
       <div class="hint">다음 시즌 시작 시 나이·성장·계약 만료·순위 상금이 정산되고 새 일정과 컵 대진이 만들어집니다.</div></div>`);
     h.push(`<div class="grid2">`);
-    h.push(`<div class="card"><h3>최종 순위 <span>하위 2팀 강등권</span></h3>${this.tableHtml(rows).replace(/<tr class="([^"]*)"><td>(\d+)<\/td>/g, (_m, cls: string, p: string) => `<tr class="${cls}${Number(p) > n - 2 ? " rel" : ""}"><td>${p}${Number(p) > n - 2 ? '<small class="relTag">강등권</small>' : ""}</td>`)}</div>`);
+    const bottom = userDivision(s) >= DIVISIONS;
+    h.push(`<div class="card"><h3>최종 순위 <span>${bottom ? "상위 2팀 승격" : "하위 2팀 강등권"}</span></h3>${this.tableHtml(rows).replace(/<tr class="([^"]*)"><td>(\d+)<\/td>/g, (_m, cls: string, p: string) => bottom
+      ? `<tr class="${cls}"><td>${p}${Number(p) <= 2 ? '<small class="relTag" style="color:var(--good)">승격</small>' : ""}</td>`
+      : `<tr class="${cls}${Number(p) > n - 2 ? " rel" : ""}"><td>${p}${Number(p) > n - 2 ? '<small class="relTag">강등권</small>' : ""}</td>`)}</div>`);
     h.push(`<div class="card"><h3>리그 득점 TOP 3</h3>${scorers.length ? `<table class="std"><thead><tr><th>#</th><th class="l">선수</th><th class="l">클럽</th><th>출장</th><th>골</th></tr></thead><tbody>${scorers
       .map((x, i) => `<tr class="${x.club.id === me.id ? "me" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${face(x.player, x.club, 22)}</span>${x.player.name}</td><td class="l">${x.club.shortName}</td><td>${x.player.stats.apps}</td><td><b>${x.player.stats.goals}</b></td></tr>`).join("")}</tbody></table>` : '<div class="hint">득점 기록이 없습니다.</div>'}
       <h3 style="margin-top:10px">시즌 소식 하이라이트</h3><div class="news">${highlights.map((x) => `<div>${x}</div>`).join("") || "<div>특별한 소식이 없었습니다.</div>"}</div></div>`);
@@ -2588,7 +2592,7 @@ export class Game {
     const myLastTie = [...s.cup.ties].reverse().find((t) => t.score && (t.home === me.id || t.away === me.id));
     const cupResult = cupSt === "holder" ? "우승 🏆" : myLastTie ? `${CUP_STAGE_LABEL[myLastTie.stage]} ${tieWinner(myLastTie) === me.id ? "진출" : "탈락"}` : "—";
     const n = rows.length;
-    const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? "강등권 성적입니다. 전력 보강이 시급합니다." : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
+    const verdict = pos === 1 ? "리그 우승! 완벽한 시즌입니다." : pos <= 3 ? "상위권 마무리. 우승 도전은 다음 시즌으로." : pos > n - 2 ? (userDivision(s) < DIVISIONS ? "강등권 성적입니다. 전력 보강이 시급합니다." : "최하위권 시즌입니다. 전력 보강이 시급합니다.") : "중위권 시즌. 핵심 선수를 지키고 보강하세요.";
     if (!isNativeApp() && downloadsBlocked() && !("share" in navigator)) { alert("이 환경에서는 파일 저장이 막혀 있습니다. 앱이나 브라우저에서 열면 카드를 공유할 수 있습니다."); return; }
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = "카드 만드는 중…";
