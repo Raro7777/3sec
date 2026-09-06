@@ -239,6 +239,25 @@ details[open] summary::after{content:"▴"}
 .flash.show{opacity:1}
 .flash.home{color:var(--court);border:1px solid var(--court)}
 .flash.away{color:var(--bad);border:1px solid var(--bad)}
+.flash.big{font-size:44px;padding:6px 22px;letter-spacing:.06em}
+.flash.up{top:20%;font-size:30px;padding:4px 16px}   /* 컷인이 아래를 차지하면 플래시는 위로 */
+.flash small{display:block;font-family:"Gothic A1",sans-serif;font-size:12px;font-weight:700;letter-spacing:0;color:var(--ink2);margin-top:-2px}
+.flash .streak{display:block;font-size:14px;letter-spacing:.12em;color:var(--hot);margin-top:1px}
+@media (prefers-reduced-motion:no-preference){
+  .flash.show{animation:flashin .22s cubic-bezier(.2,.9,.3,1.4)}
+  @keyframes flashin{from{transform:translate(-50%,-50%) scale(.6);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+}
+.setb{position:absolute;left:0;right:0;top:38%;padding:10px 0;text-align:center;background:rgba(10,16,23,.9);border-top:2px solid var(--ssr);border-bottom:2px solid var(--ssr);
+  font-family:"Barlow Condensed",sans-serif;font-size:26px;font-weight:700;letter-spacing:.08em;color:var(--ink);opacity:0;pointer-events:none;transform:translateX(-110%)}
+.setb small{display:block;font-family:"Gothic A1",sans-serif;font-size:12.5px;font-weight:600;letter-spacing:0;color:var(--ink2)}
+.setb.show{animation:sweep 1.6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes sweep{0%{transform:translateX(-110%);opacity:0}18%{transform:translateX(0);opacity:1}78%{transform:translateX(0);opacity:1}100%{transform:translateX(110%);opacity:0}}
+.court.tense::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:10px;box-shadow:inset 0 0 46px rgba(233,161,59,.42)}
+@media (prefers-reduced-motion:no-preference){ .court.tense::after{animation:tense 1.1s ease-in-out infinite alternate} @keyframes tense{from{opacity:.45}to{opacity:1}} }
+.court .tag{position:absolute;left:50%;top:9px;transform:translateX(-50%);font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;letter-spacing:.14em;
+  padding:2px 10px;border-radius:7px;background:rgba(233,161,59,.92);color:#1A1200;pointer-events:none}
+.bscore.pop{animation:scorepop .35s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes scorepop{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
 
 .rally{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:10px;min-height:92px}
 .rlabel{font-size:11.5px;color:var(--ink3);margin-bottom:7px;font-family:"Barlow Condensed",sans-serif;letter-spacing:.08em}
@@ -2293,7 +2312,11 @@ function nextRally(){
   var doneSet = mv.rallies[mv.ri] ? mv.rallies[mv.ri].set : 1;
   mv.ri++;
   var nextSet = mv.rallies[mv.ri] ? mv.rallies[mv.ri].set : doneSet;
-  if (nextSet > doneSet) unlockSkip('1세트 완료 · 건너뛰기가 열렸습니다');
+  if (nextSet > doneSet) {
+    unlockSkip('1세트 완료 · 건너뛰기가 열렸습니다');   // 첫 해금은 화면을 다시 그리므로 배너는 그 뒤에
+    var last = mv.rallies[mv.ri - 1];
+    if (last && last.point) setBanner(doneSet, [last.point.home, last.point.away]);
+  }
   var sp = (mv.speed || 1);
   if (mv.ri >= mv.rallies.length) { setTimeout(finishViewer, 700 / sp); return; }
   setTimeout(function(){ if (mv && cr) { loadRally(); if (mv.playing) cr.play(); } }, 620 / sp);
@@ -2313,6 +2336,41 @@ function skipSet(){
   loadRally(); if (mv.playing && cr) cr.play();
 }
 
+/** 득점 사유 → 플래시 글자. reason: 1 에이스 · 2 서브 범실 · 3 강타 · 4 공격 범실 · 5 블로킹 · 6 블록 아웃 */
+function pointLabel(pt){
+  var mine = pt.side === mySide;
+  var map = { 1:['ACE', mine ? '서브 에이스' : '상대 에이스'], 3:['KILL', mine ? '강타 득점' : '상대 강타'], 5:['WALL', mine ? '블로킹 득점' : '상대 블로킹'],
+              6:['BLOCK OUT', mine ? '블록 아웃 득점' : '상대 블록 아웃'], 2:['범실', mine ? '상대 서브 범실' : '서브 범실'], 4:['범실', mine ? '상대 공격 범실' : '공격 범실'] };
+  var m = map[pt.reason] || [mine ? '득점' : '실점', ''];
+  var big = pt.clutch || pt.reason === 1 || pt.reason === 3 || pt.reason === 5;
+  return { big: (pt.clutch ? '클러치 ' : '') + m[0], small: m[1], isBig: big };
+}
+/** ri 번째 랠리까지 같은 쪽이 몇 점 연속인가. */
+function pointStreak(ri){
+  var side = mv.rallies[ri] && mv.rallies[ri].point ? mv.rallies[ri].point.side : -1, n = 0;
+  for (var i = ri; i >= 0; i--) { var p = mv.rallies[i].point; if (!p || p.side !== side) break; if (mv.rallies[i].set !== mv.rallies[ri].set) break; n++; }
+  return n;
+}
+/** 지금 랠리가 세트 포인트/매치 포인트 상황이면 태그 문구, 아니면 ''. 세트 승수는 랠리 목록에서 센다. */
+function tensionOf(r, ended){
+  var sc = (ended && r.point) ? [r.point.home, r.point.away] : r.before;
+  var target = r.set === 5 ? 15 : 25;
+  if (sc[0] < target - 1 && sc[1] < target - 1) return '';          // 아직 아무도 세트 포인트 근처가 아니다
+  var who = sc[0] > sc[1] ? 0 : (sc[1] > sc[0] ? 1 : -1);
+  if (who < 0) return '듀스';
+  var setsWon = [0, 0];
+  for (var i = 0; i < mv.ri; i++) { var a = mv.rallies[i], b = mv.rallies[i + 1]; if (a.point && (!b || b.set > a.set)) setsWon[a.point.side]++; }
+  var ours = who === mySide;
+  if (setsWon[who] >= 2) return ours ? '매치 포인트' : '상대 매치 포인트';
+  return ours ? '세트 포인트' : '상대 세트 포인트';
+}
+/** 세트가 끝나면 배너가 쓸고 지나간다. */
+function setBanner(setNo, score){
+  var el = document.getElementById('lvSetB'); if (!el) return;
+  el.innerHTML = setNo + '세트 종료 · ' + score[0] + '-' + score[1] + '<small>' + (score[0] > score[1] ? lastMatch.ctx.homeName : lastMatch.ctx.awayName) + ' 세트 획득</small>';
+  el.className = 'setb'; void el.offsetWidth; el.className = 'setb show';
+}
+
 // 스코어보드·랠리 흐름 갱신(코트는 렌더러가 그린다)
 function paintLive(ti){
   if (!mv) return;
@@ -2323,7 +2381,10 @@ function paintLive(ti){
   var m = lastMatch;
   var sc = (ended && r.point) ? [r.point.home, r.point.away] : r.before;
   var el = document.getElementById('lvScore');
-  if (el) el.textContent = sc[0] + ' : ' + sc[1];
+  if (el) {
+    var txt = sc[0] + ' : ' + sc[1];
+    if (el.textContent !== txt) { el.textContent = txt; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  }
   el = document.getElementById('lvSet');
   if (el) {
     var done = m.setScores.filter(function(x){ return x.set < r.set; });
@@ -2335,9 +2396,20 @@ function paintLive(ti){
   var fl = document.getElementById('lvFlash');
   if (fl) {
     if (ended && r.point) {
-      fl.textContent = (r.point.side===mySide ? '득점' : '실점') + (r.point.clutch ? ' !' : '');
-      fl.className = 'flash show ' + (r.point.side===mySide?'home':'away');
+      var lab = pointLabel(r.point), streak = pointStreak(mv.ri);
+      fl.innerHTML = esc(lab.big) + '<small>' + esc(lab.small) + '</small>' + (streak >= 3 ? '<span class="streak">' + streak + '연속 ' + (r.point.side===mySide ? '득점' : '실점') + '</span>' : '');
+      fl.className = 'flash show ' + (r.point.side===mySide?'home':'away') + (lab.isBig ? ' big' : '');
+      if (cr && cr.cheerFor) cr.cheerFor(r.point.side);
     } else fl.className = 'flash';
+  }
+  // 세트 포인트·매치 포인트 — 코트 가장자리가 뜨겁게 뛰고 위에 태그가 붙는다
+  var court = document.getElementById('lvCourt');
+  if (court) {
+    var tense = tensionOf(r, ended);
+    court.classList.toggle('tense', !!tense);
+    var tag = court.querySelector('.tag');
+    if (tense) { if (!tag) { tag = document.createElement('div'); tag.className = 'tag'; court.appendChild(tag); } tag.textContent = tense; }
+    else if (tag) tag.remove();
   }
   el = document.getElementById('lvRally');
   if (el) el.innerHTML = rallyStrip(r, shown, ended);
@@ -2354,6 +2426,7 @@ function paintLive(ti){
       if (tt && tt.skills && tt.skills.length) ct = { p: tt.player, side: tt.side, title: tt.skills[0].skillName, name: tt.name, skill: true };
     }
     if (ct) showCut(cut, ct);
+    if (fl && ct && !ct.skill && cut.className.indexOf('show') >= 0) fl.classList.add('up');
   }
 }
 var cutTimer = 0;
@@ -2463,6 +2536,7 @@ function vMatchLive(){
      '<canvas id="lvCanvas"></canvas>'+
      '<div class="hud"><span>'+esc(m.ctx.awayName)+'</span><span>'+esc(m.ctx.homeName)+'</span></div>'+
      '<div class="flash" id="lvFlash"></div>'+
+     '<div class="setb" id="lvSetB"></div>'+
      '<div class="cut" id="lvCut"></div>'+
      '<div class="intro" id="lvIntro" data-mv="intro"></div>'+
    '</div>'+

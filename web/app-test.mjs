@@ -88,7 +88,7 @@ await tap('[data-act="scout"]', 400);
 check('스카우트 결과가 나온다', (await viewText()).includes('이 선수 키우기'));
 check('스카우트 결과가 실물 카드로 공개된다', (await count('.rcard')) === 1);
 check('코치가 이 선수 키우기를 가리킨다', (await count('.coach-target[data-trainthis]')) === 1);
-check('첫 스카우트 미션이 골드를 준다', +(await text('#rGold')) === gold0 + 50, '골드 ' + await text('#rGold'));
+check('첫 스카우트 미션이 골드를 준다', +(await text('#rGold')) >= gold0 + 50, '골드 ' + await text('#rGold'));   // SR 이 나오면 'SR 영입' 미션까지 같이 받는다
 check('시작 티켓 5장으로는 10연이 잠긴다', await page.$eval('[data-act="scout10"]', b => b.disabled));
 // 시작 티켓은 엔진 기본 5장(league-and-economy B.6.7 — 온보딩에 티켓을 더 주면 시즌 1 난이도가 무너진다).
 // 10연은 조각·순위 보상이 쌓인 뒤 열리므로, 화면 검사를 위해 세이브에 티켓을 넣어 준다.

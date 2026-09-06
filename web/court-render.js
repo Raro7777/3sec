@@ -160,8 +160,12 @@ function create(canvas, opts) {
     crowd: Math.max(0, Math.min(1, (opts && opts.crowd) || 0)),
     t: 0, idx: 0, playing: false, speed: 1, raf: 0, last: 0,
     onTouch: null, onEnd: null, faceOf: null, markOf: null, impact: 0, shake: 0, ended: false, endHold: 0,
-    trail: [], bursts: []   // 스킬 발동 이펙트 {x,y,side,name,t}
+    trail: [], bursts: [],   // 스킬 발동 이펙트 {x,y,side,name,t}
+    // 연출 1단계(art-pipeline 16.7): 카메라 줌·포커스, 슬로모션, 착지 충격, 네트 흔들림, 관중 환호, 시계
+    zoom: 1, zoomT: 1, fx: 0, fy: 0, fxT: 0, fyT: 0, slow: 1, land: null, netWobble: 0, cheer: null, clock: 0
   };
+  /** 득점 뒤 관중 반응 — 앱이 부른다. side 가 내 쪽이면 홈 관중이 들썩이고, 아니면 잠깐 조용해진다. */
+  R.cheerFor = function (side) { R.cheer = { side: side, t: 0 }; };
 
   R.resize = function () {
     var dpr = Math.min(2, global.devicePixelRatio || 1);
@@ -176,7 +180,7 @@ function create(canvas, opts) {
     R.touches = touches || []; R.point = point || null;
     R.flights = buildFlights(R.touches, R.point, seed || 1);
     R.t = 0; R.idx = 0; R.ended = false; R.endHold = 0; R.trail.length = 0;
-    R.bursts.length = 0;
+    R.bursts.length = 0; R.land = null; R.slow = 1;
     if (R.onTouch && R.touches.length) R.onTouch(0);
     if (R.touches.length) spawnBursts(R.touches[0]);
   };
@@ -205,28 +209,37 @@ function create(canvas, opts) {
   function loop(now) {
     R.raf = requestAnimationFrame(loop);
     if (!R.last) R.last = now || 0;
-    var dt = Math.min(0.05, ((now || 0) - R.last) / 1000) * R.speed;
+    var raw = Math.min(0.05, ((now || 0) - R.last) / 1000);
     R.last = now || 0;
+    R.clock += raw;
+    var dt = raw * R.speed * R.slow;
     if (R.playing) step(dt);
+    stepFx(raw * Math.max(1, R.speed));
     draw();
   }
   R.frame = function () { draw(); };
 
+  /** 이 랠리의 마지막 비행이 "큰 득점"(에이스·강타·블로킹·클러치)인가 — 슬로모션과 큰 충격의 조건. */
+  function bigFinish() {
+    var pt = R.point; if (!pt) return false;
+    return !!(pt.clutch || pt.reason === 1 || pt.reason === 3 || pt.reason === 5);
+  }
   function step(dt) {
     if (R.ended) {
       R.endHold += dt;
-      if (R.endHold > 0.75 && R.onEnd) { var cb = R.onEnd; R.onEnd = null; cb(); }
+      if (R.endHold > (bigFinish() && R.speed < 4 ? 1.0 : 0.75) && R.onEnd) { var cb = R.onEnd; R.onEnd = null; cb(); }
       R.impact = Math.max(0, R.impact - dt * 3);
-      R.shake = Math.max(0, R.shake - dt * 4);
       stepBursts(dt);
       return;
     }
     R.t += dt;
     R.impact = Math.max(0, R.impact - dt * 3);
-    R.shake = Math.max(0, R.shake - dt * 4);
     stepBursts(dt);
     var f = R.flights[R.idx];
     if (!f) { R.ended = true; return; }
+    // 마지막 비행 후반, 큰 득점이면 슬로모션 — 결말이 보이게
+    var isLast = R.idx === R.flights.length - 1;
+    R.slow = (isLast && bigFinish() && R.speed < 4 && R.t / f.T > 0.45) ? 0.42 : 1;   // 4배속은 훑어보기 — 슬로모션 없음
     if (R.t >= f.T) {
       R.t -= f.T; R.idx++;
       R.impact = 1; R.trail.length = 0;
@@ -236,10 +249,34 @@ function create(canvas, opts) {
         spawnBursts(R.touches[R.idx]);
         if (nf.from && nf.from.type === EV.Attack) R.shake = 0.6;
       } else {
-        R.ended = true;
+        R.ended = true; R.slow = 1;
+        var end = f.path[f.path.length - 1];
+        var big = bigFinish();
+        R.land = { x: end.x, y: end.y, z: end.z, t: 0, big: big };
+        R.shake = big ? 1.0 : 0.35;
+        if (Math.abs(end.y - COURT.net) < 0.35 && end.z > 0.5) R.netWobble = 1;   // 네트에 걸렸다
         if (R.onTouch) R.onTouch(R.touches.length);
       }
     }
+  }
+  /** 실시간(재생 속도·슬로모션과 무관)으로 흐르는 연출 — 흔들림 감쇠, 착지 링, 네트, 환호, 카메라 보간. */
+  function stepFx(dt) {
+    R.shake = Math.max(0, R.shake - dt * 4);
+    if (R.land) { R.land.t += dt; if (R.land.t > 0.9) R.land = null; }
+    R.netWobble = Math.max(0, R.netWobble - dt * 1.4);
+    if (R.cheer) { R.cheer.t += dt; if (R.cheer.t > 1.4) R.cheer = null; }
+    // 카메라: 강타가 날아가는 동안 살짝 당기고, 공을 따라 미세하게 판다
+    var f = R.flights[R.idx], b = ballAt();
+    var zt = 1, fx = COURT.width / 2, fy = COURT.net;
+    if (f && !R.ended) {
+      var from = f.path[0], to = f.path[f.path.length - 1];
+      if (f.from && f.from.type === EV.Attack) { zt = 1.13; fx = (from.x + to.x) / 2; fy = (from.y + to.y) / 2; }
+      else if (f.from && f.from.type === EV.Set) { zt = 1.05; fx = b.x; fy = b.y; }
+      else { zt = 1.02; fx = COURT.width / 2 + (b.x - COURT.width / 2) * 0.4; fy = COURT.net + (b.y - COURT.net) * 0.4; }
+    } else if (R.ended && R.land) { zt = R.land.big ? 1.10 : 1.04; fx = R.land.x; fy = R.land.y; }
+    var k = Math.min(1, dt * 3.2);
+    R.zoom += (zt - R.zoom) * k;
+    R.fx += (fx - R.fx) * k; R.fy += (fy - R.fy) * k;
   }
 
   function stepBursts(dt) {
@@ -291,17 +328,23 @@ function create(canvas, opts) {
   function draw() {
     var cam = R.cam, c = ctx, w = cam.w, h = cam.h;
     c.save();
-    if (R.shake > 0) c.translate((Math.random()-0.5)*R.shake*3, (Math.random()-0.5)*R.shake*3);
     c.clearRect(-10, -10, w+20, h+20);
-
-    // 체육관 배경
+    // 체육관 배경(줌 밖에 고정)
     var sky = c.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, '#0C1620'); sky.addColorStop(0.55, '#122335'); sky.addColorStop(1, '#0A1017');
+    sky.addColorStop(0, '#0B141E'); sky.addColorStop(0.5, '#122335'); sky.addColorStop(1, '#0A1017');
     c.fillStyle = sky; c.fillRect(-10, -10, w+20, h+20);
+    drawLights(c, cam);
+
+    // 카메라: 포커스 지점을 축으로 줌 + 흔들림
+    var fp = project(cam, R.fx, R.fy, 0);
+    var ax = fp.sx + (cam.cx - fp.sx) * 0.35, ay = fp.sy + (cam.cy - fp.sy) * 0.35;
+    c.translate(ax, ay); c.scale(R.zoom, R.zoom); c.translate(-ax, -ay);
+    if (R.shake > 0) c.translate((Math.random()-0.5)*R.shake*4, (Math.random()-0.5)*R.shake*4);
 
     drawStands(c, cam);
     drawFloor(c, cam);
     drawLines(c, cam);
+    drawLanding(c, cam);
 
     var ball = ballAt();
     // 쿼터뷰에서는 회전 깊이 순으로 그린다(먼 쪽 먼저).
@@ -317,39 +360,137 @@ function create(canvas, opts) {
     drawBall(c, cam, ball);
     drawBursts(c, cam);
     c.restore();
+    // 슬로모션·큰 착지에는 가장자리를 어둡게 (비네트)
+    var vig = R.slow < 1 ? 0.45 : (R.land && R.land.big ? Math.max(0, 0.45 * (1 - R.land.t / 0.9)) : 0);
+    if (vig > 0) {
+      var vg = c.createRadialGradient(w/2, h/2, Math.min(w, h) * 0.35, w/2, h/2, Math.max(w, h) * 0.75);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + vig + ')');
+      c.fillStyle = vg; c.fillRect(0, 0, w, h);
+    }
   }
-
-  /** 먼 쪽 관중석 — 밀도(R.crowd)만큼 점을 채운다. 결정적(시드 고정)이라 프레임마다 흔들리지 않는다. */
-  function drawStands(c, cam) {
-    if (R.crowd <= 0) return;
-    var far = project(cam, 0, COURT.length + 2.4, 0), farR = project(cam, COURT.width, COURT.length + 2.4, 0);
-    var top = Math.max(cam.h * 0.09, far.sy - cam.h * 0.30), bottom = far.sy - 4;   // 위쪽 팀 이름 라벨 자리를 남긴다
-    var x0 = Math.min(far.sx, farR.sx) - cam.w * 0.18, x1 = Math.max(far.sx, farR.sx) + cam.w * 0.18;
-    var rows = 6, rnd = rng(7331);
+  /** 천장 조명 — 위쪽에 부드러운 빛 무리 셋. */
+  function drawLights(c, cam) {
+    var w = cam.w, h = cam.h;
+    [0.22, 0.5, 0.78].forEach(function (u, i) {
+      var g = c.createRadialGradient(w * u, -h * 0.05, 4, w * u, -h * 0.05, h * (i === 1 ? 0.55 : 0.42));
+      g.addColorStop(0, 'rgba(210,228,250,.22)'); g.addColorStop(0.35, 'rgba(160,200,240,.07)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+    });
+  }
+  /** 착지 충격 — 바닥에 퍼지는 링과 먼지. 큰 득점이면 두 겹 + 섬광. */
+  function drawLanding(c, cam) {
+    var L = R.land; if (!L) return;
+    var u = L.t / 0.9, g = project(cam, L.x, L.y, 0);
+    var col = (R.point && R.point.side === R.mySide) ? '255,236,170' : '255,190,170';
     c.save();
-    c.fillStyle = 'rgba(8,14,22,.55)'; c.fillRect(x0, top, x1 - x0, bottom - top);   // 스탠드 그림자
-    for (var r = 0; r < rows; r++) {
-      var y = top + (bottom - top) * (r + 0.5) / rows;
-      var cols = 26 + r * 4, sz = 2 + r * 0.35;
-      for (var i = 0; i < cols; i++) {
-        var u = rnd();
-        if (u > R.crowd) continue;                       // 밀도만큼만 앉는다
-        var x = x0 + (x1 - x0) * (i + 0.5) / cols + (rnd() - 0.5) * 3;
-        var hue = rnd();
-        c.fillStyle = hue < 0.5 ? 'rgba(95,176,255,.55)' : (hue < 0.8 ? 'rgba(230,236,242,.45)' : 'rgba(240,144,128,.5)');
-        c.beginPath(); c.arc(x, y, sz, 0, Math.PI * 2); c.fill();
+    var rr = (0.25 + u * (L.big ? 2.6 : 1.4)) * cam.s;
+    c.globalAlpha = Math.max(0, (L.big ? 0.8 : 0.5) * (1 - u));
+    c.strokeStyle = 'rgba(' + col + ',1)'; c.lineWidth = Math.max(1.5, 0.08 * cam.s);
+    c.beginPath(); c.ellipse(g.sx, g.sy, rr, rr * cam.sp, 0, 0, 6.284); c.stroke();
+    if (L.big) {
+      var r2 = (0.1 + u * 1.5) * cam.s;
+      c.globalAlpha = Math.max(0, 0.6 * (1 - u * 1.3));
+      c.beginPath(); c.ellipse(g.sx, g.sy, r2, r2 * cam.sp, 0, 0, 6.284); c.stroke();
+      if (u < 0.25) {                                  // 섬광
+        var fl = c.createRadialGradient(g.sx, g.sy, 1, g.sx, g.sy, cam.s * 1.6);
+        fl.addColorStop(0, 'rgba(' + col + ',' + (0.55 * (1 - u / 0.25)) + ')'); fl.addColorStop(1, 'rgba(0,0,0,0)');
+        c.globalAlpha = 1; c.fillStyle = fl; c.fillRect(g.sx - cam.s * 2, g.sy - cam.s * 2, cam.s * 4, cam.s * 4);
+      }
+      // 먼지 알갱이
+      var rnd = rng(31 + Math.round(L.x * 10)), n = 7;
+      c.fillStyle = 'rgba(' + col + ',1)';
+      for (var i = 0; i < n; i++) {
+        var a = rnd() * 6.283, d = (0.3 + rnd() * 1.6) * u * cam.s, lift = Math.sin(Math.min(1, u * 1.4) * 3.14) * (0.25 + rnd() * 0.5) * cam.s;
+        c.globalAlpha = Math.max(0, 0.7 * (1 - u));
+        c.beginPath(); c.arc(g.sx + Math.cos(a) * d, g.sy + Math.sin(a) * d * cam.sp - lift, Math.max(1, 0.035 * cam.s), 0, 6.284); c.fill();
       }
     }
     c.restore();
   }
+
+  /** 먼 쪽 관중석 — 밀도(R.crowd)만큼 점을 채운다. 결정적(시드 고정)이라 프레임마다 흔들리지 않는다. */
+  function drawStands(c, cam) {
+    var density = 0.35 + 0.65 * R.crowd;                  // 신생 구단도 관중은 있다 — 시설 등급은 만원 여부를 바꾼다(E.5 ⑲)
+    var far = project(cam, 0, COURT.length + 2.4, 0), farR = project(cam, COURT.width, COURT.length + 2.4, 0);
+    var top = Math.max(cam.h * 0.09, far.sy - cam.h * 0.30), bottom = far.sy - 4;   // 위쪽 팀 이름 라벨 자리를 남긴다
+    var x0 = -cam.w * 0.3, x1 = cam.w * 1.3;                 // 화면 폭 전체(줌·흔들림 여유 포함) — 끊기는 모서리가 없게
+    var rows = 6, rnd = rng(7331);
+    var cheer = R.cheer && R.cheer.side === R.mySide ? Math.sin(Math.min(1, R.cheer.t / 1.4) * 3.14159) : 0;
+    var hush = R.cheer && R.cheer.side !== R.mySide ? Math.max(0, 1 - R.cheer.t / 1.4) : 0;
+    c.save();
+    // 스탠드 단(계단식 어두운 띠)
+    for (var r = 0; r < rows; r++) {
+      var y0 = top + (bottom - top) * r / rows, y1 = top + (bottom - top) * (r + 1) / rows;
+      c.fillStyle = r % 2 ? 'rgba(10,18,28,.62)' : 'rgba(14,24,36,.62)';
+      c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
+    for (var r2 = 0; r2 < rows; r2++) {
+      var y = top + (bottom - top) * (r2 + 0.5) / rows;
+      var cols = 26 + r2 * 4, sz = 2.2 + r2 * 0.4;
+      for (var i = 0; i < cols; i++) {
+        var u = rnd();
+        var x = x0 + (x1 - x0) * (i + 0.5) / cols + (rnd() - 0.5) * 3;
+        var hue = rnd(), ph = rnd() * 6.283;
+        if (u > density) continue;                       // 밀도만큼만 앉는다
+        var bounce = cheer > 0 ? Math.max(0, Math.sin(R.clock * 14 + ph)) * cheer * 3.5 : (Math.sin(R.clock * 1.3 + ph) * 0.5);
+        var alpha = hush > 0 ? 0.35 : 1;
+        c.globalAlpha = alpha;
+        c.fillStyle = hue < 0.5 ? 'rgba(95,176,255,.6)' : (hue < 0.8 ? 'rgba(230,236,242,.5)' : 'rgba(240,144,128,.55)');
+        c.beginPath(); c.arc(x, y - bounce, sz, 0, Math.PI * 2); c.fill();
+        if (cheer > 0.3 && rnd() < 0.06 && Math.sin(R.clock * 23 + ph) > 0.7) {   // 휴대폰 플래시
+          c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.arc(x + 1, y - bounce - 2, 1.3, 0, 6.283); c.fill();
+        }
+      }
+    }
+    c.globalAlpha = 1;
+    var fade = c.createLinearGradient(0, top, 0, bottom);                  // 아래로 갈수록 어둡게(조명은 위에서 온다)
+    fade.addColorStop(0, 'rgba(8,14,22,0)'); fade.addColorStop(1, 'rgba(8,14,22,.55)');
+    c.fillStyle = fade; c.fillRect(x0, top, x1 - x0, bottom - top);
+    // 앞쪽 펜스 + 구단 색 현수막 띠
+    var fenceY = bottom - 2, fh = Math.max(6, cam.h * 0.028);
+    var g = c.createLinearGradient(0, fenceY - fh, 0, fenceY);
+    g.addColorStop(0, R.colors.away); g.addColorStop(0.5, R.colors.away); g.addColorStop(0.5, R.colors.home); g.addColorStop(1, R.colors.home);
+    c.fillStyle = 'rgba(6,12,20,.9)'; c.fillRect(x0, fenceY - fh - 3, x1 - x0, fh + 5);
+    c.globalAlpha = 0.85; c.fillStyle = g;
+    var seg = (x1 - x0) / 6;
+    for (var k2 = 0; k2 < 6; k2++) { if (k2 % 2 === 0) c.fillRect(x0 + seg * k2 + 2, fenceY - fh, seg - 4, fh); }
+    c.globalAlpha = 1;
+    c.restore();
+  }
   function drawFloor(c, cam) {
-    // 코트 바닥(원근 사다리꼴) + 주변 여유 공간
-    var out = quad(cam, -1.8, -2.4, COURT.width+1.8, COURT.length+2.4);
-    c.fillStyle = 'rgba(18,48,73,.55)'; fillPoly(c, out);
+    // 프리존(마루) → 코트(타라플렉스 파랑) → 마루 결 → 스포트라이트 → 네트 앞 광택
+    var out = quad(cam, -2.2, -2.8, COURT.width+2.2, COURT.length+2.8);
+    var wg = c.createLinearGradient(0, project(cam,4.5,COURT.length+2.8,0).sy, 0, project(cam,4.5,-2.8,0).sy);
+    wg.addColorStop(0, '#3A2C1E'); wg.addColorStop(1, '#5A4530');
+    c.fillStyle = wg; fillPoly(c, out);
+    c.save();
+    c.beginPath(); c.moveTo(out[0].sx, out[0].sy); for (var i = 1; i < 4; i++) c.lineTo(out[i].sx, out[i].sy); c.closePath(); c.clip();
+    c.strokeStyle = 'rgba(0,0,0,.16)'; c.lineWidth = 1;
+    for (var px = -2.2; px <= COURT.width + 2.2; px += 0.75) {      // 마루 널 결(코트 세로 방향)
+      var a = project(cam, px, -2.8, 0), b = project(cam, px, COURT.length + 2.8, 0);
+      c.beginPath(); c.moveTo(a.sx, a.sy); c.lineTo(b.sx, b.sy); c.stroke();
+    }
+    c.restore();
     var inn = quad(cam, 0, 0, COURT.width, COURT.length);
     var g = c.createLinearGradient(0, project(cam,4.5,COURT.length,0).sy, 0, project(cam,4.5,0,0).sy);
-    g.addColorStop(0, '#1B4B76'); g.addColorStop(1, '#20608F');
+    g.addColorStop(0, '#1B4B76'); g.addColorStop(1, '#24699C');
     c.fillStyle = g; fillPoly(c, inn);
+    c.save();
+    c.beginPath(); c.moveTo(inn[0].sx, inn[0].sy); for (var j = 1; j < 4; j++) c.lineTo(inn[j].sx, inn[j].sy); c.closePath(); c.clip();
+    var mid = project(cam, COURT.width / 2, COURT.net, 0);              // 스포트라이트
+    var sp = c.createRadialGradient(mid.sx, mid.sy, 2, mid.sx, mid.sy, cam.s * 9);
+    sp.addColorStop(0, 'rgba(255,255,255,.14)'); sp.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = sp; c.fillRect(0, 0, cam.w * 3, cam.h * 3);
+    c.strokeStyle = 'rgba(255,255,255,.05)'; c.lineWidth = 1;
+    for (var qx = 0.75; qx < COURT.width; qx += 0.75) {                 // 코트 위 결
+      var a2 = project(cam, qx, 0, 0), b2 = project(cam, qx, COURT.length, 0);
+      c.beginPath(); c.moveTo(a2.sx, a2.sy); c.lineTo(b2.sx, b2.sy); c.stroke();
+    }
+    var gl = quad(cam, 0, COURT.net - 1.2, COURT.width, COURT.net + 1.2);   // 네트 앞 광택
+    var gg = c.createLinearGradient(0, gl[2].sy, 0, gl[0].sy);
+    gg.addColorStop(0, 'rgba(255,255,255,0)'); gg.addColorStop(0.5, 'rgba(255,255,255,.07)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gg; fillPoly(c, gl);
+    c.restore();
   }
   function quad(cam, x0, y0, x1, y1) {
     return [project(cam,x0,y0,0), project(cam,x1,y0,0), project(cam,x1,y1,0), project(cam,x0,y1,0)];
@@ -376,6 +517,8 @@ function create(canvas, opts) {
     var W = COURT.width, N = COURT.net, top = COURT.netBandTop, bot = COURT.netBandBottom;
     var tl = project(cam,0,N,top), tr = project(cam,W,N,top);
     var bl = project(cam,0,N,bot), br = project(cam,W,N,bot);
+    var wob = R.netWobble > 0 ? Math.sin(R.clock * 28) * R.netWobble * 3.5 : 0;   // 공이 걸리면 그물이 출렁인다
+    if (wob) { c.save(); c.translate(0, wob * 0.4); }
     c.fillStyle = 'rgba(200,220,240,.10)';
     c.beginPath(); c.moveTo(tl.sx,tl.sy); c.lineTo(tr.sx,tr.sy); c.lineTo(br.sx,br.sy); c.lineTo(bl.sx,bl.sy); c.closePath(); c.fill();
     c.strokeStyle = 'rgba(210,228,244,.30)'; c.lineWidth = 1;
@@ -395,11 +538,13 @@ function create(canvas, opts) {
       c.strokeStyle = '#E9A13B'; c.lineWidth = 2.5;
       c.beginPath(); c.moveTo(a.sx,a.sy); c.lineTo(b.sx,b.sy); c.stroke();
     });
+    if (wob) c.restore();
   }
 
   function collectPlayers() {
-    // 코트에는 항상 6인씩 선다. 공을 만진 선수만 이름과 동작을 얻는다.
+    // 코트에는 항상 6인씩 선다. 공을 만진 선수만 이름과 동작을 얻는다. 다음에 만질 선수는 준비 자세를 잡는다.
     var actor = R.touches[Math.min(R.idx, R.touches.length-1)] || null;
+    var nextT = (!R.ended && R.idx + 1 < R.touches.length) ? R.touches[R.idx + 1] : null;
     var byKey = {};
     for (var i = 0; i < R.touches.length; i++) {
       var t = R.touches[i];
@@ -410,73 +555,132 @@ function create(canvas, opts) {
       [1,2,3,4,5,6].forEach(function (zone) {
         var p = zonePos(side, zone), t = byKey[side + '-' + zone];
         var isActor = !!(actor && actor.side === side && actor.pos === zone);
+        var isNext = !!(nextT && nextT.side === side && nextT.pos === zone);
         out.push({ side:side, pos:zone, x:p.x, y:p.y,
                    name: isActor && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
-                   known: !!t, active: isActor, type: isActor ? actor.type : 0 });
+                   known: !!t, active: isActor, type: isActor ? actor.type : 0,
+                   next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0 });
       });
     });
     return out;
   }
+  /** 색을 어둡게/밝게 (0 < k: 밝게, k < 0: 어둡게). */
+  function shade(hex, k) {
+    var n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    var f = function (v) { return Math.max(0, Math.min(255, Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k))); };
+    return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+  }
+  /**
+   * 선수 — 유니폼 색으로 채운 실루엣(다리·몸통·팔) + 등번호 + 얼굴. 막대 인간을 면으로 바꾼 것이 연출 1단계의 핵심이다.
+   * 자세: 공을 막 친 선수는 터치 종류(서브·토스·강타·블로킹·디그)의 자세, 다음에 만질 선수는 준비 자세(공이 다가오면 블로커는 뛴다).
+   */
   function drawPlayer(c, cam, p, ball) {
-    // 스파이크·블로킹 순간에는 점프 — 공 높이를 따라 뜬다
-    var jump = 0;
-    if (p.active && (p.type === EV.Attack || p.type === EV.Block)) jump = Math.min(0.80, Math.max(0, ball.z - 2.1) * 0.55);
     var F = STYLE.figure;
-    var HIP = 0.95 * F, SHOULDER = 1.45 * F, HEAD = 1.68 * F;   // 인체 비율(m) × 가독성 보정
-    var base = project(cam, p.x, p.y, jump);
+    var u = 0; { var f = R.flights[R.idx]; if (f && !R.ended) u = Math.max(0, Math.min(1, R.t / f.T)); }
+    var pose = p.active ? p.type : 0, ready = p.next;
+    // 점프: 강타·블로킹 순간은 공 높이를 따라, 다음 블로커는 공이 다가오면 솟는다
+    var jump = 0;
+    if (p.active && (p.type === EV.Attack || p.type === EV.Block)) jump = Math.min(0.85, Math.max(0, ball.z - 2.0) * 0.6) * Math.max(0, 1 - u * 1.6);
+    if (ready === EV.Block && u > 0.55) jump = Math.sin((u - 0.55) / 0.45 * 3.14159) * 0.7;
+    var crouch = (pose === EV.Reception || pose === EV.Dig || pose === EV.Cover) ? 0.78
+               : ((ready === EV.Reception || ready === EV.Dig || ready === EV.Cover) ? 0.88 : 1);
+    if (!p.active && !ready) crouch = 0.97 + Math.sin(R.clock * 1.7 + p.pos * 1.3 + p.side * 2) * 0.012;   // 숨쉬기
+    var HIP = 0.95 * F * crouch, SHO = 1.45 * F * crouch, HEAD = 1.68 * F * crouch;
+    var base = project(cam, p.x, p.y, 0);
+    var foot = project(cam, p.x, p.y, jump);
     var hip  = project(cam, p.x, p.y, HIP + jump);
-    var sho  = project(cam, p.x, p.y, SHOULDER + jump);
+    var sho  = project(cam, p.x, p.y, SHO + jump);
     var head = project(cam, p.x, p.y, HEAD + jump);
     var s = base.s;
-    var col = p.side === R.mySide ? R.colors.home : R.colors.away;
-    var lw = Math.max(2, 0.085 * s);
-    c.globalAlpha = p.active ? 1 : (p.known ? 0.62 : 0.34);
-    c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round';
-
-    var legSpread = 0.28 * s;                          // 다리
+    var mine = p.side === R.mySide;
+    var col = mine ? R.colors.home : R.colors.away;
+    var dark = shade(col, -0.45), light = shade(col, 0.25);
+    var alpha = p.active ? 1 : (p.known ? 0.92 : 0.6);
+    var faceUp = p.side === 0;                                        // 홈은 위(네트)를 본다 — 등번호는 뒤에서 보인다
+    c.save();
+    c.globalAlpha = alpha;
+    // 그림자 — 뛰면 작아진다
+    c.fillStyle = 'rgba(4,10,16,' + (0.38 * Math.max(0.3, 1 - jump * 0.8)) + ')';
+    c.beginPath(); c.ellipse(base.sx, base.sy, 0.34 * s, 0.14 * s, 0, 0, 6.284); c.fill();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    // 다리(반바지 색), 점프하면 모인다
+    var spread = (jump > 0.1 ? 0.10 : 0.20) * s;
+    c.strokeStyle = dark; c.lineWidth = Math.max(3, 0.15 * s);
+    c.beginPath(); c.moveTo(hip.sx - 0.08 * s, hip.sy); c.lineTo(foot.sx - spread, foot.sy - 0.02 * s); c.stroke();
+    c.beginPath(); c.moveTo(hip.sx + 0.08 * s, hip.sy); c.lineTo(foot.sx + spread, foot.sy - 0.02 * s); c.stroke();
+    // 몸통(어깨가 넓은 사다리꼴, 둥근 모서리)
+    var shw = 0.27 * s, hpw = 0.19 * s;
+    c.fillStyle = col; c.strokeStyle = col; c.lineWidth = Math.max(2, 0.10 * s);
     c.beginPath();
-    c.moveTo(hip.sx - legSpread, base.sy); c.lineTo(hip.sx, hip.sy); c.lineTo(hip.sx + legSpread, base.sy);
-    c.stroke();
-    c.beginPath(); c.moveTo(hip.sx, hip.sy); c.lineTo(sho.sx, sho.sy); c.stroke();   // 몸통
-
-    var up = (p.active && (p.type === EV.Attack || p.type === EV.Block || p.type === EV.Serve || p.type === EV.Set));
-    var armY = up ? sho.sy - 0.62 * s : sho.sy + 0.30 * s;
-    var armX = 0.42 * s;
-    c.beginPath();
-    c.moveTo(sho.sx - armX, armY); c.lineTo(sho.sx, sho.sy); c.lineTo(sho.sx + armX, armY);
-    c.stroke();
-
-    // 얼굴 마커(art-pipeline 16.2) — 앱이 R.faceOf(pid) 로 64px 원형 비트맵을 주면 머리 자리에 그린다. 없으면 점.
+    c.moveTo(sho.sx - shw, sho.sy); c.lineTo(sho.sx + shw, sho.sy); c.lineTo(hip.sx + hpw, hip.sy); c.lineTo(hip.sx - hpw, hip.sy); c.closePath();
+    c.fill(); c.stroke();
+    // 가슴 하이라이트
+    c.fillStyle = light; c.globalAlpha = alpha * 0.35;
+    c.beginPath(); c.moveTo(sho.sx - shw * 0.9, sho.sy + 0.02 * s); c.lineTo(sho.sx + shw * 0.2, sho.sy + 0.02 * s); c.lineTo(hip.sx - hpw * 0.6, hip.sy - 0.04 * s); c.lineTo(hip.sx - hpw * 0.95, hip.sy - 0.04 * s); c.closePath(); c.fill();
+    c.globalAlpha = alpha;
+    // 등번호
+    if (p.jersey) {
+      c.font = '700 ' + Math.max(8, 0.30 * s) + 'px "Barlow Condensed",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = 'rgba(255,255,255,.92)';
+      c.fillText(String(p.jersey), (sho.sx + hip.sx) / 2, (sho.sy + hip.sy) / 2 + 0.01 * s);
+      c.textBaseline = 'alphabetic';
+    }
+    // 팔 — 자세별 손 위치 (어깨 기준, 화면 px)
+    var A = 0.62 * s;                                                  // 팔 길이(화면)
+    var lh, rh;                                                        // 왼손·오른손
+    if (pose === EV.Serve)            { lh = [-0.25 * A, -0.55 * A]; rh = [0.30 * A, -1.0 * A]; }
+    else if (pose === EV.Set)         { lh = [-0.28 * A, -0.95 * A]; rh = [0.28 * A, -0.95 * A]; }
+    else if (pose === EV.Block)       { lh = [-0.22 * A, -1.0 * A];  rh = [0.22 * A, -1.0 * A]; }
+    else if (pose === EV.Attack)      { var sw = Math.min(1, u * 3); lh = [-0.55 * A, -0.55 * A]; rh = [0.55 * A * (1 - sw) + 0.25 * A * sw, -0.95 * A * (1 - sw) + 0.35 * A * sw]; }
+    else if (pose === EV.Reception || pose === EV.Dig || pose === EV.Cover || pose === EV.FreeBall) { lh = [-0.10 * A, 0.75 * A]; rh = [0.10 * A, 0.75 * A]; }
+    else if (ready === EV.Block)      { var rb = Math.min(1, Math.max(0, (u - 0.35) / 0.4)); lh = [-0.30 * A, -(0.3 + 0.7 * rb) * A]; rh = [0.30 * A, -(0.3 + 0.7 * rb) * A]; }
+    else if (ready === EV.Set)        { lh = [-0.30 * A, -0.7 * A]; rh = [0.30 * A, -0.7 * A]; }
+    else if (ready === EV.Attack)     { lh = [-0.45 * A, 0.1 * A]; rh = [0.45 * A, -0.4 * A]; }
+    else if (ready)                   { lh = [-0.25 * A, 0.6 * A]; rh = [0.25 * A, 0.6 * A]; }
+    else                              { lh = [-0.42 * A, 0.45 * A]; rh = [0.42 * A, 0.45 * A]; }
+    c.strokeStyle = col; c.lineWidth = Math.max(2.5, 0.12 * s);
+    var armAt = function (h, sign) {
+      var sx = sho.sx + sign * shw * 0.85, sy = sho.sy + 0.02 * s;
+      var ex = sx + h[0] * 0.5 + sign * 0.12 * A, ey = sy + h[1] * 0.5 + 0.10 * A;   // 팔꿈치는 살짝 바깥·아래
+      c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.lineTo(sx + h[0], sy + h[1]); c.stroke();
+    };
+    armAt(lh, -1); armAt(rh, 1);
+    // 강타 순간 손끝 스윙 잔상
+    if (pose === EV.Attack && u < 0.25) {
+      c.globalAlpha = alpha * (1 - u / 0.25) * 0.6; c.strokeStyle = '#FFF'; c.lineWidth = Math.max(1.5, 0.05 * s);
+      c.beginPath(); c.arc(sho.sx + shw * 0.85, sho.sy, A * 0.95, -1.9, -0.3); c.stroke();
+      c.globalAlpha = alpha;
+    }
+    // 얼굴 마커(art-pipeline 16.2) — 앱이 R.faceOf(pid) 로 64px 원형 비트맵을 주면 머리 자리에 그린다. 없으면 유니폼색 머리.
     var face = (p.pid !== null && p.pid !== undefined && R.faceOf) ? R.faceOf(p.pid) : null;
-    var fr = 0;
+    var fr = Math.max(7, 0.45 * s), fy = head.sy - 0.10 * s;
     if (face) {
-      fr = Math.max(7, 0.45 * s);                  // 폰에서 알아볼 최소 크기(지름 14px 이상)
-      var fy = head.sy - 0.10 * s;
       c.save(); c.beginPath(); c.arc(head.sx, fy, fr, 0, 6.284); c.closePath(); c.clip();
       c.drawImage(face, head.sx - fr, fy - fr, fr * 2, fr * 2); c.restore();
       c.beginPath(); c.arc(head.sx, fy, fr, 0, 6.284);
       c.lineWidth = Math.max(1.5, 0.06 * s); c.strokeStyle = col; c.stroke();
     } else {
-      c.fillStyle = col;
-      c.beginPath(); c.arc(head.sx, head.sy, Math.max(2.6, 0.15 * s), 0, 6.284); c.fill();
+      var hr = Math.max(4, 0.22 * s);
+      c.fillStyle = '#F1D6C2'; c.beginPath(); c.arc(head.sx, fy, hr, 0, 6.284); c.fill();
+      c.fillStyle = dark; c.beginPath(); c.arc(head.sx, fy - hr * 0.25, hr, 3.3, 6.1); c.fill();   // 머리카락
     }
     // 강조 링 — 앱이 R.markOf(pid) 로 색을 주면(데뷔전 선수 등) 머리 둘레에 한 겹 더 그린다. 표현 전용.
     var mk = (p.pid !== null && p.pid !== undefined && R.markOf) ? R.markOf(p.pid) : null;
     if (mk) {
-      var my = face ? (head.sy - 0.10 * s) : head.sy, mr = (face ? fr : Math.max(2.6, 0.15 * s)) + Math.max(3, 0.12 * s);
-      c.beginPath(); c.arc(head.sx, my, mr, 0, 6.284);
+      var mr = (face ? fr : Math.max(4, 0.22 * s)) + Math.max(3, 0.12 * s);
+      c.beginPath(); c.arc(head.sx, fy, mr, 0, 6.284);
       c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke();
     }
-
     c.globalAlpha = 1;
     if (p.active && p.name) {
-      var ly = face ? (head.sy - 0.10 * s - fr - 5) : (head.sy - 0.30 * s - 5);
-      c.font = '600 11px "Gothic A1",sans-serif'; c.textAlign = 'center';
-      c.fillStyle = 'rgba(233,240,247,.94)';
+      var ly = fy - (face ? fr : Math.max(4, 0.22 * s)) - 6;
+      c.font = '700 11px "Gothic A1",sans-serif'; c.textAlign = 'center';
+      c.fillStyle = 'rgba(233,240,247,.96)';
       c.strokeStyle = 'rgba(6,14,22,.85)'; c.lineWidth = 3;
       c.strokeText(p.name, head.sx, ly);
       c.fillText(p.name, head.sx, ly);
     }
+    c.restore();
   }
   function drawShadow(c, cam, b) {
     var g = project(cam, b.x, b.y, 0);
@@ -488,17 +692,19 @@ function create(canvas, opts) {
     c.fill();
   }
   function drawTrail(c, cam) {
-    if (R.trail.length < 2) return;
-    c.strokeStyle = 'rgba(233,185,73,.30)'; c.lineWidth = 2;
-    c.beginPath();
-    for (var i=0;i<R.trail.length;i++) {
-      var q = project(cam, R.trail[i].x, R.trail[i].y, R.trail[i].z);
-      if (i===0) c.moveTo(q.sx,q.sy); else c.lineTo(q.sx,q.sy);
+    var n = R.trail.length; if (n < 2) return;
+    var f = R.flights[R.idx], fast = f && f.from && (f.from.type === EV.Attack || f.from.type === EV.Serve);
+    c.lineCap = 'round';
+    for (var i = 1; i < n; i++) {
+      var a = project(cam, R.trail[i-1].x, R.trail[i-1].y, R.trail[i-1].z), b = project(cam, R.trail[i].x, R.trail[i].y, R.trail[i].z);
+      var u = i / n;
+      c.strokeStyle = 'rgba(255,220,120,' + (u * u * (fast ? 0.75 : 0.35)) + ')';
+      c.lineWidth = Math.max(1, u * (fast ? 7 : 3.5));
+      c.beginPath(); c.moveTo(a.sx, a.sy); c.lineTo(b.sx, b.sy); c.stroke();
     }
-    c.stroke();
   }
   function drawBall(c, cam, b) {
-    R.trail.push({x:b.x,y:b.y,z:b.z}); if (R.trail.length > 14) R.trail.shift();
+    R.trail.push({x:b.x,y:b.y,z:b.z}); if (R.trail.length > 18) R.trail.shift();
     var p = project(cam, b.x, b.y, b.z);
     var r = Math.max(4, PHY.ballR * STYLE.ball * p.s);
     var g = c.createRadialGradient(p.sx - r*0.35, p.sy - r*0.4, r*0.1, p.sx, p.sy, r);
