@@ -51,15 +51,27 @@ const court = fs.readFileSync(path.join(HERE, 'court-render.js'), 'utf8');
 const { art, bytes: artBytes, entries: artEntries, problems: artProblems } = collectArt();
 const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';</scr' + 'ipt>';
 
+// 4) 빌드 태그 — 피드백 본문에 붙는다(어느 리비전에서 난 일인지). git 이 없으면 날짜만.
+function buildTag() {
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', 'web', 'data'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() ? '+' : '';
+    return sha + dirty + ' ' + day;
+  } catch { return day; }
+}
+const BUILD = buildTag();
+
 const html = shell.replace('<!--ENGINE-->',
-  artScript + '\n<script>\n' + engine + '\n</scr' + 'ipt>\n<script>\n' + court + '\n</scr' + 'ipt>');
+  artScript + '\n<script>\n' + engine + '\n</scr' + 'ipt>\n<script>\n' + court + '\n</scr' + 'ipt>')
+  .replace("var BUILD = '__BUILD__';", 'var BUILD = ' + JSON.stringify(BUILD) + ';');
 
 fs.writeFileSync(outPath, html);
 fs.rmSync(bundlePath, { force: true });
 
 const mb = html.length / 1024 / 1024;
 const artMb = artBytes / 1024 / 1024;
-console.log(`${path.relative(ROOT, outPath)}  ${(html.length / 1024).toFixed(0)}KB` +
+console.log(`${path.relative(ROOT, outPath)}  ${(html.length / 1024).toFixed(0)}KB  [${BUILD}]` +
   (artEntries.length ? `  (아트 ${artEntries.length}명 · ${artMb.toFixed(2)}MB)` : '  (아트 없음 — SVG 플레이스홀더)'));
 if (artMb > ART_BUDGET_MB)
   console.warn(`⚠ 인라인 아트 ${artMb.toFixed(2)}MB 가 예산 ${ART_BUDGET_MB}MB 를 넘었습니다 — 아티팩트 상한(16MB)에 걸립니다.`);

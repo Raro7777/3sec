@@ -75,6 +75,18 @@ check('지정 스카우트 비용이 표시된다', (await viewText()).includes(
 await tap('[data-act="scout"]', 400);
 check('스카우트 결과가 나온다', (await viewText()).includes('이 선수 키우기'));
 check('스카우트 결과가 실물 카드로 공개된다', (await count('.rcard')) === 1);
+check('첫 스카우트 미션이 조각을 준다', /^3\/12/.test(await text('#rFrag')), '조각 ' + await text('#rFrag'));
+check('시작 티켓 5장으로는 10연이 잠긴다', await page.$eval('[data-act="scout10"]', b => b.disabled));
+// 시작 티켓은 엔진 기본 5장(league-and-economy B.6.7 — 온보딩에 티켓을 더 주면 시즌 1 난이도가 무너진다).
+// 10연은 조각·순위 보상이 쌓인 뒤 열리므로, 화면 검사를 위해 세이브에 티켓을 넣어 준다.
+await page.evaluate(() => {
+  const E = window.VS, k = 'bloom-manager-save-v1';
+  const g = E.loadGame(JSON.parse(localStorage.getItem(k)));
+  E.addTickets(g, 10);
+  localStorage.setItem(k, JSON.stringify(E.saveGame(g)));
+});
+await page.reload(); await page.waitForTimeout(800);
+await tap('[data-tab="scout"]', 300);
 await tap('[data-act="scout10"]', 700);
 check('10연 결과가 나온다', (await viewText()).includes('10연속 결과'));
 check('10연 결과가 카드 10장 그리드다', (await count('.rgrid .rcard')) === 10);
@@ -289,6 +301,44 @@ check('로스터에 계약 인원 게이지가 있다', /계약 \d+\/42/.test(aw
   check('결산에서 들어간 시설 화면은 결산으로 돌아간다', (await count('[data-go="settle"]')) === 1);
   await tap('[data-go="settle"]', 500);
   check('결산으로 돌아온다', (await viewText()).includes('결산'));
+}
+
+// --- 9b. 피드백 보내기 — 테스터가 어디서든 상황이 붙은 한 줄을 남길 수 있어야 한다
+await tap('[data-tab="home"]', 400);
+check('감독실에 피드백 보내기가 있다', (await count('[data-go="feedback"]')) >= 1);
+await tap('[data-go="feedback"]', 400);
+{
+  await page.fill('#fbText', '경기 화면 글자가 작아요');
+  await tap('[data-fbkind="art"]', 300);
+  check('피드백 종류 선택이 유지된다', (await page.$eval('[data-fbkind="art"]', el => el.getAttribute('aria-current'))) === 'true');
+  check('종류를 바꿔도 입력이 남는다', (await page.$eval('#fbText', el => el.value)) === '경기 화면 글자가 작아요');
+  const body = await page.$eval('#fbBody', el => el.value);
+  check('피드백 본문에 내용과 종류가 붙는다', body.includes('경기 화면 글자가 작아요') && body.includes('그림'));
+  check('피드백 본문에 시즌·화면·빌드가 붙는다', /시즌 \d/.test(body) && body.includes('화면 감독실') && /빌드 \S+/.test(body));
+  check('피드백 본문에 티켓·골드·로스터가 붙는다', /티켓 \d+ · 골드 \d+ · 로스터 \d+/.test(body));
+  check('피드백 본문에 개인 정보가 없다', !/@|[0-9]{3}-[0-9]{3,4}-[0-9]{4}/.test(body));
+  check('피드백 입력 글자가 16px 이상이다(iOS 확대 방지)', (await page.$eval('#fbText', el => parseFloat(getComputedStyle(el).fontSize))) >= 16);
+  check('공유가 없는 기기에도 복사 버튼이 있다', (await count('[data-act="fbcopy"]')) === 1);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await tap('[data-act="fbcopy"]', 500);
+  check('복사 결과를 알려 준다', (await count('.toast')) >= 1);
+  await tap('[data-act="fbback"]', 400);
+  check('피드백에서 온 곳으로 돌아간다', (await viewText()).includes('다음 목표') || (await viewText()).includes('먼저 선수를'));
+}
+// 오류 기록 — 화면이 멈춘 이유를 피드백이 같이 실어야 한다
+{
+  await page.evaluate(() => { setTimeout(() => { throw new Error('테스트용 오류'); }, 0); });
+  await page.waitForTimeout(200);
+  jsErrors = jsErrors.filter(m => !m.includes('테스트용 오류'));
+  const errs = await page.evaluate(() => JSON.parse(localStorage.getItem('bloom-errors-v1') || '[]'));
+  check('자바스크립트 오류가 기억된다', errs.some(e => e.includes('테스트용 오류')), JSON.stringify(errs));
+  await tap('[data-act="help"]', 400);
+  check('도움말 끝에 피드백 링크가 있다', (await count('[data-go="feedback"]')) === 1);
+  await tap('[data-go="feedback"]', 400);
+  const body = await page.$eval('#fbBody', el => el.value);
+  check('피드백 본문에 최근 오류가 붙는다', body.includes('최근 오류') && body.includes('테스트용 오류'));
+  check('도움말에서 들어가면 화면이 도움말로 적힌다', body.includes('화면 도움말'));
+  await tap('[data-act="fbback"]', 300);
 }
 
 // --- 10. 전역 조건

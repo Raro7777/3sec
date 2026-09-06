@@ -328,6 +328,14 @@ details[open] summary::after{content:"▴"}
 .chips button{flex:none;min-height:38px;padding:0 13px;border-radius:19px;border:1px solid var(--line2);
   background:var(--panel2);font-size:13px;font-weight:700;color:var(--ink2)}
 .chips button[aria-current="page"]{background:var(--court-bg);border-color:var(--court);color:var(--court)}
+/* 피드백 보내기 — 본문 16px(iOS 확대 방지), 터치 44px+ */
+.fb-ta{width:100%;min-height:120px;padding:12px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);
+  color:var(--ink);font:inherit;font-size:16px;line-height:1.5;resize:vertical}
+.fb-ta[readonly]{color:var(--ink2);font-size:13px;min-height:150px;font-family:ui-monospace,Menlo,monospace}
+.fb-kind{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0 12px}
+.fb-kind button{flex:none;min-height:44px;padding:0 14px;border-radius:22px;border:1px solid var(--line2);
+  background:var(--panel2);font-size:14px;font-weight:700;color:var(--ink2)}
+.fb-kind button[aria-current="true"]{background:var(--hot-bg);border-color:var(--hot);color:var(--hot)}
 .hero{position:relative;overflow:hidden}
 .hero .hbg{position:absolute;right:-8%;top:-4%;width:58%;height:78%;object-fit:cover;object-position:50% 0;opacity:.62;
   pointer-events:none;-webkit-mask-image:linear-gradient(to left,#000 30%,transparent 100%);mask-image:linear-gradient(to left,#000 30%,transparent 100%)}
@@ -413,6 +421,20 @@ details[open] summary::after{content:"▴"}
 var E = window.VS;
 window.BLOOM_UI = { matchStory: function(oppId){ return matchStory(oppId, G && G.league ? E.seasonView(G) : null); } };   // app-test 용 훅(표현 계층)
 var SAVE_KEY = 'bloom-manager-save-v1';
+var BUILD = '__BUILD__';                 // build.mjs 가 git 해시·날짜로 바꾼다. 소스 그대로면 'dev'
+if (BUILD.indexOf('__') === 0) BUILD = 'dev';
+var ERR_KEY = 'bloom-errors-v1', META_KEY = 'bloom-meta-v1';
+var meta = { firstOpen: 0, opens: 0 };
+// 테스터가 "화면이 멈췄어요" 라고 할 때 원인을 같이 받으려면 오류를 게임이 기억해야 한다(피드백 본문에 붙는다).
+function rememberError(msg){
+  try {
+    var arr = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');
+    arr.push(new Date().toISOString().slice(0,16) + ' ' + String(msg).slice(0, 160));
+    localStorage.setItem(ERR_KEY, JSON.stringify(arr.slice(-3)));
+  } catch(e){}
+}
+window.addEventListener('error', function(ev){ rememberError((ev.message || 'error') + (ev.lineno ? ' @' + ev.lineno : '')); });
+window.addEventListener('unhandledrejection', function(ev){ var r = ev.reason; rememberError('promise: ' + (r && r.message ? r.message : String(r))); });
 
 // ---------------------------------------------------------------- state
 var G = null;                 // 엔진 게임 상태
@@ -435,58 +457,37 @@ var SKIP_KEY = 'bloom-skip-unlocked-v1';
 var MISSION_KEY = 'bloom-missions-v1';
 var autoUnlocked = false, usedAutoThisCamp = false, skipUnlocked = false;
 var claimed = {};          // 달성해서 보상을 받은 미션 id
-var STARTING_TICKETS = 20; // 초반에 넉넉히 뽑아 보게 (엔진 기본 5 + 보너스)
+var STARTING_TICKETS = E.ONBOARDING.startingTickets; // 온보딩 시작 티켓 — 엔진(missions.js)에 있어 season-check --app 이 같은 값을 잰다
 
 // ---------------------------------------------------------------- 미션
-// 코어 루프를 순서대로 가르치는 온보딩 미션. 달성 즉시 티켓을 준다.
+// 코어 루프를 순서대로 가르치는 온보딩 미션. 표·판정·지급은 엔진(engine/missions.js)에 있고
+// 여기서는 화면 모양과 "이미 받은 미션" 저장만 맡는다 — 하네스가 같은 표로 난이도를 잰다.
 function reps(){ return E.representatives(G); }
 function fillerCount(){ return E.myRoster(G).filter(function(p){ return p.rarity===0; }).length; }
-var MISSIONS = [
-  { id:'scout1', t:'선수를 스카우트한다', d:'명단에서 신인 한 명을 데려오세요.', r:3,
-    p:function(){ return Math.min(1, Object.keys(G.ownedCards||{}).length); }, goal:1 },
-  { id:'grad1', t:'첫 선수를 키워낸다', d:'캠프 12턴을 완주해 졸업시키세요.', r:5,
-    p:function(){ return Math.min(1, G.trainingCount); }, goal:1 },
-  { id:'match1', t:'첫 경기를 치른다', d:'구단 하나를 골라 경기를 해보세요.', r:3,
-    p:function(){ return Math.min(1, G.wins + G.losses); }, goal:1 },
-  { id:'roster3', t:'주전을 셋 만든다', d:'졸업시킨 선수 3명을 로스터에 채우세요.', r:5,
-    p:function(){ return Math.min(3, reps().length); }, goal:3 },
-  { id:'win1', t:'첫 승리', d:'여섯 구단 중 한 곳을 이기세요.', r:5,
-    p:function(){ return Math.min(1, G.wins); }, goal:1 },
-  { id:'pos5', t:'모든 포지션을 갖춘다', d:'S · OH · OP · MB · L 을 한 명씩 보유하세요.', r:5,
-    p:function(){ var s={}; reps().forEach(function(i){ s[i.pos]=1; }); return Object.keys(s).length; }, goal:5 },
-  { id:'gradA', t:'A등급으로 졸업시킨다', d:'캠프를 잘 굴려 A등급 이상을 만드세요.', r:5,
-    p:function(){ return reps().some(function(i){ return i.grade<=1; })?1:0; }, goal:1 },
-  { id:'team7', t:'한 팀을 완성한다', d:'라인업 일곱 자리를 전부 정식 선수로 채우세요. 연습생 0명.', r:12,
-    p:function(){ return Math.max(0, 7 - fillerCount()); }, goal:7 },
-  { id:'win3club', t:'세 구단을 격파한다', d:'서로 다른 구단 세 곳에 승리하세요.', r:8,
-    p:function(){ var n=0; for (var k in (G.winsByClub||{})) if (G.winsByClub[k]>0) n++; return Math.min(3,n); }, goal:3 },
-  { id:'sr1', t:'SR 이상을 영입한다', d:'희귀도 높은 카드를 뽑으세요. 천장이 보장합니다.', r:5,
-    p:function(){ var ok=0; Object.keys(G.ownedCards||{}).forEach(function(id){
-        var c = E.cardById(G, id);
-        if (c && c.rarity>=2) ok=1; }); return ok; }, goal:1 },
-];
+function rewardText(m){
+  var parts = [];
+  if (m.reward.tickets) parts.push('티켓 +' + m.reward.tickets);
+  if (m.reward.gold) parts.push('골드 +' + m.reward.gold);
+  if (m.reward.fragments) parts.push('조각 +' + m.reward.fragments);
+  return parts.join(' · ');
+}
 function missionState(){
-  return MISSIONS.map(function(m){
-    var p = 0; try { p = m.p(); } catch(e){}
-    return { m:m, p:p, done:p>=m.goal, got:!!claimed[m.id] };
+  return E.missionProgress(G).map(function(x){
+    return { m:x.mission, p:x.progress, done:x.done, got:!!claimed[x.mission.id] };
   });
 }
 // 새로 달성된 미션의 보상을 지급하고 안내한다.
 function checkMissions(){
-  var got = [];
-  missionState().forEach(function(s){
-    if (s.done && !s.got) {
-      claimed[s.m.id] = 1;
-      G.tickets += s.m.r;
-      got.push(s.m);
-    }
-  });
+  var got = E.claimMissions(G, claimed);
   if (got.length) {
     try { localStorage.setItem(MISSION_KEY, JSON.stringify(claimed)); } catch(e){}
     save();
-    var total = got.reduce(function(a,m){ return a+m.r; }, 0);
+    var tk = got.reduce(function(a,m){ return a+(m.reward.tickets|0); }, 0);
+    var gd = got.reduce(function(a,m){ return a+(m.reward.gold|0); }, 0);
+    var fr = got.reduce(function(a,m){ return a+(m.reward.fragments|0); }, 0);
+    var sum = (tk ? ' 티켓 +' + tk : '') + (gd ? ' 골드 +' + gd : '') + (fr ? ' 조각 +' + fr : '');
     setTimeout(function(){
-      toast('미션 달성 · ' + got[0].t + (got.length>1?' 외 '+(got.length-1)+'건':'') + ' — 티켓 +' + total);
+      toast('미션 달성 · ' + got[0].title + (got.length>1?' 외 '+(got.length-1)+'건':'') + ' —' + sum);
     }, 500);
   }
   return got;
@@ -810,6 +811,9 @@ function boot(){
     autoUnlocked = localStorage.getItem(AUTO_KEY) === '1';
     skipUnlocked = localStorage.getItem(SKIP_KEY) === '1';
     claimed = JSON.parse(localStorage.getItem(MISSION_KEY) || '{}');
+    meta = JSON.parse(localStorage.getItem(META_KEY) || 'null') || { firstOpen: Date.now(), opens: 0 };
+    meta.opens = (meta.opens | 0) + 1;
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
   } catch(e){ claimed = {}; }
   if (raw) { try { G = E.loadGame(JSON.parse(raw)); } catch(e){ G = null; } }
   if (!G) { G = newGame(); }
@@ -824,7 +828,7 @@ function newGame(){
 function save(){
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(E.saveGame(G))); } catch(e){}
 }
-function go(v){ if (v !== 'matchLive') stopViewer(); view = v; window.scrollTo(0,0); render(); }
+function go(v){ if (v !== 'matchLive') stopViewer(); if (v === 'feedback' && view !== 'feedback') fbBack = (view === 'matchLive') ? 'home' : view; view = v; window.scrollTo(0,0); render(); }
 function toast(msg){
   var t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg;
@@ -855,7 +859,7 @@ function renderNav(){
 function renderTop(){
   document.getElementById('clubName').textContent = G.clubName;
   document.getElementById('rTickets').textContent = G.tickets;
-  document.getElementById('rFrag').textContent = G.fragments + '/3';
+  document.getElementById('rFrag').textContent = G.fragments + '/' + E.ECONOMY.fragmentsPerTicket;   // 12조각 = 티켓 1 (B.1) — 전에는 /3 으로 굳어 있었다
   var gEl = document.getElementById('rGold');
   if (gEl) gEl.textContent = (G.gold | 0) >= 10000 ? Math.round((G.gold|0)/1000) + 'k' : (G.gold | 0);
 }
@@ -869,7 +873,7 @@ function render(){
     trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
     matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions,
     league:vLeague, playoff:vPlayoff, settle:vSettle, player:vPlayer,
-    facility:vFacility, report:vReport, album:vAlbum
+    facility:vFacility, report:vReport, album:vAlbum, feedback:vFeedback
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') mountCourt();
@@ -913,6 +917,7 @@ function vHome(){
    missionCard()+
    facilityCard()+
    '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
+   feedbackCard()+
    (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
       hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
    '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
@@ -933,9 +938,9 @@ function missionCard(){
     next.map(function(s){
       var pctv = Math.round(Math.min(1, s.p/s.m.goal)*100);
       return '<div style="margin-bottom:10px">'+
-        '<div class="spread"><span style="font-size:13.5px;font-weight:600">'+esc(s.m.t)+'</span>'+
-          '<span class="num" style="color:var(--hot);font-size:13px">티켓 +'+s.m.r+'</span></div>'+
-        '<div class="tiny" style="margin:2px 0 5px">'+esc(s.m.d)+'</div>'+
+        '<div class="spread"><span style="font-size:13.5px;font-weight:600">'+esc(s.m.title)+'</span>'+
+          '<span class="num" style="color:var(--hot);font-size:13px">'+rewardText(s.m)+'</span></div>'+
+        '<div class="tiny" style="margin:2px 0 5px">'+esc(s.m.desc)+'</div>'+
         '<div class="gauge"><span style="width:'+pctv+'%"></span></div></div>';
     }).join('')+
   '</div>';
@@ -988,7 +993,7 @@ function vScout(){
      POSK.map(function(p,i){ return '<button class="btn ghost" style="padding:12px 4px;font-size:14px" data-scoutpos="'+i+'"'+(canPos?'':' disabled')+'>'+p+'</button>'; }).join('')+
    '</div>'+
    (can && !canPos ? '<div class="tiny" style="margin-top:7px;color:var(--ink3)">골드가 부족합니다. 경기와 시즌 순위 보상으로 모입니다.</div>' : '')+
-   (can?'':'<div class="empty">티켓이 없습니다. 미션을 달성하거나 경기에서 이기면 티켓이 들어옵니다.</div>')
+   (can?'':'<div class="empty">티켓이 없습니다. 경기를 치르면 조각이 쌓여 '+E.ECONOMY.fragmentsPerTicket+'개마다 티켓이 되고, 시즌 순위 보상으로도 들어옵니다.</div>')
   );
 }
 
@@ -1151,7 +1156,7 @@ function vMissions(){
   var st = missionState();
   var next = st.filter(function(s){ return !s.done; });
   var done = st.filter(function(s){ return s.done; });
-  return h('<h2>미션</h2><p class="sub">순서대로 따라가면 게임이 손에 익습니다. 달성하면 티켓이 바로 들어옵니다.</p>'+
+  return h('<h2>미션</h2><p class="sub">순서대로 따라가면 게임이 손에 익습니다. 달성하면 골드·조각이 바로 들어옵니다. 조각 '+E.ECONOMY.fragmentsPerTicket+'개는 티켓 1장이 됩니다.</p>'+
     next.map(missionRow).join('')+
     (done.length ? '<div class="muted" style="margin:16px 0 8px">달성 '+done.length+'건</div>'+done.map(missionRow).join('') : '')+
     '<button class="btn ghost" data-go="home">돌아가기</button>');
@@ -1159,9 +1164,9 @@ function vMissions(){
 function missionRow(s){
   var pctv = Math.round(Math.min(1, s.p/s.m.goal)*100);
   return '<div class="card" style="padding:12px 13px;'+(s.done?'opacity:.62':'')+'">'+
-    '<div class="spread"><b style="font-size:14.5px">'+esc(s.m.t)+'</b>'+
-      '<span class="num" style="color:'+(s.done?'var(--good)':'var(--hot)')+';font-size:14px">'+(s.done?'완료':'티켓 +'+s.m.r)+'</span></div>'+
-    '<div class="tiny" style="margin:3px 0 8px">'+esc(s.m.d)+'</div>'+
+    '<div class="spread"><b style="font-size:14.5px">'+esc(s.m.title)+'</b>'+
+      '<span class="num" style="color:'+(s.done?'var(--good)':'var(--hot)')+';font-size:14px">'+(s.done?'완료':rewardText(s.m))+'</span></div>'+
+    '<div class="tiny" style="margin:3px 0 8px">'+esc(s.m.desc)+'</div>'+
     '<div class="gauge"><span style="width:'+pctv+'%;background:'+(s.done?'var(--good)':'var(--court)')+'"></span></div>'+
     '<div class="tiny" style="margin-top:4px">'+s.p+' / '+s.m.goal+'</div>'+
   '</div>';
@@ -2430,17 +2435,104 @@ function vHelp(){
      '<b>멘탈</b><span>20점 이후 접전(클러치)에서 성공률 보정</span>'+
      '<b>스태미나</b><span>세트가 길어져도 능력치가 덜 떨어짐</span>'+
    '</div></div>'+
-   '<button class="btn" data-go="home">알겠습니다</button>');
+   '<button class="btn" data-go="home">알겠습니다</button>'+
+   '<button class="tiny" data-go="feedback" style="display:block;width:100%;margin-top:12px;padding:10px 0;text-decoration:underline;color:var(--ink2)">헷갈리는 게 있으면 · 피드백 보내기</button>');
+}
+
+// ---------- 피드백 보내기 (테스트 기간 회수 장치)
+// 밖의 서비스로 보내지 않는다 — 공개 공유가 막히지 않도록 아티팩트 저장소도 쓰지 않는다.
+// 대신 한 줄 의견에 상황(시즌·화면·기기·최근 오류)을 붙여 본문을 만들고, 공유 시트나 복사로 개발자에게 넘긴다.
+var FB_KINDS = [['fun','재밌던 것'],['confuse','헷갈린 것'],['bug','버그'],['balance','밸런스'],['art','그림']];
+var fbKind = 'confuse', fbText = '', fbBack = 'home';
+var VIEW_KO = { home:'감독실', scout:'스카우트', train:'육성', trainSup:'서포터 선택', trainTurn:'캠프 턴', trainGrad:'졸업', roster:'로스터',
+  lineup:'라인업', match:'리그', matchLive:'경기 중계', matchResult:'경기 결과', help:'도움말', missions:'미션', league:'순위표', playoff:'플레이오프',
+  settle:'결산', player:'선수 상세', facility:'구단 시설', report:'스카우트 리포트', album:'도감' };
+function feedbackCard(){
+  return '<div class="card flat" style="padding:12px 14px"><div class="spread">'+
+    '<div><b style="font-size:14px">테스터 안내</b><div class="tiny" style="margin-top:3px">헷갈리거나 이상한 게 있으면 그 자리에서 한 줄만 남겨 주세요. 상황이 같이 붙습니다.</div></div>'+
+    '<button class="btn ghost" data-go="feedback" style="width:auto;flex:none;min-height:44px;padding:0 13px;font-size:13.5px">피드백 보내기</button>'+
+  '</div></div>';
+}
+/** 피드백 본문 — 사람이 읽는 한 줄 + 재현에 필요한 상황. 개인 정보는 넣지 않는다(기기 종류만). */
+function feedbackBody(){
+  var sv = null; try { sv = G && G.league ? E.seasonView(G) : null; } catch(e){}
+  var reps = []; try { reps = E.representatives(G); } catch(e){}
+  var fillers = 0; try { fillers = fillerCount(); } catch(e){}
+  var errs = []; try { errs = JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch(e){}
+  var hist = (G && G.history || []).slice(-3);
+  var kindKo = (FB_KINDS.filter(function(k){ return k[0]===fbKind; })[0] || FB_KINDS[1])[1];
+  var ua = navigator.userAgent || '';
+  var dev = /iPhone|iPad/.test(ua) ? 'iOS' : (/Android/.test(ua) ? 'Android' : (/Mobile/.test(ua) ? '모바일' : 'PC'));
+  var days = meta.firstOpen ? Math.floor((Date.now() - meta.firstOpen) / 86400000) : 0;
+  var lines = [
+    '[블룸 리그 피드백] ' + new Date().toISOString().slice(0,10) + ' · ' + kindKo,
+    (fbText.trim() || '(내용 없음)'),
+    '',
+    '— 상황 —',
+    '시즌 ' + (G ? G.season : '?') + (sv ? ' · ' + (sv.phase === 'matchday' ? '매치데이 ' + sv.matchday : sv.phase) : ' · 시즌 전') + ' · 화면 ' + (VIEW_KO[fbBack] || fbBack),
+    '플레이 ' + (meta.opens | 0) + '회차' + (days ? ' · 첫 실행 ' + days + '일 전' : ' · 오늘 처음'),
+    '티켓 ' + (G ? G.tickets : '?') + ' · 골드 ' + (G ? (G.gold | 0) : '?') + ' · 로스터 ' + reps.length + '(연습생 ' + fillers + ') · 육성 ' + (G ? G.trainingCount : '?') + '회 · ' + (G ? G.wins + '승 ' + G.losses + '패' : ''),
+    '빌드 ' + BUILD + ' · ' + dev + ' ' + window.innerWidth + '×' + window.innerHeight + ' · ' + ua.slice(0, 40),
+  ];
+  if (errs.length) lines.push('최근 오류: ' + errs.join(' / '));
+  if (hist.length) lines.push('최근 기록: ' + hist.join(' / '));
+  return lines.join('\n');
+}
+function vFeedback(){
+  var canShare = !!(navigator.share);
+  return h('<h2>피드백 보내기</h2>'+
+   '<p class="sub">한 줄이면 충분합니다. 지금 화면·시즌·기기 정보가 자동으로 붙어서, 개발자가 같은 상황을 다시 만들 수 있습니다. 이름이나 연락처는 들어가지 않습니다.</p>'+
+   '<div class="fb-kind">'+FB_KINDS.map(function(k){
+     return '<button data-fbkind="'+k[0]+'"'+(fbKind===k[0]?' aria-current="true"':'')+'>'+k[1]+'</button>'; }).join('')+'</div>'+
+   '<textarea class="fb-ta" id="fbText" placeholder="예) 육성 8턴에서 뭘 골라야 할지 모르겠어요 / 경기 화면 글자가 너무 작아요" maxlength="600">'+esc(fbText)+'</textarea>'+
+   '<div class="btn-row" style="margin-top:12px">'+
+     (canShare ? '<button class="btn" data-act="fbshare">공유하기</button>' : '')+
+     '<button class="btn'+(canShare?' ghost':'')+'" data-act="fbcopy"'+(canShare?'':' style="grid-column:1/-1"')+'>복사하기</button>'+
+   '</div>'+
+   '<div class="tiny" style="margin:10px 0 6px">'+(canShare ? '공유하기를 누르면 메신저·메모로 바로 보낼 수 있습니다. ' : '')+'복사한 글을 개발자에게 메신저로 보내 주세요. 아래는 보내지는 내용입니다.</div>'+
+   '<textarea class="fb-ta" id="fbBody" readonly>'+esc(feedbackBody())+'</textarea>'+
+   '<button class="btn ghost" style="margin-top:12px" data-act="fbback">돌아가기</button>');
+}
+function readFbText(){ var el = document.getElementById('fbText'); if (el) fbText = el.value; }
+function copyText(txt, done){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function(){ done(true); }, function(){ done(copyFallback(txt)); });
+  } else done(copyFallback(txt));
+}
+function copyFallback(txt){
+  try {
+    var el = document.getElementById('fbBody');
+    if (!el) return false;
+    el.value = txt; el.focus(); el.select(); el.setSelectionRange(0, txt.length);
+    return document.execCommand && document.execCommand('copy');
+  } catch(e){ return false; }
 }
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown],[data-fbkind]');
   if (!t) return;
   var d = t.dataset;
 
   if (d.tab) { if (ses && d.tab!=='train') return; go(d.tab==='train'&&ses?'trainTurn':d.tab); return; }
   if (d.go) { if (d.go === 'facility') facilityBack = 'home'; if (d.go === 'album') dexFocus = null; go(d.go); return; }
+  if (d.fbkind) { readFbText(); fbKind = d.fbkind; render(); return; }
+  if (d.act === 'fbshare') {
+    readFbText();
+    var body = feedbackBody();
+    document.getElementById('fbBody').value = body;
+    navigator.share({ title: '블룸 리그 피드백', text: body }).then(function(){ toast('보냈습니다. 고맙습니다!'); },
+      function(err){ if (!err || err.name !== 'AbortError') copyText(body, function(ok){ toast(ok ? '공유 대신 복사했습니다' : '공유가 막혔습니다 — 아래 글을 길게 눌러 복사해 주세요'); }); });
+    return;
+  }
+  if (d.act === 'fbcopy') {
+    readFbText();
+    var body2 = feedbackBody();
+    var bodyEl = document.getElementById('fbBody'); if (bodyEl) bodyEl.value = body2;
+    copyText(body2, function(ok){ toast(ok ? '복사했습니다 — 메신저에 붙여 넣어 주세요' : '복사가 막혔습니다 — 아래 글을 길게 눌러 복사해 주세요'); });
+    return;
+  }
+  if (d.act === 'fbback') { fbText = ''; go(fbBack); return; }
   if (d.dex) { dexFocus = d.dex; dexBack = (view === 'scout') ? 'scout' : 'album'; go('album'); return; }
   if (d.dexclub) { dexClub = d.dexclub; render(); return; }
   if (d.dexown) { dexOwned = !dexOwned; render(); return; }

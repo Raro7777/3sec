@@ -71,6 +71,9 @@ export {
 
 export { POLICIES, runWithPolicy, injuryBadge, campLine } from './engine/training.js';
 
+// 온보딩 미션(GDD 13절) — 앱과 season-check --app 이 같은 표를 쓴다
+export { ONBOARDING, MISSIONS, missionProgress, claimMissions, missionRewardTotal } from './engine/missions.js';
+
 // 고유 스킬(docs/skills.md) — 카드 UI 표기·밸런스 하네스용
 export {
   SKILLS, SKILL_BY_NAME, SKILL_BY_ID, SKILL_BY_OWNER,

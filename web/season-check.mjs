@@ -7,6 +7,7 @@
 //   node web/season-check.mjs --seasons 5     시즌 5까지(사다리 고원 확인)
 //   node web/season-check.mjs --long          장기(시즌 1~15) 목표 + 신인 세대·카드 풀 검증 — 기본 실행에는 포함되지 않는다
 //                                             권장: node web/season-check.mjs --long --n 120  (약 2분)
+//   node web/season-check.mjs --app           앱 경제로(시작 티켓 + 온보딩 미션 보상, engine/missions.js) — B.6.7
 //   node web/season-check.mjs --eval sim      육성 평가전을 실제 시뮬로(느림, 정합 확인용)
 //   node web/season-check.mjs --json          기계 판독용 출력
 // 종료 코드 0 = 전 목표 충족.
@@ -38,6 +39,20 @@ if (NO_ROOKIES) E.ROOKIES.firstSeason = 1e9;
 if (argv.includes('--no-club-skill')) E.ROOKIES.clubSkill = false;
 /** --legacy-vacancy = 결원 판정을 옛 규칙(슬롯 점유 여부와 무관하게 카드 id 기준)으로 되돌린다. */
 if (argv.includes('--legacy-vacancy')) E.VACANCY_TUNING.onlyCurrentOccupant = false;
+/** --app = 앱 경제로 잰다: 시작 티켓 ONBOARDING.startingTickets + 온보딩 미션 보상(engine/missions.js).
+ *  기본 실행은 엔진 기본(티켓 5·미션 없음)이라 GDD 13절 "미션 티켓이 측정 밖" 을 이 스위치가 닫는다.
+ *  --app-start N     시작 티켓을 N 으로(실험용)
+ *  --mission-mul X · --mission-gold-mul X · --mission-frag-mul X   미션 보상(티켓·골드·조각)을 X 배(실험용, 반올림) */
+const APP = argv.includes('--app');
+const APP_START = parseInt(arg('app-start', String(E.ONBOARDING.startingTickets)), 10);
+const MISSION_MUL = parseFloat(arg('mission-mul', '1'));
+const MISSION_GOLD_MUL = parseFloat(arg('mission-gold-mul', '1'));
+const MISSION_FRAG_MUL = parseFloat(arg('mission-frag-mul', '1'));
+if (APP) for (const m of E.MISSIONS) {
+  m.reward.tickets = Math.round((m.reward.tickets | 0) * MISSION_MUL);
+  m.reward.gold = Math.round((m.reward.gold | 0) * MISSION_GOLD_MUL);
+  m.reward.fragments = Math.round((m.reward.fragments | 0) * MISSION_FRAG_MUL);
+}
 
 // ---------------------------------------------------------------- 참조
 /** 카드 조회는 런칭 42명 + 신인 세대를 모두 봐야 한다(docs/rookies.md — 풀이 시즌마다 늘어난다). */
@@ -235,8 +250,24 @@ function ageMetrics(g, season) {
 }
 
 // ---------------------------------------------------------------- 1회 플레이(시즌 1..SEASONS)
+/** 앱 흐름과 같은 자리(스카우트·졸업·매치데이·결산 뒤)에서 미션 보상을 받는다. 미션 티켓으로 바로 더 뽑는다. */
+let CLAIMED = null, MISSION_LOG = null;
+function claimPhase(g) {
+  if (!APP) return 0;
+  let n = 0;
+  for (const m of E.claimMissions(g, CLAIMED)) { n += m.reward.tickets | 0; MISSION_LOG.push({ id: m.id, season: g.season, tickets: m.reward.tickets | 0 }); }
+  return n;
+}
+function scoutAndClaim(g) {
+  for (let guard = 0; guard < 10; guard++) {
+    scoutPhase(g);
+    if (claimPhase(g) === 0 || g.tickets <= 0) break;
+  }
+}
+
 function playRun(seed) {
   const g = E.createGame({ seed, evaluation: EVAL });
+  if (APP) { if (g.tickets < APP_START) g.tickets = APP_START; CLAIMED = {}; MISSION_LOG = []; }
   const runs = new Map();
   const out = { seasons: [], firstTitle: null, firstFinal4: null, firstWinTrainings: null, firstWinMatchday: null, lineupFullSeason: null };
 
@@ -247,25 +278,28 @@ function playRun(seed) {
     const ticketsBefore = g.tickets, goldBefore = g.gold;
     let minTickets = g.tickets;
 
-    scoutPhase(g);
-    trainPhase(g, runs);
+    const missionsBefore = APP ? MISSION_LOG.length : 0;
+    scoutAndClaim(g);
+    trainPhase(g, runs); claimPhase(g);
     E.autoLineup(g);
 
     for (let md = 1; md <= E.SEASON_CONFIG.matchdays; md++) {
       const r = E.advanceMatchday(g, { collectEvents: false });
+      claimPhase(g);
       if (r.myMatch && r.myMatch.won && out.firstWinTrainings === null) {
         out.firstWinTrainings = g.trainingCount;
         out.firstWinMatchday = md;
       }
       if (!r.seasonEnded) {
-        scoutPhase(g);
-        trainPhase(g, runs);
+        scoutAndClaim(g);
+        trainPhase(g, runs); claimPhase(g);
         E.autoLineup(g);
         if (g.tickets < minTickets) minTickets = g.tickets;
       }
     }
     E.autoFinishPlayoff(g);
     const st = E.finishSeason(g);
+    claimPhase(g);
     spendPhase(g);   // 결산 화면에서 구단에 투자한다 (B.6.4)
     if (st.playoffEntered && out.firstFinal4 === null) out.firstFinal4 = n;
     if (st.isChampion && out.firstTitle === null) out.firstTitle = n;
@@ -287,12 +321,16 @@ function playRun(seed) {
       upkeepPaid: st.upkeep ? st.upkeep.paid : 0,
       upkeepShort: st.upkeep ? st.upkeep.shortfall : 0,
       prestige: E.clubPrestige(g).total,
+      // --app: 이 시즌에 받은 미션 티켓·건수
+      missionTickets: APP ? MISSION_LOG.slice(missionsBefore).reduce((a, m) => a + m.tickets, 0) : 0,
+      missionsDone: APP ? MISSION_LOG.length - missionsBefore : 0,
       ssr: Object.keys(g.ownedCards).filter(c => card(g, c) && card(g, c).rarity === E.RARITY.SSR).length,
       sr: Object.keys(g.ownedCards).filter(c => card(g, c) && card(g, c).rarity === E.RARITY.SR).length,
       // A.3.6 노화 — finishSeason 이 state.season 을 +1 한 뒤라 이 시즌 기준으로 되돌려 잰다
       ...ageMetrics(g, n),
     });
   }
+  if (APP) out.missionLog = MISSION_LOG;
   return out;
 }
 
@@ -651,7 +689,8 @@ const invFail = invariants.filter(i => !i.ok).length;
 if (AS_JSON) {
   console.log(JSON.stringify({ n: N, seasons: SEASONS, targets, invariants, perf, simMs }, null, 2));
 } else {
-  console.log(`# season-check — n=${N} · 시즌 1~${SEASONS} · seed ${BASE_SEED} · 육성 평가전 ${EVAL}\n`);
+  console.log(`# season-check — n=${N} · 시즌 1~${SEASONS} · seed ${BASE_SEED} · 육성 평가전 ${EVAL}` +
+    (APP ? ` · **앱 경제**(시작 티켓 ${APP_START} + 미션 티켓 ${E.missionRewardTotal().tickets} · 골드 ${E.missionRewardTotal().gold} · 조각 ${E.missionRewardTotal().fragments})` : '') + '\n');
   console.log('## 난이도 목표 (docs/league-and-economy.md A.4.1 · D.1)\n');
   console.log('| 항목 | 목표 | 실측 | 판정 |');
   console.log('|---|---|---|---|');
@@ -682,6 +721,28 @@ if (AS_JSON) {
     const end = mean(rs.map(r => r.goldEnd));
     const out = mean(rs.map(r => r.scoutGold + r.facilityGold + r.reportGold + r.upkeepPaid));
     console.log(`| ${n} | ${(end - prev + out).toFixed(0)} | ${mean(rs.map(r => r.targeted)).toFixed(1)}회 / ${mean(rs.map(r => r.scoutGold)).toFixed(0)} | ${mean(rs.map(r => r.facilityGold)).toFixed(0)} | ${mean(rs.map(r => r.reportGold)).toFixed(0)} | ${mean(rs.map(r => r.upkeepPaid)).toFixed(0)} | ${mean(rs.map(r => r.prestige)).toFixed(1)} | ${mean(rs.map(r => r.owned)).toFixed(1)} | ${end.toFixed(0)} |`);
+  }
+
+  if (APP) {
+    console.log('\n## 온보딩 미션 (engine/missions.js · --app)\n');
+    console.log('| 시즌 | 미션 달성 | 미션 티켓(조각 환산 제외) | 스카우트 | 티켓 잔액 |');
+    console.log('|---|---|---|---|---|');
+    for (let n = 1; n <= SEASONS; n++) {
+      const rs = byS(n);
+      if (!rs.length) continue;
+      console.log(`| ${n} | ${mean(rs.map(r => r.missionsDone)).toFixed(2)}건 | ${mean(rs.map(r => r.missionTickets)).toFixed(1)} | ${mean(rs.map(r => r.scouts)).toFixed(1)} | ${mean(rs.map(r => r.ticketsEnd)).toFixed(1)} |`);
+    }
+    // 미션별 달성 시즌 p50 — 어느 미션이 늦게 열리는지
+    const bySeason = runsOut.map(r => r.missionLog || []);
+    const rows = E.MISSIONS.map(m => {
+      const seasons = bySeason.map(log => { const hit = log.find(x => x.id === m.id); return hit ? hit.season : null; });
+      const done = seasons.filter(v => v !== null);
+      const rw = [m.reward.tickets ? `티켓 ${m.reward.tickets}` : '', m.reward.gold ? `골드 ${m.reward.gold}` : '', m.reward.fragments ? `조각 ${m.reward.fragments}` : ''].filter(Boolean).join(' · ') || '—';
+      return `| ${m.id} | ${m.title} | ${rw} | ${p(done.length / N)} | ${done.length ? pctl(done, 0.5).toFixed(0) : '—'} |`;
+    });
+    console.log('\n| 미션 | 제목 | 보상 | 달성률(3시즌) | 달성 시즌 p50 |');
+    console.log('|---|---|---|---|---|');
+    for (const r of rows) console.log(r);
   }
 
   console.log('\n순위 분포 (%)\n');
