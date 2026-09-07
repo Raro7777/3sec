@@ -5,6 +5,7 @@ import { boardCupWin } from "./board";
 import { fansCupResult } from "./fans";
 import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOver, type GameMatchOptions } from "./season";
 import { clubsIn, divisionOf } from "./divisions";
+import { clDayDue } from "./continental";
 
 export const CUP_NAME = "3sec 컵";
 /** Cup matchdays: before league round index r (0-based) when the season reaches it → stage index. */
@@ -228,6 +229,7 @@ export function advanceCupDay(s: GameState): boolean {
   }
   // Normally the next stage waits for its own league round; a save that fell behind catches up at once.
   s.pendingCupDay = cupDayDue(s);
+  if (!s.pendingCupDay && clDayDue(s)) s.pendingClDay = true;
   return true;
 }
 

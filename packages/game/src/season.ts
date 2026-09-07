@@ -11,6 +11,7 @@ import { trainWeek, ATTR_LABEL, playingTimeBonus } from "./training";
 import { payWages, settleContracts, wageBill, weeklyRevenue } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
 import { cupDayDue, cupPrize, newCup } from "./cup";
+import { clDayDue, ensureForeign, foreignRollover, newContinental, noteQualifiers, pendingClTies } from "./continental";
 import { overall } from "./rating";
 import { REVIEW_FROM_ROUND, applyManagerMatchday, applyManagerPolicy, boardReview, clearUserManager, managerRollover } from "./managers";
 import { pendingCupTies } from "./cup";
@@ -27,8 +28,8 @@ import { careerInit, careerRollover, careerWeek } from "./career";
 import { CLUBS_PER_DIVISION, DIVISIONS, DIVISION_REVENUE_FACTOR, PARACHUTE_FACTOR, applyPromotionRelegation, buildAllFixtures, divisionName, divisionOf, divisionPosition, divisionTable, prizeFactor, simulateAwayDivisions, userDivision } from "./divisions";
 
 export interface RecordOptions {
-  /** cup matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
-  competition?: "league" | "cup";
+  /** cup and continental matches count for player stats and injuries only: no league bans, no yellow-card accumulation */
+  competition?: "league" | "cup" | "cl";
 }
 
 export const DEFAULT_MANAGER_NAME = "감독";
@@ -46,6 +47,8 @@ export function newGame(seed: number, userClub = 0, managerName: string = DEFAUL
   const s: GameState = { version: 1, seed, difficulty, roster: roster?.name, season: 1, round: 0, userClub, managerName: name, clubs, fixtures: buildAllFixtures(clubs), news: [`시즌 1 시작. ${name} 감독님, ${clubs[userClub]!.name}에 오신 것을 환영합니다.`], cup: { ties: [], stage: 0 }, pendingCupDay: false, offers: [], freeAgents: [], loans: [], aiDeals: [], marketLog: [], seasonHistory: [], freeManagers: [], board: newBoard(prof.startConfidence) };
   clearUserManager(s);
   newCup(s);
+  ensureForeign(s);
+  newContinental(s);
   for (const c of clubs) resetSeasonCounters(c);
   // Personalities, captains and the locker room (morale.ts); empty story queues (story.ts).
   migrateMorale(s);
@@ -77,7 +80,7 @@ export function yellowBan(seasonYellows: number): number {
   return seasonYellows >= 15 ? 2 : 1;
 }
 
-export const clubOf = (s: GameState, id: number): Club => s.clubs[id]!;
+export const clubOf = (s: GameState, id: number): Club => s.clubs[id] ?? s.foreign?.find((c) => c.id === id)!;
 export const playerOf = (c: Club, id: string): SquadPlayer => c.squad.find((p) => p.id === id)!;
 /** A season is one division's double round-robin; every division runs the same calendar (divisions.ts). */
 export const seasonRounds = (s: GameState): number => roundsPerSeason(Math.min(CLUBS_PER_DIVISION, s.clubs.length));
@@ -98,7 +101,7 @@ export function fixtureSeed(s: GameState, f: Fixture): number {
 /** The club each side meets on the coming matchday (league round, or the pending cup day). */
 function opponents(s: GameState): Map<number, number> {
   const out = new Map<number, number>();
-  const pairs: { home: number; away: number }[] = s.pendingCupDay && !seasonOver(s) ? pendingCupTies(s) : currentFixtures(s);
+  const pairs: { home: number; away: number }[] = s.pendingCupDay && !seasonOver(s) ? pendingCupTies(s) : s.pendingClDay && !seasonOver(s) ? pendingClTies(s) : currentFixtures(s);
   for (const f of pairs) { out.set(f.home, f.away); out.set(f.away, f.home); }
   return out;
 }
@@ -110,7 +113,7 @@ function opponents(s: GameState): Map<number, number> {
 export function prepareRound(s: GameState): void {
   const opp = opponents(s);
   // Derby flags for older saves and the "더비 데이" news for the user's rivalry match (lore.ts).
-  if (!s.pendingCupDay && !seasonOver(s)) derbyPreview(s, currentFixtures(s));
+  if (!s.pendingCupDay && !s.pendingClDay && !seasonOver(s)) derbyPreview(s, currentFixtures(s));
   for (const c of s.clubs) {
     if (c.id === s.userClub) { c.selection = repairSelection(c); continue; }
     if (c.manager) { applyManagerMatchday(c, opp.has(c.id) ? clubOf(s, opp.get(c.id)!) : null); continue; }
@@ -155,7 +158,8 @@ export function createMatch(s: GameState, f: Fixture, opts: GameMatchOptions = {
 /** Write a finished match back into the season: score, scorers, player stats, cards, fatigue, injuries, bans. */
 export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOptions = {}): void {
   if (m.state.phase !== "FULL_TIME") throw new Error("match not finished");
-  const cup = opts.competition === "cup";
+  const cup = opts.competition === "cup" || opts.competition === "cl";
+  const prefix = opts.competition === "cl" ? "동아시아 CL: " : opts.competition === "cup" ? "3sec 컵: " : "";
   f.score = [m.state.score[0], m.state.score[1]];
   f.scorers = m.state.events
     .filter((e) => e.type === "GOAL" || e.type === "OWN_GOAL")
@@ -225,7 +229,7 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
     const [hg, ag] = f.score;
     if ((f.home === s.userClub && hg > ag) || (f.away === s.userClub && ag > hg)) boardCupWin(s);
   }
-  s.news.unshift(`${cup ? "3sec 컵: " : ""}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
+  s.news.unshift(`${prefix}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
   // Rivalry headlines and swings (lore.ts), debut / first-goal / loan-return news (story.ts), the user's interview (press.ts).
   derbyResult(s, f, cup);
   storyMatch(s, f, m, cup);
@@ -288,6 +292,8 @@ export function advanceRound(s: GameState): boolean {
   careerWeek(s);
   // Cup matchdays sit between league rounds 6/7, 11/12, 16/17 and 21/22.
   if (cupDayDue(s)) s.pendingCupDay = true;
+  // Continental matchdays sit on other midweeks (continental.ts); a cup day that is also due goes first.
+  else if (clDayDue(s)) s.pendingClDay = true;
   return true;
 }
 
@@ -300,7 +306,9 @@ export function startNextSeason(s: GameState): void {
   const rng = new Rng(s.seed * 13 + s.season * 977);
   const finalTable = table(s);
   const userRow = finalTable.findIndex((r) => r.club === s.userClub);
-  const record: SeasonRecord = { season: s.season, champion: finalTable[0]!.club, cupWinner: s.cup.holder ?? null, userPosition: userRow + 1, userPts: finalTable[userRow]!.pts };
+  const record: SeasonRecord = { season: s.season, champion: finalTable[0]!.club, cupWinner: s.cup.holder ?? null, userPosition: userRow + 1, userPts: finalTable[userRow]!.pts, d2Champion: divisionTable(s, 2)[0]?.club, clWinner: s.continental?.holder ?? null };
+  // next season's continental entrants come from this table, before the divisions swap
+  noteQualifiers(s);
   const award = managerRollover(s, new Rng(s.seed * 43 + s.season * 719 + 999));
   if (award) record.managerOfYear = award;
   s.seasonHistory.push(record);
@@ -343,6 +351,8 @@ export function startNextSeason(s: GameState): void {
   // Up and down before the new calendar is drawn, so the fixtures are for the divisions as they now
   // stand (divisions.ts).
   const swap = applyPromotionRelegation(s);
+  record.promoted = swap.promoted.map((x) => x.club);
+  record.relegated = swap.relegated.map((x) => x.club);
   for (const { club, to } of swap.promoted) s.news.unshift(`${clubOf(s, club).name} ${divisionName(to)} 승격!`);
   for (const { club, from } of swap.relegated) s.news.unshift(`${clubOf(s, club).name} ${divisionName(from)} 강등.`);
   if (swap.promoted.some((p) => p.club === s.userClub)) s.news.unshift(`승격했습니다. 다음 시즌은 ${divisionName(userDivision(s))}입니다.`);
@@ -361,6 +371,8 @@ export function startNextSeason(s: GameState): void {
   for (const c of s.clubs) applyExpansion(s, c);
   newCup(s);
   s.pendingCupDay = false;
+  foreignRollover(s);
+  newContinental(s);
   youthRollover(s, rng);
   youthIntake(s, new Rng(s.seed * 29 + s.season * 449 + 3));
   transferWeek(s, rng);

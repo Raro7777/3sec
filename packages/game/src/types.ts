@@ -386,6 +386,17 @@ export interface Cup {
   holder?: number;
 }
 
+/** 동아시아 챔피언스리그 (continental.ts): 16 entrants in four groups of four, then single-leg knock-outs. */
+export interface Continental {
+  season: number;
+  /** 16 club ids in draw order: entrants[4g .. 4g+3] is group g */
+  entrants: number[];
+  ties: CupTie[];
+  /** stage being played next: 0-2 group matchdays, 3 QF, 4 SF, 5 final, 6 done */
+  stage: number;
+  holder?: number;
+}
+
 export interface TableRow {
   club: number;
   played: number;
@@ -426,6 +437,11 @@ export interface SeasonRecord {
   userClub?: number;
   /** the league's top scorer that season (achievements.ts) */
   topScorer?: { name: string; club: number; goals: number };
+  /** 기록실 (annals.ts): the second division's champion, the movers, and the continental winner (foreign ids ≥ 100) */
+  d2Champion?: number;
+  promoted?: number[];
+  relegated?: number[];
+  clWinner?: number | null;
 }
 
 /** Why and when the user's board pulled the trigger (the viewer shows the sacked screen while this is set). */
@@ -522,6 +538,16 @@ export interface GameState {
   cup: Cup;
   /** the next matchday is a cup matchday (set when the league reaches a cup round) */
   pendingCupDay: boolean;
+  /** 동아시아 챔피언스리그 (continental.ts) */
+  continental?: Continental;
+  /** season whose continental win the viewer already celebrated */
+  clCelebratedSeason?: number;
+  /** the next matchday is a continental matchday */
+  pendingClDay?: boolean;
+  /** the Korean entrants for the coming season, noted from the final table before the divisions swap */
+  clQualifiers?: number[];
+  /** the thirteen foreign clubs (ids from 100), full Club objects but never part of the league */
+  foreign?: Club[];
   /** incoming bids for the user's players (open ones and this week's resolved ones) */
   offers: TransferOffer[];
   /** released players anyone can sign for a signing fee */

@@ -91,3 +91,10 @@ export {
 export { CLUB_NAME_MAX, SHORT_NAME_MIN, SHORT_NAME_MAX, STADIUM_NAME_MAX, KIT_PATTERNS, KIT_PATTERN_LABEL, renameClub, renameStadium, setClubKit, resetClubKit } from "./customize";
 export { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, isDifficulty, type Difficulty, type DifficultyProfile } from "./difficulty";
 export { ROSTER_FORMAT, ROSTER_SLOTS, ROSTER_MIN_SQUAD, ROSTER_MAX_SQUAD, parseRoster, applyRoster, rosterTemplate, type RosterPack, type RosterClub, type RosterPlayer } from "./roster";
+export {
+  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGES, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_KR_SLOTS, CL_PRIZE, FOREIGN_ID_BASE, FOREIGN_DEFS, GROUP_NAMES,
+  buildForeignClubs, isForeignId, foreignCountry, ensureForeign, continentalQualifiers, newContinental, groupOf, groupMembers, groupTable,
+  clDone, currentClTies, pendingClTies, userClTie, userEnteredCl, userStillInCl, clDayDue, clFixture, createClMatch, recordClResult,
+  simulateClDay, advanceClDay, clPrize, userClSummary, refreshForeign, type GroupRow,
+} from "./continental";
+export { clubRecords, type ClubRecords, type ClubRecordLine, type SeasonBest } from "./annals";

@@ -18,6 +18,7 @@ import { DEFAULT_MANAGER_NAME } from "./season";
 import { newCup } from "./cup";
 import { migrateStaff } from "./staff";
 import { isDifficulty } from "./difficulty";
+import { advanceClDay, clDayDue, ensureForeign, newContinental, simulateClDay } from "./continental";
 import { newBoard } from "./board";
 import { migrateFans } from "./fans";
 import { migrateAchievements } from "./achievements";
@@ -97,6 +98,13 @@ export function deserialize(json: string | null | undefined): GameState | null {
     // Saves from before the fans: capacity, content supporters and empty attendance counters.
     migrateFans(s);
     for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); migrateRatings(p); }
+    // Saves from before the continental competition: the foreign field and this season's draw, caught up headlessly.
+    ensureForeign(s);
+    if (typeof s.pendingClDay !== "boolean") s.pendingClDay = false;
+    if (!s.continental || s.continental.season !== s.season) {
+      newContinental(s);
+      for (let guard = 0; guard < 8 && clDayDue(s) && !s.pendingCupDay; guard++) { s.pendingClDay = true; simulateClDay(s); advanceClDay(s); }
+    }
     // Saves from before the difficulty setting play on normal.
     if (!isDifficulty(s.difficulty)) s.difficulty = "normal";
     // Saves from before the user's board.

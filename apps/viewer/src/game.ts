@@ -9,6 +9,7 @@ import {
   freeAgentTerms, signFreeAgent, loanableOut, loanDestination, loanOut, loanTargets, loanIn, type BidResult,
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
+  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_PRIZE, GROUP_NAMES, advanceClDay, createClMatch, clFixture, clPrize, pendingClTies, recordClResult, userClTie, userEnteredCl, userStillInCl, groupTable, groupOf, isForeignId, foreignCountry, userClSummary, clDone, clubRecords, refreshForeign,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userEnteredCup, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
@@ -140,7 +141,7 @@ const face = (p: { id: string; age: number }, club: { color: string } | null | u
   portraitSvg({ id: p.id, age: p.age, color: club?.color }, size);
 
 /** The home ground as a painted strip (public/art/stadium-NN.webp, by club id) with its name and seats. */
-const venueHtml = (c: Club, seats: number): string =>
+const venueHtml = (c: Club, seats: number): string => isForeignId(c.id) ? "" :
   `<div class="venue"><img class="venueArt" src="./art/stadium-${String(c.id).padStart(2, "0")}.webp" alt="" loading="lazy"><span class="venueCap">${c.stadiumName ?? stadiumFor(c.baseName ?? c.name).name} · ${seats.toLocaleString("ko-KR")}석</span></div>`;
 
 const managerLabel = (c: Club): string => c.manager ? `${c.manager.name} 감독${managerTags(c.manager).length ? ` <small>(${managerTags(c.manager).join(" · ")})</small>` : ""}` : "";
@@ -181,7 +182,7 @@ export class Game {
   private readonly screen: MatchScreen;
   private live: { fixture: Fixture; match: Match; tie?: CupTie }[] | null = null;
   /** what the live matches belong to (decides how they are settled and shown) */
-  private liveKind: "league" | "cup" = "league";
+  private liveKind: "league" | "cup" | "cl" = "league";
   /** The last watched match's before/after readout of the manager's own changes (tactics-report.ts). */
   private lastTactics: TacticsReport | null = null;
   /** the running 도전 모드 match (outside the season: never settled, never saved) */
@@ -429,6 +430,14 @@ export class Game {
       <li>90분 무승부면 <b>승부차기</b>로 가립니다. 컵 경기의 경고는 리그 누적에 들어가지 않지만 출장·득점·부상은 그대로 기록됩니다.</li>
       <li>상금: 8강 탈락 ${CUP_PRIZE.qfLoser}억 · 4강 탈락 ${CUP_PRIZE.sfLoser}억 · 준우승 ${CUP_PRIZE.runnerUp}억 · 우승 ${CUP_PRIZE.winner}억. 대진표는 <b>순위</b> 탭 아래에 있습니다.</li>
       <li>마지막 라운드가 끝나면 <b>시즌 결산</b> 화면에서 최종 순위·컵 결과·팀 기록·예산 변화를 돌아보고 다음 시즌을 시작합니다.</li></ul>`)}
+    ${sec(CL_NAME, `<ul>
+      <li>지난 시즌 <b>1부 1~3위</b>가 나가는 대륙 대회입니다 (첫 시즌은 평판 상위 3팀). 한국 3팀과 일본·중국·호주·동남아의 13개 클럽이 <b>4개 조</b>로 나뉘어 단일 라운드로빈 3경기를 치르고, 각 조 상위 2팀이 <b>8강 단판 토너먼트</b>로 갑니다.</li>
+      <li>경기일은 리그 <b>${CL_ROUNDS.join("·")}라운드 뒤</b>입니다. 컵과 겹치지 않으며, 출전하지 않는 시즌에는 <b>경기일 진행</b> 한 번으로 넘어갑니다. 대진과 조 순위는 <b>순위 → ${CL_SHORT}</b> 탭에 있습니다.</li>
+      <li>상금: 조별리그 승리 ${CL_PRIZE.groupWin}억·무승부 ${CL_PRIZE.groupDraw}억, 8강 탈락 ${CL_PRIZE.qfLoser}억, 4강 탈락 ${CL_PRIZE.sfLoser}억, 준우승 ${CL_PRIZE.runnerUp}억, <b>우승 ${CL_PRIZE.winner}억</b>. 우승하면 구단 평판이 오릅니다. 외국 클럽은 평판 12.4~15.6으로 국내 최강보다 셉니다.</li>
+      <li>주중 경기가 늘어난 만큼 체력 관리가 문제가 됩니다. 로테이션을 쓰세요.</li></ul>`)}
+    ${sec("기록실", `<ul>
+      <li><b>순위 → 기록실</b> 탭에 구단의 역대 최다 득점·출장, 한 시즌 최다 득점과 최고 평점, 그리고 시즌별 연대기(1·2부 우승, 컵, ${CL_SHORT}, 승격·강등, 득점왕)가 쌓입니다.</li>
+      <li>선수 경력은 구단을 옮겨도 남습니다. 은퇴해 리그를 떠난 선수는 목록에서 빠집니다.</li></ul>`)}
     ${sec("상대 감독", `<ul>
       <li>AI 구단마다 성향이 다른 <b>감독</b>이 있습니다. 홈 화면의 다음 경기 카드에 상대 감독의 이름·성향 태그·대응 팁이, 순위표에 감독 이름이 표시됩니다.</li>
       <li>성향 태그: <b>공격적/수비적</b>(멘탈리티·라인·템포), <b>점유 축구/롱볼</b>(직접성·역습), <b>강한 압박</b>, <b>실용주의/이상주의</b>, <b>유스 중시</b>, <b>큰손/짠물</b>, <b>협상 강경</b>, <b>다혈질</b>.</li>
@@ -751,6 +760,28 @@ export class Game {
         : inRelegationZone(s, me.id) ? ` <b style="color:var(--bad)">강등.</b> 다음 시즌은 ${divisionName(userDivision(s) + 1)}에서 다시 시작합니다.` : "";
       h.push(`<div class="hint">${divisionName(userDivision(s))} 시즌 ${s.season} 최종 순위 ${pos}위.${fate} 우승: <b style="color:var(--accent)">${champ.name}</b>${s.cup.holder !== undefined ? ` · ${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b>` : ""}</div>`);
       h.push(`<div class="actions"><button class="primary" data-act="review">시즌 결산 보기</button><button data-act="nextSeason">다음 시즌 시작 →</button></div>`);
+    } else if (s.pendingClDay && !s.pendingCupDay && s.continental) {
+      const tie = userClTie(s);
+      const stage = CL_STAGE_LABEL[s.continental.stage] ?? "";
+      if (tie) {
+        const home = clubOf(s, tie.home), away = clubOf(s, tie.away);
+        const country = (c: Club) => foreignCountry(c.id) || "한국";
+        h.push(venueHtml(home, clubCapacity(home)));
+        h.push(`<div class="fixture cup">
+          <div class="team" data-clubcard="${home.id}" style="cursor:pointer"><span class="embWrap">${emblemSvg(home, 26)}</span>${home.name}<small>${tie.home === me.id ? "홈" : country(home)} · 평판 ${home.reputation.toFixed(1)}</small></div>
+          <div class="vs"><span class="cupTag">${CL_SHORT}</span>${stage}<b>vs</b></div>
+          <div class="team r" data-clubcard="${away.id}" style="cursor:pointer">${away.name}<span class="embWrap r">${emblemSvg(away, 26)}</span><small>${tie.away === me.id ? "원정" : country(away)} · 평판 ${away.reputation.toFixed(1)}</small></div>
+        </div>`);
+        h.push(this.opponentHtml(clubOf(s, tie.home === me.id ? tie.away : tie.home)));
+        if (s.continental.stage < CL_GROUP_STAGES) { const g = groupOf(s.continental, me.id); h.push(`<div class="hint">${GROUP_NAMES[g]}조: ${groupTable(s, g).map((r, i) => `${i + 1}.${clubOf(s, r.club).shortName} ${r.pts}점`).join(" · ")} — 상위 2팀이 8강에 갑니다.</div>`); }
+        const prob = selectionProblem(me);
+        if (prob) h.push(`<div class="hint" style="color:var(--warn)">선발 문제: ${prob} — 스쿼드에서 조정하거나 자동으로 보정됩니다.</div>`);
+        h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><button data-act="clSim" title="이번 대륙 대회 경기일의 모든 경기를 즉시 시뮬레이션합니다">⏩ 자동 진행</button></div>
+        <div class="hint">조별리그는 승리 ${CL_PRIZE.groupWin}억, 무승부 ${CL_PRIZE.groupDraw}억. 토너먼트는 단판이며 90분 무승부면 승부차기입니다. 우승 상금 ${CL_PRIZE.winner}억.</div>`);
+      } else {
+        h.push(`<div class="fixture cup"><div class="team"><span class="cupTag">${CL_SHORT}</span> ${stage}<small>${userEnteredCl(s) ? "우리 팀은 이미 탈락했습니다. 다른 팀들의 경기가 진행됩니다." : "이번 시즌 대륙 대회에는 나가지 않습니다 (지난 시즌 1부 1~3위만 출전). 다른 팀들의 경기가 진행됩니다."}</small></div></div>`);
+        h.push(`<div class="actions"><button class="primary" data-act="clSim">${CL_SHORT} 경기일 진행 ⏩</button><button data-act="sim3" title="대륙 대회 경기일을 처리한 뒤 리그 3라운드를 이어서 자동 진행합니다">⏩ +3라운드</button><button data-act="sim5" title="대륙 대회 경기일을 처리한 뒤 리그 5라운드를 이어서 자동 진행합니다">⏩ +5라운드</button></div>`);
+      }
     } else if (s.pendingCupDay) {
       const tie = userCupTie(s);
       const stage = CUP_STAGE_LABEL[s.cup.stage] ?? "";
@@ -792,7 +823,7 @@ export class Game {
       h.push(`<div class="actions"><button data-act="squad">스쿼드 점검</button><button class="primary" data-act="play">경기 시작 ▶</button><span style="display:inline-flex;gap:4px;align-items:center"><button data-act="sim1" title="이번 라운드의 모든 경기를 즉시 시뮬레이션합니다">⏩ 1라운드</button><button data-act="sim3" title="3라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 3라운드</button><button data-act="sim5" title="5라운드를 연속 시뮬레이션합니다 (내 경기 포함)">⏩ 5라운드</button></span></div>
       <div class="hint">자동 진행은 내 전술 + 수석코치 성향으로 AI가 지휘합니다.</div>`);
     }
-    if (!over) h.push(`<div class="cupLine">${this.cupLineHtml()}</div>`);
+    if (!over) h.push(`<div class="cupLine">${this.cupLineHtml()}${this.clLineHtml()}</div>`);
     h.push(`</div>`);
     h.push(this.challengeCardHtml(false));
     h.push(`<div class="grid2">`);
@@ -1058,12 +1089,12 @@ export class Game {
     const iv = s.pendingInterview;
     if (!iv || !iv.options?.length) return "";
     const me = this.me;
-    const opp = s.clubs[iv.opponent];
+    const opp = clubOf(s, iv.opponent);
     const p = iv.playerId ? me.squad.find((q) => q.id === iv.playerId) : undefined;
     const sign = (x: number) => `${x > 0 ? "+" : ""}${x}`;
     const eff = (o: InterviewOption) => [o.squad ? `팀 사기 ${sign(o.squad)}` : "", p && o.player ? `${p.name} 사기 ${sign(o.player)}` : "", o.board ? `이사회 ${sign(o.board)}` : "", o.fans ? `팬 ${sign(o.fans)}` : ""].filter(Boolean).join(" · ") || "변화 없음";
     const color = (k: InterviewOption["kind"]) => (k === "praise" ? "var(--good)" : k === "criticize" ? "var(--warn)" : "var(--muted)");
-    return `<div class="card" data-story-card="interview" style="border-left:3px solid var(--accent)"><h3>🎙 경기 후 인터뷰 <span>${iv.cup ? CUP_NAME : `R${iv.round + 1}`}${opp ? ` · vs ${opp.shortName}` : ""}</span></h3>
+    return `<div class="card" data-story-card="interview" style="border-left:3px solid var(--accent)"><h3>🎙 경기 후 인터뷰 <span>${iv.cup ? (opp && isForeignId(opp.id) ? CL_SHORT : CUP_NAME) : `R${iv.round + 1}`}${opp ? ` · vs ${opp.shortName}` : ""}</span></h3>
       <div class="hint" style="color:var(--text);margin-bottom:6px">"${iv.question}"</div>
       <div class="todo">${iv.options.map((o, i) => `<button class="todoRow" data-story="answer" data-idx="${i}" style="border-left-color:${color(o.kind)}"><span><b>${o.label}</b><br><small>${eff(o)}</small></span><b>›</b></button>`).join("")}</div>
       <div class="hint">답하지 않으면 다음 라운드에 원론적인 답변으로 처리됩니다.</div></div>`;
@@ -1141,6 +1172,20 @@ export class Game {
   }
 
   /** One-line cup status for the home card: next stage and the user's tie / 탈락 / 부전승. */
+  /** One line on the home card: the user's standing in the continental competition, or the route into it. */
+  private clLineHtml(): string {
+    const s = this.state;
+    const c = s.continental;
+    if (!c) return "";
+    if (!userEnteredCl(s)) return `<br><b>${CL_SHORT}</b> ${clDone(s) ? `종료 · 우승 ${c.holder !== undefined ? clubOf(s, c.holder).name : "—"}` : "미출전"} · <span style="color:var(--muted)">1부 1~3위로 마치면 다음 시즌 출전</span>`;
+    if (clDone(s)) return `<br><b>${CL_SHORT}</b> 종료 · ${userClSummary(s) ?? "—"}`;
+    const stage = CL_STAGE_LABEL[c.stage] ?? "";
+    const when = s.pendingClDay ? "오늘" : s.round < CL_ROUNDS[c.stage]! ? `${CL_ROUNDS[c.stage]}R 후` : "다음 경기일";
+    const tie = userClTie(s);
+    const mine = tie ? `vs ${clubOf(s, tie.home === s.userClub ? tie.away : tie.home).name} (${tie.home === s.userClub ? "홈" : "원정"})` : userStillInCl(s) ? "대진 미정" : '<span style="color:var(--bad)">탈락</span>';
+    return `<br><b>${CL_SHORT}</b> ${stage} · ${when} · ${mine}`;
+  }
+
   private cupLineHtml(): string {
     const s = this.state;
     const me = s.userClub;
@@ -1172,7 +1217,7 @@ export class Game {
 
   private act(a: string): void {
     // A 도전 모드 match is running: nothing that would advance or settle the season is allowed until it is over.
-    if (this.challenge && ["play", "sim1", "sim3", "sim5", "cupSim", "nextSeason", "nextRound"].includes(a)) {
+    if (this.challenge && ["play", "sim1", "sim3", "sim5", "cupSim", "clSim", "nextSeason", "nextRound"].includes(a)) {
       alert(`도전 「${this.challenge.scen.title}」 경기가 진행 중입니다. 먼저 끝내거나 포기하세요.`);
       return;
     }
@@ -1185,6 +1230,7 @@ export class Game {
       case "sim5": void this.simRounds(5); break;
       case "toMatch": this.show("match"); break;
       case "cupSim": void this.simRounds(1); break;
+      case "clSim": void this.simRounds(1); break;
       case "review": this.renderReview(); this.show("review"); break;
       case "sacked": this.renderSacked(); this.show("sacked"); break;
       // The snapshot goes first so the timer it resets keeps `save` from taking a second, near-identical one.
@@ -1305,6 +1351,7 @@ export class Game {
     else if (seasonOver(s)) { label = cur === "review" ? "다음 시즌 시작 →" : "시즌 결산 보기 →"; act = cur === "review" ? "nextSeason" : "review"; }
     else if (selectionProblem(this.me)) { label = "선발 문제 해결 →"; act = "squad"; }
     else if (s.pendingCupDay) { const mine = !!userCupTie(s); label = mine ? `${CUP_NAME} 경기 시작 ▶` : `${CUP_NAME} 라운드 진행 ⏩`; act = mine ? "play" : "cupSim"; }
+    else if (s.pendingClDay) { const mine = !!userClTie(s); label = mine ? `${CL_SHORT} 경기 시작 ▶` : `${CL_SHORT} 경기일 진행 ⏩`; act = mine ? "play" : "clSim"; }
     else { const fx = nextUserFixture(s); label = fx ? `R${s.round + 1} 경기 시작 ▶` : "라운드 진행 ⏩"; act = fx ? "play" : "sim1"; }
     this.cta.textContent = label;
     this.cta.dataset.act = act;
@@ -2065,6 +2112,59 @@ export class Game {
       .join("")}</tbody></table>`;
   }
 
+  /** 동아시아 CL: the four group tables, then the knock-out bracket. */
+  private clHtml(): string {
+    const s = this.state;
+    const c = s.continental;
+    if (!c) return `<div class="card"><h3>${CL_NAME}</h3><div class="hint">이번 시즌 대회 정보가 없습니다.</div></div>`;
+    const me = s.userClub;
+    const country = (id: number) => foreignCountry(id) || "한국";
+    const groups = [0, 1, 2, 3].map((g) => {
+      const rows = groupTable(s, g);
+      return `<div class="card"><h3>${GROUP_NAMES[g]}조</h3><table class="std"><thead><tr><th>#</th><th class="l">클럽</th><th>경기</th><th>득실</th><th>승점</th></tr></thead><tbody>${rows.map((r, i) => {
+        const cl = clubOf(s, r.club);
+        return `<tr class="${r.club === me ? "me" : ""}${i < 2 ? " promo" : ""}"><td>${i + 1}</td><td class="l"><span class="embWrap">${emblemSvg(cl, 18)}</span>${cl.name} <small style="color:var(--muted)">${country(r.club)}</small></td><td>${r.played}</td><td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    }).join("");
+    const stages = [3, 4, 5].map((st) => {
+      const ties = c.ties.filter((t) => t.stage === st);
+      const body = ties.length ? ties.map((t) => {
+        const h = clubOf(s, t.home), a = clubOf(s, t.away);
+        const w = tieWinner(t);
+        const cell = (x: Club, won: boolean) => `<span class="${won ? "w" : t.score ? "l" : ""}"><span class="dot" style="background:${x.color}"></span>${x.name} <small style="color:var(--muted)">${country(x.id)}</small></span>`;
+        const sc = t.score ? `${t.score[0]} - ${t.score[1]}${t.penalties ? `<small>승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : ""}` : "—";
+        return `<div class="tie ${t.home === me || t.away === me ? "me" : ""}">${cell(h, w === t.home)}<span class="sc">${sc}</span>${cell(a, w === t.away)}</div>`;
+      }).join("") : `<div class="hint">${st === 3 ? "조별리그가 끝나면 각 조 1·2위로 대진을 짭니다." : "이전 라운드가 끝나면 정해집니다."}</div>`;
+      const when = st === c.stage && s.pendingClDay ? "오늘" : `${CL_ROUNDS[st]}R 후`;
+      return `<div class="stage"><div class="stageHead">${CL_STAGE_LABEL[st]} <small>${when}</small></div>${body}</div>`;
+    }).join("");
+    const holder = c.holder !== undefined ? ` · 우승 <b style="color:var(--accent)">${clubOf(s, c.holder).name}</b>` : "";
+    const mine = userEnteredCl(s) ? `우리 팀: ${userClSummary(s) ?? "출전"} · 상금 ${clPrize(s, me)}억` : "우리 팀은 이번 시즌 출전하지 않습니다. 1부를 1~3위로 마치면 다음 시즌 출전권을 얻습니다.";
+    return `<div class="card"><h3>${CL_NAME} <span>시즌 ${c.season}${holder}</span></h3><div class="hint">한국 3팀(지난 시즌 1부 1~3위)과 일본·중국·호주·동남아 13개 클럽. 조별 단일 라운드로빈 3경기 후 상위 2팀이 8강 단판 토너먼트. 경기일: ${CL_ROUNDS.map((r) => `${r}R 후`).join(", ")}.</div><div class="hint" style="color:var(--accent)">${mine}</div></div>
+      <div class="grid2">${groups}</div>
+      <div class="card"><h3>토너먼트 <span>단판 · 무승부 시 승부차기</span></h3><div class="bracket">${stages}</div></div>`;
+  }
+
+  /** 기록실: the club's all-time records and the league's season chronicle. */
+  private annalsHtml(): string {
+    const s = this.state;
+    const me = this.me;
+    const rec = clubRecords(s, me.id, 5);
+    const line = (x: { name: string; value: number; seasons: string; current: boolean }, unit: string) => `<tr><td class="l">${x.name}${x.current ? "" : ' <small style="color:var(--muted)">(떠남)</small>'}</td><td class="l" style="color:var(--muted)">${x.seasons}</td><td><b>${x.value}</b>${unit}</td></tr>`;
+    const best = (b: { name: string; season: number; value: number } | null, unit: string, digits = 0) => (b ? `<b>${digits ? b.value.toFixed(digits) : b.value}</b>${unit} <small>${b.name} · S${b.season}</small>` : "—");
+    const club = `<div class="card"><h3>${me.name} 구단 기록 <span>${rec.seasonsOnRecord}시즌</span></h3>
+      <div class="pcStats wrap"><div>한 시즌 최다 득점<b>${best(rec.seasonGoals, "골")}</b></div><div>한 시즌 최고 평점<b>${best(rec.seasonRating, "", 2)}</b></div></div>
+      <div class="grid2" style="margin-top:8px">
+        <div><h3 style="font-size:13px;margin-bottom:4px">역대 최다 득점</h3>${rec.topScorers.length ? `<table class="std"><tbody>${rec.topScorers.map((x) => line(x, "골")).join("")}</tbody></table>` : '<div class="hint">아직 기록이 없습니다.</div>'}</div>
+        <div><h3 style="font-size:13px;margin-bottom:4px">역대 최다 출장</h3>${rec.topApps.length ? `<table class="std"><tbody>${rec.topApps.map((x) => line(x, "경기")).join("")}</tbody></table>` : '<div class="hint">아직 기록이 없습니다.</div>'}</div>
+      </div>
+      <div class="hint" style="margin-top:6px">선수의 경력은 구단을 옮겨도 남습니다. 은퇴해 리그를 떠난 선수는 목록에서 빠집니다.</div></div>`;
+    const hist = [...(s.seasonHistory ?? [])].reverse();
+    const nm = (id: number | null | undefined) => (id === null || id === undefined ? "—" : clubOf(s, id)?.shortName ?? "—");
+    const chron = `<div class="card"><h3>시즌 연대기 <span>${hist.length}시즌</span></h3>${hist.length ? `<div style="overflow-x:auto"><table class="std"><thead><tr><th>시즌</th><th class="l">1부 우승</th><th class="l">2부 우승</th><th class="l">${CUP_NAME}</th><th class="l">${CL_SHORT}</th><th class="l">승격</th><th class="l">강등</th><th class="l">득점왕</th><th>내 순위</th></tr></thead><tbody>${hist.map((r) => `<tr><td>S${r.season}</td><td class="l"><b>${nm(r.champion)}</b></td><td class="l">${nm(r.d2Champion)}</td><td class="l">${nm(r.cupWinner)}</td><td class="l">${nm(r.clWinner)}</td><td class="l">${(r.promoted ?? []).map(nm).join(", ") || "—"}</td><td class="l">${(r.relegated ?? []).map(nm).join(", ") || "—"}</td><td class="l">${r.topScorer ? `${r.topScorer.name} ${r.topScorer.goals}골` : "—"}</td><td>${r.userPosition}위</td></tr>`).join("")}</tbody></table></div>` : '<div class="hint">첫 시즌이 끝나면 연대기가 시작됩니다.</div>'}</div>`;
+    return club + chron;
+  }
+
   private cupHtml(): string {
     const s = this.state;
     const me = s.userClub;
@@ -2128,7 +2228,9 @@ export class Game {
       { id: "standings", label: "순위", html: standings },
       { id: "sched", label: "일정", html: sched },
       { id: "cup", label: CUP_NAME, html: this.cupHtml() },
+      { id: "cl", label: CL_SHORT, html: this.clHtml() },
       { id: "records", label: "기록", html: records + this.cupRecordsHtml() },
+      { id: "annals", label: "기록실", html: this.annalsHtml() },
       { id: "hof", label: "명예의 전당", html: this.hallOfFameHtml() },
     ]);
     this.wireSubTabs(this.el.table);
@@ -2461,11 +2563,12 @@ export class Game {
       <div class="hint" style="margin-top:8px">슈팅·태클은 10분당 횟수입니다. 바꾼 <b>뒤에</b> 벌어진 일이지 바꿨기 <b>때문에</b> 벌어진 일은 아닙니다 — 상대도 함께 조정하고, 스코어 자체가 양 팀을 움직입니다.${skipped}</div></div>`;
   }
 
-  private myMatchSummaryHtml(kind: "league" | "cup", round: number, cupStage: number): string {
+  private myMatchSummaryHtml(kind: "league" | "cup" | "cl", round: number, cupStage: number): string {
     const s = this.state;
     const me = this.me;
     const fx = kind === "cup"
       ? s.cup.ties.find((t) => t.stage === cupStage && (t.home === me.id || t.away === me.id) && t.score)
+      : kind === "cl" ? s.continental?.ties.find((t) => t.stage === cupStage && (t.home === me.id || t.away === me.id) && t.score)
       : s.fixtures.find((f) => f.round === round && (f.home === me.id || f.away === me.id) && f.score);
     if (!fx || !fx.score) return "";
     const home = clubOf(s, fx.home), away = clubOf(s, fx.away);
@@ -2481,7 +2584,7 @@ export class Game {
     </div>${this.tacticsReportHtml()}`;
   }
 
-  private renderResults(round: number, kind: "league" | "cup" = "league", cupStage = 0): void {
+  private renderResults(round: number, kind: "league" | "cup" | "cl" = "league", cupStage = 0): void {
     const s = this.state;
     const me = s.userClub;
     const line = (home: Club, away: Club, score: [number, number] | null, scorers: string[], extra = "", motm?: Fixture["motm"], attendance?: number) => {
@@ -2500,6 +2603,14 @@ export class Game {
       title = `${CUP_NAME} ${CUP_STAGE_LABEL[cupStage]} 결과`;
       body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : "", t.motm, t.attendance)).join("");
       if (cupStage === 3 && s.cup.holder !== undefined) body += `<div class="hint" style="color:var(--accent);margin-top:6px">${CUP_NAME} 우승: <b>${clubOf(s, s.cup.holder).name}</b></div>`;
+      btn = "다음 라운드로 →";
+    } else if (kind === "cl") {
+      const c = s.continental!;
+      const ties = c.ties.filter((t) => t.stage === cupStage);
+      title = `${CL_SHORT} ${CL_STAGE_LABEL[cupStage]} 결과`;
+      body = ties.map((t) => line(clubOf(s, t.home), clubOf(s, t.away), t.score, t.scorers, `${cupStage < CL_GROUP_STAGES ? ` <small style="color:var(--muted)">${GROUP_NAMES[groupOf(c, t.home)]}조</small>` : ""}${t.penalties ? ` <small style="color:var(--accent)">승부차기 ${t.penalties[0]}-${t.penalties[1]}</small>` : ""}`, t.motm, t.attendance)).join("");
+      if (cupStage === 5 && c.holder !== undefined) body += `<div class="hint" style="color:var(--accent);margin-top:6px">${CL_NAME} 우승: <b>${clubOf(s, c.holder).name}</b></div>`;
+      if (cupStage === CL_GROUP_STAGES - 1 && userEnteredCl(s)) { const g = groupOf(c, me); const row = groupTable(s, g).findIndex((r) => r.club === me) + 1; body += `<div class="hint" style="margin-top:6px">${GROUP_NAMES[g]}조 최종 ${row}위 · ${row <= 2 ? '<b style="color:var(--good)">8강 진출</b>' : '<span style="color:var(--bad)">탈락</span>'}</div>`; }
       btn = "다음 라운드로 →";
     } else {
       // my own division only: the other one is resolved as the round advances, and lives on the 순위 screen
@@ -2561,6 +2672,8 @@ export class Game {
         ${stat("리그 우승", `<span class="dot" style="background:${champ.color}"></span>${champ.name}`)}
         ${stat(`${CUP_NAME} 우승`, s.cup.holder !== undefined ? clubOf(s, s.cup.holder).name : "미정")}
         ${stat("우리 팀 컵 성적", cupText)}
+        ${stat(`${CL_SHORT} 우승`, s.continental?.holder !== undefined ? `${clubOf(s, s.continental.holder).name} <small>${foreignCountry(s.continental.holder) || "한국"}</small>` : "미정")}
+        ${userEnteredCl(s) ? stat(`우리 팀 ${CL_SHORT}`, `${userClSummary(s) ?? "—"} <small>상금 ${clPrize(s, me.id)}억</small>`) : ""}
         ${stat("승 / 무 / 패", `${mine.won} / ${mine.drawn} / ${mine.lost}`)}
         ${stat("득 / 실", `${mine.gf} / ${mine.ga} (${mine.gf - mine.ga > 0 ? "+" : ""}${mine.gf - mine.ga})`)}
         ${stat("예산 변화", `<span style="color:${budgetDelta >= 0 ? "var(--good)" : "var(--bad)"}">${budgetDelta >= 0 ? "+" : ""}${budgetDelta}억</span> <small>${me.seasonStartBudget}억 → ${me.budget}억${cupPrize(s, me.id) ? ` · 컵 상금 ${cupPrize(s, me.id)}억` : ""}</small>`)}
@@ -2674,6 +2787,10 @@ export class Game {
       this.liveKind = "cup";
       return pendingCupTies(s).map((tie) => ({ fixture: cupFixture(tie), match: createCupMatch(s, tie), tie }));
     }
+    if (s.pendingClDay && !seasonOver(s)) {
+      this.liveKind = "cl";
+      return pendingClTies(s).map((tie) => ({ fixture: clFixture(tie), match: createClMatch(s, tie), tie }));
+    }
     this.liveKind = "league";
     return currentFixtures(s).filter((f) => !f.score).map((fixture) => ({ fixture, match: createMatch(s, fixture) }));
   }
@@ -2693,7 +2810,7 @@ export class Game {
     this.show("match");
     // atmosphere: today's crowd (same seeded draw recordAttendance will make), derby flag, and the season context for the live table
     const home = clubOf(s, mine.home), away = clubOf(s, mine.away);
-    const attendance = expectedAttendance(s, home, away, this.liveKind === "cup", new Rng((fixtureSeed(s, mine) ^ 0x2545f491) >>> 0));
+    const attendance = expectedAttendance(s, home, away, this.liveKind !== "league", new Rng((fixtureSeed(s, mine) ^ 0x2545f491) >>> 0));
     const derby = !!derbyFor(s, mine);
     this.screen.start(user.match, side, others, () => this.finishRound(), {
       crowd: { attendance, capacity: clubCapacity(home), derby },
@@ -2725,11 +2842,14 @@ export class Game {
       if (seasonOver(s)) break;
       prepareRound(s);
       const cup = s.pendingCupDay && !seasonOver(s);
-      this.liveKind = cup ? "cup" : "league";
-      const label = cup ? `${CUP_NAME} ${CUP_STAGE_LABEL[s.cup.stage]} 시뮬레이션 중…` : n > 1 ? `라운드 ${s.round + 1} 시뮬레이션 중… (${k + 1}/${n})` : "라운드 시뮬레이션 중…";
+      const cl = !cup && !!s.pendingClDay && !seasonOver(s);
+      this.liveKind = cup ? "cup" : cl ? "cl" : "league";
+      const label = cup ? `${CUP_NAME} ${CUP_STAGE_LABEL[s.cup.stage]} 시뮬레이션 중…` : cl ? `${CL_SHORT} ${CL_STAGE_LABEL[s.continental!.stage]} 시뮬레이션 중…` : n > 1 ? `라운드 ${s.round + 1} 시뮬레이션 중… (${k + 1}/${n})` : "라운드 시뮬레이션 중…";
+      if (cl) refreshForeign(s);
       // Headless rounds run on the worker pool (parallel on multi-core phones; falls back to in-thread).
       const items = cup
         ? pendingCupTies(s).map((tie) => ({ fixture: cupFixture(tie), tie, job: cupJob(s, tie) }))
+        : cl ? pendingClTies(s).map((tie) => ({ fixture: clFixture(tie), tie, job: leagueJob(s, clFixture(tie)) }))
         : currentFixtures(s).filter((f) => !f.score).map((fixture) => ({ fixture, tie: undefined as CupTie | undefined, job: leagueJob(s, fixture) }));
       this.setBusy(label, 0);
       let results: Map<string, ReturnType<typeof asMatch> extends infer _M ? import("./sim/protocol").MatchResult : never>;
@@ -2739,13 +2859,14 @@ export class Game {
         this.setBusy(null, 0);
       }
       this.live = items.map((x) => ({ fixture: x.fixture, tie: x.tie, match: asMatch(results.get(x.job.id)!) }));
-      const last = k === n - 1 || seasonOver(s) || (!cup && s.round + 1 >= seasonRounds(s));
+      const last = k === n - 1 || seasonOver(s) || (!cup && !cl && s.round + 1 >= seasonRounds(s));
       if (last) {
         this.finishRound();
         return;
       }
       this.settleLive();
       if (cup) advanceCupDay(s);
+      else if (cl) advanceClDay(s);
       else advanceRound(s);
       prepareRound(s);
       this.save();
@@ -2822,7 +2943,7 @@ export class Game {
     if (!this.live) return;
     for (const { fixture, match, tie } of this.live) {
       if (tie ? tie.score : fixture.score) continue;
-      if (tie) recordCupResult(s, tie, match);
+      if (tie) (this.liveKind === "cl" ? recordClResult : recordCupResult)(s, tie, match);
       else recordResult(s, fixture, match);
       for (const side of [0, 1] as TeamId[]) {
         const club = clubOf(s, side === 0 ? fixture.home : fixture.away);
@@ -2843,10 +2964,10 @@ export class Game {
     this.lastTactics = this.screen.tacticsReport();
     const round = s.round;
     const kind = this.liveKind;
-    const cupStage = s.cup.stage;
+    const cupStage = kind === "cl" ? (s.continental?.stage ?? 0) : s.cup.stage;
     // 승부차기: the user's cup tie is level after 90 minutes → compute the kick-by-kick sequence before
     // recording (recordCupResult makes the identical seeded draw), then present it one kick per tap.
-    const mineLive = kind === "cup" ? this.live.find((x) => x.tie && (x.tie.home === s.userClub || x.tie.away === s.userClub)) : undefined;
+    const mineLive = kind === "cup" || (kind === "cl" && cupStage >= CL_GROUP_STAGES) ? this.live.find((x) => x.tie && (x.tie.home === s.userClub || x.tie.away === s.userClub)) : undefined;
     const shootout = mineLive?.tie && mineLive.match.state.phase === "FULL_TIME" && mineLive.match.state.score[0] === mineLive.match.state.score[1]
       ? { detail: penaltyShootoutDetail(s, mineLive.tie, mineLive.match), match: mineLive.match } : null;
     this.settleLive();
@@ -2933,8 +3054,16 @@ export class Game {
   }
 
   /** Results screen and the cup celebration, after the round is recorded (and any shoot-out shown). */
-  private afterRound(round: number, kind: "league" | "cup", cupStage: number): void {
+  private afterRound(round: number, kind: "league" | "cup" | "cl", cupStage: number): void {
     const s = this.state;
+    if (kind === "cl" && cupStage === 5 && s.continental?.holder === s.userClub && s.clCelebratedSeason !== s.season) {
+      s.clCelebratedSeason = s.season;
+      this.save();
+      this.renderResults(round, kind, cupStage);
+      this.show("results");
+      void celebrate({ kind: "cup", title: `${CL_NAME} 우승!`, subtitle: `${this.me.name} · 시즌 ${s.season} 동아시아 챔피언`, color: "#f2c14e", lines: [`상금 ${CL_PRIZE.winner}억 · 구단 평판 +0.3`, "한국 구단이 대륙의 정상에 섰습니다."], button: "🎉 축하 받기" });
+      return;
+    }
     this.renderResults(round, kind, cupStage);
     this.show("results");
     if (kind === "cup" && cupStage === 3 && s.cup.holder === s.userClub && s.cupCelebratedSeason !== s.season) {
