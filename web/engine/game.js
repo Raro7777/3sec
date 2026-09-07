@@ -1420,7 +1420,8 @@ export function formatMatchResult(result, home, away, mySide, seed) {
   const players = {};
   // cardId/look 은 뷰어의 초상·컷인용 그림 키(art-pipeline 16절). 판정에는 쓰이지 않는다.
   const entry = (p, side) => ({ id: p.id, name: p.name, jersey: p.jersey, pos: p.pos, side,
-    cardId: p.cardId || null, look: p.look || null, personality: p.personality || null, clubId: p.teamId || null });
+    cardId: p.cardId || null, look: p.look || null, personality: p.personality || null, clubId: p.teamId || null,
+    heightCm: p.heightCm || 0 });   // 리그 체형(16.9)용
   for (const p of home.roster) players[p.id] = entry(p, SIDE.HOME);
   for (const p of away.roster) players[p.id] = entry(p, SIDE.AWAY);
   const lineupIds = ts => (ts.lineup ? ts.lineup.startingIds.concat(ts.lineup.liberoId ? [ts.lineup.liberoId] : []) : []);

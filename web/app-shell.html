@@ -714,7 +714,7 @@ function faceBitmap(p, onReady){
       var side = 2.2 * f[2] * H;
       var sx = Math.max(0, Math.min(W - side, f[0] * W - side / 2));
       var sy = Math.max(0, Math.min(H - side, (f[1] + 0.15 * f[2]) * H - side / 2));
-      var cv = document.createElement('canvas'), S = 64; cv.width = S; cv.height = S;
+      var cv = document.createElement('canvas'), S = 96; cv.width = S; cv.height = S;   // 리그 머리(16.9)가 2x 줌에서 ~48px 라 96
       var g = cv.getContext('2d');
       g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.clip();
       g.drawImage(img, sx, sy, side, side, 0, 0, S, S);
@@ -2288,6 +2288,18 @@ function buildRallies(m){
 
 var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
+// 코트 그림 방식(art-pipeline 16.9): 'rig'(공용 바디 리그, 기본) | 'standee'(전신 누끼). 경기 화면 버튼으로 바꾸고 기억한다.
+var FIG_KEY = 'bloom-figure-v1';
+var FIG = 'rig';
+try { var _f = localStorage.getItem(FIG_KEY); if (_f === 'standee' || _f === 'rig') FIG = _f; } catch(e){}
+function figLabel(){ return FIG === 'rig' ? '그림: 리그' : '그림: 스탠디'; }
+/** 리그 머리(16.9): 선수 → {face(카드 원형 비트맵), hair:[팔레트, 스타일], skin, type(체형 S/M/L)}. 그림 정보는 빌드가 h 로 실어 준다. */
+function headInfo(p, onReady){
+  var k = artKey(p), e = k ? window.BLOOM_ART[k] : null;
+  var h = (e && e.h) || [2, 'short', 'A'];
+  var hc = p.heightCm || 0, type = hc && hc <= 172 ? 'S' : (hc >= 182 ? 'L' : 'M');
+  return { face: faceBitmap(p, onReady), hair: [h[0], h[1]], skin: h[2], type: type };
+}
 // 검사용 훅(art-test 16.8): 스크립트 지역 변수라 밖에서 못 보므로 코트 렌더러만 내준다. 게임 로직은 쓰지 않는다.
 window.BLOOM_DEBUG = { court: function(){ return cr; } };
 
@@ -2313,6 +2325,15 @@ function mountCourt(){
   cr.faceOf = function(pid){ var p = players[pid]; return p ? faceBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
   // 스탠디(16.8): 누끼 전신이 있는 선수는 실루엣 대신 그림으로 선다
   cr.standOf = function(pid){ var p = players[pid]; return p ? standBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
+  // 리그(16.9): 그림 방식·머리 정보·유니폼(구단색)
+  cr.figure = FIG;
+  cr.headOf = function(pid){ var p = players[pid]; return p ? headInfo(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
+  var kits = [null, null];
+  [m.ctx.homeId, m.ctx.awayId].forEach(function(id, i){
+    var cl = id ? clubOf(id) : null;
+    kits[i] = (cl && cl.colors) ? { primary: cl.colors.primary, secondary: cl.colors.secondary || '#FFFFFF' } : null;
+  });
+  cr.kitOf = function(side){ return kits[side] || { primary: side === mySide ? '#5FB0FF' : '#F09080', secondary: '#FFFFFF' }; };
   var debut = debutSet(m);
   cr.markOf = function(pid){ return debut[pid] ? '#E9B949' : null; };   // 데뷔전 선수는 금색 링
   loadRally();
@@ -2598,10 +2619,12 @@ function vMatchLive(){
          '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
          '<button data-mv="skipset">세트 건너뛰기</button>'+
          '<button data-mv="end">결과</button>'+
+         '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>'+
        '</div>'
-     : '<div class="ctrl" style="grid-template-columns:1fr 1fr">'+
+     : '<div class="ctrl" style="grid-template-columns:1fr 1fr 1fr">'+
          '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
          '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
+         '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>'+
        '</div>'+
        '<div class="card flat"><div class="tiny">1세트를 보고 나면 세트 건너뛰기와 결과 바로가기가 열립니다.</div></div>')+
    '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'
@@ -3018,6 +3041,11 @@ document.addEventListener('click', function(e){
       mv.speed = mv.speed === 1 ? 2 : (mv.speed === 2 ? 4 : 1);
       if (cr) cr.speed = mv.speed;
       t.textContent = '속도 ' + mv.speed + '배';
+    } else if (d.mv === 'figure') {
+      FIG = FIG === 'rig' ? 'standee' : 'rig';
+      try { localStorage.setItem(FIG_KEY, FIG); } catch(err){}
+      if (cr) { cr.figure = FIG; cr.frame(); }
+      t.textContent = figLabel();
     } else if (d.mv === 'skipset') skipSet();
     else if (d.mv === 'end') finishViewer();
     return;

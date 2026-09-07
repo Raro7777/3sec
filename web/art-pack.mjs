@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROOKIE_LOOKS } from './engine/rookies.js';   // 신인 풀 외형(머리 스타일·색·피부) — 리그 머리(16.9)용
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -48,6 +49,38 @@ export const SPEC = {
 };
 /** 스탠디 앵커 기본값 — meta.standee 가 없을 때. [발x, 발y, 몸위, 몸아래, 머리x, 머리y, 방향(1=R,-1=L,0=모름)] */
 export const STAND_DEFAULT = [0.5, 1.0, 0.03, 0.97, 0.5, 0.08, 0];
+
+/**
+ * 리그 머리(art-pipeline 16.9): h = [머리 팔레트 번호(art-style-guide 2.7, 13 = 선셋 오렌지), 뒷머리 스타일 묶음, 피부톤 A/B/C].
+ * 런칭 선수는 meta.json(hair.palette·skin), 신인 풀은 엔진의 ROOKIE_LOOKS 에서 읽는다. 렌더러는 이 세 값만 쓴다.
+ */
+const HAIR_PALETTE = {
+  '블랙': 1, '다크 브라운': 2, '체스트넛 브라운': 3, '라이트 브라운': 4, '애쉬 브라운': 6, '애쉬 그레이': 6, '차콜 그레이': 6,
+  '로즈 브라운': 3, '밀크티 베이지': 5, '골든 브라운': 4, '허니 블론드': 5, '오번': 8, '플래티넘 블론드': 7, '와인 레드': 8,
+  '민트 그린': 11, '네이비 블루': 10, '화이트': 7, '화이트 실버': 7, '코랄 핑크': 9, '크림슨 레드': 8, '선셋 오렌지': 13,
+  '라벤더 퍼플': 12, '스카이 블루': 10, '피치 핑크': 9,
+};
+/** 헤어스타일 이름 → 뒷머리 도형 묶음. 앞에서부터 먼저 맞는 것. */
+export function hairBucket(style) {
+  const s = String(style || '');
+  if (/트윈테일/.test(s)) return 'twin';
+  if (/번/.test(s)) return 'bun';
+  if (/브레이드/.test(s)) return 'braid';
+  if (/포니테일/.test(s)) return 'pony';
+  if (/롱/.test(s)) return 'long';
+  if (/미디엄|하프업|레이어드|울프컷|웨이브/.test(s)) return 'medium';
+  return 'short';
+}
+const LOOK_BY_ID = new Map(ROOKIE_LOOKS.map(l => [l.id, l]));
+function headInfo(pid, meta) {
+  let color = null, style = null, skin = null, palette = null;
+  if (meta && meta.hair) { color = meta.hair.color; style = meta.hair.style; palette = meta.hair.palette; skin = meta.skin; }
+  const look = LOOK_BY_ID.get(pid);
+  if (look) { color = color || look.hairColor; style = style || look.hairStyle; skin = skin || look.skin; }
+  if (!color && !style) return null;
+  const idx = palette || HAIR_PALETTE[color] || 2;
+  return [idx, hairBucket(style), skin || 'A'];
+}
 /** 얼굴 상자 기본값(4.2 규격: 얼굴 중심 (50%, 30%) · 머리 높이 20%). meta.json 이 없을 때만 쓴다. */
 export const FACE_DEFAULT = [0.5, 0.30, 0.20];
 
@@ -135,6 +168,8 @@ export function collectArt() {
         problems.push(`${pid} 스탠디: meta.standee 가 없습니다 — python3 tools/art-standee.py --ids ${pid} --force`);
       }
     }
+    const hi = headInfo(pid, meta);
+    if (hi) one.h = hi;
     if (Object.keys(one).length) { art[pid] = one; entries.push(row); }
     else problems.push(`${pid}: 폴더는 있는데 ${PREFER.join('/')} 파일이 없습니다`);
   }
