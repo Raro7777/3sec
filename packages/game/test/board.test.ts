@@ -27,12 +27,12 @@ function scripted(s: GameState, n: number, userWins: boolean): void {
 }
 
 describe("confidence dynamics", () => {
-  it("targets 50 at expectation with average form, ±5 per place and ±1.5 per form point, clamped", () => {
+  it("targets 50 at expectation with average form, ±4 per place and ±1.25 per form point, clamped", () => {
     expect(confidenceTarget(5, 5, 7)).toBe(50);
-    expect(confidenceTarget(5, 7, 7)).toBe(40);
-    expect(confidenceTarget(7, 5, 7)).toBe(60);
-    expect(confidenceTarget(5, 5, 15)).toBe(62);
-    expect(confidenceTarget(5, 5, 0)).toBe(39.5);
+    expect(confidenceTarget(5, 7, 7)).toBe(42);
+    expect(confidenceTarget(7, 5, 7)).toBe(58);
+    expect(confidenceTarget(5, 5, 15)).toBe(60);
+    expect(confidenceTarget(5, 5, 0)).toBe(41.25);
     expect(confidenceTarget(1, 12, 0)).toBe(0);
     expect(confidenceTarget(12, 1, 15)).toBe(100);
     expect(stepConfidence(60, 20)).toBe(50);
@@ -59,7 +59,7 @@ describe("confidence dynamics", () => {
     expect(s.board.confidence).toBeGreaterThan(START_CONFIDENCE);
   });
 
-  it("an underdog winning everything heads for 100, a favourite meeting expectation settles near 62, a losing favourite sinks", () => {
+  it("an underdog winning everything heads for 100, a favourite meeting expectation settles near 60, a losing favourite sinks", () => {
     const up = newGame(3, 10);
     expect(userExpectation(up)).toBeGreaterThan(8);
     scripted(up, 15, true);
@@ -67,8 +67,8 @@ describe("confidence dynamics", () => {
     expect(up.board.warnings).toBe(0);
     const par = newGame(3, 7);
     scripted(par, 15, true);
-    expect(par.board.confidence).toBeGreaterThan(60);
-    expect(par.board.confidence).toBeLessThanOrEqual(62);
+    expect(par.board.confidence).toBeGreaterThan(58);
+    expect(par.board.confidence).toBeLessThanOrEqual(60);
     const down = newGame(3, 7);
     scripted(down, 8, false);
     expect(down.board.confidence).toBeLessThan(30);

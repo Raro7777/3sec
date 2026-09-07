@@ -51,9 +51,16 @@ export function formPoints(s: GameState, club: number, n = 5): number {
   return pts;
 }
 
-/** The confidence the current situation would settle at: 50 + (expectation − position) × 5 + (form − 7) × 1.5, clamped 0..100. */
+/** Confidence lost per place below expectation, and per point of five-match form below par. */
+export const PLACE_WEIGHT = 4;
+export const FORM_WEIGHT = 1.25;
+/**
+ * The confidence the current situation would settle at: 50 + (expectation − position) × PLACE_WEIGHT + (form − 7) × FORM_WEIGHT,
+ * clamped 0..100. Four places below expectation with average form sits at 34: a warning zone, not the sack; the
+ * sack (below 15) needs a season gone badly wrong, not a mid-table finish by a fancied side.
+ */
 export const confidenceTarget = (expectation: number, position: number, form: number): number =>
-  clamp(50 + (expectation - position) * 5 + (form - 7) * 1.5, 0, 100);
+  clamp(50 + (expectation - position) * PLACE_WEIGHT + (form - 7) * FORM_WEIGHT, 0, 100);
 
 /** One step of the weekly drift: a quarter of the way to the target. */
 export const stepConfidence = (confidence: number, target: number): number => round1(clamp(confidence + (target - confidence) * CONFIDENCE_STEP, 0, 100));

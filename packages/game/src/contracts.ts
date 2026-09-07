@@ -116,11 +116,12 @@ export function settleContracts(s: GameState, newSeason: number, rng: { next(): 
     // never let the last goalkeepers walk: the board renews one for a year
     const gkShort = p.role === "GK" && staying(me, newSeason, (q) => q.contractUntil < newSeason, "GK") < MIN_GK;
     if (me.squad.length <= MIN_SQUAD || gkShort) {
+      // the board's stop-gap deal: a year on the going wage and no signing fee — the same terms an AI club
+      // renews on (settleContracts above), so a thin, poor squad is not billed every season for standing still
       const t = renewalTerms(p, 1);
-      me.budget = Math.round((me.budget - t.fee) * 10) / 10;
       p.wage = t.wage;
       p.contractUntil = newSeason;
-      s.news.unshift(`${me.shortName}: ${gkShort ? "골키퍼 부족으로" : "최소 인원 유지를 위해"} ${p.name} 1년 자동 재계약 (계약금 ${t.fee}억).`);
+      s.news.unshift(`${me.shortName}: ${gkShort ? "골키퍼 부족으로" : "최소 인원 유지를 위해"} ${p.name} 1년 자동 재계약 (연봉 ${t.wage}억, 계약금 없음).`);
       continue;
     }
     me.squad = me.squad.filter((q) => q !== p);
