@@ -86,6 +86,8 @@ describe("승강제가 만든 이벤트", () => {
     // force the user into the drop zone of the first division on the last rounds
     const me = s.clubs[s.userClub]!;
     me.division = 1;
+    // a season simulated headlessly can end with the sack, which silences every story event; the board is not under test here
+    if (s.board) { delete s.board.sacked; s.board.confidence = 50; s.board.warnings = 0; }
     for (const f of s.fixtures) {
       if (f.home === me.id) f.score = [0, 4];
       else if (f.away === me.id) f.score = [4, 0];

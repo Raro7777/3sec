@@ -115,7 +115,8 @@ export interface Interview {
   round: number;
 }
 
-export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut" | "topFlightBid" | "relegationFear" | "overseasBid";
+export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut" | "topFlightBid" | "relegationFear" | "overseasBid"
+  | "wageArrears" | "boardSellDemand" | "fanFunding" | "cityGrant" | "veteranFarewell" | "lateBloomer" | "prodigalReturn" | "rivalTaunt";
 
 export interface StoryChoice { label: string; hint: string }
 
@@ -135,6 +136,8 @@ export interface StoryEvent {
   amount?: number;
   /** another club the template is about (topFlightBid: the bidder) */
   clubId?: number;
+  /** the opposing manager the template is about (rivalTaunt) */
+  managerId?: string;
   /** settles itself with the last choice once s.round reaches this */
   expiresRound: number;
   resolved?: { choice: number; outcome: string; round: number; auto?: true };
@@ -306,6 +309,8 @@ export interface Club {
   capacity: number;
   /** the supporters: mood and attendance counters (fans.ts) */
   fans: Fans;
+  /** consecutive weeks the budget has been in the red (finance.ts; the user's club) */
+  redWeeks?: number;
   /** the club's original name, set on the first rename (the viewer looks up stadium art, kits and rivalries by it) */
   baseName?: string;
   /** custom home kit (customize.ts); `primary` is kept equal to `color` */
@@ -581,6 +586,14 @@ export interface GameState {
   eventLog?: StoryEvent[];
   /** one-shot narrative news already shown (story.ts) */
   storyFlags?: string[];
+  /** the owner's emergency loan being repaid (finance.ts) */
+  emergencyLoan?: { remaining: number; weekly: number; season: number };
+  /** players sold abroad who may come home (alumni.ts) */
+  alumni?: import("./alumni").Alumnus[];
+  /** the user's record against each opposing manager, by manager id (rivalry.ts) */
+  managerH2H?: Record<string, import("./rivalry").ManagerH2H>;
+  /** feud level per opposing manager id (rivalry.ts) */
+  feud?: Record<string, number>;
   /** career counters behind the achievements (achievements.ts) */
   records?: Records;
   /** unlocked achievements, oldest first (achievements.ts) */

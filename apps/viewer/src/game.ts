@@ -9,7 +9,7 @@ import {
   freeAgentTerms, signFreeAgent, loanableOut, loanDestination, loanOut, loanTargets, loanIn, type BidResult,
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
-  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_PRIZE, GROUP_NAMES, advanceClDay, createClMatch, clFixture, clPrize, pendingClTies, recordClResult, userClTie, userEnteredCl, userStillInCl, groupTable, groupOf, isForeignId, foreignCountry, userClSummary, clDone, clubRecords, refreshForeign, NAT_CODE, FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, foreignCount,
+  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_PRIZE, GROUP_NAMES, advanceClDay, createClMatch, clFixture, clPrize, pendingClTies, recordClResult, userClTie, userEnteredCl, userStillInCl, groupTable, groupOf, isForeignId, foreignCountry, userClSummary, clDone, clubRecords, refreshForeign, NAT_CODE, FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, foreignCount, financeStatus, RED_ARREARS_WEEKS, h2hTable, FEUD_AT, rivalManager,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userEnteredCup, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
@@ -440,6 +440,14 @@ export class Game {
     ${sec("기록실", `<ul>
       <li><b>순위 → 기록실</b> 탭에 구단의 역대 최다 득점·출장, 한 시즌 최다 득점과 최고 평점, 그리고 시즌별 연대기(1·2부 우승, 컵, ${CL_SHORT}, 승격·강등, 득점왕)가 쌓입니다.</li>
       <li>선수 경력은 구단을 옮겨도 남습니다. 은퇴해 리그를 떠난 선수는 목록에서 빠집니다.</li></ul>`)}
+    ${sec("구단 생존", `<ul>
+      <li>예산이 <b>적자</b>인 주가 이어지면 홈 화면 상단에 경고가 뜹니다. ${RED_ARREARS_WEEKS}주째부터는 <b>급여 체불</b>로 매주 선수단 사기가 깎이고, 주장이 항의하러 오며, 이사회는 핵심 선수 매각을 요구하기도 합니다.</li>
+      <li>버티는 수단도 있습니다. 구단주 <b>긴급 대출</b>(이자 15%, 20주 분할 상환), 서포터즈의 <b>팬 후원 캠페인</b>, 시민구단이라면 시의회 <b>지자체 지원금</b> 심사. 각각 팬 여론이나 이사회 신뢰를 대가로 치릅니다.</li>
+      <li>흑자로 돌아서면 밀린 급여가 지급되고 사기 하락이 멈춥니다. 연봉을 줄이고 잉여 선수를 파는 것이 근본 해법입니다.</li></ul>`)}
+    ${sec("선수 서사", `<ul>
+      <li><b>베테랑의 마지막 시즌</b>: 33세 이상, 계약 만료를 앞둔 고참이 시즌 막판 감독실을 찾습니다. 1년 더 뛰게 하거나, 은퇴 경기를 마련해 보내거나, 사무적으로 통보할 수 있습니다.</li>
+      <li><b>늦깎이의 부탁</b>: 20대 중후반 비주전 중 아직 잠재력이 남은 선수가 기회를 청합니다. 믿어 주면 성장이 붙습니다.</li>
+      <li><b>돌아온 탕아</b>: 해외로 판 유스 출신이나 구단의 오랜 주역은 2시즌 뒤 복귀를 타진합니다. 시세의 60%에 데려올 수 있고 팬들이 크게 반깁니다.</li></ul>`)}
     ${sec("상대 감독", `<ul>
       <li>AI 구단마다 성향이 다른 <b>감독</b>이 있습니다. 홈 화면의 다음 경기 카드에 상대 감독의 이름·성향 태그·대응 팁이, 순위표에 감독 이름이 표시됩니다.</li>
       <li>성향 태그: <b>공격적/수비적</b>(멘탈리티·라인·템포), <b>점유 축구/롱볼</b>(직접성·역습), <b>강한 압박</b>, <b>실용주의/이상주의</b>, <b>유스 중시</b>, <b>큰손/짠물</b>, <b>협상 강경</b>, <b>다혈질</b>.</li>
@@ -741,7 +749,7 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">${userArt(s, 22, me.color)} 감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}</span></h3>`);
+    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">${userArt(s, 22, me.color)} 감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}${this.financeBadge()}</span></h3>`);
     h.push(this.todoHtml());
     h.push(this.careerStripHtml());
     // the pending interview (press.ts) and the story events with their choices (story.ts)
@@ -1082,6 +1090,16 @@ export class Game {
     const last = f.lastAttendance ? `지난 홈경기 관중 ${n(f.lastAttendance)}명${f.lastAttendance >= cap ? " · 매진" : ""}` : `홈구장 ${n(cap)}석 · 아직 홈경기 없음`;
     return `<div class="board"><div class="boardHead"><span>팬 분위기 <b style="color:${color}">${moodLabel(f.mood)}</b> <small>${Math.round(f.mood)}</small></span><small>${last}</small></div>
       <div class="bar" title="팬 분위기 ${f.mood}/100"><i style="width:${Math.round(f.mood)}%;background:${color}"></i></div></div>`;
+  }
+
+  /** 재정 경고: weeks in the red, late wages, the owner's loan (finance.ts); empty when the club is fine. */
+  private financeBadge(): string {
+    const f = financeStatus(this.state);
+    const parts: string[] = [];
+    if (f.arrears) parts.push(`<b style="color:var(--bad)">급여 체불 ${f.redWeeks}주</b>`);
+    else if (f.redWeeks > 0) parts.push(`<b style="color:var(--warn)">적자 ${f.redWeeks}주</b> <small>(${RED_ARREARS_WEEKS}주면 체불)</small>`);
+    if (f.loan) parts.push(`<span style="color:var(--warn)">대출 잔액 ${f.loan.remaining}억 (주 ${f.loan.weekly}억)</span>`);
+    return parts.length ? " · " + parts.join(" · ") : "";
   }
 
   // ------------------------------------------------------------ interviews and story events (press.ts, story.ts)
@@ -2165,7 +2183,13 @@ export class Game {
     const hist = [...(s.seasonHistory ?? [])].reverse();
     const nm = (id: number | null | undefined) => (id === null || id === undefined ? "—" : clubOf(s, id)?.shortName ?? "—");
     const chron = `<div class="card"><h3>시즌 연대기 <span>${hist.length}시즌</span></h3>${hist.length ? `<div style="overflow-x:auto"><table class="std"><thead><tr><th>시즌</th><th class="l">1부 우승</th><th class="l">2부 우승</th><th class="l">${CUP_NAME}</th><th class="l">${CL_SHORT}</th><th class="l">승격</th><th class="l">강등</th><th class="l">득점왕</th><th>내 순위</th></tr></thead><tbody>${hist.map((r) => `<tr><td>S${r.season}</td><td class="l"><b>${nm(r.champion)}</b></td><td class="l">${nm(r.d2Champion)}</td><td class="l">${nm(r.cupWinner)}</td><td class="l">${nm(r.clWinner)}</td><td class="l">${(r.promoted ?? []).map(nm).join(", ") || "—"}</td><td class="l">${(r.relegated ?? []).map(nm).join(", ") || "—"}</td><td class="l">${r.topScorer ? `${r.topScorer.name} ${r.topScorer.goals}골` : "—"}</td><td>${r.userPosition}위</td></tr>`).join("")}</tbody></table></div>` : '<div class="hint">첫 시즌이 끝나면 연대기가 시작됩니다.</div>'}</div>`;
-    return club + chron;
+    const h2h = h2hTable(s, 8);
+    const rv = rivalManager(s);
+    const h2hRows = h2h.map((r) => { const c = clubOf(s, r.club); const isRival = rv?.manager.id === r.id; return `<tr${isRival ? ' style="color:var(--accent)"' : ""}><td class="l">${r.name}${r.feud >= FEUD_AT ? ' <small style="color:var(--bad)">앙숙</small>' : r.feud > 0 ? ' <small style="color:var(--warn)">신경전</small>' : ""}</td><td class="l" style="color:var(--muted)"><span class="dot" style="background:${c?.color ?? "#888"}"></span>${c?.shortName ?? "—"}</td><td>${r.games}</td><td><b>${r.w}</b></td><td>${r.d}</td><td>${r.l}</td></tr>`; }).join("");
+    const managers = `<div class="card"><h3>감독 상대 전적 <span>${rv ? `라이벌 ${rv.club.shortName} · ${rv.manager.name} 감독` : "감독 ${s.managerName}"}</span></h3>
+      ${h2h.length ? `<div style="overflow-x:auto"><table class="std"><thead><tr><th class="l">상대 감독</th><th class="l">구단</th><th>경기</th><th>승</th><th>무</th><th>패</th></tr></thead><tbody>${h2hRows}</tbody></table></div>` : '<div class="hint">첫 경기를 치르면 상대 감독과의 전적이 쌓입니다.</div>'}
+      <div class="hint" style="margin-top:6px">더비 주간 기자회견에서 받아치면 <b>신경전</b>이 쌓이고 ${FEUD_AT}단계부터 <b>앙숙</b>이 됩니다. 앙숙과의 더비는 이기면 팬·선수단이 더 달아오르고, 지면 더 아픕니다. 신경전은 시즌마다 한 단계씩 식습니다.</div></div>`;
+    return club + managers + chron;
   }
 
   private cupHtml(): string {

@@ -23,8 +23,14 @@ import { STAFF_ROLE_LABEL } from "./staff";
 import { formPoints } from "./board";
 import { overall } from "./rating";
 import { CLUBS_PER_DIVISION, DIVISIONS, clubsIn, divisionName, inRelegationZone, userDivision } from "./divisions";
-import { playerValue, windowOpen } from "./transfers";
+import { MAX_SQUAD, bestOffer, playerValue, sellPlayer, windowOpen } from "./transfers";
+import { wageBill } from "./contracts";
 import { seasonRounds, table } from "./season";
+import { LOAN_INTEREST, LOAN_WEEKS, RED_ARREARS_WEEKS, inArrears, redWeeks, takeEmergencyLoan } from "./finance";
+import { forgetAlumnus, noteDeparture, returnFee, returnable, returningPlayer } from "./alumni";
+import { FEUD_AT, adjustFeud, feudWith, tauntLine } from "./rivalry";
+import { clubLore } from "./lore";
+import { clubCapacity, fanBase } from "./fans";
 
 export const STORY_CHANCE = 0.25;
 /** Rounds a pending event waits before it settles itself with the last choice. */
@@ -41,7 +47,8 @@ export const SCOUT_TIP_COST = 3;
 export const AWAY_BUS_COST = 2;
 export const PHYSIO_COST = 3;
 
-export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear", "overseasBid"];
+export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear", "overseasBid",
+  "wageArrears", "boardSellDemand", "fanFunding", "cityGrant", "veteranFarewell", "lateBloomer", "prodigalReturn", "rivalTaunt"];
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -61,7 +68,7 @@ function flag(s: GameState, key: string): boolean {
 
 // ------------------------------------------------------------------ templates
 
-interface Draft { title: string; text: string; choices: StoryChoice[]; playerId?: string; playerId2?: string; staffId?: string; amount?: number; clubId?: number }
+interface Draft { title: string; text: string; choices: StoryChoice[]; playerId?: string; playerId2?: string; staffId?: string; amount?: number; clubId?: number; managerId?: string }
 
 /** The squad member a bigger club would come asking about: the best of the ones that can be sold. */
 const starPlayer = (me: Club): SquadPlayer | undefined =>
@@ -80,6 +87,22 @@ function pointsToSafety(s: GameState): number {
 const roundsLeft = (s: GameState): number => Math.max(0, seasonRounds(s) - s.round);
 
 const assistantOf = (me: Club): { id: string; name: string; rating: number; wage: number } | undefined => (me.staff ?? []).filter((m) => m.role === "assistant").sort((a, b) => b.rating - a.rating)[0];
+const hasFlag = (s: GameState, key: string): boolean => !!s.storyFlags?.includes(key);
+const roundsLeftIn = (s: GameState): number => seasonRounds(s) - s.round;
+/** 시민구단 by its lore: the city's club, which the council part-funds. */
+const isCivic = (id: number): boolean => /시민구단/.test(clubLore(id).history);
+/** A veteran on an expiring deal in the run-in, the most-capped first. */
+const veteranOf = (s: GameState, me: Club): SquadPlayer | undefined =>
+  s.round >= seasonRounds(s) - 6 && roundsLeftIn(s) > 0
+    ? [...squadPool(me)].filter((p) => p.age >= 33 && p.contractUntil <= s.season && !hasFlag(s, `vet:${p.id}`)).sort((a, b) => b.stats.apps - a.stats.apps)[0]
+    : undefined;
+/** A non-starter in his mid-to-late twenties with room left to grow: the late bloomer. */
+const bloomerOf = (s: GameState, me: Club): SquadPlayer | undefined =>
+  s.round >= 3
+    ? [...squadPool(me)].filter((p) => p.age >= 25 && p.age <= 29 && p.injuryDays === 0 && !me.selection.starters.includes(p.id) && p.potential - overall(p.attrs, p.role) >= 1 && !hasFlag(s, `bloom:${p.id}`))
+      .sort((a, b) => (b.potential - overall(b.attrs, b.role)) - (a.potential - overall(a.attrs, a.role)))[0]
+    : undefined;
+const fundingAmount = (me: Club): number => clamp(Math.round((fanBase(me.reputation, clubCapacity(me)) / 4000) * (me.fans.mood / 60)), 2, 12);
 const squadPool = (me: Club): SquadPlayer[] => me.squad.filter((p) => !p.onLoan);
 
 /** Can the template fire this week? */
@@ -103,6 +126,17 @@ function applicable(s: GameState, me: Club, t: StoryTemplateId): boolean {
     // a club abroad comes for the top flight's stars: only a real star, only with the window open
     case "overseasBid": { const star = starPlayer(me); return userDivision(s) === 1 && windowOpen(s) && !!star && overall(star.attrs, star.role) >= 13.5 && (s.foreign?.length ?? 0) > 0; }
     // The run-in, in the drop zone, with the drop still real.
+    // 구단 생존 (finance.ts): the squad, the board, the fans and the city all react to a club in the red
+    case "wageArrears": return inArrears(me) && !hasFlag(s, `arrears:${s.season}`);
+    case "boardSellDemand": { const star = starPlayer(me); return redWeeks(me) >= RED_ARREARS_WEEKS + 3 && windowOpen(s) && !!star && !!bestOffer(s, star.id) && !hasFlag(s, `selldemand:${s.season}`); }
+    case "fanFunding": return me.budget < 0 && me.fans.mood >= 45 && !hasFlag(s, `fund:${s.season}`);
+    case "cityGrant": return isCivic(me.id) && s.round >= 2 && s.round <= 8 && me.budget < 15 && !hasFlag(s, `grant:${s.season}`);
+    // 선수 서사
+    case "veteranFarewell": return !!veteranOf(s, me);
+    case "lateBloomer": return !!bloomerOf(s, me);
+    case "prodigalReturn": return windowOpen(s) && returnable(s).length > 0 && me.squad.length < MAX_SQUAD;
+    // 감독 라이벌 (rivalry.ts): the derby press week
+    case "rivalTaunt": return !!fx && isDerby(fx.home, fx.away) && !!clubOf(s, fx.home === s.userClub ? fx.away : fx.home).manager && !hasFlag(s, `taunt:${s.season}:${s.round}`);
     case "relegationFear": return userDivision(s) < DIVISIONS && s.round >= seasonRounds(s) - 4 && roundsLeft(s) > 0 && inRelegationZone(s, s.userClub);
   }
 }
@@ -185,6 +219,110 @@ function draft(s: GameState, me: Club, t: StoryTemplateId, rng: Rng): Draft | nu
           { label: `${fee}억에 보낸다`, hint: `예산 +${fee}억, 선수단 사기 −3, 팬 −4, 이사회 +2` },
           { label: "거절한다", hint: `${p.name} 사기 −18, 이적 요구 가능성 큼` },
           { label: `재계약으로 붙잡는다 (연봉 +${raise}억)`, hint: `${p.name} 사기 +10, 예산 −${raise}억, 팬 +4` },
+        ],
+      };
+    }
+    case "wageArrears": {
+      flag(s, `arrears:${s.season}`);
+      const cap = ensureCaptain(me);
+      const amount = Math.max(5, Math.round(wageBill(me) / 4));
+      return {
+        title: "급여 체불 항의",
+        text: `${redWeeks(me)}주째 적자로 급여가 밀렸습니다. ${cap ? `주장 ${cap.name}이(가)` : "고참들이"} 선수단을 대표해 감독실을 찾아왔습니다. 구단주는 ${amount}억 긴급 대출을 제안했지만 이자 ${Math.round(LOAN_INTEREST * 100)}%에 ${LOAN_WEEKS}주 분할 상환 조건입니다.`,
+        amount, playerId: cap?.id,
+        choices: [
+          { label: "주장에게 시간을 부탁한다", hint: "주장 리더십에 따라 선수단 사기 +3 또는 −3" },
+          { label: `구단주 대출 ${amount}억`, hint: `예산 +${amount}억, ${LOAN_WEEKS}주간 매주 상환, 이사회 −2` },
+          { label: "버틴다", hint: "선수단 사기 −4, 이사회 −1, 이적 요구 가능성" },
+        ],
+      };
+    }
+    case "boardSellDemand": {
+      flag(s, `selldemand:${s.season}`);
+      const star = starPlayer(me)!;
+      const offer = bestOffer(s, star.id)!;
+      return {
+        title: "이사회의 매각 요구",
+        text: `${redWeeks(me)}주째 적자입니다. 이사회가 "구단이 먼저"라며 ${star.name}을(를) ${offer.club.name}에 ${offer.fee}억에 넘기라고 요구합니다.`,
+        playerId: star.id, clubId: offer.club.id, amount: offer.fee,
+        choices: [{ label: `${offer.fee}억에 판다`, hint: "예산 +, 이사회 +5, 팬과 선수단은 실망" }, { label: "거부한다", hint: "이사회 −8, 선수단 사기 +2" }],
+      };
+    }
+    case "fanFunding": {
+      flag(s, `fund:${s.season}`);
+      const amount = fundingAmount(me);
+      return {
+        title: "팬 후원 캠페인",
+        text: `서포터즈 연합이 "구단을 살리자" 후원 캠페인을 제안했습니다. 예상 모금액은 ${amount}억이지만, 팬들에게 손을 벌리는 일입니다.`,
+        amount,
+        choices: [{ label: "캠페인을 연다", hint: `예산 +${amount}억, 팬 −3, 선수단 사기 +2` }, { label: "사양한다", hint: "팬 +1" }],
+      };
+    }
+    case "cityGrant": {
+      flag(s, `grant:${s.season}`);
+      const amount = rng.int(6, 12);
+      return {
+        title: "지자체 지원금 심사",
+        text: `시의회가 시민구단 지원금 ${amount}억 심사를 앞두고 있습니다. 유스·지역 공헌 계획 발표가 필요합니다. 시장 선거 유세에 감독이 함께 서 준다면 더 준다는 귀띔도 있습니다.`,
+        amount,
+        choices: [
+          { label: "지역 공헌 계획으로 신청한다", hint: `팬 여론 40 이상이면 +${amount}억, 아니면 절반` },
+          { label: "유세에 동행한다", hint: `+${Math.round(amount * 1.3)}억, 팬 −4, 이사회 +1` },
+          { label: "신청하지 않는다", hint: "변화 없음" },
+        ],
+      };
+    }
+    case "veteranFarewell": {
+      const p = veteranOf(s, me)!;
+      flag(s, `vet:${p.id}`);
+      const apps = p.stats.apps + (p.career ?? []).filter((e) => e.club === me.id).reduce((n, e) => n + e.apps, 0);
+      const wage = Math.max(0.2, round1(p.wage * 0.8));
+      return {
+        title: "베테랑의 마지막 시즌",
+        text: `${p.name}(${p.age}세)의 계약이 이번 시즌으로 끝납니다. 구단에서 ${apps}경기를 뛴 그가 감독실 문을 두드렸습니다. "한 시즌만 더 뛰고 싶습니다. 연봉은 깎아도 좋습니다."`,
+        playerId: p.id, amount: wage,
+        choices: [
+          { label: `1년 더 (연봉 ${wage}억)`, hint: `${p.name} 사기 +8, 팬 +2` },
+          { label: "은퇴 경기를 마련한다", hint: "팬 +5, 선수단 사기 +3, 시즌 후 떠남" },
+          { label: "사무적으로 통보한다", hint: `${p.name} 사기 −8, 팬 −3, 선수단 −1` },
+        ],
+      };
+    }
+    case "lateBloomer": {
+      const p = bloomerOf(s, me)!;
+      flag(s, `bloom:${p.id}`);
+      return {
+        title: "늦깎이의 부탁",
+        text: `${p.age}세 ${p.name}이(가) 훈련이 끝난 뒤 혼자 남아 있었습니다. "감독님, 저 아직 늘 수 있습니다. 한 번만 믿어 주세요." 코치진도 요즘 훈련 태도가 달라졌다고 합니다.`,
+        playerId: p.id,
+        choices: [{ label: "기회를 준다", hint: `${p.name} 성장 +1.5, 사기 +12` }, { label: "지금처럼 간다", hint: `${p.name} 사기 −5` }],
+      };
+    }
+    case "prodigalReturn": {
+      const a = returnable(s)[0]!;
+      const rp = returningPlayer(s, a);
+      const fee = returnFee(rp);
+      return {
+        title: "돌아온 탕아",
+        text: `${a.toName}에서 ${s.season - a.season}시즌을 보낸 ${rp.name}(${rp.age}세 ${rp.role}, 능력 ${overall(rp.attrs, rp.role).toFixed(1)})이(가) 돌아오고 싶다고 합니다. 이적료 ${fee}억, 연봉 ${rp.wage}억. 팬들은 이미 그의 이름을 외치고 있습니다.`,
+        playerId: rp.id, amount: fee, clubId: a.toClub,
+        choices: [{ label: `데려온다 (${fee}억)`, hint: "팬 +6, 선수단 사기 +1" }, { label: "거절한다", hint: "그는 다른 곳에서 커리어를 마칩니다" }],
+      };
+    }
+    case "rivalTaunt": {
+      const fx = nextUserFixture(s)!;
+      flag(s, `taunt:${s.season}:${s.round}`);
+      const opp = clubOf(s, fx.home === s.userClub ? fx.away : fx.home);
+      const m = opp.manager!;
+      const feud = feudWith(s, m.id);
+      return {
+        title: "라이벌 감독의 도발",
+        text: `${derbyName(fx.home, fx.away)}을(를) 앞둔 기자회견에서 ${opp.shortName}의 ${m.name} 감독이 말했습니다. ${tauntLine(m, s.managerName)}${feud >= FEUD_AT ? " 두 감독의 신경전은 이미 리그의 화제입니다." : ""}`,
+        clubId: opp.id, managerId: m.id,
+        choices: [
+          { label: "받아친다", hint: "선수단 사기 +3, 팬 +3, 이사회 −1, 앙숙 +1 (더비 결과의 파급 커짐)" },
+          { label: "무시한다", hint: "변화 없음" },
+          { label: "존중을 표한다", hint: "이사회 +1, 팬 −1, 앙숙 −1" },
         ],
       };
     }
@@ -339,6 +477,7 @@ export function resolveEvent(s: GameState, eventId: string, choice: number, auto
       if (choice === 0) {
         const fee = ev.amount ?? 0;
         money(me, fee);
+        if (from) noteDeparture(s, p, from.id, from.name, me.id);
         me.squad = me.squad.filter((q) => q.id !== p.id);
         me.selection.starters = me.selection.starters.filter((id) => id !== p.id);
         me.selection.bench = me.selection.bench.filter((id) => id !== p.id);
@@ -389,6 +528,90 @@ export function resolveEvent(s: GameState, eventId: string, choice: number, auto
         p.transferRequest = false;
         out = `${p.name}이(가) 재계약에 서명했습니다 (연봉 +${raise}억). "아직 여기서 이룰 게 남았다"고 했습니다.`;
       }
+      break;
+    }
+    case "wageArrears": {
+      if (choice === 0) {
+        const cap = captainOf(me);
+        if (cap && leadership(cap) >= 0.55) { adjustSquadMorale(me, 3); out = `주장 ${cap.name}이(가) 선수단을 다독였습니다. "감독님을 믿자." 밀린 급여는 남았지만 라커룸은 버팁니다.`; }
+        else { adjustSquadMorale(me, -3); out = `${cap ? `주장 ${cap.name}은(는)` : "고참들은"} 선수단을 설득하지 못했습니다. 훈련장 분위기가 싸늘합니다.`; }
+      } else if (choice === 1) {
+        takeEmergencyLoan(s, ev.amount ?? 0);
+        boardAdd(s, -2);
+        adjustSquadMorale(me, 2);
+        out = `구단주에게 ${ev.amount}억을 빌렸습니다. 급여가 나갔지만 ${LOAN_WEEKS}주간 매주 ${s.emergencyLoan?.weekly}억씩 갚아야 합니다. 이사회는 감독의 살림을 걱정합니다.`;
+      } else {
+        adjustSquadMorale(me, -4);
+        boardAdd(s, -1);
+        const restless = [...squadPool(me)].sort((a, b) => personalityOf(b).ambition - personalityOf(a).ambition)[0];
+        if (restless && personalityOf(restless).ambition > 0.5) { restless.transferRequest = true; out = `버티기로 했습니다. ${restless.name}이(가) 에이전트를 통해 이적을 요구했습니다.`; }
+        else out = "버티기로 했습니다. 선수들은 말없이 훈련했지만 웃음이 사라졌습니다.";
+      }
+      break;
+    }
+    case "boardSellDemand": {
+      if (!p) { out = "그 선수는 이미 팀을 떠났습니다."; break; }
+      if (choice === 0) {
+        const err = sellPlayer(s, p.id);
+        if (err) { out = `매각이 무산됐습니다: ${err}`; break; }
+        boardAdd(s, 5);
+        adjustSquadMorale(me, -2);
+        out = `${p.name}을(를) 팔았습니다. 이사회는 안도했고, 팬들은 "구단이 선수를 팔아 연명한다"고 씁쓸해합니다.`;
+      } else { boardAdd(s, -8); adjustSquadMorale(me, 2); out = `매각을 거부했습니다. 이사회는 "감독이 현실을 모른다"고 했지만 선수단은 감독 편에 섰습니다.`; }
+      break;
+    }
+    case "fanFunding":
+      if (choice === 0) { money(me, ev.amount ?? 0); adjustMood(me, -3); adjustSquadMorale(me, 2); out = `팬들이 ${ev.amount}억을 모아 주었습니다. 선수들은 응답해야 한다는 것을 압니다. 다만 "또 팬 지갑이냐"는 말도 나옵니다.`; }
+      else { adjustMood(me, 1); out = "정중히 사양했습니다. 팬들은 구단의 자존심을 이해했습니다."; }
+      break;
+    case "cityGrant": {
+      const amount = ev.amount ?? 0;
+      if (choice === 0) {
+        const full = me.fans.mood >= 40;
+        const got = full ? amount : Math.round(amount / 2);
+        money(me, got);
+        out = full ? `시의회가 지원금 ${got}억을 승인했습니다. 시민 여론이 구단 편이었습니다.` : `시민 여론이 좋지 않아 지원금이 ${got}억으로 깎였습니다.`;
+      } else if (choice === 1) { const got = Math.round(amount * 1.3); money(me, got); adjustMood(me, -4); boardAdd(s, 1); out = `유세 무대에 함께 섰고 지원금 ${got}억이 나왔습니다. 서포터 게시판은 "감독이 정치를 한다"며 시끄럽습니다.`; }
+      else out = "신청하지 않았습니다. 시의회는 다음 시즌에 다시 보자고 했습니다.";
+      break;
+    }
+    case "veteranFarewell": {
+      if (!p) { out = "그 선수는 이미 팀을 떠났습니다."; break; }
+      if (choice === 0) { p.wage = ev.amount ?? p.wage; p.contractUntil = s.season + 1; adjustMorale(p, 8); adjustMood(me, 2); out = `${p.name}이(가) 연봉 ${p.wage}억에 1년 더 뛰기로 했습니다. 그는 감독실을 나서며 고개를 깊이 숙였습니다.`; }
+      else if (choice === 1) { adjustMood(me, 5); adjustSquadMorale(me, 3); adjustMorale(p, 4); out = `마지막 홈경기를 ${p.name}의 은퇴 경기로 치르기로 했습니다. 팬들이 걸개를 준비합니다. 시즌이 끝나면 그는 떠납니다.`; }
+      else { adjustMorale(p, -8); adjustMood(me, -3); adjustSquadMorale(me, -1); out = `사무국 통보로 끝났습니다. ${p.name}은(는) 말없이 짐을 챙겼고 고참들은 그 장면을 봤습니다.`; }
+      break;
+    }
+    case "lateBloomer": {
+      if (!p) { out = "그 선수는 이미 팀을 떠났습니다."; break; }
+      if (choice === 0) { p.growth += 1.5; p.potential = Math.max(p.potential, round1(overall(p.attrs, p.role) + 1.5)); adjustMorale(p, 12); out = `${p.name}에게 기회를 약속했습니다. 그는 그날 밤 가장 늦게 훈련장을 떠났습니다 (성장 +1.5).`; }
+      else { adjustMorale(p, -5); out = `${p.name}은(는) 알겠다고만 했습니다. 다음 날 훈련은 평소와 같았습니다.`; }
+      break;
+    }
+    case "prodigalReturn": {
+      const a = (s.alumni ?? []).find((x) => x.player.id === ev.playerId);
+      if (!a) { out = "그는 이미 다른 팀과 계약했습니다."; break; }
+      if (choice === 0) {
+        const fee = ev.amount ?? 0;
+        if (me.budget < fee) { out = `예산이 부족해 복귀가 무산됐습니다 (${fee}억 필요).`; break; }
+        if (me.squad.length >= MAX_SQUAD) { out = "스쿼드가 가득 차 복귀가 무산됐습니다."; break; }
+        const rp = returningPlayer(s, a);
+        money(me, -fee);
+        const used = new Set(me.squad.map((q) => q.number));
+        if (used.has(rp.number)) for (let n = 2; n < 100; n++) if (!used.has(n)) { rp.number = n; break; }
+        me.squad.push(rp);
+        forgetAlumnus(s, rp.id);
+        adjustMood(me, 6);
+        adjustSquadMorale(me, 1);
+        out = `${rp.name}이(가) 돌아왔습니다. 첫 훈련에 팬 수백 명이 담장 밖에 모였습니다.`;
+      } else { forgetAlumnus(s, ev.playerId!); out = "거절했습니다. 그는 다른 곳에서 커리어를 이어 갑니다."; }
+      break;
+    }
+    case "rivalTaunt": {
+      const mid = ev.managerId ?? "";
+      if (choice === 0) { adjustSquadMorale(me, 3); adjustMood(me, 3); boardAdd(s, -1); const f = adjustFeud(s, mid, 1); out = `받아쳤습니다. 다음 날 신문 1면은 두 감독의 사진이었습니다${f >= FEUD_AT ? " — 이제 두 사람은 공인된 앙숙입니다" : ""}.`; }
+      else if (choice === 1) out = "질문을 흘려보냈습니다. 기사는 하루 만에 잊혔습니다.";
+      else { boardAdd(s, 1); adjustMood(me, -1); adjustFeud(s, mid, -1); out = "상대 감독을 치켜세웠습니다. 이사회는 품위를 칭찬했고 팬들은 조금 김이 빠졌습니다."; }
       break;
     }
     case "relegationFear": {

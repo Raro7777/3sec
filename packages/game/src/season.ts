@@ -18,9 +18,12 @@ import { pendingCupTies } from "./cup";
 import { appendCareer, applyRatings, emptyStats } from "./ratings";
 import { BOARD_FROM_ROUND, boardCupWin, boardRollover, boardWeek, newBoard } from "./board";
 import { fanHomeEdge, fansRollover, fansWeek, recordAttendance } from "./fans";
-import { derbyPreview, derbyResult } from "./lore";
+import { derbyPreview, derbyResult, isDerby } from "./lore";
 import { matchAttrs, migrateMorale, moraleRollover, moraleWeek } from "./morale";
 import { pressConference, skipInterview } from "./press";
+import { financeRollover, financeWeek } from "./finance";
+import { alumniRollover } from "./alumni";
+import { derbyQuote, recordManagerH2H, rivalryRollover } from "./rivalry";
 import { storyMatch, storyRollover, storyWeek } from "./story";
 import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
@@ -232,6 +235,9 @@ export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOpt
   s.news.unshift(`${prefix}${h.shortName} ${f.score[0]} - ${f.score[1]} ${a.shortName}`);
   // Rivalry headlines and swings (lore.ts), debut / first-goal / loan-return news (story.ts), the user's interview (press.ts).
   derbyResult(s, f, cup);
+  // The user's record against the opposing manager, and the rival's word after a derby (rivalry.ts).
+  recordManagerH2H(s, f);
+  if (isDerby(f.home, f.away)) derbyQuote(s, f);
   storyMatch(s, f, m, cup);
   pressConference(s, f, m, cup);
   // The user's career counters and achievements (achievements.ts; a no-op for other clubs' matches).
@@ -275,6 +281,8 @@ export function advanceRound(s: GameState): boolean {
   const positions = new Map<number, number>();
   for (let d = 1; d <= DIVISIONS; d++) divisionTable(s, d).forEach((r, i) => positions.set(r.club, i + 1));
   payWages(s, seasonRounds(s), positions);
+  // The user's club in the red: late wages, the owner's loan (finance.ts).
+  financeWeek(s);
   // The supporters weigh the week (fans.ts): results, goals, the table, runs; a protest can cost the user's board.
   fansWeek(s);
   transferWeek(s, new Rng(s.seed * 17 + s.season * 331 + s.round * 41));
@@ -366,6 +374,9 @@ export function startNextSeason(s: GameState): void {
   moraleRollover(s);
   skipInterview(s);
   storyRollover(s);
+  financeRollover(s);
+  alumniRollover(s);
+  rivalryRollover(s);
   s.news.unshift(`시즌 ${s.season} 시작.`);
   // Stadium expansions bought last season open with the new one (stadium.ts).
   for (const c of s.clubs) applyExpansion(s, c);
