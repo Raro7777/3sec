@@ -1,80 +1,104 @@
 {
-  "pid": "p026",
-  "team": "t04",
-  "position": "OH",
-  "rarity": "R",
-  "height_cm": 177,
-  "jersey": 18,
-  "skin": "C",
-  "hair": {
-    "style": "턱선 단발 보브",
-    "color": "라이트 브라운",
-    "palette": 4
-  },
-  "eye": {
-    "shape": "tsurime",
-    "color": "그린"
-  },
-  "card": {
-    "face": {
-      "cx": 450,
-      "cy": 360,
-      "h": 240
-    }
-  },
-  "stand": {
-    "face_rect": {
-      "x": 464,
-      "y": 200,
-      "w": 512,
-      "h": 512
-    },
-    "has_hair_front": null
-  },
-  "gen": {
-    "model": null,
-    "lora": null,
-    "seed_card": null,
-    "seed_stand": null
-  },
-  "source": {
-    "file": "p026.png",
-    "size": "1760x2352",
-    "crop": {
-      "x": 281,
-      "y": 213,
-      "w": 1410,
-      "h": 1880
-    },
-    "imported": "2026-09-05"
-  },
-  "standee": {
-    "w": 207,
-    "h": 320,
-    "foot": [
-      0.576,
-      0.978
-    ],
-    "head": [
-      0.43,
-      0.181
-    ],
-    "top": 0.131,
-    "bottom": 0.934,
-    "facing": "L",
-    "facing_src": "manual",
-    "ball": "none",
-    "ball_touch": null,
-    "src": "p026_hero.webp",
-    "crop": [
-      117,
-      44,
-      715,
-      1107
-    ],
-    "model": "isnet-anime"
-  },
-  "standee_manual": {
-    "facing": "L"
+ "pid": "p026",
+ "team": "t04",
+ "position": "OH",
+ "rarity": "R",
+ "height_cm": 177,
+ "jersey": 18,
+ "skin": "C",
+ "hair": {
+  "style": "턱선 단발 보브",
+  "color": "라이트 브라운",
+  "palette": 4
+ },
+ "eye": {
+  "shape": "tsurime",
+  "color": "그린"
+ },
+ "card": {
+  "face": {
+   "cx": 450,
+   "cy": 360,
+   "h": 240
   }
+ },
+ "stand": {
+  "face_rect": {
+   "x": 464,
+   "y": 200,
+   "w": 512,
+   "h": 512
+  },
+  "has_hair_front": null
+ },
+ "gen": {
+  "model": null,
+  "lora": null,
+  "seed_card": null,
+  "seed_stand": null
+ },
+ "source": {
+  "file": "p026.png",
+  "size": "1760x2352",
+  "crop": {
+   "x": 281,
+   "y": 213,
+   "w": 1410,
+   "h": 1880
+  },
+  "imported": "2026-09-05"
+ },
+ "standee": {
+  "w": 207,
+  "h": 320,
+  "foot": [
+   0.576,
+   0.978
+  ],
+  "head": [
+   0.43,
+   0.181
+  ],
+  "top": 0.131,
+  "bottom": 0.934,
+  "facing": "L",
+  "facing_src": "manual",
+  "ball": "none",
+  "ball_touch": null,
+  "src": "p026_hero.webp",
+  "crop": [
+   117,
+   44,
+   715,
+   1107
+  ],
+  "model": "isnet-anime"
+ },
+ "standee_manual": {
+  "facing": "L"
+ },
+ "faces": {
+  "focus": {
+   "cx": 766,
+   "cy": 231,
+   "side": 498
+  },
+  "cheer": {
+   "cx": 254,
+   "cy": 728,
+   "side": 464
+  },
+  "sad": {
+   "cx": 767,
+   "cy": 678,
+   "side": 348
+  }
+ },
+ "faces_src": {
+  "file": "expr.png",
+  "size": [
+   1024,
+   1024
+  ]
+ }
 }

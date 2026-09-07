@@ -170,7 +170,7 @@ function create(canvas, opts) {
     // 스탠디(16.8): 앱이 R.standOf(pid) 로 {img, m} 을 주면 실루엣 대신 누끼 그림을 세운다. _stand 는 pid 별 캐시(팀색 림 포함).
     // lineup: [[{id,name,jersey}×6 홈], [×6 원정]] 자리 1~6 순 — 있으면 공을 안 만진 선수도 이름·그림을 얻는다.
     // figure(16.9): 'rig' | 'standee' | 'silhouette'. headOf(pid) → {face, hair:[팔레트, 스타일], skin}, kitOf(side) → {primary, secondary}
-    standOf: null, _stand: {}, lineup: null, figure: 'rig', headOf: null, kitOf: null, debug: { standees: 0, rigs: 0, parts: 0 },
+    standOf: null, _stand: {}, lineup: null, figure: 'rig', headOf: null, kitOf: null, debug: { standees: 0, rigs: 0, parts: 0, quarters: 0, fades: 0, moods: 0 },
     _rigPose: {}, _rigFx: [],  // 리그(16.9): 선수별 지난 자세(블렌딩)·착지 먼지
     rigParts: null, _rigImg: {}  // 파츠 시트(16.9.2): 앱이 BLOOM_RIG 를 주면 디코드해 캐시
   };
@@ -399,7 +399,7 @@ function create(canvas, opts) {
 
     var ball = ballAt();
     // 쿼터뷰에서는 회전 깊이 순으로 그린다(먼 쪽 먼저).
-    R.debug.standees = 0; R.debug.rigs = 0; R.debug.parts = 0;
+    R.debug.standees = 0; R.debug.rigs = 0; R.debug.parts = 0; R.debug.quarters = 0; R.debug.fades = 0; R.debug.moods = 0;
     var ps = collectPlayers();
     ps.forEach(function (p) { p.d = depthOf(cam, p.x, p.y); });
     ps.sort(function (a, b) { return b.d - a.d; });
@@ -698,7 +698,8 @@ function create(canvas, opts) {
                    name: (isActor || isTell) && t ? t.name : '', jersey: t ? t.jersey : (lu ? lu.jersey : 0),
                    pid: t ? t.playerId : (lu ? lu.id : null),
                    known: !!t || !!lu, active: isActor, type: isActor ? actor.type : 0,
-                   next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0 });
+                   next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0,
+                   dive: !!((isActor && actor.dive) || (isNext && nextT.dive)) });   // 다이빙 디그(3차 클립)
       });
     });
     return out;
@@ -892,10 +893,10 @@ function create(canvas, opts) {
     return e;
   }
   /** 포즈 세트에서 이번 프레임의 그림 — 리그 클립과 같은 규칙. 예비 동작은 공이 오기 직전에, 마무리는 친 직후 잠깐. */
-  function standPose(p, g) {
+  function standPose(p, g, poses) {
     if (R.ended && R.point) return R.point.side === p.side ? 'cheer' : 'sad';
-    if (p.active && g.pose) return g.u < 0.4 ? clipOf(g.pose) : (p.moving ? 'run' : 'ready');
-    if (g.ready) return g.u >= 0.55 ? clipOf(g.ready) : (p.moving ? 'run' : 'ready');
+    if (p.active && g.pose) return g.u < 0.4 ? standName(clipOf(g.pose), poses) : (p.moving ? 'run' : 'ready');
+    if (g.ready) return g.u >= 0.55 ? standName(clipOf(g.ready), poses) : (p.moving ? 'run' : 'ready');
     if (p.moving && g.jump < 0.1) return 'run';
     return 'idle';
   }
@@ -903,8 +904,8 @@ function create(canvas, opts) {
   function standAnimFrame(e, p, g) {
     if (!e.anims) return null;
     var name = null, ph = 0;
-    if (p.active && g.pose && g.u < 0.5) { name = clipOf(g.pose); ph = 0.5 + 0.5 * (g.u / 0.5); }
-    else if (g.ready && !p.active) { name = clipOf(g.ready); ph = 0.5 * Math.max(0, (g.u - 0.15) / 0.85); }
+    if (p.active && g.pose && g.u < 0.5) { name = standName(clipOf(g.pose), e.anims); ph = 0.5 + 0.5 * (g.u / 0.5); }
+    else if (g.ready && !p.active) { name = standName(clipOf(g.ready), e.anims); ph = 0.5 * Math.max(0, (g.u - 0.15) / 0.85); }
     if (!name || !e.anims[name]) return null;
     var A = e.anims[name], n = A.frames.length, c = A.c;
     var idx = ph < 0.5 ? Math.round((ph / 0.5) * c) : c + Math.round(((ph - 0.5) / 0.5) * (n - 1 - c));
@@ -922,7 +923,7 @@ function create(canvas, opts) {
     var posed = false;
     var af = standAnimFrame(e, p, g);
     if (af) { e = af; posed = true; }
-    else if (e.poses) { var pn = standPose(p, g); var pe = e.poses[pn] || e.poses.idle; if (pe) { e = pe; posed = true; } }
+    else if (e.poses) { var pn = standPose(p, g, e.poses); var pe = e.poses[pn] || e.poses.idle; if (pe) { e = pe; posed = true; } }
     var m = e.m, W = e.W, H = e.H, s = g.s;
     var fx = m[0] * W, fy = m[1] * H, span = Math.max(0.2, m[3] - m[2]) * H;
     var bodyPx = STAND.body * s;
@@ -1063,23 +1064,51 @@ function create(canvas, opts) {
             [0.62, P({ spine: -0.05, uaN: 3.1, faN: 0.0, uaF: 3.1, faF: 0.0, thN: 0.1, shN: -0.3, thF: -0.1, shF: -0.3, root: 0.28 })],
             [0.82, P({ spine: 0.1, uaN: 2.0, faN: 0.4, uaF: 2.0, faF: 0.4, thN: 0.4, shN: -0.8, thF: -0.4, shF: -0.8, crouch: 0.2 })],
             [1,    P({ spine: 0.1, uaN: 1.4, faN: 1.4, uaF: 1.4, faF: 1.4, thN: 0.3, shN: -0.6, thF: -0.3, shF: -0.6, crouch: 0.14 })]],
+    // 서브 리시브(3차): 낮은 준비 → 앞발을 내디디며 두 팔을 모아 플랫폼을 공 쪽으로 → 일어선다. 공 IK 가 손을 공에 맞춘다
+    srecv: [[0,    P({ spine: 0.28, uaN: 0.8, faN: 0.9, uaF: 0.8, faF: 0.9, thN: 0.5, shN: -0.8, thF: -0.35, shF: -0.5, crouch: 0.2 })],
+            [0.35, P({ spine: 0.4, uaN: 0.95, faN: 0.3, uaF: 0.95, faF: 0.3, thN: 0.85, shN: -1.0, thF: -0.55, shF: -0.35, crouch: 0.3 })],
+            [0.5,  P({ spine: 0.5, uaN: 1.1, faN: 0.0, uaF: 1.1, faF: 0.0, thN: 0.95, shN: -1.15, thF: -0.65, shF: -0.3, crouch: 0.36 })],
+            [0.7,  P({ spine: 0.42, uaN: 1.3, faN: 0.0, uaF: 1.3, faF: 0.0, thN: 0.7, shN: -0.95, thF: -0.5, shF: -0.4, crouch: 0.28 })],
+            [1,    P({ spine: 0.22, uaN: 0.7, faN: 0.9, uaF: 0.7, faF: 0.9, thN: 0.45, shN: -0.7, thF: -0.35, shF: -0.5, crouch: 0.16 })]],
+    // 다이빙 디그(3차): 준비 → 몸을 앞으로 던져 팔을 뻗는다(몸통이 거의 수평, 다리는 뒤로) → 무릎으로 일어난다. 측면 세트로 그린다
+    dive:  [[0,    P({ spine: 0.35, uaN: 0.8, faN: 0.8, uaF: 0.8, faF: 0.8, thN: 0.55, shN: -0.9, thF: -0.4, shF: -0.5, crouch: 0.24 })],
+            [0.3,  P({ spine: 0.9, uaN: 1.6, faN: 0.2, uaF: 1.4, faF: 0.3, thN: 0.2, shN: -0.9, thF: -0.6, shF: -0.5, crouch: 0.5, head: -0.3 })],
+            [0.5,  P({ spine: 1.35, uaN: 1.9, faN: 0.0, uaF: 1.7, faF: 0.1, thN: -0.5, shN: -0.6, thF: -0.8, shF: -0.4, crouch: 0.72, head: -0.55 })],
+            [0.7,  P({ spine: 1.2, uaN: 1.7, faN: 0.3, uaF: 1.2, faF: 0.6, thN: -0.3, shN: -0.9, thF: -0.7, shF: -0.5, crouch: 0.62, head: -0.45 })],
+            [1,    P({ spine: 0.5, uaN: 0.9, faN: 0.6, uaF: 0.9, faF: 0.6, thN: 0.7, shN: -1.0, thF: -0.5, shF: -0.5, crouch: 0.35 })]],
+    // 착지(3차): 공중에서 내려온 직후 0.28초 — 무릎을 깊게 굽혀 충격을 받고 팔을 앞으로 내려 균형을 잡는다. 뒤는 블렌딩이 잇는다
+    land:  [[0,    P({ spine: 0.2, uaN: 0.9, faN: 0.3, uaF: 0.9, faF: 0.3, thN: 0.45, shN: -0.8, thF: -0.4, shF: -0.7, crouch: 0.24 })],
+            [0.35, P({ spine: 0.3, uaN: 0.7, faN: 0.5, uaF: 0.7, faF: 0.5, thN: 0.55, shN: -1.0, thF: -0.45, shF: -0.85, crouch: 0.32 })],
+            [1,    P({ spine: 0.1, uaN: 0.4, faN: 0.4, uaF: 0.4, faF: 0.4, thN: 0.2, shN: -0.4, thF: -0.2, shF: -0.3, crouch: 0.06 })]],
+    // 블로킹 점프(3차): 무릎을 깊게 접어 로딩 → 수직으로 솟아 두 팔을 네트 너머로 밀어 넣는다(손이 앞으로 기운다) → 착지
+    bjump: [[0,    P({ spine: 0.1, uaN: 1.4, faN: 1.4, uaF: 1.4, faF: 1.4, thN: 0.3, shN: -0.6, thF: -0.3, shF: -0.6, crouch: 0.14 })],
+            [0.25, P({ spine: 0.25, uaN: 0.6, faN: 1.2, uaF: 0.6, faF: 1.2, thN: 0.6, shN: -1.15, thF: -0.55, shF: -1.1, crouch: 0.34 })],
+            [0.42, P({ spine: -0.08, uaN: 3.2, faN: 0.15, uaF: 3.2, faF: 0.15, thN: 0.1, shN: -0.35, thF: -0.1, shF: -0.35, root: 0.34 })],
+            [0.6,  P({ spine: -0.1, uaN: 3.35, faN: 0.1, uaF: 3.3, faF: 0.1, thN: 0.1, shN: -0.3, thF: -0.1, shF: -0.3, root: 0.34 })],
+            [0.8,  P({ spine: 0.12, uaN: 2.4, faN: 0.3, uaF: 2.4, faF: 0.3, thN: 0.4, shN: -0.8, thF: -0.4, shF: -0.8, crouch: 0.22, root: 0.06 })],
+            [1,    P({ spine: 0.1, uaN: 1.4, faN: 1.4, uaF: 1.4, faF: 1.4, thN: 0.3, shN: -0.6, thF: -0.3, shF: -0.6, crouch: 0.14 })]],
     cheer: [[0,    P({ spine: -0.05, uaN: 2.6, faN: 0.4, uaF: 2.6, faF: 0.4, thN: 0.1, shN: -0.2, thF: -0.1, shF: -0.2, head: -0.2 })],
             [0.5,  P({ spine: -0.1, uaN: 2.9, faN: 0.2, uaF: 2.9, faF: 0.2, thN: 0.15, shN: -0.1, thF: -0.15, shF: -0.1, root: 0.1, head: -0.3 })],
             [1,    P({ spine: -0.05, uaN: 2.6, faN: 0.4, uaF: 2.6, faF: 0.4, thN: 0.1, shN: -0.2, thF: -0.1, shF: -0.2, head: -0.2 })]],
     sad:   [[0,    P({ spine: 0.35, uaN: 0.2, faN: 0.1, uaF: 0.2, faF: 0.1, thN: 0.1, shN: -0.3, thF: -0.1, shF: -0.3, crouch: 0.1, head: 0.5 })],
             [1,    P({ spine: 0.4, uaN: 0.2, faN: 0.1, uaF: 0.2, faF: 0.1, thN: 0.1, shN: -0.3, thF: -0.1, shF: -0.3, crouch: 0.12, head: 0.55 })]]
   };
-  function clipOf(type) {
+  /** 터치 종류 → 클립. dive 는 강타를 받아내는 디그(공이 멀리 떨어질 때) — buildFlights 가 터치에 표시한다. */
+  function clipOf(type, dive) {
     switch (type) {
       case EV.Serve: return 'serve';
-      case EV.Reception: case EV.Cover: case EV.FreeBall: return 'recv';
-      case EV.Dig: return 'dig';
+      case EV.Reception: return 'srecv';
+      case EV.Cover: case EV.FreeBall: return 'recv';
+      case EV.Dig: return dive ? 'dive' : 'dig';
       case EV.Set: return 'set';
       case EV.Attack: return 'spike';
-      case EV.Block: return 'block';
+      case EV.Block: return 'bjump';
       default: return 'ready';
     }
   }
+  /** 스탠디 포즈 세트(16.10)는 3차 클립 이름을 모른다 — 가장 가까운 옛 이름으로. */
+  var CLIP_ALIAS = { srecv: 'recv', dive: 'dig', bjump: 'block', land: 'idle' };
+  function standName(name, poses) { return (poses && poses[name]) ? name : (CLIP_ALIAS[name] || name); }
   /** 클립을 위상으로 샘플링(선형 보간, 구간마다 ease). */
   function samplePose(name, ph) {
     var kf = CLIPS[name] || CLIPS.idle;
@@ -1097,8 +1126,8 @@ function create(canvas, opts) {
       ph = Math.min(1, R.endHold / 0.75);
       return R.point.side === p.side ? ['cheer', 0.5 + 0.5 * Math.sin(ph * 6.28) * 0.5 + 0.25 * ph] : ['sad', ph];
     }
-    if (p.active && g.pose) return [clipOf(g.pose), 0.5 + 0.5 * Math.min(1, g.u / 0.45)];      // 방금 침: 마무리 절반
-    if (g.ready) return [clipOf(g.ready), 0.5 * g.u];                                            // 다음 차례: 예비 동작 절반
+    if (p.active && g.pose) return [clipOf(g.pose, p.dive), 0.5 + 0.5 * Math.min(1, g.u / 0.45)];      // 방금 침: 마무리 절반
+    if (g.ready) return [clipOf(g.ready, p.dive), 0.5 * g.u];                                            // 다음 차례: 예비 동작 절반
     if (p.moving && g.jump < 0.1) return ['run', ((R.clock * 2.4) + p.pos * 0.37 + p.side * 0.5) % 1];
     // 랠리 중 나머지: 후위(1·5·6)는 낮은 준비 자세, 전위(2·3·4)는 네트 앞에서 손을 든 블로킹 대기. 서브 전 숨 고르기(R.pre)만 편한 자세
     var live = R.flights.length > 0 && R.pre <= 0;
@@ -1114,8 +1143,9 @@ function create(canvas, opts) {
   // 앱이 R.rigParts(= window.BLOOM_RIG) 를 주면 코드 도형 대신 그림 파츠를 뼈대에 입힌다.
   // 파츠는 정면 A-포즈 한 장을 관절로 자른 것(tools/art-rig.py). 피벗(p)→끝(t) 축을 뼈 A→B 에 맞춰 회전·배율.
   // 저지·반바지는 회색 명도로 저장돼 있고 마스크(m)로 구단색을 곱한다(팀마다 한 번 만들어 캐시).
-  function rigSet(type) {
+  function rigSet(type, strict) {
     var src = R.rigParts; if (!src) return null;
+    if (strict && !src[type]) return null;                                 // 측면 세트처럼 "있으면 쓰고 없으면 말고"
     var t = src[type] ? type : (src.M ? 'M' : Object.keys(src)[0]); if (!t) return null;
     var e = R._rigImg[t]; if (e) return e.ready ? e : null;
     e = R._rigImg[t] = { ready: false, left: 0, parts: {}, bh: src[t].bh, sho: src[t].sho, hip: src[t].hip, neck: src[t].neck, tint: {} };
@@ -1183,19 +1213,31 @@ function create(canvas, opts) {
     var head = rigHead(p.pid);
     var type = head && head.type ? head.type : 'M';
     var U = RIG.body * s * (RIG.types[type] || 1);                        // 그림 공간 1 = U px
-    var RS = (quarter && rigSet(type + 'q')) || rigSet(type);
+    var cp = rigClip(p, g), target = samplePose(cp[0], cp[1]);
+    var key = p.side + '-' + p.pos, prev = R._rigPose[key];
+    var dt = prev ? Math.max(0, Math.min(0.2, R.clock - prev.t)) : 0;
+    // 착지(3차): 공중에서 내려온 뒤 0.28초는 착지 클립이 목표 자세를 덮는다(깊은 무릎 → 블렌딩이 원래 자세로 되돌린다)
+    var landT = prev ? prev.landT : undefined;
+    if (landT !== undefined && !R.ended) {
+      var la = (R.clock - landT) / 0.28;
+      if (la < 1) target = mixPose(target, samplePose('land', la), 1 - la * la); else landT = undefined;
+    }
+    // 4분의 3 측면 세트(있으면): 달리기·강타·서브·다이빙처럼 방향이 있는 동작. 정면↔측면은 0.15초 크로스페이드(3차)
+    var quarter = (cp[0] === 'run' || cp[0] === 'spike' || cp[0] === 'serve' || cp[0] === 'dive');
+    var RSf = rigSet(type), RSq = rigSet(type + 'q', true);               // 측면 세트는 그 체형 것이 있을 때만
+    var qw = quarter ? 1 : 0;
+    if (RSq && prev && prev.qw !== undefined) { var qs = dt / 0.15; qw = prev.qw + Math.max(-qs, Math.min(qs, qw - prev.qw)); }
+    if (!RSq) qw = 0;
+    var RS = qw >= 0.5 ? RSq : RSf;                                        // 뼈 길이는 더 많이 보이는 세트 기준
     var B = RS ? { thigh: RS.parts.thighR.l, shin: RS.parts.shinR.l, foot: RS.parts.footR.l, uarm: RS.parts.uarmR.l, farm: RS.parts.farmR.l, hand: RS.parts.handR.l,
                    torso: RS.parts.torso.l, pelvis: RS.parts.pelvis.l, hipX: RS.hip ? Math.abs(RS.hip[0]) : RIG.hipX * 0.6,
                    shoX: RS.sho ? Math.abs(RS.sho[0]) : RIG.shoX * 0.5, shoK: (RS.sho && RS.neck && RS.neck[1] > 0) ? Math.max(0.6, Math.min(0.98, RS.sho[1] / RS.neck[1])) : 0.86 }
                : { thigh: RIG.thigh, shin: RIG.shin, foot: 0.02, uarm: RIG.uarm, farm: RIG.farm, hand: 0.05, torso: RIG.shoulder - RIG.hip + 0.05, pelvis: 0.05,
                    hipX: RIG.hipX * 0.6, shoX: RIG.shoX * 0.5, shoK: (RIG.shoulder - RIG.hip) / (RIG.shoulder - RIG.hip + 0.05) };
     B.hip = RS ? (B.thigh + B.shin + B.foot) : RIG.hip;
-    var cp = rigClip(p, g), target = samplePose(cp[0], cp[1]);
-    // 4분의 3 측면 세트(있으면): 달리기·강타·서브처럼 방향이 있는 동작. 아직 안 실렸으면 정면으로
-    var quarter = (cp[0] === 'run' || cp[0] === 'spike' || cp[0] === 'serve');
     // 자세 블렌딩: 지난 프레임 자세에서 목표 자세로 초당 ~16 의 속도로 따라간다(클립 전환이 부드럽다)
-    var key = p.side + '-' + p.pos, prev = R._rigPose[key], pose = target;
-    if (prev && R.clock - prev.t < 0.5) { var dt = Math.max(0, Math.min(0.2, R.clock - prev.t)); pose = mixPose(prev.pose, target, 1 - Math.exp(-dt * 16)); }
+    var pose = target;
+    if (prev && R.clock - prev.t < 0.5) pose = mixPose(prev.pose, target, 1 - Math.exp(-dt * 16));
     var kit = (R.kitOf && R.kitOf(p.side)) || { primary: g.col, secondary: '#FFFFFF' };
     var skin = SKIN[head && head.skin ? head.skin : 'A'] || SKIN.A;
     var hairIdx = head && head.hair ? head.hair[0] : 0, hairStyle = head && head.hair ? head.hair[1] : 'short';
@@ -1203,9 +1245,9 @@ function create(canvas, opts) {
     var alpha = g.alpha;
     var rootUp = Math.max(pose.root, g.jump * 0.35);
     var crouch = Math.max(pose.crouch, (1 - g.crouch) * 0.6);
-    // 착지 먼지: 공중에서 땅으로 내려오는 순간
-    if (prev && prev.root > 0.08 && rootUp < 0.03) R._rigFx.push({ x: g.foot.sx, y: g.base.sy, t: R.clock, s: s });
-    R._rigPose[key] = { pose: pose, root: rootUp, t: R.clock };
+    // 착지 먼지 + 착지 클립 시작: 공중에서 땅으로 내려오는 순간
+    if (prev && prev.root > 0.08 && rootUp < 0.03) { R._rigFx.push({ x: g.foot.sx, y: g.base.sy, t: R.clock, s: s }); landT = R.clock; }
+    R._rigPose[key] = { pose: pose, root: rootUp, t: R.clock, qw: qw, landT: landT };
     var lineW = Math.max(0.8, RIG.line * U);
     var mirror = dirWant;
     var sq = p.tell ? 1 + 0.03 * Math.sin(R.clock * 9) : 1;
@@ -1286,36 +1328,46 @@ function create(canvas, opts) {
     if (RS) {
       // ---- 파츠 시트로 그린다: 먼 팔 → 먼 다리 → 가까운 다리 → 뒷머리 → 반바지 → 몸통 → 가까운 팔 (머리는 아래 공통)
       var PT = function (x, y) { return { x: X(x), y: Y(y) }; };
-      var partImg = function (name) { var pp = RS.parts[name]; return pp ? pp.img : null; };
-      var paintArm = function (A, sfx) {
-        var dirx = A.hx - A.ex, diry = A.hy - A.ey, dl = Math.sqrt(dirx * dirx + diry * diry) || 1;
-        var handTip = { x: A.hx + dirx / dl * B.hand, y: A.hy + diry / dl * B.hand };
-        drawPart(c, partImg('uarm' + sfx), RS.parts['uarm' + sfx], PT(A.sx, A.sy), PT(A.ex, A.ey));
-        drawPart(c, partImg('farm' + sfx), RS.parts['farm' + sfx], PT(A.ex, A.ey), PT(A.hx, A.hy));
-        drawPart(c, partImg('hand' + sfx), RS.parts['hand' + sfx], PT(A.hx, A.hy), PT(handTip.x, handTip.y));
+      var paintBody = function (SET, a) {                                  // 한 세트를 뼈대에 입힌다(a = 불투명도 배수)
+        c.globalAlpha = alpha * a;
+        var partImg = function (name) { var pp = SET.parts[name]; return pp ? pp.img : null; };
+        var paintArm = function (A, sfx) {
+          var dirx = A.hx - A.ex, diry = A.hy - A.ey, dl = Math.sqrt(dirx * dirx + diry * diry) || 1;
+          var handTip = { x: A.hx + dirx / dl * B.hand, y: A.hy + diry / dl * B.hand };
+          drawPart(c, partImg('uarm' + sfx), SET.parts['uarm' + sfx], PT(A.sx, A.sy), PT(A.ex, A.ey));
+          drawPart(c, partImg('farm' + sfx), SET.parts['farm' + sfx], PT(A.ex, A.ey), PT(A.hx, A.hy));
+          drawPart(c, partImg('hand' + sfx), SET.parts['hand' + sfx], PT(A.hx, A.hy), PT(handTip.x, handTip.y));
+        };
+        var paintLeg = function (L, sfx) {
+          drawPart(c, partImg('thigh' + sfx), SET.parts['thigh' + sfx], PT(L.hx, L.hy), PT(L.kx, L.ky));
+          drawPart(c, partImg('shin' + sfx), SET.parts['shin' + sfx], PT(L.kx, L.ky), PT(L.fx, L.fy));
+          // 발: 땅에 있으면 곧게, 공중이면 정강이 방향을 40% 따라간다
+          var shinAng = Math.atan2(L.fx - L.kx, -(L.fy - L.ky));
+          var fa = (rootUp > 0.02 ? shinAng * 0.4 : 0);
+          drawPart(c, partImg('foot' + sfx), SET.parts['foot' + sfx], PT(L.fx, L.fy), PT(L.fx + Math.sin(fa) * B.foot, L.fy - Math.cos(fa) * B.foot));
+        };
+        paintArm(armF, 'L');
+        paintLeg(legF, 'L');
+        paintLeg(legN, 'R');
+        drawHairBack(c, X, Y, headX, headY, headTilt, hairStyle, hair, U, p, cp);
+        var pelvisTip = { x: Math.sin(pose.spine * 0.25) * B.pelvis, y: hipY - Math.cos(pose.spine * 0.25) * B.pelvis };
+        drawPart(c, tintedPart(SET, 'pelvis', shade(kit.primary, -0.5)), SET.parts.pelvis, PT(0, hipY), PT(pelvisTip.x, pelvisTip.y));   // 반바지는 어둡게
+        drawPart(c, tintedPart(SET, 'torso', kit.primary, kit.secondary), SET.parts.torso, PT(0, hipY), PT(neckX, neckY));
+        if (p.jersey) {                                                    // 등번호(가슴)
+          c.save(); c.translate(X(shoX * 0.55), Y(hipY + torsoLen * 0.62)); c.rotate(pose.spine); c.scale(mirror, 1);
+          c.font = '700 ' + (0.09 * U) + 'px "Barlow Condensed",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = 'rgba(255,255,255,.95)'; c.fillText(String(p.jersey), 0, 0); c.restore();
+        }
+        paintArm(armN, 'R');
+        c.globalAlpha = alpha;
       };
-      var paintLeg = function (L, sfx) {
-        drawPart(c, partImg('thigh' + sfx), RS.parts['thigh' + sfx], PT(L.hx, L.hy), PT(L.kx, L.ky));
-        drawPart(c, partImg('shin' + sfx), RS.parts['shin' + sfx], PT(L.kx, L.ky), PT(L.fx, L.fy));
-        // 발: 땅에 있으면 곧게, 공중이면 정강이 방향을 40% 따라간다
-        var shinAng = Math.atan2(L.fx - L.kx, -(L.fy - L.ky));
-        var fa = (rootUp > 0.02 ? shinAng * 0.4 : 0);
-        drawPart(c, partImg('foot' + sfx), RS.parts['foot' + sfx], PT(L.fx, L.fy), PT(L.fx + Math.sin(fa) * B.foot, L.fy - Math.cos(fa) * B.foot));
-      };
-      paintArm(armF, 'L');
-      paintLeg(legF, 'L');
-      paintLeg(legN, 'R');
-      drawHairBack(c, X, Y, headX, headY, headTilt, hairStyle, hair, U, p, cp);
-      var pelvisTip = { x: Math.sin(pose.spine * 0.25) * B.pelvis, y: hipY - Math.cos(pose.spine * 0.25) * B.pelvis };
-      drawPart(c, tintedPart(RS, 'pelvis', shade(kit.primary, -0.5)), RS.parts.pelvis, PT(0, hipY), PT(pelvisTip.x, pelvisTip.y));   // 반바지는 어둡게
-      drawPart(c, tintedPart(RS, 'torso', kit.primary, kit.secondary), RS.parts.torso, PT(0, hipY), PT(neckX, neckY));
+      // 크로스페이드(3차): 전환 중에는 사라지는 세트를 온전히 그리고 그 위에 나타나는 세트를 qw 만큼 겹친다 — 몸이 비치지 않는다
+      if (qw <= 0.001 || !RSq) paintBody(RSf, 1);
+      else if (qw >= 0.999) paintBody(RSq, 1);
+      else if (quarter) { paintBody(RSf, 1); paintBody(RSq, qw); }
+      else { paintBody(RSq, 1); paintBody(RSf, 1 - qw); }
       R.debug.parts++;
-      if (p.jersey) {                                                      // 등번호(가슴)
-        c.save(); c.translate(X(shoX * 0.55), Y(hipY + torsoLen * 0.62)); c.rotate(pose.spine); c.scale(mirror, 1);
-        c.font = '700 ' + (0.09 * U) + 'px "Barlow Condensed",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.fillStyle = 'rgba(255,255,255,.95)'; c.fillText(String(p.jersey), 0, 0); c.restore();
-      }
-      paintArm(armN, 'R');
+      if (qw > 0.001 && qw < 0.999) R.debug.fades++; else if (qw >= 0.999) R.debug.quarters++;
       if (g.pose === EV.Attack && p.active && g.u < 0.14) {                 // 강타 스윙 잔상
         c.strokeStyle = 'rgba(255,255,255,' + (0.7 * (1 - g.u / 0.14)) + ')'; c.lineWidth = Math.max(1, 0.012 * U); c.lineCap = 'round';
         for (var si2 = 1; si2 <= 3; si2++) { var a0 = -0.4 - si2 * 0.28; c.beginPath(); c.arc(X(armN.sx), Y(armN.sy), (B.uarm + B.farm) * 0.95 * U, a0, a0 + 0.22); c.stroke(); }
@@ -1388,6 +1440,11 @@ function create(canvas, opts) {
     c.fillStyle = hair[0]; c.strokeStyle = stroke; c.lineWidth = lineW;
     c.beginPath(); c.ellipse(X(headX - 0.006), Y(headY + 0.014), hr * 1.1 * U, hry * 1.12 * U, 0, 0, 6.284); c.fill(); c.stroke();
     var face = head && head.face ? head.face : null;
+    // 표정(16.11): 랠리가 끝나면 이긴 쪽 환호·진 쪽 낙담, 공을 다루는 선수(방금 침·다음 차례·예고)는 집중, 나머지는 평상(카드 얼굴)
+    if (head && head.faces) {
+      var mood = (R.ended && R.point) ? (R.point.side === p.side ? 'cheer' : 'sad') : ((p.active || g.ready || p.tell) ? 'focus' : null);
+      if (mood && head.faces[mood]) { face = head.faces[mood]; R.debug.moods++; }
+    }
     if (face) {
       c.save(); c.translate(X(headX), Y(headY)); c.scale(mirror, 1);
       c.beginPath(); c.ellipse(0, 0, hr * 1.0 * U, hry * U, 0, 0, 6.284); c.closePath(); c.clip();
@@ -1504,6 +1561,20 @@ function rng(seed) { var s = seed >>> 0 || 1; return function () { s ^= s<<13; s
 function buildFlights(touches, point, seed) {
   var rand = rng(seed), out = [];
   if (!touches.length) return out;
+  // 다이빙 디그(3차 클립): 강타(속공·오픈·후위)를 받아내는 디그가 나쁜 품질(Poor·Error)이거나 셋 중 하나꼴로 — 접점을 사이드라인 쪽으로
+  // 0.8m 옮기고 낮춰서 선수가 몸을 던지게 한다. 매번 다시 계산해 난수 소비가 재생마다 같다(결정성).
+  for (var d = 0; d < touches.length; d++) {
+    var td = touches[d], pv = d > 0 ? touches[d - 1] : null;
+    td.dive = false; td.cp = null;
+    if (td.type === EV.Dig && pv && pv.type === EV.Attack && pv.attackType !== ATK.FreeBall && pv.attackType !== ATK.Dump) {
+      var q = td.quality | 0, r = rand();
+      td.dive = q >= 3 || (q === 2 && r < 0.35);
+      if (td.dive) {
+        var z0 = zonePos(td.side, td.pos), dxs = z0.x < COURT.width / 2 ? -0.8 : 0.8;
+        td.cp = { x: Math.max(0.5, Math.min(COURT.width - 0.5, z0.x + dxs)), y: z0.y, z: 0.35 };
+      }
+    }
+  }
   for (var i = 0; i < touches.length; i++) {
     var t = touches[i];
     var from = contactPoint(t);
@@ -1519,6 +1590,7 @@ function buildFlights(touches, point, seed) {
   return out;
 }
 function contactPoint(t) {
+  if (t.cp) return t.cp;                           // buildFlights 가 옮겨 둔 접점(다이빙 디그)
   var p = zonePos(t.side, t.pos), z = contactHeight(t);
   if (t.type === EV.Serve) {                       // 서브는 엔드라인 뒤
     return { x: p.x, y: t.side === 0 ? -0.6 : COURT.length + 0.6, z: z };

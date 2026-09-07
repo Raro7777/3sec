@@ -7,6 +7,7 @@
     python3 tools/art-rig.py --check         # 산출물 유무·rig.json 검사
 
 입력  art/02_gen/rig/apose_{type}.png   정면 A-포즈, 흰 배경, 마젠타 민소매 저지 · 시안 반바지 · 검은 무릎 보호대 · 흰 양말·신발
+      손은 손가락을 모은 자연스러운 손(편 손은 회전하면 갈고리처럼 보인다 — 3차, 원본을 편집 생성으로 손만 바꿨다)
 출력  art/05_shared/rig/{type}/{part}.webp   파츠 RGBA (저지·반바지 자리는 회색 명도만 남긴다 → 런타임이 구단색을 곱한다)
       art/05_shared/rig/{type}/{part}_m.webp 저지·반바지 마스크(알파) — torso·pelvis 만
       art/05_shared/rig/rig.json              타입별 파츠 목록: 파일, 피벗(관절 a), 끝(관절 b), 폭, 몸 높이 대비 길이
@@ -237,9 +238,11 @@ def process(t, height):
     for side in ('L', 'R'):
         sho, elb, wri, hand = J['sho' + side], J['elb' + side], J['wri' + side], J['hand' + side]
         w = limb_width(M, sho, hand, M['jersey']) * 1.5
-        save('uarm' + side, cut_part(rgba, M, sho, elb, w, ext, exclude=M['jersey_loose']), sho, elb)
-        save('farm' + side, cut_part(rgba, M, elb, wri, w, ext, exclude=M['jersey_loose']), elb, wri)
-        save('hand' + side, cut_part(rgba, M, wri, hand, w * 1.6, ext * 2, exclude=M['jersey_loose']), wri, hand)
+        # 팔은 저지·반바지 픽셀을 뺀다 — 손가락을 모은 손은 엉덩이 옆에 가까워 손 띠가 반바지를 물어 온다
+        cloth = M['jersey_loose'] | M['shorts_loose']
+        save('uarm' + side, cut_part(rgba, M, sho, elb, w, ext, exclude=cloth), sho, elb)
+        save('farm' + side, cut_part(rgba, M, elb, wri, w, ext, exclude=cloth), elb, wri)
+        save('hand' + side, cut_part(rgba, M, wri, hand, w * 1.6, ext * 2, exclude=cloth), wri, hand)
         hip, knee, ank, foot = J['hip' + side], J['knee' + side], J['ank' + side], J['foot' + side]
         half = (np.arange(Ww)[None, :] < J['pelvis'][0]) if side == 'L' else (np.arange(Ww)[None, :] >= J['pelvis'][0])
         half = np.broadcast_to(half, M['body'].shape)

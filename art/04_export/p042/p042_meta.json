@@ -1,81 +1,105 @@
 {
-  "pid": "p042",
-  "team": "t06",
-  "position": "L",
-  "rarity": "R",
-  "height_cm": 165,
-  "jersey": 2,
-  "skin": "A",
-  "hair": {
-    "style": "컬리 보브",
-    "color": "라이트 브라운",
-    "palette": 4
-  },
-  "eye": {
-    "shape": "tsurime",
-    "color": "블루"
-  },
-  "card": {
-    "face": {
-      "cx": 455,
-      "cy": 360,
-      "h": 240
-    }
-  },
-  "stand": {
-    "face_rect": {
-      "x": 464,
-      "y": 200,
-      "w": 512,
-      "h": 512
-    },
-    "has_hair_front": null
-  },
-  "gen": {
-    "model": null,
-    "lora": null,
-    "seed_card": null,
-    "seed_stand": null
-  },
-  "source": {
-    "file": "p042.png",
-    "size": "1760x2352",
-    "crop": {
-      "x": 177,
-      "y": 120,
-      "w": 1583,
-      "h": 2110
-    },
-    "imported": "2026-09-05"
-  },
-  "standee": {
-    "w": 281,
-    "h": 320,
-    "foot": [
-      0.906,
-      0.975
-    ],
-    "head": [
-      0.42,
-      0.122
-    ],
-    "top": 0.072,
-    "bottom": 0.909,
-    "facing": "F",
-    "facing_src": "manual",
-    "ball": "attached",
-    "ball_touch": 0.88,
-    "src": "p042_hero.webp",
-    "crop": [
-      101,
-      137,
-      799,
-      911
-    ],
-    "model": "isnet-general-use"
-  },
-  "standee_manual": {
-    "facing": "F",
-    "model": "isnet-general-use"
+ "pid": "p042",
+ "team": "t06",
+ "position": "L",
+ "rarity": "R",
+ "height_cm": 165,
+ "jersey": 2,
+ "skin": "A",
+ "hair": {
+  "style": "컬리 보브",
+  "color": "라이트 브라운",
+  "palette": 4
+ },
+ "eye": {
+  "shape": "tsurime",
+  "color": "블루"
+ },
+ "card": {
+  "face": {
+   "cx": 455,
+   "cy": 360,
+   "h": 240
   }
+ },
+ "stand": {
+  "face_rect": {
+   "x": 464,
+   "y": 200,
+   "w": 512,
+   "h": 512
+  },
+  "has_hair_front": null
+ },
+ "gen": {
+  "model": null,
+  "lora": null,
+  "seed_card": null,
+  "seed_stand": null
+ },
+ "source": {
+  "file": "p042.png",
+  "size": "1760x2352",
+  "crop": {
+   "x": 177,
+   "y": 120,
+   "w": 1583,
+   "h": 2110
+  },
+  "imported": "2026-09-05"
+ },
+ "standee": {
+  "w": 281,
+  "h": 320,
+  "foot": [
+   0.906,
+   0.975
+  ],
+  "head": [
+   0.42,
+   0.122
+  ],
+  "top": 0.072,
+  "bottom": 0.909,
+  "facing": "F",
+  "facing_src": "manual",
+  "ball": "attached",
+  "ball_touch": 0.88,
+  "src": "p042_hero.webp",
+  "crop": [
+   101,
+   137,
+   799,
+   911
+  ],
+  "model": "isnet-general-use"
+ },
+ "standee_manual": {
+  "facing": "F",
+  "model": "isnet-general-use"
+ },
+ "faces": {
+  "focus": {
+   "cx": 767,
+   "cy": 248,
+   "side": 522
+  },
+  "cheer": {
+   "cx": 256,
+   "cy": 755,
+   "side": 520
+  },
+  "sad": {
+   "cx": 768,
+   "cy": 755,
+   "side": 520
+  }
+ },
+ "faces_src": {
+  "file": "expr.png",
+  "size": [
+   1024,
+   1024
+  ]
+ }
 }

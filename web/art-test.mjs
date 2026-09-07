@@ -244,6 +244,10 @@ check(REAL_STAND ? '스탠디로 바꾸면 12명이 전원 스탠디로 선다(�
   !!figs && (REAL_STAND ? figs.standees === 12 : figs.standees === 0), `프레임당 스탠디 ${figs && figs.standees}명 · 실물 누끼 ${REAL_STAND}장`);
 check('리그 머리 정보(h)가 팩에 실린다', Array.isArray(packed.art[ART_PID]?.h) === false && Object.values(packed.art).some(e => Array.isArray(e.h) && e.h.length === 3),
   '실물 아트가 있을 때만 h 가 붙는다(검사용 pid 는 외형이 없다)');
+const REAL_FACES = REAL.filter(d => fs.existsSync(path.join(EXPORT, d, d + '_face_focus.webp'))).length;
+check(REAL_FACES ? '표정 얼굴(x: focus·cheer·sad)이 팩에 실린다' : '표정 얼굴이 없으면 x 가 없다',
+  REAL_FACES ? Object.values(packed.art).filter(e => e.x && e.x.focus && e.x.cheer && e.x.sad).length === REAL_FACES : !Object.values(packed.art).some(e => e.x),
+  `표정 시트 ${REAL_FACES}명`);
 
 // 7) 혼재 상태에서 화면이 정상인가
 check('가로 스크롤이 없다', await page.evaluate(() =>

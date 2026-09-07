@@ -2331,7 +2331,33 @@ function headInfo(p, onReady){
   var k = artKey(p), e = k ? window.BLOOM_ART[k] : null;
   var h = (e && e.h) || [2, 'short', 'A'];
   var hc = p.heightCm || 0, type = hc && hc <= 172 ? 'S' : (hc >= 182 ? 'L' : 'M');
-  return { face: faceBitmap(p, onReady), hair: [h[0], h[1]], skin: h[2], type: type };
+  return { face: faceBitmap(p, onReady), faces: exprBitmaps(p, onReady), hair: [h[0], h[1]], skin: h[2], type: type };
+}
+/** 표정 얼굴(art-pipeline 16.11): 선수 → {focus, cheer, sad} 96px 원형 비트맵(있는 것만). 카드에 표정 시트가 없는 선수(신인 풀)는 null. */
+var EXPR_BMP = {};   // artKey → {name: canvas} | 'pending'
+function exprBitmaps(p, onReady){
+  var k = artKey(p); if (!k) return null;
+  var e = window.BLOOM_ART[k]; if (!e || !e.x) return null;
+  var c = EXPR_BMP[k];
+  if (c) return c === 'pending' ? null : c;
+  EXPR_BMP[k] = 'pending';
+  var names = Object.keys(e.x), out = {}, left = names.length;
+  names.forEach(function(n){
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var cv = document.createElement('canvas'), S = 96; cv.width = S; cv.height = S;
+        var g = cv.getContext('2d');
+        g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.clip();
+        g.drawImage(img, 0, 0, S, S);
+        out[n] = cv;
+      } catch(err){}
+      if (--left === 0) { EXPR_BMP[k] = out; if (onReady) onReady(); }
+    };
+    img.onerror = function(){ if (--left === 0) { EXPR_BMP[k] = out; if (onReady) onReady(); } };
+    img.src = e.x[n];
+  });
+  return null;
 }
 // 검사용 훅(art-test 16.8): 스크립트 지역 변수라 밖에서 못 보므로 코트 렌더러만 내준다. 게임 로직은 쓰지 않는다.
 window.BLOOM_DEBUG = { court: function(){ return cr; }, match: function(){ return lastMatch; } };

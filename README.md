@@ -34,7 +34,8 @@ node data/validate.mjs            # 로스터 스키마·분포
 node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
 python3 tools/art-standee.py --check # 전신 42장 → 코트 스탠디(누끼) 유무·앵커 (만들기: --force, pillow·scipy·opencv·rembg 필요)
 python3 tools/art-rig.py --check     # 리그 파츠 시트 S/M/L — A-포즈 생성본을 관절로 자른 것 (만들기: 인자 없이)
-node web/art-test.mjs             # 아트 슬롯인 회귀 19건 (playwright 필요)
+python3 tools/art-faces.py --check   # 표정 얼굴 42명 × 3종(집중·환호·낙담) — 카드 참조 표정 시트에서 오린 것 (만들기: 인자 없이, 미리보기: --preview)
+node web/art-test.mjs             # 아트 슬롯인 회귀 20건 (playwright 필요)
 ```
 
 ## 문서

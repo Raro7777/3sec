@@ -199,6 +199,13 @@ export function collectArt(opts = {}) {
       if (fc && d) f = [fc.cx / d.w, fc.cy / d.h, fc.h / d.h].map(v => Math.round(v * 1000) / 1000);
       one.f = f;
     }
+    // 표정 얼굴(16.11): {pid}_face_{focus|cheer|sad}.webp 128px 정사각 → x = {name: uri}. 평상은 카드 얼굴(f)이다.
+    for (const name of ['focus', 'cheer', 'sad']) {
+      const hit = pick(dir, pid, 'face_' + name);
+      if (!hit) continue;
+      const { uri, bytes: n } = dataUri(hit);
+      (one.x = one.x || {})[name] = uri; bytes += n; row.face = (row.face || 0) + n;
+    }
     if (one.s) {
       // 스탠디 앵커 — 출력 이미지 기준 0~1. 렌더러는 이 값만 읽는다(발을 코트에 놓고 몸 구간을 같은 높이로 맞춘다).
       const st = meta && meta.standee;
