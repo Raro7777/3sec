@@ -166,7 +166,10 @@ function create(canvas, opts) {
     // 선수 이동(16.8): 현재 위치와 이번 비행 동안의 이동 계획. 공을 만질 선수는 접점으로 뛰어가고, 친 뒤에는 자리로 돌아온다.
     pp: {}, plan: {},
     // 박진감(16.9): 큰 득점·스킬 직전에 느려지고(예고), 때리는 순간 멈췄다가(히트스톱), 공은 빠르게 꽂힌다
-    hitstop: 0, pre: 0, anticip: 0
+    hitstop: 0, pre: 0, anticip: 0,
+    // 스탠디(16.8): 앱이 R.standOf(pid) 로 {img, m} 을 주면 실루엣 대신 누끼 그림을 세운다. _stand 는 pid 별 캐시(팀색 림 포함).
+    // lineup: [[{id,name,jersey}×6 홈], [×6 원정]] 자리 1~6 순 — 있으면 공을 안 만진 선수도 이름·그림을 얻는다.
+    standOf: null, _stand: {}, lineup: null, debug: { standees: 0 }
   };
   /** 득점 뒤 관중 반응 — 앱이 부른다. side 가 내 쪽이면 홈 관중이 들썩이고, 아니면 잠깐 조용해진다. */
   R.cheerFor = function (side) { R.cheer = { side: side, t: 0 }; };
@@ -393,6 +396,7 @@ function create(canvas, opts) {
 
     var ball = ballAt();
     // 쿼터뷰에서는 회전 깊이 순으로 그린다(먼 쪽 먼저).
+    R.debug.standees = 0;
     var ps = collectPlayers();
     ps.forEach(function (p) { p.d = depthOf(cam, p.x, p.y); });
     ps.sort(function (a, b) { return b.d - a.d; });
@@ -658,6 +662,7 @@ function create(canvas, opts) {
       var k = easeInOut((u - pl.d0) / Math.max(0.05, pl.d1 - pl.d0));
       var nx = pl.fx + (pl.tx - pl.fx) * k, ny = pl.fy + (pl.ty - pl.fy) * k;
       q.mv = Math.abs(nx - q.x) + Math.abs(ny - q.y);
+      q.dx = nx - q.x; q.dy = ny - q.y;          // 이동 방향(스탠디가 달리는 쪽을 보게)
       q.x = nx; q.y = ny;
     }
   }
@@ -680,10 +685,15 @@ function create(canvas, opts) {
         var isActor = !!(actor && actor.side === side && actor.pos === zone);
         var isNext = !!(nextT && nextT.side === side && nextT.pos === zone);
         var isTell = !!(tellT && tellT.side === side && tellT.pos === zone);
+        // 화면상 이동 방향(회전한 x축) — 스탠디 뒤집기·기울임용
+        var sd = (q && R.cam) ? (q.dx || 0) * R.cam.ct - (q.dy || 0) * R.cam.st : 0;
+        var lu = (R.lineup && R.lineup[side]) ? R.lineup[side][zone - 1] : null;   // 공을 안 만진 선수의 신원
         out.push({ side:side, pos:zone, x:p.x, y:p.y, moving: q ? q.mv > 0.004 : false, tell: isTell,
+                   dir: sd > 0.0005 ? 1 : (sd < -0.0005 ? -1 : 0),
                    tellSkill: isTell && hasSkill(tellT) ? tellT.skills[0].skillName : '',
-                   name: (isActor || isTell) && t ? t.name : '', jersey: t ? t.jersey : 0, pid: t ? t.playerId : null,
-                   known: !!t, active: isActor, type: isActor ? actor.type : 0,
+                   name: (isActor || isTell) && t ? t.name : '', jersey: t ? t.jersey : (lu ? lu.jersey : 0),
+                   pid: t ? t.playerId : (lu ? lu.id : null),
+                   known: !!t || !!lu, active: isActor, type: isActor ? actor.type : 0,
                    next: isNext ? nextT.type : 0, attackType: isActor ? actor.attackType : 0 });
       });
     });
@@ -736,6 +746,14 @@ function create(canvas, opts) {
     // 그림자 — 뛰면 작아진다
     c.fillStyle = 'rgba(4,10,16,' + (0.38 * Math.max(0.3, 1 - jump * 0.8)) + ')';
     c.beginPath(); c.ellipse(base.sx, base.sy, 0.34 * s, 0.14 * s, 0, 0, 6.284); c.fill();
+    // 스탠디(16.8): 누끼 그림이 있으면 실루엣 대신 세운다. 없는 선수(신인 풀 등)는 아래 실루엣 그대로.
+    var st = (p.pid !== null && p.pid !== undefined && R.standOf) ? standSprite(p.pid) : null;
+    if (st) {
+      drawStandee(c, cam, p, st, { u:u, pose:pose, ready:ready, jump:jump, crouch:crouch, base:base, foot:foot, s:s, col:col,
+                                    alpha: p.active ? 1 : (p.known ? 1 : 0.8) });
+      c.restore();
+      return;
+    }
     c.lineCap = 'round'; c.lineJoin = 'round';
     // 다리(반바지 색), 점프하면 모이고, 달리면 앞뒤로 엇갈린다
     var spread = (jump > 0.1 ? 0.10 : 0.20) * s;
@@ -823,6 +841,100 @@ function create(canvas, opts) {
       c.fillText(p.name, head.sx, ly);
     }
     c.restore();
+  }
+  // ---------------------------------------------------------------- 스탠디 (art-pipeline 16.8)
+  // 전신 누끼 한 장을 아크릴 스탠드처럼 발 앵커에 세운다. 그림 내용은 모르고 meta 앵커(m)만 읽는다:
+  //   m = [발x, 발y, 몸위, 몸아래, 머리x, 머리y, 방향(1=R,-1=L,0=모름)]  — 전부 이미지 기준 0~1
+  // 크기: 몸 구간(위~아래, 알파 질량 3%~97%)이 같은 화면 높이가 되게 맞춘다 → 포즈가 달라도 선수 크기가 비슷하다.
+  // 방향: 기본은 네트 쪽을 보고, 달리는 중이면 달리는 쪽. 자세는 스쿼시·스트레치·기울임으로만 표현한다(그림은 한 장뿐).
+  var STAND = { body: 2.35, rim: 0.055, lean: 0.14 };
+  var STAND_DEFAULT = [0.5, 1.0, 0.03, 0.97, 0.5, 0.08, 0];
+  function standSprite(pid) {
+    var e = R._stand[pid];
+    if (e) return e;
+    var got = R.standOf(pid); if (!got || !got.img) return null;
+    var img = got.img, W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    if (!W || !H) return null;
+    // ghost: 그림이 없는 선수의 대역 — 윤곽만 팀색으로 칠하고 얼굴을 얹는다(앱이 기증자 스탠디를 골라 준다)
+    e = { img: img, W: W, H: H, m: (got.m && got.m.length >= 7) ? got.m : STAND_DEFAULT, rim: {}, ghost: !!got.ghost };
+    R._stand[pid] = e;
+    return e;
+  }
+  /** 팀색으로 칠한 실루엣(림용) — 색마다 한 번만 만든다. */
+  function rimOf(e, col) {
+    var cv = e.rim[col]; if (cv) return cv;
+    cv = document.createElement('canvas'); cv.width = e.W; cv.height = e.H;
+    var g = cv.getContext('2d'); g.drawImage(e.img, 0, 0);
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, e.W, e.H);
+    e.rim[col] = cv; return cv;
+  }
+  function drawStandee(c, cam, p, e, g) {
+    var m = e.m, W = e.W, H = e.H, s = g.s;
+    var fx = m[0] * W, fy = m[1] * H, span = Math.max(0.2, m[3] - m[2]) * H;
+    var bodyPx = STAND.body * s;
+    var k = bodyPx / span;
+    var toNet = project(cam, p.x, p.y + (p.side === 0 ? 1 : -1), 0).sx - g.base.sx;
+    var want = (p.moving && p.dir) ? p.dir : (toNet >= 0 ? 1 : -1);
+    var flip = (m[6] || 1) === want ? 1 : -1;
+    var sx = 1, sy = 1, lean = 0, ph = p.pos * 1.3 + p.side * 2;
+    if (g.pose === EV.Attack && g.u < 0.2) { var pk = 1 + 0.12 * (1 - g.u / 0.2); sx *= pk; sy *= pk; }   // 타격 펀치
+    if (g.jump > 0.05) { sy *= 1 + 0.10 * g.jump; sx *= 1 - 0.06 * g.jump; }                              // 점프 스트레치
+    if (g.crouch < 0.85) { sy *= 0.86; sx *= 1.08; } else if (g.crouch < 0.95) { sy *= 0.93; sx *= 1.04; }   // 리시브 스쿼시
+    if (p.moving && g.jump < 0.1) {                                                                       // 달리기: 기울임 + 들썩임
+      lean = (p.dir || want) * STAND.lean;
+      var bob = Math.abs(Math.sin(R.clock * 12 + ph)); sy *= 1 - 0.03 * bob; sx *= 1 + 0.02 * bob;
+    } else if (!p.active && !g.ready) { var br = Math.sin(R.clock * 1.7 + ph) * 0.012; sy *= 1 + br; sx *= 1 - br * 0.5; }   // 숨쉬기
+    if (p.tell) { var tp = 1 + 0.03 * Math.sin(R.clock * 9); sx *= tp; sy *= tp; }
+    c.save();
+    c.translate(g.foot.sx, g.foot.sy);
+    c.rotate(lean);
+    c.scale(k * sx * flip, k * sy);
+    c.translate(-fx, -fy);
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    // 팀색 림 — 색칠한 실루엣을 여덟 방향으로 살짝 밀어 그린다(아크릴 스탠드 테두리 + 팀 구분)
+    var rim = rimOf(e, g.col), r = Math.max(1.2, STAND.rim * s) / k, rd = r * 0.7;
+    c.globalAlpha = g.alpha * (p.active || p.tell ? 0.95 : 0.75);
+    c.drawImage(rim, -r, 0); c.drawImage(rim, r, 0); c.drawImage(rim, 0, -r); c.drawImage(rim, 0, r);
+    c.drawImage(rim, -rd, -rd); c.drawImage(rim, rd, -rd); c.drawImage(rim, -rd, rd); c.drawImage(rim, rd, rd);
+    c.globalAlpha = g.alpha;
+    if (e.ghost) c.drawImage(rimOf(e, shade(g.col, -0.55)), 0, 0);   // 대역: 어두운 팀색 윤곽
+    else c.drawImage(e.img, 0, 0);
+    // 강조 링(데뷔전 선수 등) — 머리 둘레
+    var mk = R.markOf ? R.markOf(p.pid) : null;
+    if (mk) {
+      var hr = span * 0.11;
+      c.beginPath(); c.arc(m[4] * W, m[5] * H + hr * 0.6, hr, 0, 6.284);
+      c.lineWidth = Math.max(1.5, 0.07 * s) / k; c.strokeStyle = mk; c.stroke();
+    }
+    c.restore();
+    R.debug.standees++;
+    // 이름·스킬 예고 — 화면 좌표로 머리 위에
+    var hx = (m[4] * W - fx) * k * sx * flip, hy = (m[5] * H - fy) * k * sy;
+    var cl = Math.cos(lean), sl = Math.sin(lean);
+    var headX = g.foot.sx + hx * cl - hy * sl, headY = g.foot.sy + hx * sl + hy * cl;
+    var topY = Math.min(headY, g.foot.sy - (fy - m[2] * H) * k * sy);
+    if (e.ghost) {                                                       // 대역: 머리 자리에 얼굴(카드에서 오린 원형)
+      var face = R.faceOf ? R.faceOf(p.pid) : null;
+      var fr = Math.max(6, 0.36 * s), fcy = headY + fr * 0.55;
+      c.globalAlpha = g.alpha;
+      if (face) {
+        c.save(); c.beginPath(); c.arc(headX, fcy, fr, 0, 6.284); c.closePath(); c.clip();
+        c.drawImage(face, headX - fr, fcy - fr, fr * 2, fr * 2); c.restore();
+      } else { c.fillStyle = '#F1D6C2'; c.beginPath(); c.arc(headX, fcy, fr * 0.7, 0, 6.284); c.fill(); }
+      c.beginPath(); c.arc(headX, fcy, fr, 0, 6.284); c.lineWidth = Math.max(1.5, 0.06 * s); c.strokeStyle = g.col; c.stroke();
+      topY = Math.min(topY, fcy - fr);
+    }
+    c.globalAlpha = 1;
+    if (p.tell && p.tellSkill) {
+      c.font = '700 12px "Gothic A1",sans-serif'; c.textAlign = 'center';
+      c.strokeStyle = 'rgba(6,14,22,.9)'; c.lineWidth = 3.5; c.strokeText(p.tellSkill, headX, topY - 20);
+      c.fillStyle = '#E9B949'; c.fillText(p.tellSkill, headX, topY - 20);
+    }
+    if ((p.active || p.tell) && p.name) {
+      c.font = '700 11px "Gothic A1",sans-serif'; c.textAlign = 'center';
+      c.fillStyle = 'rgba(233,240,247,.96)'; c.strokeStyle = 'rgba(6,14,22,.85)'; c.lineWidth = 3;
+      c.strokeText(p.name, headX, topY - 6); c.fillText(p.name, headX, topY - 6);
+    }
   }
   function drawShadow(c, cam, b) {
     var g = project(cam, b.x, b.y, 0);

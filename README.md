@@ -32,7 +32,8 @@ node web/season-check.mjs --app   # 같은 목표를 앱 경제(시작 티켓·�
 node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건 (약 60초)
 node data/validate.mjs            # 로스터 스키마·분포
 node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
-node web/art-test.mjs             # 아트 슬롯인 회귀 12건 (playwright 필요)
+python3 tools/art-standee.py --check # 전신 42장 → 코트 스탠디(누끼) 유무·앵커 (만들기: --force, pillow·scipy·opencv·rembg 필요)
+node web/art-test.mjs             # 아트 슬롯인 회귀 16건 (playwright 필요)
 ```
 
 ## 문서

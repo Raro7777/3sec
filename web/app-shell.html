@@ -726,6 +726,36 @@ function faceBitmap(p, onReady){
   img.src = e.card;
   return null;
 }
+/**
+ * 코트 스탠디(art-pipeline 16.8): 선수 → {img, m[, ghost]}. 누끼 그림을 한 번 디코드해 두고 렌더러에 넘긴다.
+ * 누끼가 없는 선수(연습생·신인 풀은 카드만 있다)는 **대역 실루엣**: 정해진 기증자 스탠디의 윤곽을 팀색으로 칠하고 얼굴만 얹는다(ghost).
+ * 그래야 코트 위 12명이 같은 크기·같은 어법으로 선다. 대역은 선수 id 로 결정적으로 고른다(같은 선수는 늘 같은 윤곽).
+ */
+var STAND_BMP = {};
+var STAND_DONORS = ['p029', 'p012', 'p024', 'p025', 'p020'];   // 공이 없고 자세가 또렷한 스탠디
+function standDecode(k, onReady){
+  var c = STAND_BMP[k];
+  if (c) return c === 'pending' ? null : c;
+  var e = window.BLOOM_ART[k]; if (!e || !e.s) return null;
+  STAND_BMP[k] = 'pending';
+  var img = new Image();
+  img.onload = function(){ STAND_BMP[k] = { img: img, m: e.sm || null }; if (onReady) onReady(); };
+  img.onerror = function(){ delete STAND_BMP[k]; };
+  img.src = e.s;
+  return null;
+}
+function standBitmap(p, onReady){
+  var A = window.BLOOM_ART; if (!A || !p) return null;
+  var k = artKey(p);
+  if (k && A[k] && A[k].s) return standDecode(k, onReady);
+  // 대역: 기증자 중 누끼가 있는 것만, id 해시로 고정
+  var pool = STAND_DONORS.filter(function(d){ return A[d] && A[d].s; });
+  if (!pool.length) return null;
+  var id = String(p.id || p.cardId || ''), h = 0;
+  for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  var d = standDecode(pool[h % pool.length], onReady);
+  return d ? { img: d.img, m: d.m, ghost: true } : null;
+}
 var RARK = ['N','R','SR','SSR'];
 function clubOf(id){ return E.CLUBS.filter(function(x){ return x.id === id; })[0] || null; }
 function cardOvr(c){ var o = 0; for (var i = 0; i < 10; i++) o += c.stats[i]; return o / 10; }
@@ -2231,7 +2261,11 @@ function buildRallies(m){
   var hs = 0, as = 0;
   m.events.forEach(function(e){
     if (e.type === 18) { pendingTO = { side:e.side, streak:e.value }; return; }   // 작전타임 → 다음 랠리 앞에 띄운다
-    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[], timeout: pendingTO }; pendingTO = null; rallies.push(cur); return; }
+    if (e.type === 2) {
+      // 코트 위 12명(자리 1~6 순) — 공을 안 만진 선수도 스탠디로 세운다(art-pipeline 16.8)
+      var lineup = e.lineup ? e.lineup.map(function(ids){ return ids.map(function(id){ var q = m.ctx.players[id]; return q ? { id:id, name:q.name, jersey:q.jersey } : { id:id, name:'', jersey:0 }; }); }) : null;
+      cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[], timeout: pendingTO, lineup: lineup }; pendingTO = null; rallies.push(cur); return;
+    }
     if (!cur) return;
     if (e.type === 11) {
       cur.point = { side:e.side, reason:e.reason, clutch:e.clutch, home:e.homeScore, away:e.awayScore };
@@ -2254,6 +2288,8 @@ function buildRallies(m){
 
 var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
+// 검사용 훅(art-test 16.8): 스크립트 지역 변수라 밖에서 못 보므로 코트 렌더러만 내준다. 게임 로직은 쓰지 않는다.
+window.BLOOM_DEBUG = { court: function(){ return cr; } };
 
 function startViewer(){
   mv = { rallies: buildRallies(lastMatch), ri:0, ti:-1, playing:true, speed:1, done:false };
@@ -2275,6 +2311,8 @@ function mountCourt(){
   // 코트 얼굴 마커(art-pipeline 16.2): 선수 id → 64px 원형 비트맵. 처음 디코드가 끝나면 정지 프레임을 한 번 다시 그린다.
   var players = m.ctx.players;
   cr.faceOf = function(pid){ var p = players[pid]; return p ? faceBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
+  // 스탠디(16.8): 누끼 전신이 있는 선수는 실루엣 대신 그림으로 선다
+  cr.standOf = function(pid){ var p = players[pid]; return p ? standBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
   var debut = debutSet(m);
   cr.markOf = function(pid){ return debut[pid] ? '#E9B949' : null; };   // 데뷔전 선수는 금색 링
   loadRally();
@@ -2296,6 +2334,7 @@ function loadRally(){
   if (!r) { finishViewer(); return; }
   mv.ti = 0;
   cr.mySide = mySide;
+  cr.lineup = r.lineup || null;
   cr.setRally(r.touches, r.point, 1000 + mv.ri * 7 + (lastMatch.seed|0));
   cr.onEnd = function(){ nextRally(); };
   paintLive(0);

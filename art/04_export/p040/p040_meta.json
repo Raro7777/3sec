@@ -47,5 +47,34 @@
       "h": 1880
     },
     "imported": "2026-09-05"
+  },
+  "standee": {
+    "w": 138,
+    "h": 320,
+    "foot": [
+      0.724,
+      0.975
+    ],
+    "head": [
+      0.536,
+      0.122
+    ],
+    "top": 0.072,
+    "bottom": 0.931,
+    "facing": "F",
+    "facing_src": "manual",
+    "ball": "cut",
+    "ball_touch": 0.32,
+    "src": "p040_hero.webp",
+    "crop": [
+      216,
+      45,
+      491,
+      1137
+    ],
+    "model": "isnet-anime"
+  },
+  "standee_manual": {
+    "facing": "F"
   }
 }

@@ -47,5 +47,61 @@
       "h": 1375
     },
     "imported": "2026-09-05"
+  },
+  "standee": {
+    "w": 173,
+    "h": 320,
+    "foot": [
+      0.315,
+      0.975
+    ],
+    "head": [
+      0.295,
+      0.091
+    ],
+    "top": 0.041,
+    "bottom": 0.925,
+    "facing": "F",
+    "facing_src": "manual",
+    "ball": "none",
+    "ball_touch": null,
+    "src": "p006_hero.webp",
+    "crop": [
+      286,
+      59,
+      614,
+      1133
+    ],
+    "model": "isnet-general-use"
+  },
+  "standee_manual": {
+    "facing": "F",
+    "model": "isnet-general-use",
+    "cuts": [
+      [
+        0,
+        360,
+        312,
+        65
+      ],
+      [
+        540,
+        360,
+        230,
+        65
+      ],
+      [
+        0,
+        750,
+        330,
+        70
+      ],
+      [
+        532,
+        750,
+        240,
+        70
+      ]
+    ]
   }
 }

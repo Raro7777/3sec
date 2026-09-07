@@ -10,7 +10,9 @@
  * 규칙(art-style-guide 4.9 · art-pipeline 15.2):
  *   art/04_export/{pid}/{pid}_card.{webp,png}   — 카드 일러스트 3:4
  *   art/04_export/{pid}/{pid}_hero.{webp,png}   — 전신 3:4 (선수 상세)
- *   art/04_export/{pid}/{pid}_meta.json         — 얼굴 좌표(card.face). 원형 초상은 **카드에서 오린다** —
+ *   art/04_export/{pid}/{pid}_stand.webp        — 코트 스탠디: 전신에서 배경을 지운 RGBA 누끼, 세로 320px
+ *                                                  (tools/art-standee.py 가 hero 에서 만든다 · art-pipeline 16.8)
+ *   art/04_export/{pid}/{pid}_meta.json         — 얼굴 좌표(card.face) + 스탠디 앵커(standee). 원형 초상은 **카드에서 오린다** —
  *                                                  별도 썸네일 파일을 두지 않는다(42명 × 32KB = 1.3MB 절약).
  *   webp 가 있으면 webp 를 쓴다(같은 화질에 png 의 30~40%).
  *   {pid} 는 선수 id(p001~) 또는 신인 외형 풀 id(rk01~) 다.
@@ -41,7 +43,11 @@ const PREFER = ['.webp', '.png', '.jpg', '.jpeg'];
 export const SPEC = {
   card:  { ratio: 3 / 4, tol: 0.02, ideal: '2048×2732', what: '카드 일러스트(미디엄 샷)' },
   hero:  { ratio: 3 / 4, tol: 0.04, ideal: '1600×2133', what: '전신 일러스트' },
+  // 스탠디는 몸 상자로 잘라 비율이 제각각이다 — 세로만 본다. 코트에서 최대 ~160px(2x)로 그려지므로 320 이면 충분하다.
+  stand: { height: 320, what: '코트 스탠디(누끼)' },
 };
+/** 스탠디 앵커 기본값 — meta.standee 가 없을 때. [발x, 발y, 몸위, 몸아래, 머리x, 머리y, 방향(1=R,-1=L,0=모름)] */
+export const STAND_DEFAULT = [0.5, 1.0, 0.03, 0.97, 0.5, 0.08, 0];
 /** 얼굴 상자 기본값(4.2 규격: 얼굴 중심 (50%, 30%) · 머리 높이 20%). meta.json 이 없을 때만 쓴다. */
 export const FACE_DEFAULT = [0.5, 0.30, 0.20];
 
@@ -85,33 +91,49 @@ export function collectArt() {
   for (const pid of fs.readdirSync(EXPORT_DIR).sort()) {
     const dir = path.join(EXPORT_DIR, pid);
     if (!fs.statSync(dir).isDirectory()) continue;
-    const row = { pid, card: 0, hero: 0, dim: {} };
+    const row = { pid, card: 0, hero: 0, stand: 0, dim: {} };
     const one = {};
-    for (const kind of ['card', 'hero']) {
+    const metaFile = path.join(dir, `${pid}_meta.json`);
+    let meta = null;
+    if (fs.existsSync(metaFile)) {
+      try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); }
+      catch { problems.push(`${pid}: meta.json 을 읽을 수 없습니다`); }
+    }
+    for (const kind of ['card', 'hero', 'stand']) {
       const hit = pick(dir, pid, kind);
       if (!hit) continue;
       const { uri, bytes: n, dim } = dataUri(hit);
-      one[kind] = uri;
+      one[kind === 'stand' ? 's' : kind] = uri;
       row[kind] = n;
       row.dim[kind] = dim;
       bytes += n;
       const spec = SPEC[kind];
       if (!dim) problems.push(`${pid} ${spec.what}: 크기를 읽을 수 없습니다(${path.basename(hit.file)})`);
-      else if (Math.abs(dim.w / dim.h - spec.ratio) > spec.tol)
+      else if (spec.ratio !== undefined && Math.abs(dim.w / dim.h - spec.ratio) > spec.tol)
         problems.push(`${pid} ${spec.what}: 비율 ${dim.w}×${dim.h} — 규격은 ${spec.ideal} (${spec.ratio === 1 ? '1:1' : '3:4'})`);
+      else if (spec.height !== undefined && dim.h !== spec.height)
+        problems.push(`${pid} ${spec.what}: 세로 ${dim.h}px — 규격은 ${spec.height}px (tools/art-standee.py)`);
     }
     if (one.card) {
       // 얼굴 상자 — 카드 좌표계의 비율 [cx, cy, h]. 원형 초상은 이 상자를 2.2×h 정사각형으로 오려 만든다(4.3).
-      const metaFile = path.join(dir, `${pid}_meta.json`);
       let f = FACE_DEFAULT;
-      if (fs.existsSync(metaFile)) {
-        try {
-          const m = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-          const fc = m.card && m.card.face, d = row.dim.card;
-          if (fc && d) f = [fc.cx / d.w, fc.cy / d.h, fc.h / d.h].map(v => Math.round(v * 1000) / 1000);
-        } catch { problems.push(`${pid}: meta.json 을 읽을 수 없습니다`); }
-      }
+      const fc = meta && meta.card && meta.card.face, d = row.dim.card;
+      if (fc && d) f = [fc.cx / d.w, fc.cy / d.h, fc.h / d.h].map(v => Math.round(v * 1000) / 1000);
       one.f = f;
+    }
+    if (one.s) {
+      // 스탠디 앵커 — 출력 이미지 기준 0~1. 렌더러는 이 값만 읽는다(발을 코트에 놓고 몸 구간을 같은 높이로 맞춘다).
+      const st = meta && meta.standee;
+      if (st && st.foot && st.head) {
+        // 방향은 사람이 적은 값(standee_manual.facing)이 도구 추정보다 우선한다 — 다시 만들지 않아도 바로 반영
+        const man = meta.standee_manual || {};
+        const facing = man.facing || st.facing;
+        const dir3 = facing === 'R' ? 1 : facing === 'L' ? -1 : 0;
+        one.sm = [st.foot[0], st.foot[1], st.top, st.bottom, st.head[0], st.head[1], dir3];
+      } else {
+        one.sm = STAND_DEFAULT.slice();
+        problems.push(`${pid} 스탠디: meta.standee 가 없습니다 — python3 tools/art-standee.py --ids ${pid} --force`);
+      }
     }
     if (Object.keys(one).length) { art[pid] = one; entries.push(row); }
     else problems.push(`${pid}: 폴더는 있는데 ${PREFER.join('/')} 파일이 없습니다`);
@@ -132,14 +154,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
   const dim = d => d ? `${d.w}×${d.h}` : '?';
-  console.log('| id | 카드 | 크기 | 전신 | 크기 | 얼굴 |');
-  console.log('|---|---|---|---|---|---|');
+  console.log('| id | 카드 | 크기 | 전신 | 크기 | 스탠디 | 크기 | 얼굴 |');
+  console.log('|---|---|---|---|---|---|---|---|');
   for (const e of entries)
-    console.log(`| ${e.pid} | ${kb(e.card)} | ${dim(e.dim.card)} | ${kb(e.hero)} | ${dim(e.dim.hero)} | ${(art[e.pid].f || []).join(',')} |`);
+    console.log(`| ${e.pid} | ${kb(e.card)} | ${dim(e.dim.card)} | ${kb(e.hero)} | ${dim(e.dim.hero)} | ${kb(e.stand)} | ${dim(e.dim.stand)} | ${(art[e.pid].f || []).join(',')} |`);
   const mb = bytes / 1024 / 1024;
   const launch = entries.filter(e => /^p\d/.test(e.pid)), pool = entries.filter(e => /^rk/.test(e.pid));
-  const sum = list => list.reduce((a, e) => a + e.card + e.hero, 0) / 1024 / 1024;
+  const sum = list => list.reduce((a, e) => a + e.card + e.hero + e.stand, 0) / 1024 / 1024;
+  const standN = entries.filter(e => e.stand).length, standMb = entries.reduce((a, e) => a + e.stand, 0) / 1024 / 1024;
   console.log(`\n선수 ${launch.length}명 ${sum(launch).toFixed(2)}MB · 신인 풀 ${pool.length}종 ${sum(pool).toFixed(2)}MB` +
+    ` · 스탠디 ${standN}장 ${standMb.toFixed(2)}MB` +
     ` · 합계 ${mb.toFixed(2)}MB / 예산 ${ART_BUDGET_MB}MB` + (mb > ART_BUDGET_MB ? ' — **초과**' : ''));
   if (problems.length) {
     console.log(`\n## 규격 확인 — ${problems.length}건\n`);

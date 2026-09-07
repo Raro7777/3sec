@@ -178,7 +178,11 @@ class MatchSim {
     receiving.stats.receiveRallies++;
     if (clutch) { serving.stats.clutchRallies++; receiving.stats.clutchRallies++; }
 
-    if (this.log.enabled) this.emit(EV.RallyStart, serving, serving.playerAt(1), 1, Q.None, OUT.None, ATK.None, 0, serving.rotationIndex, clutch);
+    if (this.log.enabled) {
+      const rs = this.emit(EV.RallyStart, serving, serving.playerAt(1), 1, Q.None, OUT.None, ATK.None, 0, serving.rotationIndex, clutch);
+      // 코트 위 12명 스냅샷(리베로 교대 반영, 자리 1~6 순) — 화면이 공을 안 만진 선수도 그리기 위한 것. 판정과 무관.
+      if (rs !== null) rs.lineup = [this.home.onCourt.map(p => p.id), this.away.onCourt.map(p => p.id)];
+    }
 
     // ---------------- 1. 서브 ----------------
     const server = serving.playerAt(1);

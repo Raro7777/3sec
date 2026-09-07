@@ -47,5 +47,35 @@
       "h": 2110
     },
     "imported": "2026-09-05"
+  },
+  "standee": {
+    "w": 281,
+    "h": 320,
+    "foot": [
+      0.906,
+      0.975
+    ],
+    "head": [
+      0.42,
+      0.122
+    ],
+    "top": 0.072,
+    "bottom": 0.909,
+    "facing": "F",
+    "facing_src": "manual",
+    "ball": "attached",
+    "ball_touch": 0.88,
+    "src": "p042_hero.webp",
+    "crop": [
+      101,
+      137,
+      799,
+      911
+    ],
+    "model": "isnet-general-use"
+  },
+  "standee_manual": {
+    "facing": "F",
+    "model": "isnet-general-use"
   }
 }

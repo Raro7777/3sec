@@ -122,8 +122,11 @@ function cleanup() {
 process.on('exit', () => { if (!KEEP) cleanup(); });
 
 // 1) 검사용 아트를 넣는다 — 눈에 확 띄는 단색. 썸네일 파일은 없다 — 초상은 카드에서 오린다(art-pipeline 15.2).
+//    스탠디(16.8)는 세로 320 규격의 누끼 + meta.standee 앵커 — 도구(tools/art-standee.py)가 쓰는 형태 그대로 흉내 낸다.
 const CARD = png(60, 80, [40, 200, 230]);
-for (const pid of PIDS) put(pid, 'card', '.png', CARD);
+const STAND = png(120, 320, [230, 120, 40]);
+const META = JSON.stringify({ standee: { w: 120, h: 320, foot: [0.5, 0.99], head: [0.5, 0.06], top: 0.03, bottom: 0.97, facing: 'R', ball: 'none' } });
+for (const pid of PIDS) { put(pid, 'card', '.png', CARD); put(pid, 'stand', '.png', STAND); put(pid, 'meta', '.json', Buffer.from(META)); }
 
 // 2) art-pack 이 잡아내는가
 const { collectArt } = await import('./art-pack.mjs?t=' + Date.now());
@@ -132,6 +135,11 @@ check('art-pack 이 넣은 아트를 전부 찾는다', Object.keys(packed.art).
   Object.keys(packed.art).length + '/' + (PIDS.length + REAL.length) + (REAL.length ? ` (실물 ${REAL.length}명 포함)` : ''));
 check('카드와 얼굴 상자(f) 둘 다 잡힌다', !!packed.art[ART_PID]?.card && Array.isArray(packed.art[ART_PID]?.f) && packed.art[ART_PID].f.length === 3);
 check('data: URI 로 만든다', /^data:image\/png;base64,/.test(packed.art[ART_PID]?.card || ''));
+// 스탠디: 누끼(s)와 앵커 7칸(sm = 발x·발y·몸위·몸아래·머리x·머리y·방향)
+const sm = packed.art[ART_PID]?.sm;
+check('스탠디 누끼(s)와 앵커(sm) 가 잡힌다', /^data:image\/png;base64,/.test(packed.art[ART_PID]?.s || '') && Array.isArray(sm) && sm.length === 7 && sm[6] === 1,
+  JSON.stringify(sm));
+check('스탠디 규격 위반이 없다(세로 320)', !packed.problems.some(p => p.startsWith(ART_PID)), packed.problems.filter(p => p.startsWith(ART_PID)).join(' | '));
 
 // 3) webp 우선순위 — 같은 이름의 webp 가 있으면 그쪽을 쓴다
 put(ART_PID, 'card', '.webp', Buffer.from('RIFF____WEBPVP8 ', 'ascii'));
@@ -196,14 +204,33 @@ const imgs = await page.evaluate(() => {
 });
 check('화면의 이미지가 실제로 디코딩된다', imgs.n > 0 && imgs.broken === 0, `${imgs.n}장 중 깨짐 ${imgs.broken}`);
 
-// 6) 혼재 상태에서 화면이 정상인가
+// 6) 코트 위에 스탠디가 실제로 서는가 — 경기 화면까지 가서 렌더러의 프레임 카운터를 읽는다(art-pipeline 16.8).
+//    실물 누끼가 있으면 12명 전원(대역 포함)이 스탠디여야 한다. 실물이 하나도 없으면 실루엣으로 떨어지는 것이 맞다(0).
+const REAL_STAND = REAL.filter(d => fs.existsSync(path.join(EXPORT, d, d + '_stand.webp'))).length;
+await page.evaluate(() => {
+  const E = window.VS, g = E.createGame({ seed: 7, clubName: '검사 구단' });
+  localStorage.setItem('bloom-manager-save-v1', JSON.stringify(E.saveGame(g)));
+  localStorage.setItem('bloom-coach-v1', JSON.stringify({ on: false, intro: true, done: true }));
+});
+await page.reload(); await page.waitForTimeout(600);
+await tap('[data-tab="match"]', 300);
+await tap('[data-act="startseason"]', 300);
+await tap('[data-act="advance"]', 300);
+const courtUp = await page.waitForSelector('#lvCanvas', { timeout: 20000 }).then(() => true).catch(() => false);
+if (courtUp) { await tap('#lvIntro', 300); await page.waitForTimeout(1500); }
+const standees = courtUp ? await page.evaluate(() => { const c = window.BLOOM_DEBUG && window.BLOOM_DEBUG.court(); return (c && c.debug) ? c.debug.standees : -1; }) : -1;
+check('경기 화면이 뜬다', courtUp);
+check(REAL_STAND ? '코트 12명이 전원 스탠디로 선다(실물 누끼 + 대역)' : '실물 누끼가 없으면 실루엣으로 떨어진다',
+  REAL_STAND ? standees === 12 : standees === 0, `프레임당 스탠디 ${standees}명 · 실물 누끼 ${REAL_STAND}장`);
+
+// 7) 혼재 상태에서 화면이 정상인가
 check('가로 스크롤이 없다', await page.evaluate(() =>
   document.documentElement.scrollWidth <= document.documentElement.clientWidth));
 check('자바스크립트 오류가 없다', jsErrors.length === 0, jsErrors.slice(0, 2).join(' | '));
 
 await browser.close();
 
-// 7) 뒷정리
+// 8) 뒷정리
 if (!KEEP) {
   cleanup();
   const after = snapshot();
