@@ -1123,28 +1123,33 @@ function create(canvas, opts) {
     var done = function () { if (--e.left <= 0) e.ready = true; };
     Object.keys(P).forEach(function (name) {
       var d = P[name], img = new Image(); e.left++;
-      var part = e.parts[name] = { img: img, w: d.w, h: d.h, p: d.p, t: d.t, l: d.l, mask: null };
+      var part = e.parts[name] = { img: img, w: d.w, h: d.h, p: d.p, t: d.t, l: d.l, mask: null, trim: null };
       img.onload = done; img.onerror = done; img.src = d.u;
       if (d.m) { var mi = new Image(); e.left++; mi.onload = function () { part.mask = mi; done(); }; mi.onerror = done; mi.src = d.m; }
+      if (d.t2) { var ti = new Image(); e.left++; ti.onload = function () { part.trim = ti; done(); }; ti.onerror = done; ti.src = d.t2; }
     });
     return null;
   }
   /** 구단색으로 물들인 파츠(저지·반바지) — 마스크 밝기를 알파로 바꿔 색을 채우고 곱한다. 색마다 한 번. */
-  function tintedPart(e, name, col) {
+  function tintedPart(e, name, col, col2) {
     var part = e.parts[name]; if (!part) return null;
     if (!part.mask) return part.img;
-    var key = col + '|' + name, cv = e.tint[key]; if (cv) return cv;
+    var key = col + '|' + (col2 || '') + '|' + name, cv = e.tint[key]; if (cv) return cv;
     cv = document.createElement('canvas'); cv.width = part.w; cv.height = part.h;
     var g = cv.getContext('2d'); g.drawImage(part.img, 0, 0);
-    var mc = document.createElement('canvas'); mc.width = part.w; mc.height = part.h;
-    var mg = mc.getContext('2d'); mg.drawImage(part.mask, 0, 0);
-    try {
+    var stamp = function (maskImg, color) {                            // 마스크 밝기 → 알파, 색 채움, 곱하기
+      var mc = document.createElement('canvas'); mc.width = part.w; mc.height = part.h;
+      var mg = mc.getContext('2d'); mg.drawImage(maskImg, 0, 0);
       var id = mg.getImageData(0, 0, part.w, part.h), d = id.data;
       for (var i = 0; i < d.length; i += 4) { d[i + 3] = d[i]; d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; }
       mg.putImageData(id, 0, 0);
+      mg.globalCompositeOperation = 'source-in'; mg.fillStyle = color; mg.fillRect(0, 0, part.w, part.h);
+      g.globalCompositeOperation = 'multiply'; g.drawImage(mc, 0, 0);
+    };
+    try {
+      stamp(part.mask, col);
+      if (part.trim && col2) stamp(part.trim, col2);
     } catch (err) { e.tint[key] = part.img; return part.img; }
-    mg.globalCompositeOperation = 'source-in'; mg.fillStyle = col; mg.fillRect(0, 0, part.w, part.h);
-    g.globalCompositeOperation = 'multiply'; g.drawImage(mc, 0, 0);
     g.globalCompositeOperation = 'destination-in'; g.drawImage(part.img, 0, 0);
     e.tint[key] = cv; return cv;
   }
@@ -1178,7 +1183,7 @@ function create(canvas, opts) {
     var head = rigHead(p.pid);
     var type = head && head.type ? head.type : 'M';
     var U = RIG.body * s * (RIG.types[type] || 1);                        // 그림 공간 1 = U px
-    var RS = rigSet(type);
+    var RS = (quarter && rigSet(type + 'q')) || rigSet(type);
     var B = RS ? { thigh: RS.parts.thighR.l, shin: RS.parts.shinR.l, foot: RS.parts.footR.l, uarm: RS.parts.uarmR.l, farm: RS.parts.farmR.l, hand: RS.parts.handR.l,
                    torso: RS.parts.torso.l, pelvis: RS.parts.pelvis.l, hipX: RS.hip ? Math.abs(RS.hip[0]) : RIG.hipX * 0.6,
                    shoX: RS.sho ? Math.abs(RS.sho[0]) : RIG.shoX * 0.5, shoK: (RS.sho && RS.neck && RS.neck[1] > 0) ? Math.max(0.6, Math.min(0.98, RS.sho[1] / RS.neck[1])) : 0.86 }
@@ -1186,6 +1191,8 @@ function create(canvas, opts) {
                    hipX: RIG.hipX * 0.6, shoX: RIG.shoX * 0.5, shoK: (RIG.shoulder - RIG.hip) / (RIG.shoulder - RIG.hip + 0.05) };
     B.hip = RS ? (B.thigh + B.shin + B.foot) : RIG.hip;
     var cp = rigClip(p, g), target = samplePose(cp[0], cp[1]);
+    // 4분의 3 측면 세트(있으면): 달리기·강타·서브처럼 방향이 있는 동작. 아직 안 실렸으면 정면으로
+    var quarter = (cp[0] === 'run' || cp[0] === 'spike' || cp[0] === 'serve');
     // 자세 블렌딩: 지난 프레임 자세에서 목표 자세로 초당 ~16 의 속도로 따라간다(클립 전환이 부드럽다)
     var key = p.side + '-' + p.pos, prev = R._rigPose[key], pose = target;
     if (prev && R.clock - prev.t < 0.5) { var dt = Math.max(0, Math.min(0.2, R.clock - prev.t)); pose = mixPose(prev.pose, target, 1 - Math.exp(-dt * 16)); }
@@ -1301,7 +1308,7 @@ function create(canvas, opts) {
       drawHairBack(c, X, Y, headX, headY, headTilt, hairStyle, hair, U, p, cp);
       var pelvisTip = { x: Math.sin(pose.spine * 0.25) * B.pelvis, y: hipY - Math.cos(pose.spine * 0.25) * B.pelvis };
       drawPart(c, tintedPart(RS, 'pelvis', shade(kit.primary, -0.5)), RS.parts.pelvis, PT(0, hipY), PT(pelvisTip.x, pelvisTip.y));   // 반바지는 어둡게
-      drawPart(c, tintedPart(RS, 'torso', kit.primary), RS.parts.torso, PT(0, hipY), PT(neckX, neckY));
+      drawPart(c, tintedPart(RS, 'torso', kit.primary, kit.secondary), RS.parts.torso, PT(0, hipY), PT(neckX, neckY));
       R.debug.parts++;
       if (p.jersey) {                                                      // 등번호(가슴)
         c.save(); c.translate(X(shoX * 0.55), Y(hipY + torsoLen * 0.62)); c.rotate(pose.spine); c.scale(mirror, 1);

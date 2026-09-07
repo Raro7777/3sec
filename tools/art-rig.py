@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 GEN = ROOT / 'art' / '02_gen' / 'rig'
 OUT = ROOT / 'art' / '05_shared' / 'rig'
-TYPES = ['S', 'M', 'L']
+TYPES = ['S', 'M', 'L', 'Sq', 'Mq', 'Lq']   # 정면 3종 + 4분의 3 측면(q) 3종. 측면은 있으면 달리기·강타·서브에 쓴다
 PART_H = 0          # 0 = 원본 해상도 유지(1200px 전신 기준 파츠는 100~400px)
 
 def load_deps():
@@ -52,8 +52,11 @@ def masks(rgb, a):
         big = largest(m, 1)                                                # 가장 큰 덩어리 하나(옷) + 안쪽 구멍(하이라이트) 메움
         m = ndi.binary_fill_holes(big[0]) if big else m
         out[name] = m
+    # 트림(노랑): 저지 옆선·목선 — 구단 2색 자리. 살(H≈12, S≈64)과 겹치지 않게 S>110
+    trim = body & (H >= 20) & (H <= 40) & (S > 110) & (V > 140)
+    out['trim'] = trim
     # 느슨한 옷 마스크 — 어깨끈·하이라이트처럼 채도가 낮은 자리까지. 회색 변환(틴트 자리)에만 쓴다
-    out['jersey_loose'] = out['jersey'] | (body & (H >= 118) & (H <= 180) & (S > 25) & (V > 30))
+    out['jersey_loose'] = (out['jersey'] | (body & (H >= 118) & (H <= 180) & (S > 25) & (V > 30))) & ~trim
     out['shorts_loose'] = out['shorts'] | (body & (H >= 70) & (H <= 118) & (S > 30) & (V > 40))
     out.update({'dark': dark, 'white': white, 'body': body})
     return out
@@ -132,8 +135,8 @@ def find_joints(M, H, W):
     return J
 
 # ─────────────────────────────────────────────── 파츠 자르기
-def band_mask(shape, a, b, w, ext):
-    """a→b 축을 감싼 회전 사각형(폭 w, 양 끝 ext 만큼 연장) 마스크"""
+def band_mask(shape, a, b, w, ext, capsule=True):
+    """a→b 축을 감싼 폭 w 의 띠. capsule 이면 양 끝이 반지름 w/2 의 반원(관절에서 회전해도 모서리가 안 튀어나온다), 아니면 ext 만큼 직선 연장"""
     H, W = shape
     ax, ay = a; bx, by = b
     dx, dy = bx - ax, by - ay; L = max(1e-6, (dx * dx + dy * dy) ** 0.5)
@@ -141,7 +144,13 @@ def band_mask(shape, a, b, w, ext):
     yy, xx = np.mgrid[:H, :W]
     t = (xx - ax) * ux + (yy - ay) * uy
     s = -(xx - ax) * uy + (yy - ay) * ux
-    return (t >= -ext) & (t <= L + ext) & (np.abs(s) <= w / 2.0)
+    body = (t >= 0) & (t <= L) & (np.abs(s) <= w / 2.0)
+    if not capsule:
+        return (t >= -ext) & (t <= L + ext) & (np.abs(s) <= w / 2.0)
+    r = max(w / 2.0, ext)
+    capA = (xx - ax) ** 2 + (yy - ay) ** 2 <= r * r
+    capB = (xx - bx) ** 2 + (yy - by) ** 2 <= r * r
+    return body | capA | capB
 
 def limb_width(M, a, b, exclude=None):
     """축 중간에서 수직 방향 몸 픽셀 수 (파츠 폭)"""
@@ -198,15 +207,22 @@ def process(t, height):
         if res is None:
             log(f'  ! {t}/{name}: 비어 있음'); return
         arr, (ox, oy) = res
-        maskimg = None
+        maskimg = None; trimimg = None
         if mask_kind:
-            mk = M[mask_kind + '_loose'][oy:oy + arr.shape[0], ox:ox + arr.shape[1]] & (arr[:, :, 3] > 0)
+            alpha_ok = arr[:, :, 3] > 0
+            mk = M[mask_kind + '_loose'][oy:oy + arr.shape[0], ox:ox + arr.shape[1]] & alpha_ok
+            tr = M['trim'][oy:oy + arr.shape[0], ox:ox + arr.shape[1]] & alpha_ok if mask_kind == 'jersey' else None
             arr, maskimg = gray_where(arr, mk)
+            if tr is not None and tr.sum() > 30:
+                arr, trimimg = gray_where(arr, tr)
         Image.fromarray(arr, 'RGBA').save(d / f'{name}.webp', 'WEBP', quality=88, method=6)
         if maskimg is not None:
             Image.fromarray(maskimg, 'L').save(d / f'{name}_m.webp', 'WEBP', quality=88, method=6)
+        if trimimg is not None:
+            Image.fromarray(trimimg, 'L').save(d / f'{name}_t.webp', 'WEBP', quality=88, method=6)
         L = ((tip[0] - pivot[0]) ** 2 + (tip[1] - pivot[1]) ** 2) ** 0.5
         parts[name] = {'file': f'{name}.webp', 'mask': f'{name}_m.webp' if maskimg is not None else None,
+                       'trim': f'{name}_t.webp' if trimimg is not None else None,
                        'w': int(arr.shape[1]), 'h': int(arr.shape[0]),
                        'pivot': [round(pivot[0] - ox, 1), round(pivot[1] - oy, 1)], 'tip': [round(tip[0] - ox, 1), round(tip[1] - oy, 1)],
                        'len': round(L / body_h, 4)}
@@ -221,19 +237,19 @@ def process(t, height):
     for side in ('L', 'R'):
         sho, elb, wri, hand = J['sho' + side], J['elb' + side], J['wri' + side], J['hand' + side]
         w = limb_width(M, sho, hand, M['jersey']) * 1.5
-        save('uarm' + side, cut_part(rgba, M, sho, elb, w, ext, exclude=M['jersey']), sho, elb)
-        save('farm' + side, cut_part(rgba, M, elb, wri, w, ext, exclude=M['jersey']), elb, wri)
-        save('hand' + side, cut_part(rgba, M, wri, hand, w * 1.6, ext * 2, exclude=M['jersey']), wri, hand)
+        save('uarm' + side, cut_part(rgba, M, sho, elb, w, ext, exclude=M['jersey_loose']), sho, elb)
+        save('farm' + side, cut_part(rgba, M, elb, wri, w, ext, exclude=M['jersey_loose']), elb, wri)
+        save('hand' + side, cut_part(rgba, M, wri, hand, w * 1.6, ext * 2, exclude=M['jersey_loose']), wri, hand)
         hip, knee, ank, foot = J['hip' + side], J['knee' + side], J['ank' + side], J['foot' + side]
         half = (np.arange(Ww)[None, :] < J['pelvis'][0]) if side == 'L' else (np.arange(Ww)[None, :] >= J['pelvis'][0])
         half = np.broadcast_to(half, M['body'].shape)
         lw = limb_width(M, knee, ank, exclude=~half) * 1.7
-        save('thigh' + side, cut_part(rgba, M, hip, knee, lw * 1.15, ext, exclude=M['shorts'] | ~half), hip, knee)
+        save('thigh' + side, cut_part(rgba, M, hip, knee, lw * 1.15, ext, exclude=M['shorts_loose'] | ~half), hip, knee)
         save('shin' + side, cut_part(rgba, M, knee, ank, lw, ext, exclude=~half), knee, ank)
         save('foot' + side, cut_part(rgba, M, ank, foot, lw * 1.8, ext * 1.5, exclude=~half, include=(M['white'] & half & (np.arange(Hh)[:, None] > ank[1] - 6))), ank, foot)
     # 머리(참고용): 목 위 전부
     head_inc = M['body'] & (np.arange(Hh)[:, None] < J['neck'][1] + 4)
-    save('head', cut_part(rgba, M, J['neck'], J['top'], (J['shoR'][0] - J['shoL'][0]) * 1.2, ext, include=head_inc), J['neck'], J['top'])
+    save('head', cut_part(rgba, M, J['neck'], J['top'], (J['shoR'][0] - J['shoL'][0]) * 1.2, ext, exclude=M['jersey_loose'], include=head_inc), J['neck'], J['top'])
     joints = {k: [round(v[0], 1), round(v[1], 1)] for k, v in J.items()}
     return {'src': src.name, 'size': [Ww, Hh], 'body_h': round(body_h, 1), 'joints': joints, 'parts': parts}
 
@@ -280,7 +296,7 @@ def main():
     rig = json.loads(rig_f.read_text(encoding='utf-8')) if rig_f.exists() else {}
     types = [args.type] if args.type else TYPES
     if args.check:
-        missing = [t for t in TYPES if t not in rig or not (OUT / t / 'torso.webp').exists()]
+        missing = [t for t in ('S', 'M', 'L') if t not in rig or not (OUT / t / 'torso.webp').exists()]
         log('리그 파츠:', ', '.join(f'{t} {len(rig[t]["parts"])}개' for t in rig) or '없음')
         if missing: log('빠짐:', missing); sys.exit(1)
         log('이상 없음 ✅'); return
@@ -291,7 +307,9 @@ def main():
                 r = process(t, PART_H)
             except Exception as e:
                 log(f'{t}: 실패 — {e}'); continue
-            if r is None: log(f'{t}: 원본 없음 (art/02_gen/rig/apose_{t}.png)'); continue
+            if r is None:
+                if not t.endswith('q'): log(f'{t}: 원본 없음 (art/02_gen/rig/apose_{t}.png)')
+                continue
             rig[t] = r
             log(f'{t}: 파츠 {len(r["parts"])}개 · 몸 높이 {r["body_h"]}px')
         OUT.mkdir(parents=True, exist_ok=True)

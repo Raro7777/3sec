@@ -237,7 +237,7 @@ if (courtUp) {
 }
 const RIG_JSON = path.join(ROOT, 'art', '05_shared', 'rig', 'rig.json');
 check(fs.existsSync(RIG_JSON) ? '리그 파츠 시트(S/M/L)가 실리고 코트 12명이 전원 그림 파츠로 선다' : '리그 파츠 시트가 없으면 코드 도형으로 선다',
-  !!figs && (fs.existsSync(RIG_JSON) ? (figs.rigTypes.length === 3 && figs.parts === 12) : figs.parts === 0), JSON.stringify(figs && { parts: figs.parts, rigTypes: figs.rigTypes }));
+  !!figs && (fs.existsSync(RIG_JSON) ? (['S', 'M', 'L'].every(t => figs.rigTypes.includes(t)) && figs.parts === 12) : figs.parts === 0), JSON.stringify(figs && { parts: figs.parts, rigTypes: figs.rigTypes }));
 check('경기 화면이 뜬다', courtUp);
 check('기본 그림 방식은 리그이고 코트 12명이 전원 리그로 선다', !!figs && figs.def === 'rig' && figs.rigs === 12, JSON.stringify(figs));
 check(REAL_STAND ? '스탠디로 바꾸면 12명이 전원 스탠디로 선다(실물 누끼 + 대역)' : '실물 누끼가 없으면 스탠디 방식은 실루엣으로 떨어진다',

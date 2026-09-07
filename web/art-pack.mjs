@@ -141,6 +141,9 @@ export function collectRig() {
       if (p.mask && fs.existsSync(path.join(dir, type, p.mask))) {
         const mb = fs.readFileSync(path.join(dir, type, p.mask)); one.m = `data:image/webp;base64,${mb.toString('base64')}`; bytes += mb.length;
       }
+      if (p.trim && fs.existsSync(path.join(dir, type, p.trim))) {       // 트림(구단 2색) 마스크
+        const tb = fs.readFileSync(path.join(dir, type, p.trim)); one.t2 = `data:image/webp;base64,${tb.toString('base64')}`; bytes += tb.length;
+      }
       parts[name] = one;
     }
     if (Object.keys(parts).length) {
