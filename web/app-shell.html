@@ -2322,7 +2322,7 @@ var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
 // 코트 그림 방식(art-pipeline 16.9): 'rig'(공용 바디 리그, 기본) | 'standee'(전신 누끼). 경기 화면 버튼으로 바꾸고 기억한다.
 var FIG_KEY = 'bloom-figure-v1';
-var FIG = 'standee';   // 기본은 스탠디(포즈 세트가 있는 선수는 상태별 그림, 16.10). 리그는 비교용으로 남긴다
+var FIG = 'rig';   // 기본은 리그(16.9, 테스터 결정 2026-09). 스탠디(포즈 세트 파일럿 포함)는 비교용으로 남긴다
 try { var _f = localStorage.getItem(FIG_KEY); if (_f === 'standee' || _f === 'rig') FIG = _f; } catch(e){}
 function figLabel(){ return FIG === 'rig' ? '그림: 리그' : '그림: 스탠디'; }
 /** 리그 머리(16.9): 선수 → {face(카드 원형 비트맵), hair:[팔레트, 스타일], skin, type(체형 S/M/L)}. 그림 정보는 빌드가 h 로 실어 준다. */

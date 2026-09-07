@@ -170,7 +170,8 @@ function create(canvas, opts) {
     // 스탠디(16.8): 앱이 R.standOf(pid) 로 {img, m} 을 주면 실루엣 대신 누끼 그림을 세운다. _stand 는 pid 별 캐시(팀색 림 포함).
     // lineup: [[{id,name,jersey}×6 홈], [×6 원정]] 자리 1~6 순 — 있으면 공을 안 만진 선수도 이름·그림을 얻는다.
     // figure(16.9): 'rig' | 'standee' | 'silhouette'. headOf(pid) → {face, hair:[팔레트, 스타일], skin}, kitOf(side) → {primary, secondary}
-    standOf: null, _stand: {}, lineup: null, figure: 'rig', headOf: null, kitOf: null, debug: { standees: 0, rigs: 0 }
+    standOf: null, _stand: {}, lineup: null, figure: 'rig', headOf: null, kitOf: null, debug: { standees: 0, rigs: 0 },
+    _rigPose: {}, _rigFx: []   // 리그(16.9): 선수별 지난 자세(블렌딩)·착지 먼지
   };
   /** 득점 뒤 관중 반응 — 앱이 부른다. side 가 내 쪽이면 홈 관중이 들썩이고, 아니면 잠깐 조용해진다. */
   R.cheerFor = function (side) { R.cheer = { side: side, t: 0 }; };
@@ -406,6 +407,7 @@ function create(canvas, opts) {
     drawNet(c, cam);
     drawShadow(c, cam, ball);
     ps.filter(function (p) { return p.d < netD; }).forEach(function (p) { drawPlayer(c, cam, p, ball); });
+    drawRigFx(c);
     drawTrail(c, cam);
     drawBall(c, cam, ball);
     drawBursts(c, cam);
@@ -994,10 +996,10 @@ function create(canvas, opts) {
   // 좌표는 "몸 높이 = 1" 인 그림 공간(발 = 원점, 위 = +y, 앞 = +x). 각도는 아래(0)에서 앞(+)으로 재는 라디안.
   // Unity 이행 시 파츠 시트가 이 도형을 1:1 로 대체한다(피벗·레이어 순서는 문서 16.9).
   var RIG = {
-    body: 2.45,                       // 화면 높이 = body × s (스탠디보다 4% 크게 — 머리를 키운 만큼)
+    body: 2.55,                       // 화면 높이 = body × s (스탠디보다 9% 크게 — 리그가 기본이라 얼굴 가독성 우선)
     types: { S: 0.94, M: 1.0, L: 1.06 },
     // 6등신 — 실제 그림(6.5등신)보다 머리를 키워 49px 에서도 얼굴이 읽히게(가독성 보정, STYLE.figure 와 같은 뜻)
-    hip: 0.50, knee: 0.27, shoulder: 0.745, neck: 0.785, head: 0.875, headR: 0.112,
+    hip: 0.50, knee: 0.27, shoulder: 0.745, neck: 0.785, head: 0.862, headR: 0.112,
     hipX: 0.045, shoX: 0.07, thigh: 0.23, shin: 0.25, uarm: 0.15, farm: 0.15,
     wThigh: 0.075, wShin: 0.058, wUarm: 0.056, wFarm: 0.046, wSho: 0.19, wWaist: 0.14, wHip: 0.165, hand: 0.024,
     line: 0.012
@@ -1012,11 +1014,18 @@ function create(canvas, opts) {
   function P(o) { var r = {}; for (var k in POSE0) r[k] = o[k] !== undefined ? o[k] : POSE0[k]; return r; }
   // 클립: [위상 0~1, 자세]. 동작 클립은 위상 0.5 가 공과 닿는 순간이다(앞은 예비 동작, 뒤는 마무리).
   var CLIPS = {
-    idle:  [[0, P({ uaN: 0.25, faN: 0.35, uaF: 0.25, faF: 0.35, thN: 0.06, shN: -0.1, thF: -0.06, shF: -0.1 })],
-            [0.5, P({ uaN: 0.22, faN: 0.3, uaF: 0.22, faF: 0.3, thN: 0.06, shN: -0.1, thF: -0.06, shF: -0.1, crouch: 0.02 })],
-            [1, P({ uaN: 0.25, faN: 0.35, uaF: 0.25, faF: 0.35, thN: 0.06, shN: -0.1, thF: -0.06, shF: -0.1 })]],
-    ready: [[0, P({ spine: 0.22, uaN: 0.7, faN: 0.9, uaF: 0.7, faF: 0.9, thN: 0.45, shN: -0.7, thF: -0.35, shF: -0.5, crouch: 0.16 })],
-            [1, P({ spine: 0.22, uaN: 0.7, faN: 0.9, uaF: 0.7, faF: 0.9, thN: 0.45, shN: -0.7, thF: -0.35, shF: -0.5, crouch: 0.16 })]],
+    // 편한 자세(서브 전): 무릎 살짝, 손은 앞에서 늘어뜨리고 숨쉬기
+    idle:  [[0, P({ spine: 0.06, uaN: 0.3, faN: 0.45, uaF: 0.28, faF: 0.4, thN: 0.14, shN: -0.22, thF: -0.1, shF: -0.16, crouch: 0.05 })],
+            [0.5, P({ spine: 0.08, uaN: 0.27, faN: 0.4, uaF: 0.25, faF: 0.36, thN: 0.14, shN: -0.22, thF: -0.1, shF: -0.16, crouch: 0.07 })],
+            [1, P({ spine: 0.06, uaN: 0.3, faN: 0.45, uaF: 0.28, faF: 0.4, thN: 0.14, shN: -0.22, thF: -0.1, shF: -0.16, crouch: 0.05 })]],
+    // 후위 준비 자세: 낮게, 손은 무릎 앞. 위상으로 좌우 체중 이동
+    ready: [[0, P({ spine: 0.24, uaN: 0.75, faN: 0.85, uaF: 0.7, faF: 0.9, thN: 0.5, shN: -0.75, thF: -0.35, shF: -0.5, crouch: 0.17 })],
+            [0.5, P({ spine: 0.2, uaN: 0.7, faN: 0.9, uaF: 0.75, faF: 0.85, thN: 0.4, shN: -0.6, thF: -0.45, shF: -0.6, crouch: 0.14 })],
+            [1, P({ spine: 0.24, uaN: 0.75, faN: 0.85, uaF: 0.7, faF: 0.9, thN: 0.5, shN: -0.75, thF: -0.35, shF: -0.5, crouch: 0.17 })]],
+    // 전위 대기: 네트 앞에서 손을 가슴 높이로, 무릎은 조금만
+    front: [[0, P({ spine: 0.1, uaN: 1.3, faN: 1.5, uaF: 1.25, faF: 1.55, thN: 0.25, shN: -0.4, thF: -0.2, shF: -0.35, crouch: 0.1 })],
+            [0.5, P({ spine: 0.12, uaN: 1.4, faN: 1.45, uaF: 1.2, faF: 1.6, thN: 0.22, shN: -0.35, thF: -0.24, shF: -0.4, crouch: 0.12 })],
+            [1, P({ spine: 0.1, uaN: 1.3, faN: 1.5, uaF: 1.25, faF: 1.55, thN: 0.25, shN: -0.4, thF: -0.2, shF: -0.35, crouch: 0.1 })]],
     run:   [[0,    P({ spine: 0.18, uaN: -0.7, faN: 1.3, uaF: 0.8, faF: 1.2, thN: 0.7, shN: -0.4, thF: -0.5, shF: -1.1 })],
             [0.25, P({ spine: 0.18, uaN: 0.0, faN: 1.2, uaF: 0.0, faF: 1.2, thN: 0.1, shN: -0.9, thF: 0.0, shF: -0.4, root: 0.03 })],
             [0.5,  P({ spine: 0.18, uaN: 0.8, faN: 1.2, uaF: -0.7, faF: 1.3, thN: -0.5, shN: -1.1, thF: 0.7, shF: -0.4 })],
@@ -1090,12 +1099,29 @@ function create(canvas, opts) {
     if (p.active && g.pose) return [clipOf(g.pose), 0.5 + 0.5 * Math.min(1, g.u / 0.45)];      // 방금 침: 마무리 절반
     if (g.ready) return [clipOf(g.ready), 0.5 * g.u];                                            // 다음 차례: 예비 동작 절반
     if (p.moving && g.jump < 0.1) return ['run', ((R.clock * 2.4) + p.pos * 0.37 + p.side * 0.5) % 1];
-    return ['idle', ((R.clock * 0.35) + p.pos * 0.17) % 1];
+    // 랠리 중 나머지: 후위(1·5·6)는 낮은 준비 자세, 전위(2·3·4)는 네트 앞에서 손을 든 블로킹 대기. 서브 전 숨 고르기(R.pre)만 편한 자세
+    var live = R.flights.length > 0 && R.pre <= 0;
+    var ph2 = ((R.clock * 0.35) + p.pos * 0.17 + p.side * 0.3) % 1;
+    if (!live) return ['idle', ph2];
+    return [(p.pos >= 2 && p.pos <= 4) ? 'front' : 'ready', ph2];
   }
   function rigHead(pid) {
     if (!R.headOf || pid === null || pid === undefined) return null;
     return R.headOf(pid) || null;
   }
+  /** 2뼈 IK — 뿌리(ax,ay)에서 목표(tx,ty)로 길이 l1·l2. bend +1 이면 관절이 앞(+x)쪽, -1 이면 뒤쪽. 각도는 아래(0)에서 앞(+)으로. */
+  function ik2(ax, ay, tx, ty, l1, l2, bend) {
+    var dx = tx - ax, dy = ty - ay, d = Math.sqrt(dx * dx + dy * dy);
+    var maxd = l1 + l2 - 0.004;
+    if (d > maxd) { dx *= maxd / d; dy *= maxd / d; d = maxd; }
+    if (d < 0.01) { d = 0.01; dx = 0; dy = -0.01; }
+    var cosA = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d);
+    var a = Math.acos(Math.max(-1, Math.min(1, cosA)));
+    var ang = Math.atan2(dx, -dy) + bend * a;
+    return { jx: ax + Math.sin(ang) * l1, jy: ay - Math.cos(ang) * l1, ex: ax + dx, ey: ay + dy };
+  }
+  /** 두 자세를 섞는다(클립이 바뀔 때 툭 튀지 않게). */
+  function mixPose(a, b, k) { var o = {}; for (var key in POSE0) o[key] = a[key] + (b[key] - a[key]) * k; return o; }
   function drawRig(c, cam, p, ball, g) {
     var s = g.s, dirWant;
     var toNet = project(cam, p.x, p.y + (p.side === 0 ? 1 : -1), 0).sx - g.base.sx;
@@ -1103,124 +1129,181 @@ function create(canvas, opts) {
     var head = rigHead(p.pid);
     var type = head && head.type ? head.type : 'M';
     var U = RIG.body * s * (RIG.types[type] || 1);                        // 그림 공간 1 = U px
-    var cp = rigClip(p, g), pose = samplePose(cp[0], cp[1]);
+    var cp = rigClip(p, g), target = samplePose(cp[0], cp[1]);
+    // 자세 블렌딩: 지난 프레임 자세에서 목표 자세로 초당 ~16 의 속도로 따라간다(클립 전환이 부드럽다)
+    var key = p.side + '-' + p.pos, prev = R._rigPose[key], pose = target;
+    if (prev && R.clock - prev.t < 0.5) { var dt = Math.max(0, Math.min(0.2, R.clock - prev.t)); pose = mixPose(prev.pose, target, 1 - Math.exp(-dt * 16)); }
     var kit = (R.kitOf && R.kitOf(p.side)) || { primary: g.col, secondary: '#FFFFFF' };
     var skin = SKIN[head && head.skin ? head.skin : 'A'] || SKIN.A;
     var hairIdx = head && head.hair ? head.hair[0] : 0, hairStyle = head && head.hair ? head.hair[1] : 'short';
     var hair = HAIR_PAL[hairIdx] || ['#4A3328', '#33221A'];
     var alpha = g.alpha;
-    // 점프: 클립의 root 와 엔진 점프(공 높이 추종) 중 큰 쪽
     var rootUp = Math.max(pose.root, g.jump * 0.35);
     var crouch = Math.max(pose.crouch, (1 - g.crouch) * 0.6);
+    // 착지 먼지: 공중에서 땅으로 내려오는 순간
+    if (prev && prev.root > 0.08 && rootUp < 0.03) R._rigFx.push({ x: g.foot.sx, y: g.base.sy, t: R.clock, s: s });
+    R._rigPose[key] = { pose: pose, root: rootUp, t: R.clock };
     var lineW = Math.max(0.8, RIG.line * U);
-    c.save();
-    c.translate(g.foot.sx, g.base.sy);                                   // 발 = 원점 (점프는 root 로)
-    c.globalAlpha = alpha;
-    var mirror = dirWant;                                                // 앞 = 화면 +x 이면 그대로, 아니면 뒤집기
-    c.scale(mirror, 1);
-    // 예고 펄스·착지 스쿼시
-    var sq = 1;
-    if (p.tell) sq = 1 + 0.03 * Math.sin(R.clock * 9);
+    var mirror = dirWant;
+    var sq = p.tell ? 1 + 0.03 * Math.sin(R.clock * 9) : 1;
     var sy = sq, sx = 1 / sq;
+    c.save();
+    c.translate(g.foot.sx, g.base.sy);
+    c.globalAlpha = alpha;
+    c.scale(mirror, 1);
     c.scale(sx, sy);
-    // 그림 공간 → 화면: x 오른쪽, y 위. U 로 배율.
     var X = function (x) { return x * U; }, Y = function (y) { return -y * U; };
-    var stroke = 'rgba(16,22,34,.55)';
-    function limb(ax, ay, bx, by, w, col) {                             // 테두리(굵게, 어둡게) 위에 색
+    var stroke = 'rgba(14,20,32,.62)';
+    function limb(ax, ay, bx, by, w, col, hi) {                         // 테두리 → 색 → 왼쪽 위 하이라이트
       c.lineCap = 'round';
       c.strokeStyle = stroke; c.lineWidth = w * U + lineW * 2;
       c.beginPath(); c.moveTo(X(ax), Y(ay)); c.lineTo(X(bx), Y(by)); c.stroke();
       c.strokeStyle = col; c.lineWidth = w * U;
       c.beginPath(); c.moveTo(X(ax), Y(ay)); c.lineTo(X(bx), Y(by)); c.stroke();
+      if (hi) {
+        c.strokeStyle = hi; c.lineWidth = w * U * 0.34;
+        c.beginPath(); c.moveTo(X(ax - 0.006), Y(ay + 0.006)); c.lineTo(X(bx - 0.006), Y(by + 0.006)); c.stroke();
+      }
     }
-    function dot(x, y, r, col) { c.fillStyle = col; c.beginPath(); c.arc(X(x), Y(y), r * U, 0, 6.284); c.fill(); }
+    function blob(x, y, rx, ry, col, hi) {
+      c.fillStyle = col; c.strokeStyle = stroke; c.lineWidth = lineW;
+      c.beginPath(); c.ellipse(X(x), Y(y), rx * U, ry * U, 0, 0, 6.284); c.fill(); c.stroke();
+      if (hi) { c.fillStyle = hi; c.beginPath(); c.ellipse(X(x - rx * 0.25), Y(y + ry * 0.3), rx * 0.45 * U, ry * 0.35 * U, 0, 0, 6.284); c.fill(); }
+    }
     // ---- 순운동학
     var hipY = RIG.hip * (1 - crouch * 0.45) + rootUp;
     var torsoLen = (RIG.shoulder - RIG.hip) * (1 - crouch * 0.25);
     var shoX = Math.sin(pose.spine) * torsoLen, shoY = hipY + Math.cos(pose.spine) * torsoLen;
     var neckX = shoX + Math.sin(pose.spine) * 0.05, neckY = shoY + Math.cos(pose.spine) * 0.05;
     var headTilt = pose.spine * 0.6 + pose.head;
+    // 공을 본다: 공이 머리보다 높으면 고개를 젖히고, 낮으면 숙인다(랠리 중, 환호·낙담 제외)
+    if (ball && !R.ended) {
+      var bl = project(cam, ball.x, ball.y, ball.z);
+      var blx = (bl.sx - g.foot.sx) / (mirror * U * sx), bly = (g.base.sy - bl.sy) / (U * sy);
+      var look = Math.atan2(blx - (neckX + 0.0), bly - (neckY + 0.06));          // 앞(+)/뒤(-), 위 0
+      var lookTilt = -Math.max(-0.2, Math.min(0.2, (Math.abs(look) < 1.2 ? (0.2 - Math.abs(look) * 0.17) : -0.12)));
+      headTilt += lookTilt * (Math.abs(blx) < 4 && Math.abs(bly) < 4 ? 1 : 0.3);
+    }
     var headX = neckX + Math.sin(headTilt) * (RIG.head - RIG.neck), headY = neckY + Math.cos(headTilt) * (RIG.head - RIG.neck);
-    // 다리: 발은 땅에 닿게 — 무릎 각도로 길이를 맞추기보다 클립 값 그대로 그리고, 발끝을 땅 쪽으로 보정
     function leg(side, th, sh) {
       var hx = side * RIG.hipX * 0.6, hy = hipY;
       var kx = hx + Math.sin(th) * RIG.thigh, ky = hy - Math.cos(th) * RIG.thigh;
       var a2 = th + sh;
       var fx = kx + Math.sin(a2) * RIG.shin, fy = ky - Math.cos(a2) * RIG.shin;
-      if (rootUp < 0.02 && fy < 0.0) { fy = 0.0; }
-      return { hx: hx, hy: hy, kx: kx, ky: ky, fx: fx, fy: Math.max(fy, rootUp > 0.02 ? -1 : 0) };
+      if (rootUp < 0.02) {                                               // 땅에 선 다리: 발을 땅에 놓고 무릎을 IK 로
+        var r = ik2(hx, hy, fx, 0, RIG.thigh, RIG.shin, 1);
+        return { hx: hx, hy: hy, kx: r.jx, ky: r.jy, fx: r.ex, fy: 0 };
+      }
+      return { hx: hx, hy: hy, kx: kx, ky: ky, fx: fx, fy: fy };
     }
     function arm(side, ua, fa) {
       var sxp = shoX + side * RIG.shoX * 0.5, syp = shoY;
       var ex = sxp + Math.sin(ua) * RIG.uarm, ey = syp - Math.cos(ua) * RIG.uarm;
       var a2 = ua + fa;
-      var hx = ex + Math.sin(a2) * RIG.farm, hy = ey - Math.cos(a2) * RIG.farm;
-      return { sx: sxp, sy: syp, ex: ex, ey: ey, hx: hx, hy: hy };
+      return { sx: sxp, sy: syp, ex: ex, ey: ey, hx: ex + Math.sin(a2) * RIG.farm, hy: ey - Math.cos(a2) * RIG.farm };
     }
     var legF = leg(-1, pose.thF, pose.shF), legN = leg(1, pose.thN, pose.shN);
     var armF = arm(-1, pose.uaF, pose.faF), armN = arm(1, pose.uaN, pose.faN);
-    var shorts = '#1E2432', pad = '#171B26', shoe = '#F4F5F8';
-    // ---- 그리기 순서: 먼 팔 → 먼 다리 → 뒷머리 → 몸통 → 가까운 다리 → 가까운 팔 → 머리
-    limb(armF.sx, armF.sy, armF.ex, armF.ey, RIG.wUarm, skin[1]);
-    limb(armF.ex, armF.ey, armF.hx, armF.hy, RIG.wFarm, skin[1]);
-    dot(armF.hx, armF.hy, RIG.hand, skin[1]);
-    limb(legF.hx, legF.hy, legF.kx, legF.ky, RIG.wThigh, shorts);
-    limb(legF.kx, legF.ky, legF.fx, legF.fy, RIG.wShin, skin[1]);
-    dot(legF.kx, legF.ky, RIG.wShin * 0.62, pad);
-    limb(legF.fx, legF.fy + 0.012, legF.fx + 0.06, legF.fy + 0.012, 0.045, shoe);
-    // 뒷머리(스타일별) — 몸통 뒤에
+    // ---- 공 IK: 치는 순간 손이 공에 닿는다. 방금 친 선수는 비행 앞 18%, 다음 차례는 뒤 20% 동안 공을 향해 팔을 편다
+    var reach = 0, reachType = 0;
+    if (p.active && g.pose && g.u < 0.18) { reach = 1 - g.u / 0.18; reachType = g.pose; }
+    else if (g.ready && g.u > 0.8) { reach = (g.u - 0.8) / 0.2; reachType = g.ready; }
+    if (reach > 0 && ball) {
+      var bs = project(cam, ball.x, ball.y, ball.z);
+      var bx = (bs.sx - g.foot.sx) / (mirror * U * sx), by = (g.base.sy - bs.sy) / (U * sy);
+      var both = !(reachType === EV.Attack || reachType === EV.Serve);
+      var low = (reachType === EV.Reception || reachType === EV.Dig || reachType === EV.Cover || reachType === EV.FreeBall);
+      var tx = bx, ty = by - (low ? 0.05 : 0.02);
+      var pull = function (a, side) {
+        var r = ik2(a.sx, a.sy, tx + (both ? side * 0.03 : 0), ty, RIG.uarm, RIG.farm, -1);
+        a.ex += (r.jx - a.ex) * reach; a.ey += (r.jy - a.ey) * reach; a.hx += (r.ex - a.hx) * reach; a.hy += (r.ey - a.hy) * reach;
+      };
+      pull(armN, 1); if (both) pull(armF, -1);
+    }
+    var shorts = '#1E2432', shortsHi = '#2C3446', pad = '#171B26', shoe = '#F4F5F8', sock = '#F4F5F8';
+    var skinHiN = shade(skin[0], 0.35);
+    // ---- 그리기: 먼 팔 → 먼 다리 → 가까운 다리 → 뒷머리 → 반바지 → 몸통 → 가까운 팔 → 목 → 머리
+    function drawLeg(L, near) {
+      var sk = near ? skin[0] : skin[1], hi = near ? skinHiN : null;
+      limb(L.hx, L.hy, L.kx, L.ky, RIG.wThigh, sk, hi);
+      var a2 = Math.atan2(L.fx - L.kx, -(L.fy - L.ky));                  // 정강이 방향(아래 0)
+      var ax = L.kx + Math.sin(a2) * RIG.shin * 0.8, ay = L.ky - Math.cos(a2) * RIG.shin * 0.8;   // 발목(양말 시작)
+      limb(L.kx, L.ky, ax, ay, RIG.wShin, sk, hi);
+      limb(ax, ay, L.fx, L.fy + 0.01, RIG.wShin * 0.92, sock, null);      // 양말
+      blob(L.kx, L.ky, RIG.wShin * 0.62, RIG.wShin * 0.56, pad, '#2A3040');   // 무릎 보호대
+      blob(L.fx + 0.022, L.fy + 0.014, 0.052, 0.024, shoe, null);          // 신발
+      c.strokeStyle = 'rgba(14,20,32,.5)'; c.lineWidth = lineW * 1.2;      // 밑창
+      c.beginPath(); c.moveTo(X(L.fx - 0.028), Y(L.fy + 0.002)); c.lineTo(X(L.fx + 0.072), Y(L.fy + 0.002)); c.stroke();
+    }
+    function drawArm(A, near) {
+      var sk = near ? skin[0] : skin[1], hi = near ? skinHiN : null;
+      limb(A.sx, A.sy, A.ex, A.ey, RIG.wUarm, sk, hi);
+      limb(A.ex, A.ey, A.hx, A.hy, RIG.wFarm, sk, hi);
+      blob(A.hx, A.hy, RIG.hand, RIG.hand * 0.9, sk, null);
+    }
+    drawArm(armF, false);
+    drawLeg(legF, false);
+    drawLeg(legN, true);
     drawHairBack(c, X, Y, headX, headY, headTilt, hairStyle, hair, U, p, cp);
-    // 몸통(유니폼): 엉덩이 사다리꼴 + 어깨 사다리꼴, 구단 1색 + 옆선 2색
-    var hipW = RIG.wHip, shW = RIG.wSho, wsW = RIG.wWaist;
+    // 반바지
+    var hipW = RIG.wHip;
+    c.fillStyle = shorts; c.strokeStyle = stroke; c.lineWidth = lineW; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(X(-hipW / 2), Y(hipY + 0.03)); c.lineTo(X(hipW / 2), Y(hipY + 0.03));
+    c.lineTo(X(hipW / 2 + 0.012), Y(hipY - 0.11)); c.lineTo(X(0.012), Y(hipY - 0.13)); c.lineTo(X(-0.012), Y(hipY - 0.13)); c.lineTo(X(-hipW / 2 - 0.012), Y(hipY - 0.11)); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = shortsHi; c.beginPath(); c.moveTo(X(hipW / 2 - 0.02), Y(hipY + 0.02)); c.lineTo(X(hipW / 2 - 0.004), Y(hipY + 0.02)); c.lineTo(X(hipW / 2 + 0.008), Y(hipY - 0.1)); c.lineTo(X(hipW / 2 - 0.008), Y(hipY - 0.1)); c.closePath(); c.fill();
+    // 몸통(유니폼): 허리 → 어깨 사다리꼴 + 옆선 트림 + 목선
+    var shW = RIG.wSho, wsW = RIG.wWaist;
     var wx = Math.sin(pose.spine) * torsoLen * 0.45, wy = hipY + Math.cos(pose.spine) * torsoLen * 0.45;
-    c.fillStyle = shorts;                                                  // 반바지
-    c.beginPath(); c.moveTo(X(-hipW / 2), Y(hipY + 0.02)); c.lineTo(X(hipW / 2), Y(hipY + 0.02));
-    c.lineTo(X(hipW / 2 + 0.01), Y(hipY - 0.1)); c.lineTo(X(-hipW / 2 - 0.01), Y(hipY - 0.1)); c.closePath(); c.fill();
-    c.fillStyle = kit.primary; c.strokeStyle = stroke; c.lineWidth = lineW; c.lineJoin = 'round';
+    c.fillStyle = kit.primary; c.strokeStyle = stroke; c.lineWidth = lineW;
     c.beginPath();
     c.moveTo(X(-wsW / 2), Y(hipY)); c.lineTo(X(wsW / 2), Y(hipY));
-    c.lineTo(X(wx + wsW / 2), Y(wy)); c.lineTo(X(shoX + shW / 2), Y(shoY + 0.02)); c.lineTo(X(shoX - shW / 2), Y(shoY + 0.02));
+    c.lineTo(X(wx + wsW / 2), Y(wy)); c.lineTo(X(shoX + shW / 2), Y(shoY + 0.025)); c.lineTo(X(shoX - shW / 2), Y(shoY + 0.025));
     c.lineTo(X(wx - wsW / 2), Y(wy)); c.closePath(); c.fill(); c.stroke();
-    c.fillStyle = kit.secondary; c.globalAlpha = alpha * 0.8;             // 옆선(앞쪽 가장자리)
+    c.fillStyle = 'rgba(0,0,0,.16)';                                      // 옆구리 그늘(먼 쪽)
+    c.beginPath(); c.moveTo(X(-wsW / 2), Y(hipY)); c.lineTo(X(-wsW / 2 + 0.03), Y(hipY)); c.lineTo(X(shoX - shW / 2 + 0.035), Y(shoY + 0.02)); c.lineTo(X(shoX - shW / 2), Y(shoY + 0.02)); c.closePath(); c.fill();
+    c.fillStyle = kit.secondary; c.globalAlpha = alpha * 0.85;             // 옆선(앞쪽 가장자리)
     c.beginPath(); c.moveTo(X(wsW / 2 - 0.018), Y(hipY)); c.lineTo(X(wsW / 2), Y(hipY)); c.lineTo(X(shoX + shW / 2), Y(shoY + 0.02)); c.lineTo(X(shoX + shW / 2 - 0.02), Y(shoY + 0.02)); c.closePath(); c.fill();
+    c.strokeStyle = kit.secondary; c.lineWidth = Math.max(1, 0.012 * U);   // 목선(V)
+    c.beginPath(); c.moveTo(X(shoX - 0.045), Y(shoY + 0.02)); c.lineTo(X(shoX), Y(shoY - 0.035)); c.lineTo(X(shoX + 0.045), Y(shoY + 0.02)); c.stroke();
     c.globalAlpha = alpha;
-    if (p.jersey) {                                                        // 등번호(가슴)
-      c.save(); c.translate(X((wx + shoX) / 2 * 0.9), Y((wy + shoY) / 2)); c.scale(mirror, 1);
-      c.font = '700 ' + (0.085 * U) + 'px "Barlow Condensed",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = 'rgba(255,255,255,.92)'; c.fillText(String(p.jersey), 0, 0); c.restore();
+    if (p.jersey) {
+      c.save(); c.translate(X((wx + shoX) / 2 * 0.9), Y((wy + shoY) / 2 - 0.01)); c.scale(mirror, 1);
+      c.font = '700 ' + (0.095 * U) + 'px "Barlow Condensed",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = 'rgba(255,255,255,.94)'; c.fillText(String(p.jersey), 0, 0); c.restore();
     }
-    limb(legN.hx, legN.hy, legN.kx, legN.ky, RIG.wThigh, shorts);
-    limb(legN.kx, legN.ky, legN.fx, legN.fy, RIG.wShin, skin[0]);
-    dot(legN.kx, legN.ky, RIG.wShin * 0.62, pad);
-    limb(legN.fx, legN.fy + 0.012, legN.fx + 0.06, legN.fy + 0.012, 0.045, shoe);
-    limb(armN.sx, armN.sy, armN.ex, armN.ey, RIG.wUarm, skin[0]);
-    limb(armN.ex, armN.ey, armN.hx, armN.hy, RIG.wFarm, skin[0]);
-    dot(armN.hx, armN.hy, RIG.hand, skin[0]);
-    // 목
-    limb(neckX, neckY - 0.02, headX, headY - RIG.headR * 0.6, 0.05, skin[1]);
-    // 머리: 뒷머리 캡(원보다 조금 크게) → 얼굴(카드 원형 비트맵) → 앞머리 선
-    var hr = RIG.headR;
+    drawArm(armN, true);
+    // 강타 스윙 잔상
+    if (g.pose === EV.Attack && p.active && g.u < 0.14) {
+      c.strokeStyle = 'rgba(255,255,255,' + (0.7 * (1 - g.u / 0.14)) + ')'; c.lineWidth = Math.max(1, 0.012 * U); c.lineCap = 'round';
+      for (var si = 1; si <= 3; si++) {
+        var ang0 = -0.4 - si * 0.28, ang1 = ang0 + 0.22;
+        c.beginPath(); c.arc(X(armN.sx), Y(armN.sy), (RIG.uarm + RIG.farm) * 0.95 * U, ang0, ang1); c.stroke();
+      }
+    }
+    // 목 · 머리(타원 마스크 + 앞머리 캡)
+    limb(neckX, neckY - 0.02, headX, headY - RIG.headR * 0.6, 0.05, skin[1], null);
+    var hr = RIG.headR, hry = hr * 1.1;
     c.fillStyle = hair[0]; c.strokeStyle = stroke; c.lineWidth = lineW;
-    c.beginPath(); c.ellipse(X(headX - 0.008), Y(headY + 0.012), hr * 1.12 * U, hr * 1.16 * U, 0, 0, 6.284); c.fill(); c.stroke();
+    c.beginPath(); c.ellipse(X(headX - 0.006), Y(headY + 0.014), hr * 1.1 * U, hry * 1.12 * U, 0, 0, 6.284); c.fill(); c.stroke();
     var face = head && head.face ? head.face : null;
     if (face) {
-      c.save(); c.translate(X(headX), Y(headY)); c.scale(mirror, 1);       // 얼굴은 뒤집지 않는다(그림 좌우 유지)
-      c.beginPath(); c.arc(0, 0, hr * 1.02 * U, 0, 6.284); c.closePath(); c.clip();
-      c.drawImage(face, -hr * 1.02 * U, -hr * 1.02 * U, hr * 2.04 * U, hr * 2.04 * U); c.restore();
+      c.save(); c.translate(X(headX), Y(headY)); c.scale(mirror, 1);
+      c.beginPath(); c.ellipse(0, 0, hr * 1.0 * U, hry * U, 0, 0, 6.284); c.closePath(); c.clip();
+      c.drawImage(face, -hr * 1.0 * U, -hry * U, hr * 2.0 * U, hry * 2 * U); c.restore();
+      c.fillStyle = 'rgba(30,20,40,.16)';                                 // 턱 아래 그늘
+      c.beginPath(); c.ellipse(X(headX), Y(headY - hry * 0.72), hr * 0.75 * U, hry * 0.3 * U, 0, 0, 6.284); c.fill();
     } else {
-      dot(headX, headY, hr, skin[0]);
+      blob(headX, headY, hr, hry, skin[0], null);
       c.fillStyle = hair[0]; c.beginPath(); c.arc(X(headX), Y(headY), hr * U, 3.3, 6.1); c.fill();
     }
-    // 앞머리 캡 — 원형 크롭의 윗가장자리를 머리색 띠로 덮어 머리 실루엣을 잇는다
-    c.strokeStyle = hair[0]; c.lineWidth = hr * 0.22 * U; c.lineCap = 'round';
-    c.beginPath(); c.arc(X(headX), Y(headY), hr * 0.95 * U, 3.35 + headTilt, 6.05 + headTilt); c.stroke();
-    // 강조 링(데뷔전 등)
+    c.strokeStyle = hair[0]; c.lineWidth = hr * 0.26 * U; c.lineCap = 'round';
+    c.beginPath(); c.ellipse(X(headX), Y(headY), hr * 0.94 * U, hry * 0.94 * U, 0, 3.4 + headTilt, 6.0 + headTilt); c.stroke();
     var mk = R.markOf ? R.markOf(p.pid) : null;
-    if (mk) { c.beginPath(); c.arc(X(headX), Y(headY), hr * 1.3 * U, 0, 6.284); c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke(); }
+    if (mk) { c.beginPath(); c.ellipse(X(headX), Y(headY), hr * 1.32 * U, hry * 1.32 * U, 0, 0, 6.284); c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke(); }
     c.restore();
     R.debug.rigs++;
     // 이름·스킬 예고 — 화면 좌표
-    var hsx = g.foot.sx + mirror * headX * U * sx, topY = g.base.sy - (headY + hr * 1.3) * U * sy;
+    var hsx = g.foot.sx + mirror * headX * U * sx, topY = g.base.sy - (headY + hry * 1.35) * U * sy;
     c.globalAlpha = 1;
     if (p.tell && p.tellSkill) {
       c.font = '700 12px "Gothic A1",sans-serif'; c.textAlign = 'center';
@@ -1232,6 +1315,21 @@ function create(canvas, opts) {
       c.fillStyle = 'rgba(233,240,247,.96)'; c.strokeStyle = 'rgba(6,14,22,.85)'; c.lineWidth = 3;
       c.strokeText(p.name, hsx, topY - 6); c.fillText(p.name, hsx, topY - 6);
     }
+  }
+  /** 착지 먼지 — 공중에서 내려온 발밑에 번지는 고리 두 개(0.35초). 선수를 그린 뒤 코트 위에 겹친다. */
+  function drawRigFx(c) {
+    if (!R._rigFx.length) return;
+    var keep = [];
+    for (var i = 0; i < R._rigFx.length; i++) {
+      var f = R._rigFx[i], age = R.clock - f.t; if (age > 0.35 || age < 0) continue;
+      keep.push(f);
+      var k = age / 0.35, r = (0.25 + 0.55 * k) * f.s;
+      c.globalAlpha = 0.45 * (1 - k); c.strokeStyle = 'rgba(233,240,247,.9)'; c.lineWidth = Math.max(1, 0.05 * f.s * (1 - k));
+      c.beginPath(); c.ellipse(f.x, f.y, r, r * 0.38, 0, 0, 6.284); c.stroke();
+      c.beginPath(); c.ellipse(f.x, f.y, r * 0.6, r * 0.24, 0, 0, 6.284); c.stroke();
+    }
+    c.globalAlpha = 1;
+    R._rigFx = keep;
   }
   /** 뒷머리 — 스타일 묶음(short·medium·long·pony·twin·braid·bun)별 도형. 달릴 때 꼬리가 흔들린다. */
   function drawHairBack(c, X, Y, hx, hy, tilt, style, hair, U, p, cp) {
