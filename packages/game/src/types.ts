@@ -21,6 +21,8 @@ export interface CareerEntry { season: number; club: number; apps: number; goals
 /** A squad member: the engine's player definition plus career/season state. */
 export interface SquadPlayer extends PlayerDef {
   age: number;
+  /** nationality (names.ts); absent = 한국 */
+  nat?: string;
   /** freshness 0..1 (1 = fully rested); becomes starting fatigue in the next match */
   condition: number;
   /** days until fit again (0 = fit) */
@@ -113,7 +115,7 @@ export interface Interview {
   round: number;
 }
 
-export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut" | "topFlightBid" | "relegationFear";
+export type StoryTemplateId = "sponsor" | "localPress" | "prospectTip" | "personalLeave" | "lockerConflict" | "boardDemand" | "derbyWeek" | "awayBus" | "coachOffer" | "injuryCrisis" | "mediaCriticism" | "youthDebut" | "topFlightBid" | "relegationFear" | "overseasBid";
 
 export interface StoryChoice { label: string; hint: string }
 
@@ -232,6 +234,8 @@ export interface Manager {
   id: string;
   name: string;
   age: number;
+  /** nationality (names.ts); absent = 한국 */
+  nat?: string;
   traits: ManagerTraits;
   /** the season he took charge of the current club (or joined the free pool) */
   since: number;

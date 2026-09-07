@@ -1,4 +1,7 @@
 import { difficultyOf } from "./difficulty";
+import { FOREIGN_PREMIUM, FOREIGN_QUOTA, foreignCount, isForeignPlayer } from "./foreign";
+import { isForeignId } from "./continental";
+import { divisionOf } from "./divisions";
 import type { Club, GameState, ManagerTraits, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
 import { scoutReport, staffWeek, type ScoutReport } from "./staff";
 import { overall } from "./rating";
@@ -119,17 +122,26 @@ export interface TransferTarget {
   player: SquadPlayer;
   price: number | null;
   value: number;
+  /** the selling club plays abroad (continental.ts): the price carries FOREIGN_PREMIUM */
+  abroad?: boolean;
   /** the user's scout's 관찰 보고 (potential estimate); absent without a scout */
   report?: ScoutReport;
+}
+
+/** The asking price as the buyer sees it: a club abroad adds FOREIGN_PREMIUM. */
+export function askingPriceFor(s: GameState, from: Club, p: SquadPlayer): number | null {
+  const base = askingPrice(from, p);
+  return base === null ? null : isForeignId(from.id) ? Math.round(base * FOREIGN_PREMIUM) : base;
 }
 
 export function transferTargets(s: GameState): TransferTarget[] {
   const out: TransferTarget[] = [];
   const me = s.clubs[s.userClub]!;
-  for (const club of s.clubs) {
+  for (const club of [...s.clubs, ...(s.foreign ?? [])]) {
     if (club.id === s.userClub) continue;
+    const abroad = isForeignId(club.id);
     for (const player of club.squad) {
-      const t: TransferTarget = { club, player, price: askingPrice(club, player), value: playerValue(player) };
+      const t: TransferTarget = { club, player, price: askingPriceFor(s, club, player), value: playerValue(player), ...(abroad ? { abroad } : {}) };
       const report = scoutReport(me, player, s.season);
       if (report) t.report = report;
       out.push(t);
@@ -245,6 +257,12 @@ function positionOf(s: GameState, clubId: number): number | null {
  * exception that makes the market move: its good players want out, so they barely refuse anyone.
  */
 export function refusalChanceBetween(s: GameState, from: Club, to: Club, p: SquadPlayer): number {
+  // From abroad the whole league is a step sideways at best: a starter over there rarely comes, and never
+  // for the second division; a reserve is persuadable by a top-flight club.
+  if (isForeignId(from.id)) {
+    const top = divisionOf(to) === 1;
+    return isStarter(from, p) ? (top ? 0.45 : 0.85) : top ? 0.15 : 0.55;
+  }
   if (!isStarter(from, p)) return 0;
   // Before a table exists the standing comes from reputation instead of points.
   const settled = s.round > 5;
@@ -277,8 +295,9 @@ export function makeBid(s: GameState, fromClubId: number, playerId: string, fee:
   const err = (text: string): BidResult => ({ status: "error", text });
   if (!p) return err("선수를 찾을 수 없습니다");
   if (!windowOpen(s)) return err("이적 시장이 닫혀 있습니다");
-  const asking = askingPrice(from, p);
+  const asking = askingPriceFor(s, from, p);
   if (asking === null) return err(`${from.name}은(는) 스쿼드가 얇아 팔지 않습니다`);
+  if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return err(`외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`);
   fee = Math.round(fee);
   if (!(fee > 0)) return err("제시액이 올바르지 않습니다");
   if (me.budget < fee) return err(`예산 부족 (필요 ${fee}억, 보유 ${me.budget}억)`);
@@ -314,8 +333,9 @@ export function buyPlayer(s: GameState, fromClubId: number, playerId: string): s
   const p = from.squad.find((q) => q.id === playerId);
   if (!p) return "선수를 찾을 수 없습니다";
   if (!windowOpen(s)) return "이적 시장이 닫혀 있습니다";
-  const price = askingPrice(from, p);
+  const price = askingPriceFor(s, from, p);
   if (price === null) return `${from.name}은(는) 스쿼드가 얇아 팔지 않습니다`;
+  if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return `외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`;
   if (me.budget < price) return `예산 부족 (필요 ${price}억, 보유 ${me.budget}억)`;
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;
   movePlayer(s, from, me, p, price);
@@ -541,6 +561,7 @@ export function signFreeAgent(s: GameState, playerId: string): string | null {
   if (!p) return "선수를 찾을 수 없습니다";
   if (!windowOpen(s)) return "이적 시장이 닫혀 있습니다";
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;
+  if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return `외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`;
   const t = freeAgentTerms(p);
   if (me.budget < t.fee) return `계약금 부족 (필요 ${t.fee}억, 보유 ${me.budget}억)`;
   signFree(s, me, p);
@@ -681,6 +702,8 @@ export function aiTransfers(s: GameState, rng: Rand): void {
     // how far above value a manager will go: a big spender to 2×, a frugal one barely past the tag; money burns a hole in the pocket
     const maxRatio = (pol.spender ? 2 : pol.frugal ? 1.25 : 1.6) * (rich ? 1.25 : 1);
     const candidates = transferTargets(s)
+      // AI clubs shop at home: the foreign field is the user's hunting ground (and the conservation of the league's players)
+      .filter((t) => !t.abroad)
       .filter((t) => t.club.id !== club.id && needFor.has(t.player.role) && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
       .filter((t) => !pol.youth || t.player.age <= 24)
       .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))

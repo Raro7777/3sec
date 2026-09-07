@@ -7,6 +7,7 @@ import { wageFor } from "./contracts";
 import { generateManager, managerTraining } from "./managers";
 import { generateClubStaff } from "./staff";
 import { newFans } from "./fans";
+import { nameFor, type Nationality } from "./names";
 import { ensureCaptain, ensurePersonality, lockerRoom } from "./morale";
 
 const FIRST = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍", "문", "양", "배", "백", "남"];
@@ -59,7 +60,7 @@ export const CLUBS_D2: { name: string; shortName: string; color: string; reputat
 /** 20-man squad: two keepers, eight defenders, six midfielders, four forwards. */
 const SQUAD_ROLES: Role[] = ["GK", "GK", "CB", "CB", "CB", "CB", "LB", "LB", "RB", "RB", "DM", "CM", "CM", "CM", "AM", "LW", "RW", "ST", "ST", "LM"];
 
-export function buildSquad(rng: Rng, idPrefix: string, reputation: number): SquadPlayer[] {
+export function buildSquad(rng: Rng, idPrefix: string, reputation: number, nat: Nationality = "한국"): SquadPlayer[] {
   const numbers = new Set<number>();
   const squad: SquadPlayer[] = [];
   SQUAD_ROLES.forEach((role, i) => {
@@ -77,7 +78,8 @@ export function buildSquad(rng: Rng, idPrefix: string, reputation: number): Squa
     const potential = Math.max(ovr, Math.min(20, Math.round((ovr + Math.max(0, 27 - age) * 0.55 + rng.gauss(0.5, 1)) * 10) / 10));
     squad.push({
       id: `${idPrefix}-${i + 1}`,
-      name: randomName(rng),
+      name: nat === "한국" ? randomName(rng) : nameFor(rng, nat),
+      ...(nat === "한국" ? {} : { nat }),
       number,
       role,
       attrs,

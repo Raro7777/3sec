@@ -98,3 +98,6 @@ export {
   simulateClDay, advanceClDay, clPrize, userClSummary, refreshForeign, type GroupRow,
 } from "./continental";
 export { clubRecords, type ClubRecords, type ClubRecordLine, type SeasonBest } from "./annals";
+export { nameFor, NAT_CODE, NATIONALITIES, type Nationality } from "./names";
+export { FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, foreignCount, foreignStarters } from "./foreign";
+export { askingPriceFor } from "./transfers";

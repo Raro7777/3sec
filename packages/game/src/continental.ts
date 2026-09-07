@@ -22,6 +22,8 @@ import { clubsIn, divisionTable } from "./divisions";
 import { penaltyShootout, tieWinner } from "./cup";
 import { boardCupWin } from "./board";
 import { applyStaffRecovery } from "./staff";
+import type { Nationality } from "./names";
+import { FOREIGN_ID_BASE } from "./foreign";
 
 export const CL_NAME = "동아시아 챔피언스리그";
 export const CL_SHORT = "동아시아 CL";
@@ -31,13 +33,13 @@ export const CL_STAGES = 6;
 export const CL_STAGE_LABEL = ["조별리그 1차전", "조별리그 2차전", "조별리그 3차전", "8강", "4강", "결승"] as const;
 export const CL_GROUP_STAGES = 3;
 export const CL_KR_SLOTS = 3;
-export const FOREIGN_ID_BASE = 100;
+export { FOREIGN_ID_BASE };
 /** Prize money (억원): per group win / draw, then by how far a club went. Bigger than the league title, which is the point. */
 export const CL_PRIZE = { groupWin: 5, groupDraw: 2, qfLoser: 15, sfLoser: 25, runnerUp: 40, winner: 80 } as const;
 /** Reputation the winner and the runner-up carry home. */
 export const CL_REP = { winner: 0.3, runnerUp: 0.15 } as const;
 
-export interface ForeignDef { name: string; shortName: string; color: string; country: string; reputation: number; formation: FormationName; capacity: number }
+export interface ForeignDef { name: string; shortName: string; color: string; country: Nationality; reputation: number; formation: FormationName; capacity: number }
 /** Thirteen fictional clubs. Reputation runs 12.4-15.6 against the top flight's 10.5-14: the best of them are better than anything at home. */
 export const FOREIGN_DEFS: ForeignDef[] = [
   { name: "도쿄 이글스", shortName: "도쿄", color: "#d62828", country: "일본", reputation: 15.6, formation: "4-2-3-1", capacity: 62000 },
@@ -63,7 +65,7 @@ export function buildForeignClubs(seed: number): Club[] {
     const club: Club = {
       id, name: d.name, shortName: d.shortName, color: d.color, reputation: d.reputation, division: 0,
       budget: seasonBudget(d.reputation, null), seasonStartBudget: seasonBudget(d.reputation, null),
-      squad: buildSquad(rng, `F${id}`, d.reputation),
+      squad: buildSquad(rng, `F${id}`, d.reputation, d.country),
       tactics: { ...defaultTactics(d.formation), mentality: 0.5, pressing: 0.5, directness: 0.5 },
       selection: { formation: d.formation, starters: [], bench: [] },
       training: { focus: "balanced", intensity: "normal" },
@@ -72,7 +74,7 @@ export function buildForeignClubs(seed: number): Club[] {
       stadiumName: `${d.shortName} 스타디움`,
     };
     for (const p of club.squad) p.wage = wageFor(p);
-    club.manager = generateManager(rng, 1, `MF${id}`);
+    club.manager = generateManager(rng, 1, `MF${id}`, d.country);
     club.training = managerTraining(club.manager);
     club.selection = autoSelect(club, d.formation);
     ensureCaptain(club);
@@ -102,7 +104,7 @@ export function refreshForeign(s: GameState): void {
 export function foreignRollover(s: GameState): void {
   for (const c of ensureForeign(s)) {
     const rng = new Rng((s.seed * 53 + c.id * 2003 + s.season * 331 + 29) >>> 0);
-    c.squad = buildSquad(rng, `F${c.id}S${s.season}`, c.reputation);
+    c.squad = buildSquad(rng, `F${c.id}S${s.season}`, c.reputation, FOREIGN_DEFS[c.id - FOREIGN_ID_BASE]?.country ?? "한국");
     for (const p of c.squad) p.wage = wageFor(p);
     c.selection = autoSelect(c, c.selection.formation);
     ensureCaptain(c);

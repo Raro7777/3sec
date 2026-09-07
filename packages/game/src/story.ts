@@ -11,6 +11,7 @@
  * Hooks: `storyWeek` from advanceRound, `storyMatch` from recordResult, `storyRollover` from startNextSeason,
  * `migrateStory` from save.deserialize.
  */
+import { foreignCountry } from "./continental";
 import type { Match, Rng } from "@3sec/engine";
 import type { Club, Fixture, GameState, SquadPlayer, StoryChoice, StoryEvent, StoryTemplateId } from "./types";
 import { clubOf, nextUserFixture } from "./season";
@@ -40,7 +41,7 @@ export const SCOUT_TIP_COST = 3;
 export const AWAY_BUS_COST = 2;
 export const PHYSIO_COST = 3;
 
-export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear"];
+export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear", "overseasBid"];
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -99,6 +100,8 @@ function applicable(s: GameState, me: Club, t: StoryTemplateId): boolean {
     // A club above only comes calling when there is a division above to come from, a window to deal
     // in, and somebody worth asking about.
     case "topFlightBid": return userDivision(s) > 1 && windowOpen(s) && !!starPlayer(me) && clubsIn(s, userDivision(s) - 1).length > 0;
+    // a club abroad comes for the top flight's stars: only a real star, only with the window open
+    case "overseasBid": { const star = starPlayer(me); return userDivision(s) === 1 && windowOpen(s) && !!star && overall(star.attrs, star.role) >= 13.5 && (s.foreign?.length ?? 0) > 0; }
     // The run-in, in the drop zone, with the drop still real.
     case "relegationFear": return userDivision(s) < DIVISIONS && s.round >= seasonRounds(s) - 4 && roundsLeft(s) > 0 && inRelegationZone(s, s.userClub);
   }
@@ -164,6 +167,24 @@ function draft(s: GameState, me: Club, t: StoryTemplateId, rng: Rng): Draft | nu
           { label: `${fee}억에 판다`, hint: `예산 +${fee}억, 선수단 사기 −4, 팬 −5` },
           { label: "거절한다", hint: `${p.name} 사기 −15, 이적 요구 가능성` },
           { label: `재계약으로 붙잡는다 (연봉 +${raise}억)`, hint: `${p.name} 사기 +12, 예산 −${raise}억, 팬 +3` },
+        ],
+      };
+    }
+    case "overseasBid": {
+      const p = starPlayer(me)!;
+      const rich = [...(s.foreign ?? [])].sort((a, b) => b.reputation - a.reputation);
+      const from = rich[Math.floor(rng.next() * rng.next() * rich.length)] ?? rich[0]!;
+      // abroad the money is bigger: well above the domestic value, and the player knows it
+      const fee = Math.max(2, Math.round(playerValue(p) * (1.6 + rng.next() * 0.7)));
+      const raise = Math.max(0.2, Math.round(p.wage * 0.6 * 10) / 10);
+      return {
+        title: "해외 구단의 제안",
+        text: `${foreignCountry(from.id)}의 ${from.name}이(가) ${p.name} 영입에 ${fee}억을 제시했습니다. 에이전트는 "선수 본인도 해외 도전을 원한다"고 전합니다.`,
+        playerId: p.id, amount: fee, clubId: from.id,
+        choices: [
+          { label: `${fee}억에 보낸다`, hint: `예산 +${fee}억, 선수단 사기 −3, 팬 −4, 이사회 +2` },
+          { label: "거절한다", hint: `${p.name} 사기 −18, 이적 요구 가능성 큼` },
+          { label: `재계약으로 붙잡는다 (연봉 +${raise}억)`, hint: `${p.name} 사기 +10, 예산 −${raise}억, 팬 +4` },
         ],
       };
     }
@@ -338,6 +359,35 @@ export function resolveEvent(s: GameState, eventId: string, choice: number, auto
         adjustMood(me, 3);
         p.transferRequest = false;
         out = `${p.name}이(가) 재계약에 서명했습니다 (연봉 +${raise}억). 팬들은 구단이 에이스를 지켰다며 반겼습니다.`;
+      }
+      break;
+    }
+    case "overseasBid": {
+      const from = ev.clubId !== undefined ? clubOf(s, ev.clubId) : null;
+      if (!p) { out = "그 선수는 이미 팀을 떠났습니다."; break; }
+      if (choice === 0) {
+        const fee = ev.amount ?? 0;
+        money(me, fee);
+        me.squad = me.squad.filter((q) => q.id !== p.id);
+        me.selection.starters = me.selection.starters.filter((id) => id !== p.id);
+        me.selection.bench = me.selection.bench.filter((id) => id !== p.id);
+        if (from) from.squad.push(p);
+        adjustSquadMorale(me, -3);
+        adjustMood(me, -4);
+        if (s.board) s.board.confidence = Math.min(100, Math.round((s.board.confidence + 2) * 10) / 10);
+        out = `${p.name}이(가) ${from?.name ?? "해외"}(으)로 떠났습니다. ${fee}억. 이사회는 장사를 잘했다고 보지만 팬들은 서운합니다.`;
+      } else if (choice === 1) {
+        adjustMorale(p, -18);
+        if (personalityOf(p).ambition > 0.4) p.transferRequest = true;
+        out = `제안을 거절했습니다. ${p.name}은(는) 해외 도전의 꿈이 막혔다고 느낍니다.${p.transferRequest ? " 이적을 공식 요구했습니다." : ""}`;
+      } else {
+        const raise = Math.max(0.2, Math.round(p.wage * 0.6 * 10) / 10);
+        p.wage = Math.round((p.wage + raise) * 10) / 10;
+        money(me, -raise);
+        adjustMorale(p, 10);
+        adjustMood(me, 4);
+        p.transferRequest = false;
+        out = `${p.name}이(가) 재계약에 서명했습니다 (연봉 +${raise}억). "아직 여기서 이룰 게 남았다"고 했습니다.`;
       }
       break;
     }

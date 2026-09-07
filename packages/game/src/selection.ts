@@ -1,6 +1,7 @@
 import { FORMATIONS, type FormationName, type Role } from "@3sec/engine";
 import type { Club, Selection, SquadPlayer } from "./types";
 import { overall, slotFit } from "./rating";
+import { FOREIGN_ON_PITCH, isForeignPlayer, quotaBound } from "./foreign";
 
 export const BENCH_SIZE = 7;
 
@@ -27,6 +28,18 @@ export function autoSelect(club: Club, formation: FormationName = club.selection
     if (!best) break;
     taken.add(best.id);
     starters.push(best.id);
+  }
+  // 외국인 출전 한도: past FOREIGN_ON_PITCH, the weakest-fitting foreigner makes way for the best Korean left for his slot
+  for (let guard = 0; quotaBound(club) && guard < 8; guard++) {
+    const foreignIdx = starters.map((id, i) => ({ id, i })).filter(({ id }) => isForeignPlayer(club.squad.find((q) => q.id === id)!));
+    if (foreignIdx.length <= FOREIGN_ON_PITCH) break;
+    const fit = ({ id, i }: { id: string; i: number }) => { const p = club.squad.find((q) => q.id === id)!; return slotFit(p.attrs, p.role, slots[i]!.role); };
+    const drop = foreignIdx.sort((a, b) => fit(a) - fit(b))[0]!;
+    const slotRole = slots[drop.i]!.role;
+    const sub = pool.filter((p) => !taken.has(p.id) && !isForeignPlayer(p) && (slotRole !== "GK" || p.role === "GK")).sort((a, b) => slotFit(b.attrs, b.role, slotRole) - slotFit(a.attrs, a.role, slotRole))[0];
+    if (!sub) break;
+    taken.delete(drop.id); taken.add(sub.id);
+    starters[drop.i] = sub.id;
   }
   const rest = pool.filter((p) => !taken.has(p.id)).sort((a, b) => overall(b.attrs, b.role) * (0.7 + 0.3 * b.condition) - overall(a.attrs, a.role) * (0.7 + 0.3 * a.condition));
   const bench: string[] = [];
@@ -61,6 +74,8 @@ export function selectionProblem(club: Club): string | null {
     if (!isAvailable(p) && !shortHanded) return `${p.name}은(는) ${p.injuryDays > 0 ? "부상" : "출장 정지"} 중입니다`;
     if (i === 0 && p.role !== "GK" && club.squad.some((q) => q.role === "GK" && isAvailable(q))) return "1번 자리는 골키퍼여야 합니다";
   }
+  const foreign = sel.starters.filter((id) => { const p = club.squad.find((q) => q.id === id); return !!p && isForeignPlayer(p); }).length;
+  if (quotaBound(club) && foreign > FOREIGN_ON_PITCH) return `외국인 선수는 동시에 ${FOREIGN_ON_PITCH}명까지만 선발할 수 있습니다 (현재 ${foreign}명)`;
   if (sel.bench.length > BENCH_SIZE) return `교체 명단은 최대 ${BENCH_SIZE}명입니다`;
   for (const id of sel.bench) {
     const p = club.squad.find((q) => q.id === id);

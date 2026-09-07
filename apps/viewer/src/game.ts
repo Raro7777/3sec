@@ -9,7 +9,7 @@ import {
   freeAgentTerms, signFreeAgent, loanableOut, loanDestination, loanOut, loanTargets, loanIn, type BidResult,
   FOCUS_LABEL, INTENSITY_LABEL, expiringContracts, renewContract, renewalTerms, wageBill, type TrainingFocus, type TrainingIntensity,
   COACHING, LEAVE_AGE, MAX_PROSPECTS, MIN_PROMOTE_AGE, SCOUTING, promoteProspect, prospectOverall, releaseProspect, youthWeeklyCost, type ScoutingTier,
-  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_PRIZE, GROUP_NAMES, advanceClDay, createClMatch, clFixture, clPrize, pendingClTies, recordClResult, userClTie, userEnteredCl, userStillInCl, groupTable, groupOf, isForeignId, foreignCountry, userClSummary, clDone, clubRecords, refreshForeign,
+  CL_NAME, CL_SHORT, CL_ROUNDS, CL_STAGE_LABEL, CL_GROUP_STAGES, CL_PRIZE, GROUP_NAMES, advanceClDay, createClMatch, clFixture, clPrize, pendingClTies, recordClResult, userClTie, userEnteredCl, userStillInCl, groupTable, groupOf, isForeignId, foreignCountry, userClSummary, clDone, clubRecords, refreshForeign, NAT_CODE, FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, foreignCount,
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userEnteredCup, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
@@ -159,6 +159,8 @@ const ATTR_GROUPS: { title: string; keys: (keyof Attributes)[]; gk?: boolean }[]
   { title: "골키퍼", keys: ["reflexes", "handling", "gkPositioning"], gk: true },
 ];
 const INFO_BTN = (key: string) => `<button class="info" data-info="${key}" title="선수 프로필" aria-label="선수 프로필">ℹ</button>`;
+/** A small nationality tag after a foreign player's name; Koreans get nothing. */
+const natTag = (p: SquadPlayer): string => isForeignPlayer(p) ? ` <span class="nat" title="${p.nat}">${NAT_CODE[p.nat as keyof typeof NAT_CODE] ?? p.nat}</span>` : "";
 
 /** 1..5 전력 stars derived from reputation (10 → 1, 14.5 → 5). */
 const clubStars = (rep: number): number => Math.max(1, Math.min(5, Math.round(1 + (rep - 10) / 4.5 * 4)));
@@ -1637,7 +1639,7 @@ export class Game {
       : `<button data-sheet="pick" ${ds}>비교 대상으로</button>`;
     return `<div class="pc">
       <div class="pcHead"><div class="pcNum">${face(p, club, 44)}<small>${p.number}</small></div>
-        <div class="pcMain"><div class="pcName">${p.name}</div><div class="hint">${p.role} · ${p.age}세 · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? " <small>(타 구단)</small>" : ""}</div></div>
+        <div class="pcMain"><div class="pcName">${p.name}${natTag(p)}</div><div class="hint">${p.role} · ${p.age}세 · ${p.nat ?? "한국"} · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? " <small>(타 구단)</small>" : ""}</div></div>
         <div class="pcOvr"><b style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</b><small><span class="stars">${"★".repeat(stars)}<i>${"★".repeat(5 - stars)}</i></span></small></div></div>
       <div class="pcStats"><div>가치<b>${playerValue(p)}억</b></div><div>연봉 · 계약<b>${p.wage}억</b><small>~시즌 ${p.contractUntil}${p.contractUntil <= s.season ? " 만료" : ""}</small></div><div>컨디션<b style="color:${cond > 70 ? "var(--good)" : cond > 45 ? "var(--warn)" : "var(--bad)"}">${cond}%</b></div><div>상태<b style="color:${statusColor}">${status}</b></div></div>
       <div class="pcStats wrap"><div>사기<b style="color:${(() => { const b = moraleBand(moraleOf(p)); return b === "good" ? "var(--good)" : b === "ok" ? "var(--accent)" : b === "warn" ? "var(--warn)" : "var(--bad)"; })()}">${moraleLabel(moraleOf(p))}</b><small>${Math.round(moraleOf(p))}/100${p.transferRequest ? " · 이적 요청" : ""}</small></div><div>성격<b>${personalityTags(p).join(" · ") || "평범"}</b></div>${club && club.captain === p.id ? `<div>주장<b style="color:var(--accent)">Ⓒ</b></div>` : ""}</div>
@@ -1799,8 +1801,8 @@ export class Game {
     const career = p.career ?? [];
     const h: string[] = [];
     h.push(`<div class="card profile"><div class="actions"><button id="pfBack">← 돌아가기</button></div>
-      <div class="pfHead"><div class="pfNum">${face(p, club, 60)}<small>${p.number}</small></div><div class="pfMain"><div class="pfName">${p.name}</div>
-        <div class="hint">${p.role} · ${p.age}세 · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? ' <small style="opacity:.7">(타 구단)</small>' : ""}</div></div>
+      <div class="pfHead"><div class="pfNum">${face(p, club, 60)}<small>${p.number}</small></div><div class="pfMain"><div class="pfName">${p.name}${natTag(p)}</div>
+        <div class="hint">${p.role} · ${p.age}세 · ${p.nat ?? "한국"} · ${club ? `<span class="dot" style="background:${club.color}"></span>${club.name}` : "자유계약"}${club && club.id !== s.userClub ? ' <small style="opacity:.7">(타 구단)</small>' : ""}</div></div>
         <div class="pfOvr"><b style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</b><small>능력</small></div></div>
       <div class="stats">
         ${stat("잠재력", `<span class="stars" title="잠재력 ${stars}/5">${"★".repeat(stars)}<i>${"★".repeat(5 - stars)}</i></span>`)}
@@ -1859,7 +1861,7 @@ export class Game {
       const roleText = slotRole && slotRole !== p.role ? `${slotRole}<span style="opacity:.5">(${p.role})</span>` : p.role;
       return `<div class="row wide ${this.selA === p.id ? "sel" : ""} ${isAvailable(p) ? "" : "off"}" data-id="${p.id}">
         <span class="num face">${face(p, me, 28)}<i>${p.number}</i></span><span class="role">${roleText}</span>
-        <span class="name" title="${p.name}">${p.name}</span>
+        <span class="name" title="${p.name}">${p.name}${natTag(p)}</span>
         <span class="ovr" style="color:${ovr >= 14 ? "var(--good)" : ovr >= 11 ? "var(--text)" : "var(--warn)"}">${ovr.toFixed(1)}</span>
         <span class="age">${p.age}세</span>
         <span class="bar" title="컨디션 ${Math.round(cond * 100)}%"><i style="width:${Math.round(cond * 100)}%;background:${cond > 0.7 ? "var(--good)" : cond > 0.45 ? "var(--warn)" : "var(--bad)"}"></i></span>
@@ -2247,6 +2249,7 @@ export class Game {
 
   private transferRole = "전체";
   private transferSort = "ovr";
+  private transferScope: "all" | "home" | "abroad" = "all";
   private transferLimit = 25;
   /** the one follow-up bid the selling club allows after a counter */
   private pendingBid: { clubId: number; playerId: string; counter: number } | null = null;
@@ -2280,24 +2283,27 @@ export class Game {
       age: (a, b) => a.player.age - b.player.age || overall(b.player.attrs, b.player.role) - overall(a.player.attrs, a.player.role),
       pot: (a, b) => b.player.potential - a.player.potential,
     };
-    const allTargets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole).sort(sortFn[this.transferSort] ?? sortFn.ovr!);
+    const allTargets = transferTargets(s).filter((t) => this.transferRole === "전체" || t.player.role === this.transferRole)
+      .filter((t) => this.transferScope === "all" || (this.transferScope === "abroad") === !!t.abroad).sort(sortFn[this.transferSort] ?? sortFn.ovr!);
     const targets = allTargets.slice(0, this.transferLimit);
     const moreBtn = allTargets.length > targets.length ? `<div class="actions" style="justify-content:center"><button id="trMore">더 보기 (${allTargets.length - targets.length}명 남음)</button></div>` : "";
     if (this.pendingBid && !clubOf(s, this.pendingBid.clubId).squad.some((p) => p.id === this.pendingBid!.playerId)) this.pendingBid = null;
     const btn = 'style="padding:3px 8px;font-size:12px"';
     const fmtRow = (p: SquadPlayer, clubName: string, right: string, clubId: number = me.id) => `<div class="row tr" style="cursor:default">
         <span class="num face">${face(p, clubOf(s, clubId), 28)}<i>${p.number}</i></span><span class="role">${p.role}</span>
-        <span class="name" title="${p.name}" data-open="${clubId}:${p.id}" style="cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${p.name} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
+        <span class="name" title="${p.name}" data-open="${clubId}:${p.id}" style="cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${p.name}${natTag(p)} <span style="opacity:.55;font-size:11px">${clubName}</span></span>
         <span class="ovr">${overall(p.attrs, p.role).toFixed(1)}</span><span class="age">${p.age}세</span>
         <span class="val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right">${playerValue(p)}억</span>
         <span style="text-align:right">${right}</span>${INFO_BTN(`${clubId}:${p.id}`)}</div>`;
     const h: string[] = [], hOff: string[] = [], hBuy: string[] = [], hSell: string[] = [], hFree: string[] = [];
-    h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD}</span></h3>
+    h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD} · 외국인 ${foreignCount(me)}/${FOREIGN_QUOTA}</span></h3>
       <div class="hint">${open ? `<b style="color:var(--good)">열림</b>${deadlineDay(s) ? ' · <b style="color:var(--accent)">마감일</b> — 구단들이 평소보다 쉽게 응합니다' : ""} — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.` : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
       ${locked ? " · 경기 중에는 거래할 수 없습니다." : ""}</div>
       <div class="squad-tools"><label>포지션 <select id="trRole">${roles.map((r) => `<option ${r === this.transferRole ? "selected" : ""}>${r}</option>`).join("")}</select></label>
         <span class="chips">${([["ovr", "능력순"], ["value", "싼 순"], ["age", "어린 순"], ["pot", "잠재력순"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferSort === k ? "on" : ""}" data-sort="${k}">${l}</button>`).join("")}</span>
-      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span></div></div>`);
+        <span class="chips">${([["all", "전체"], ["home", "국내"], ["abroad", "해외"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferScope === k ? "on" : ""}" data-scope="${k}">${l}</button>`).join("")}</span>
+      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span>
+      <span class="hint"><b>외국인 규정</b>: 보유 ${FOREIGN_QUOTA}명, 동시 선발 ${FOREIGN_ON_PITCH}명까지. 해외 구단 선수의 호가는 국내보다 ${Math.round((FOREIGN_PREMIUM - 1) * 100)}% 비싸고, 주전은 상위 리그로 갈 때만 잘 응합니다. 대신 해외 구단이 우리 스타 선수에게 큰돈을 들고 찾아오기도 합니다.</span></div></div>`);
     // ---- incoming offers
     const offers = openOffers(s);
     if (offers.length || open) {
@@ -2327,7 +2333,7 @@ export class Game {
         const ok = can && me.squad.length < MAX_SQUAD && me.budget >= Math.min(t.price, pb?.counter ?? t.price) * 0.5;
         return fmtRow(t.player, t.club.shortName, pb
           ? `<button class="primary" data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="역제안 ${pb.counter}억 — 마지막 제시">재입찰 ${pb.counter}억</button>`
-          : `<button data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn}>호가 ${t.price}억</button>`, t.club.id);
+          : `<button data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="${t.abroad ? `해외 이적 프리미엄 포함 (가치 ${t.value}억)` : `가치 ${t.value}억`}">호가 ${t.price}억</button>`, t.club.id);
       })
       .join("")}</div></div>${moreBtn}`);
     hSell.push(`<div class="card"><h3>내 선수 판매 <span>최소 ${MIN_SQUAD}명 유지</span></h3><div class="hint">즉시 판매가는 지금 가장 높은 값을 부르는 구단 기준입니다. 더 받고 싶다면 받은 제안을 기다리거나 역제안하세요.</div><div class="roster">${[...me.squad]
@@ -2398,6 +2404,7 @@ export class Game {
       this.renderTransfers();
     });
     this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-sort]").forEach((b) => b.addEventListener("click", () => { this.transferSort = b.dataset.sort!; this.transferLimit = 25; this.renderTransfers(); }));
+    this.el.transfers.querySelectorAll<HTMLButtonElement>("button[data-scope]").forEach((b) => b.addEventListener("click", () => { this.transferScope = b.dataset.scope as typeof this.transferScope; this.transferLimit = 25; this.renderTransfers(); }));
     document.getElementById("trMore")?.addEventListener("click", () => { this.transferLimit += 25; this.renderTransfers(); });
     on("button[data-bid]", (b) => {
       const [club, id] = b.dataset.bid!.split(":");

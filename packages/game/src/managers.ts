@@ -1,3 +1,4 @@
+import { nameFor, type Nationality } from "./names";
 import { FORMATIONS, Rng, autoRoles, normalizeTactics, type FormationName, type PlayerRoleId, type Tactics } from "@3sec/engine";
 import type { Club, GameState, Manager, ManagerOfYear, ManagerTraitId, ManagerTraits, TableRow, TrainingFocus, TrainingIntensity } from "./types";
 import { DIVISIONS, clubsIn, divisionTable } from "./divisions";
@@ -27,10 +28,10 @@ const r2 = (x: number): number => Math.round(x * 100) / 100;
 // ------------------------------------------------------------------ generation
 
 /** A fresh manager from the dice: traits spread wide so personalities are distinct, age 36..62. */
-export function generateManager(rng: Rng, season: number, id: string): Manager {
+export function generateManager(rng: Rng, season: number, id: string, nat: Nationality = "한국"): Manager {
   const traits = {} as ManagerTraits;
   for (const k of TRAIT_IDS) traits[k] = r2(clamp(0.05 + rng.next() * 0.9 + rng.gauss(0, 0.08), 0.02, 0.98));
-  return { id, name: randomName(rng), age: rng.int(36, 62), traits, since: season, history: [] };
+  return { id, name: nat === "한국" ? randomName(rng) : nameFor(rng, nat), ...(nat === "한국" ? {} : { nat }), age: rng.int(36, 62), traits, since: season, history: [] };
 }
 
 /** Number of traits on which the two differ by at least 0.4. */
