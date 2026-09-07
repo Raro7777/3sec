@@ -25,3 +25,8 @@ saves/
 
 # 웹 빌드 산출물
 web/dist/
+
+# 아트 원본·작업 파일 — 용량이 커서 저장소 밖에 백업한다 (art/README.md)
+art/02_gen/
+art/03_work/
+art/06_lora/

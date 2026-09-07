@@ -275,6 +275,111 @@ def process(pid, height, force):
             'ball': ball_state, 'touch': ball['touch'] if ball else None, 'extra': info['kept_extra'],
             'model': model, 'sec': round(time.time() - t, 1)}
 
+# ─────────────────────────────────────────────── 포즈 세트 (art-pipeline 16.10)
+POSES = ['idle', 'ready', 'run', 'serve', 'recv', 'set', 'spike', 'block', 'dig', 'cheer', 'sad']
+def process_poses(pid, height, force):
+    """art/02_gen/{pid}/pose_{name}.png (흰 배경 생성 스틸) → {pid}_pose_{name}.webp + meta.poses[name]. 없는 포즈는 건너뛴다."""
+    src_dir = ROOT / 'art' / '02_gen' / pid
+    if not src_dir.exists():
+        return None
+    from rembg import remove
+    d = EXPORT / pid
+    d.mkdir(parents=True, exist_ok=True)
+    meta = read_meta(pid)
+    manual = (meta.get('standee_manual') or {}).get('poses') or {}
+    poses = meta.get('poses') or {}
+    done, skipped, total = 0, 0, 0
+    for name in POSES:
+        src = next((src_dir / f'pose_{name}{ext}' for ext in ('.png', '.webp', '.jpg') if (src_dir / f'pose_{name}{ext}').exists()), None)
+        if src is None:
+            continue
+        out = d / f'{pid}_pose_{name}.webp'
+        if out.exists() and not force and name in poses:
+            skipped += 1
+            continue
+        im = Image.open(src).convert('RGBA')
+        rgb = np.asarray(im)[:, :, :3].copy()
+        a = np.asarray(remove(im, session=session_for(MODEL)))[:, :, 3].astype(np.float32) / 255.0
+        a, _, info, _ = keep_body(a)
+        rgb = decontaminate(rgb, a)
+        arr, crop = crop_rgba(rgb, a)
+        small = resize_premul(arr, height)
+        anc = anchors(small)
+        Image.fromarray(small, 'RGBA').save(out, 'WEBP', quality=86, method=6, exact=False)
+        man = manual.get(name) or {}
+        poses[name] = { **anc, 'facing': man.get('facing') or 'R', 'src': src.name, 'crop': crop, 'model': MODEL }
+        done += 1
+        total += out.stat().st_size
+        log(f'| {pid} | {name} | {anc["w"]}×{anc["h"]} | {out.stat().st_size // 1024}KB | 추가성분 {info["kept_extra"]} |')
+    meta['poses'] = poses
+    write_meta(pid, meta)
+    return {'pid': pid, 'done': done, 'skipped': skipped, 'bytes': total, 'n': len(poses)}
+
+# ─────────────────────────────────────────────── 동작 애니메이션 (art-pipeline 16.10) — 영상 → 프레임 누끼
+ANIM_STEP = 5        # 24fps 영상에서 5프레임마다 = 초당 ~5장. 5초 클립이면 25장
+def process_anims(pid, height, force):
+    """art/02_gen/{pid}/anim_{name}.mp4 (흰 배경 생성 영상) → {pid}_anim_{name}_{ii}.webp + meta.anims[name] = {frames:[앵커], contact}.
+    contact(공과 닿는 프레임)는 몸 질량의 맨 위(손끝)가 가장 높은 프레임 + 1 로 잡는다. standee_manual.anims[name].contact 가 우선."""
+    src_dir = ROOT / 'art' / '02_gen' / pid
+    if not src_dir.exists():
+        return None
+    from rembg import remove
+    d = EXPORT / pid
+    meta = read_meta(pid)
+    manual = (meta.get('standee_manual') or {}).get('anims') or {}
+    anims = meta.get('anims') or {}
+    total, made = 0, 0
+    for mp4 in sorted(src_dir.glob('anim_*.mp4')):
+        name = mp4.stem[5:]
+        if name in anims and not force and any(d.glob(f'{pid}_anim_{name}_*.webp')):
+            continue
+        for old in d.glob(f'{pid}_anim_{name}_*.webp'):
+            old.unlink()
+        cap = cv2.VideoCapture(str(mp4))
+        frames, i = [], 0
+        while True:
+            ok, fr = cap.read()
+            if not ok:
+                break
+            if i % ANIM_STEP == 0:
+                frames.append(Image.fromarray(fr[:, :, ::-1]).convert('RGBA'))
+            i += 1
+        cap.release()
+        entries, tops = [], []
+        for k, im in enumerate(frames):
+            rgb = np.asarray(im)[:, :, :3].copy()
+            a = np.asarray(remove(im, session=session_for(MODEL)))[:, :, 3].astype(np.float32) / 255.0
+            ball = find_ball(rgb, a)                                   # 영상 모델이 그려 넣은 공 — 손끝에 걸친 것은 잘라낸다
+            if ball is not None and ball['touch'] <= CUT_TOUCH:
+                a = cut_disc(a, ball['x'], ball['y'], ball['r'])
+            try:
+                a, _, _, _ = keep_body(a)
+            except RuntimeError:
+                continue
+            rgb = decontaminate(rgb, a)
+            arr, crop = crop_rgba(rgb, a)
+            small = resize_premul(arr, height)
+            anc = anchors(small)
+            out = d / f'{pid}_anim_{name}_{len(entries):02d}.webp'
+            Image.fromarray(small, 'RGBA').save(out, 'WEBP', quality=84, method=6, exact=False)
+            total += out.stat().st_size
+            # 손끝 높이: 원본 좌표에서 몸 상자 위 (crop y) — 작을수록 높다
+            tops.append(crop[1])
+            entries.append({**anc, 'facing': 'R', 'src_frame': k * ANIM_STEP, 'crop': crop})
+        if not entries:
+            continue
+        contact = int(np.argmin(tops)) + 1
+        contact = min(len(entries) - 1, contact)
+        man = manual.get(name) or {}
+        if man.get('contact') is not None:
+            contact = int(man['contact'])
+        anims[name] = {'frames': entries, 'contact': contact, 'step': ANIM_STEP, 'src': mp4.name, 'model': MODEL}
+        made += 1
+        log(f'| {pid} | {name} | {len(entries)}장 | contact {contact} | {total // 1024}KB |')
+    meta['anims'] = anims
+    write_meta(pid, meta)
+    return {'pid': pid, 'made': made, 'bytes': total}
+
 # ─────────────────────────────────────────────── 검사·미리보기·수동값
 def check():
     problems = []
@@ -342,11 +447,14 @@ def set_manual(pid, kvs):
     man = meta.get('standee_manual') or {}
     for kv in kvs:
         k, _, v = kv.partition('=')
-        if k in ('cuts',):
-            v = json.loads(v)
-        elif v in ('', 'null', 'none'):
+        if v in ('', 'null', 'none'):
             man.pop(k, None); continue
-        man[k] = v
+        if v[:1] in '[{':
+            v = json.loads(v)                      # cuts=[[x,y,w,h]] · poses={"block":{"facing":"F"}} · anims={"spike":{"contact":15}}
+        if isinstance(v, dict) and isinstance(man.get(k), dict):
+            man[k].update(v)                       # 사전 값은 합친다(다른 동작의 수동값을 지우지 않게)
+        else:
+            man[k] = v
     meta['standee_manual'] = man
     write_meta(pid, meta)
     return man
@@ -359,8 +467,36 @@ def main():
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--preview', default='', help='미리보기 시트 PNG 경로')
     ap.add_argument('--set', nargs='+', metavar='ARG', help='pid key=value ... → meta.standee_manual (다시 만들지는 않는다)')
+    ap.add_argument('--poses', action='store_true', help='art/02_gen/{pid}/pose_*.png → 포즈 세트 누끼 (16.10)')
+    ap.add_argument('--anims', action='store_true', help='art/02_gen/{pid}/anim_*.mp4 → 동작 프레임 누끼 (16.10)')
     args = ap.parse_args()
     ids = [s for s in args.ids.split(',') if s]
+
+    if args.anims:
+        load_deps()
+        gen = ROOT / 'art' / '02_gen'
+        pids = ids or (sorted(p.name for p in gen.iterdir() if p.is_dir()) if gen.exists() else [])
+        log('| pid | 동작 | 프레임 | 접촉 | 누적 |')
+        log('|---|---|---|---|---|')
+        for pid in pids:
+            r = process_anims(pid, args.height, args.force)
+            if r:
+                log(f'| {pid} | 동작 {r["made"]}종 | | | {r["bytes"] // 1024}KB |')
+        return
+
+    if args.poses:
+        load_deps()
+        pids = ids or sorted(p.name for p in (ROOT / 'art' / '02_gen').iterdir() if p.is_dir()) if (ROOT / 'art' / '02_gen').exists() else []
+        log('| pid | 포즈 | 크기 | bytes | 비고 |')
+        log('|---|---|---|---|---|')
+        tot = 0
+        for pid in pids:
+            r = process_poses(pid, args.height, args.force)
+            if r:
+                tot += r['bytes']
+                log(f'| {pid} | 세트 {r["n"]}종 | 생성 {r["done"]} · 건너뜀 {r["skipped"]} | {r["bytes"] // 1024}KB | |')
+        log(f'\n합계 {tot / 1024 / 1024:.2f}MB')
+        return
 
     if args.set:
         pid, kvs = args.set[0], args.set[1:]

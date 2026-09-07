@@ -60,6 +60,9 @@ browser = await chromium.launch({ headless: !HEADED, slowMo: SLOW, ...(CHROME ? 
 page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 page.on('pageerror', e => jsErrors.push(e.message));
 page.on('console', m => { if (m.type() === 'error' && !/net::ERR/.test(m.text())) jsErrors.push('console: ' + m.text()); });
+// 새 게임 시드를 고정한다 — 앱은 시각 시드를 쓰는데, 졸업생이 첫 매치데이에 뛰는지(데뷔전·통산 검사)가 시드에 달려 있어
+// 시각 시드로는 같은 검사가 판마다 흔들린다. 스크립트가 읽기 전에 넣어야 하므로 initScript 로.
+await page.addInitScript(() => { window.BLOOM_SEED = 20260907; });
 await page.goto('file://' + APP);
 await page.waitForTimeout(700);
 

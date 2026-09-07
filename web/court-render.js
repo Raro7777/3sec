@@ -866,8 +866,46 @@ function create(canvas, opts) {
     if (!W || !H) return null;
     // ghost: 그림이 없는 선수의 대역 — 윤곽만 팀색으로 칠하고 얼굴을 얹는다(앱이 기증자 스탠디를 골라 준다)
     e = { img: img, W: W, H: H, m: (got.m && got.m.length >= 7) ? got.m : STAND_DEFAULT, rim: {}, ghost: !!got.ghost };
+    // 포즈 세트(16.10): {name: {img, m}} — 상태별로 그림을 바꿔 세운다
+    var wrap = function (pg) {
+      if (!pg || !pg.img) return null;
+      var pw = pg.img.naturalWidth || pg.img.width, ph = pg.img.naturalHeight || pg.img.height; if (!pw || !ph) return null;
+      return { img: pg.img, W: pw, H: ph, m: (pg.m && pg.m.length >= 7) ? pg.m : STAND_DEFAULT, rim: {} };
+    };
+    if (got.poses) {
+      e.poses = {};
+      for (var k in got.poses) { var w1 = wrap(got.poses[k]); if (w1) e.poses[k] = w1; }
+    }
+    // 동작 애니메이션(16.10): {name: {frames:[{img,m}], c}} — 영상에서 뽑은 프레임. 접촉 프레임 c 를 공이 닿는 순간에 맞춘다.
+    if (got.anims) {
+      e.anims = {};
+      for (var an in got.anims) {
+        var A = got.anims[an], fr = [];
+        for (var i = 0; i < A.frames.length; i++) { var w2 = wrap(A.frames[i]); if (w2) fr.push(w2); }
+        if (fr.length >= 2) e.anims[an] = { frames: fr, c: Math.max(0, Math.min(fr.length - 1, A.c | 0)) };
+      }
+    }
     R._stand[pid] = e;
     return e;
+  }
+  /** 포즈 세트에서 이번 프레임의 그림 — 리그 클립과 같은 규칙. 예비 동작은 공이 오기 직전에, 마무리는 친 직후 잠깐. */
+  function standPose(p, g) {
+    if (R.ended && R.point) return R.point.side === p.side ? 'cheer' : 'sad';
+    if (p.active && g.pose) return g.u < 0.4 ? clipOf(g.pose) : (p.moving ? 'run' : 'ready');
+    if (g.ready) return g.u >= 0.55 ? clipOf(g.ready) : (p.moving ? 'run' : 'ready');
+    if (p.moving && g.jump < 0.1) return 'run';
+    return 'idle';
+  }
+  /** 동작 애니메이션이 있으면 그 프레임 — 다음 차례(예비 동작)는 첫 프레임→접촉, 방금 침(마무리)은 접촉→끝. */
+  function standAnimFrame(e, p, g) {
+    if (!e.anims) return null;
+    var name = null, ph = 0;
+    if (p.active && g.pose && g.u < 0.5) { name = clipOf(g.pose); ph = 0.5 + 0.5 * (g.u / 0.5); }
+    else if (g.ready && !p.active) { name = clipOf(g.ready); ph = 0.5 * Math.max(0, (g.u - 0.15) / 0.85); }
+    if (!name || !e.anims[name]) return null;
+    var A = e.anims[name], n = A.frames.length, c = A.c;
+    var idx = ph < 0.5 ? Math.round((ph / 0.5) * c) : c + Math.round(((ph - 0.5) / 0.5) * (n - 1 - c));
+    return A.frames[Math.max(0, Math.min(n - 1, idx))];
   }
   /** 팀색으로 칠한 실루엣(림용) — 색마다 한 번만 만든다. */
   function rimOf(e, col) {
@@ -878,6 +916,10 @@ function create(canvas, opts) {
     e.rim[col] = cv; return cv;
   }
   function drawStandee(c, cam, p, e, g) {
+    var posed = false;
+    var af = standAnimFrame(e, p, g);
+    if (af) { e = af; posed = true; }
+    else if (e.poses) { var pn = standPose(p, g); var pe = e.poses[pn] || e.poses.idle; if (pe) { e = pe; posed = true; } }
     var m = e.m, W = e.W, H = e.H, s = g.s;
     var fx = m[0] * W, fy = m[1] * H, span = Math.max(0.2, m[3] - m[2]) * H;
     var bodyPx = STAND.body * s;
@@ -886,9 +928,10 @@ function create(canvas, opts) {
     var want = (p.moving && p.dir) ? p.dir : (toNet >= 0 ? 1 : -1);
     var flip = (m[6] || 1) === want ? 1 : -1;
     var sx = 1, sy = 1, lean = 0, ph = p.pos * 1.3 + p.side * 2;
-    if (g.pose === EV.Attack && g.u < 0.2) { var pk = 1 + 0.12 * (1 - g.u / 0.2); sx *= pk; sy *= pk; }   // 타격 펀치
-    if (g.jump > 0.05) { sy *= 1 + 0.10 * g.jump; sx *= 1 - 0.06 * g.jump; }                              // 점프 스트레치
-    if (g.crouch < 0.85) { sy *= 0.86; sx *= 1.08; } else if (g.crouch < 0.95) { sy *= 0.93; sx *= 1.04; }   // 리시브 스쿼시
+    var q = posed ? 0.35 : 1;                                                                             // 포즈 그림은 자세가 이미 있어 변형을 줄인다
+    if (g.pose === EV.Attack && g.u < 0.2) { var pk = 1 + 0.12 * q * (1 - g.u / 0.2); sx *= pk; sy *= pk; }   // 타격 펀치
+    if (g.jump > 0.05) { sy *= 1 + 0.10 * q * g.jump; sx *= 1 - 0.06 * q * g.jump; }                          // 점프 스트레치
+    if (!posed) { if (g.crouch < 0.85) { sy *= 0.86; sx *= 1.08; } else if (g.crouch < 0.95) { sy *= 0.93; sx *= 1.04; } }   // 리시브 스쿼시
     if (p.moving && g.jump < 0.1) {                                                                       // 달리기: 기울임 + 들썩임
       lean = (p.dir || want) * STAND.lean;
       var bob = Math.abs(Math.sin(R.clock * 12 + ph)); sy *= 1 - 0.03 * bob; sx *= 1 + 0.02 * bob;

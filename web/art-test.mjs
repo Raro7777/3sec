@@ -223,9 +223,10 @@ let figs = null;
 if (courtUp) {
   figs = await page.evaluate(() => {
     const c = window.BLOOM_DEBUG && window.BLOOM_DEBUG.court(); if (!c || !c.debug) return null;
-    const rigDefault = c.figure; c.frame(); const rigs = c.debug.rigs;
+    const def = c.figure;
+    c.figure = 'rig'; c.frame(); const rigs = c.debug.rigs;
     c.figure = 'standee'; c.frame();                                    // 누끼 디코드를 시작시킨다(비동기)
-    return { rigDefault, rigs };
+    return { def, rigs };
   });
   await page.waitForTimeout(1500);                                       // 42장 디코드 대기
   const st = await page.evaluate(() => {
@@ -235,7 +236,7 @@ if (courtUp) {
   if (figs) figs.standees = st;
 }
 check('경기 화면이 뜬다', courtUp);
-check('기본 그림 방식은 리그이고 코트 12명이 전원 리그로 선다', !!figs && figs.rigDefault === 'rig' && figs.rigs === 12, JSON.stringify(figs));
+check('기본 그림 방식은 스탠디이고, 리그로 바꾸면 코트 12명이 전원 리그로 선다', !!figs && figs.def === 'standee' && figs.rigs === 12, JSON.stringify(figs));
 check(REAL_STAND ? '스탠디로 바꾸면 12명이 전원 스탠디로 선다(실물 누끼 + 대역)' : '실물 누끼가 없으면 스탠디 방식은 실루엣으로 떨어진다',
   !!figs && (REAL_STAND ? figs.standees === 12 : figs.standees === 0), `프레임당 스탠디 ${figs && figs.standees}명 · 실물 누끼 ${REAL_STAND}장`);
 check('리그 머리 정보(h)가 팩에 실린다', Array.isArray(packed.art[ART_PID]?.h) === false && Object.values(packed.art).some(e => Array.isArray(e.h) && e.h.length === 3),

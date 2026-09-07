@@ -168,6 +168,43 @@ export function collectArt() {
         problems.push(`${pid} 스탠디: meta.standee 가 없습니다 — python3 tools/art-standee.py --ids ${pid} --force`);
       }
     }
+    // 포즈 세트(16.10): {pid}_pose_{name}.webp — 상태별 스탠디. p = {name: uri}, pm = {name: 앵커 7칸}
+    const poseFiles = fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_pose_([a-z]+)\\.(webp|png)$`).test(f)).sort();
+    if (poseFiles.length) {
+      one.p = {}; one.pm = {};
+      const pm = (meta && meta.poses) || {}, man = (meta && meta.standee_manual && meta.standee_manual.poses) || {};
+      for (const f of poseFiles) {
+        const name = f.match(/_pose_([a-z]+)\./)[1];
+        if (one.p[name]) continue;                                   // webp 가 png 보다 앞에 온다(정렬상 png 가 먼저라 뒤집는다)
+        const hit = { file: path.join(dir, f), ext: path.extname(f) };
+        const { uri, bytes: n, dim } = dataUri(hit);
+        one.p[name] = uri; bytes += n; row.pose = (row.pose || 0) + n;
+        if (dim && dim.h !== SPEC.stand.height) problems.push(`${pid} 포즈 ${name}: 세로 ${dim.h}px — 규격은 ${SPEC.stand.height}px`);
+        const st = pm[name];
+        if (st && st.foot && st.head) {
+          const facing = (man[name] && man[name].facing) || st.facing;
+          one.pm[name] = [st.foot[0], st.foot[1], st.top, st.bottom, st.head[0], st.head[1], facing === 'R' ? 1 : facing === 'L' ? -1 : 0];
+        } else { one.pm[name] = STAND_DEFAULT.slice(); problems.push(`${pid} 포즈 ${name}: meta.poses 가 없습니다 — python3 tools/art-standee.py --poses --ids ${pid} --force`); }
+      }
+    }
+    // 동작 애니메이션(16.10): {pid}_anim_{name}_{ii}.webp — a = {name: [uri...]}, am = {name: {m:[앵커...], c: 접촉 프레임}}
+    const animFiles = fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_anim_([a-z]+)_(\\d+)\\.webp$`).test(f)).sort();
+    if (animFiles.length) {
+      one.a = {}; one.am = {};
+      const an = (meta && meta.anims) || {};
+      for (const f of animFiles) {
+        const mm = f.match(/_anim_([a-z]+)_(\d+)\.webp$/), name = mm[1];
+        const { uri, bytes: n } = dataUri({ file: path.join(dir, f), ext: '.webp' });
+        (one.a[name] = one.a[name] || []).push(uri); bytes += n; row.anim = (row.anim || 0) + n;
+      }
+      for (const name of Object.keys(one.a)) {
+        const a = an[name];
+        const ms = (a && a.frames || []).map(st => [st.foot[0], st.foot[1], st.top, st.bottom, st.head[0], st.head[1], st.facing === 'L' ? -1 : 1]);
+        while (ms.length < one.a[name].length) ms.push(STAND_DEFAULT.slice());
+        one.am[name] = { m: ms, c: a ? a.contact : Math.floor(one.a[name].length / 2) };
+        if (!a) problems.push(`${pid} 동작 ${name}: meta.anims 가 없습니다 — python3 tools/art-standee.py --anims --ids ${pid} --force`);
+      }
+    }
     const hi = headInfo(pid, meta);
     if (hi) one.h = hi;
     if (Object.keys(one).length) { art[pid] = one; entries.push(row); }

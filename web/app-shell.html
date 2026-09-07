@@ -736,8 +736,37 @@ var STAND_DONORS = ['p029', 'p012', 'p024', 'p025', 'p020'];   // 공이 없고 
 function standDecode(k, onReady){
   var c = STAND_BMP[k];
   if (c) return c === 'pending' ? null : c;
-  var e = window.BLOOM_ART[k]; if (!e || !e.s) return null;
+  var e = window.BLOOM_ART[k]; if (!e || (!e.s && !e.p)) return null;
   STAND_BMP[k] = 'pending';
+  // 포즈 세트(16.10)가 있으면 포즈·동작 프레임을 전부 디코드한 뒤 한 번에 넘긴다. idle 이 기본 그림이 된다.
+  if (e.p) {
+    var names = Object.keys(e.p), poses = {}, anims = {}, left = names.length;
+    var animNames = e.a ? Object.keys(e.a) : [];
+    animNames.forEach(function(n){ left += e.a[n].length; anims[n] = { frames: new Array(e.a[n].length), m: e.am[n].m, c: e.am[n].c }; });
+    var finish = function(){
+      if (--left !== 0) return;
+      if (!Object.keys(poses).length) { delete STAND_BMP[k]; return; }
+      var idle = poses.idle || poses[Object.keys(poses)[0]];
+      animNames.forEach(function(n){ anims[n].frames = anims[n].frames.filter(function(f){ return !!f; }); });
+      STAND_BMP[k] = { img: idle.img, m: idle.m, poses: poses, anims: animNames.length ? anims : null };
+      if (onReady) onReady();
+    };
+    names.forEach(function(n){
+      var im = new Image();
+      im.onload = function(){ poses[n] = { img: im, m: (e.pm && e.pm[n]) || null }; finish(); };
+      im.onerror = finish;
+      im.src = e.p[n];
+    });
+    animNames.forEach(function(n){
+      e.a[n].forEach(function(uri, i){
+        var im = new Image();
+        im.onload = function(){ anims[n].frames[i] = { img: im, m: anims[n].m[i] || null }; finish(); };
+        im.onerror = finish;
+        im.src = uri;
+      });
+    });
+    return null;
+  }
   var img = new Image();
   img.onload = function(){ STAND_BMP[k] = { img: img, m: e.sm || null }; if (onReady) onReady(); };
   img.onerror = function(){ delete STAND_BMP[k]; };
@@ -747,7 +776,7 @@ function standDecode(k, onReady){
 function standBitmap(p, onReady){
   var A = window.BLOOM_ART; if (!A || !p) return null;
   var k = artKey(p);
-  if (k && A[k] && A[k].s) return standDecode(k, onReady);
+  if (k && A[k] && (A[k].s || A[k].p)) return standDecode(k, onReady);
   // 대역: 기증자 중 누끼가 있는 것만, id 해시로 고정
   var pool = STAND_DONORS.filter(function(d){ return A[d] && A[d].s; });
   if (!pool.length) return null;
@@ -918,7 +947,10 @@ function boot(){
   render();
 }
 function newGame(){
-  var g = E.createGame({ seed: (Date.now() % 100000) | 0, clubName: '새록 스프라우츠' });
+  // 시드는 시각에서 뽑는다. 검사(app-test)는 스크립트보다 먼저 window.BLOOM_SEED 를 넣어 같은 판을 재현한다 —
+  // 졸업생이 라인업에 드는지(데뷔전 검사) 같은 것이 시드에 달려 있어 시각 시드로는 검사가 흔들린다.
+  var seed = window.BLOOM_SEED ? (window.BLOOM_SEED | 0) : ((Date.now() % 100000) | 0);
+  var g = E.createGame({ seed: seed, clubName: '새록 스프라우츠' });
   // 초반에 마음껏 뽑아 보도록 티켓을 넉넉히 준다(엔진 기본 지급 + 보너스).
   if (g.tickets < STARTING_TICKETS) g.tickets = STARTING_TICKETS;
   return g;
@@ -2290,7 +2322,7 @@ var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
 // 코트 그림 방식(art-pipeline 16.9): 'rig'(공용 바디 리그, 기본) | 'standee'(전신 누끼). 경기 화면 버튼으로 바꾸고 기억한다.
 var FIG_KEY = 'bloom-figure-v1';
-var FIG = 'rig';
+var FIG = 'standee';   // 기본은 스탠디(포즈 세트가 있는 선수는 상태별 그림, 16.10). 리그는 비교용으로 남긴다
 try { var _f = localStorage.getItem(FIG_KEY); if (_f === 'standee' || _f === 'rig') FIG = _f; } catch(e){}
 function figLabel(){ return FIG === 'rig' ? '그림: 리그' : '그림: 스탠디'; }
 /** 리그 머리(16.9): 선수 → {face(카드 원형 비트맵), hair:[팔레트, 스타일], skin, type(체형 S/M/L)}. 그림 정보는 빌드가 h 로 실어 준다. */
@@ -2301,7 +2333,7 @@ function headInfo(p, onReady){
   return { face: faceBitmap(p, onReady), hair: [h[0], h[1]], skin: h[2], type: type };
 }
 // 검사용 훅(art-test 16.8): 스크립트 지역 변수라 밖에서 못 보므로 코트 렌더러만 내준다. 게임 로직은 쓰지 않는다.
-window.BLOOM_DEBUG = { court: function(){ return cr; } };
+window.BLOOM_DEBUG = { court: function(){ return cr; }, match: function(){ return lastMatch; } };
 
 function startViewer(){
   mv = { rallies: buildRallies(lastMatch), ri:0, ti:-1, playing:true, speed:1, done:false };
