@@ -11,7 +11,7 @@ import {
   CLUBS, CLUB_BY_ID, ECONOMY, REWARDS, SEASON_GROWTH, growthFor,
   myTeamState, myTeam, clubTeamState, departedCardIds, activeCardPool,
   formatMatchResult, nextSeed, addHistory, addTickets, addGold, addFragments,
-  createFillers, newClubRecords, TRAINING_CFG, rookieClassOf, recordCareer,
+  createFillers, newClubRecords, TRAINING_CFG, rookieClassOf, recordCareer, gameSimConfig, TACTICS,
 } from './game.js';
 // 골드 소비처(B.6) — 결산에서 구단 운영비를 정산한다.
 import { payUpkeep, facilityUpkeep, clubPrestige } from './facility.js';
@@ -42,12 +42,8 @@ export const SEASON_CONFIG = {
   trainingsPerMatchday: 1,
 };
 
-/** 리그 경기 전용 시뮬 설정(홈 어드밴티지 0.05). 친선경기(playMatch)는 기존대로 0.0. A.3.4 */
-const LEAGUE_SIM_CONFIG = (() => {
-  const c = createSimConfig();
-  c.match.homeCourtLogit = SEASON_CONFIG.homeCourtLogit;
-  return c;
-})();
+/** 리그 경기 전용 시뮬 설정(홈 어드밴티지 0.05 + 흐름 모델 스위치). 친선경기(playMatch)는 홈 어드밴티지 0.0. A.3.4 */
+function leagueSimConfig() { return gameSimConfig(SEASON_CONFIG.homeCourtLogit); }
 
 export const PHASE = {
   Preseason: 'preseason',   // 일정 확정, 스카우트·프리시즌 육성
@@ -288,7 +284,7 @@ function myFixture(L, clubId, md) {
 const CLUB_TS_CACHE = new WeakMap();
 function buildTeamStates(state) {
   const departed = departedCardIds(state);
-  const token = state.season + '|' + state.useClubTactics + '|' + Array.from(departed).sort().join(',');
+  const token = state.season + '|' + (TACTICS.clubTactics || state.useClubTactics) + '|' + Array.from(departed).sort().join(',');
   let hit = CLUB_TS_CACHE.get(state);
   if (!hit || hit.token !== token) {
     const g = growthFor(state.season);
@@ -305,7 +301,7 @@ function buildTeamStates(state) {
 function simFixture(L, md, index, homeTS, awayTS, collectEvents) {
   // C.4 매치데이 경기 시드 = H(seasonSeed, matchDay, fixtureIndex) — 경기마다 독립
   const seed = mixSeed(L.seasonSeed, md, index + 1);
-  return { seed, result: simulateMatch(homeTS, awayTS, seed, LEAGUE_SIM_CONFIG, collectEvents) };
+  return { seed, result: simulateMatch(homeTS, awayTS, seed, leagueSimConfig(), collectEvents) };
 }
 
 function setPoints(result, side) {
@@ -512,7 +508,7 @@ export function advancePlayoff(state, opts = {}) {
   const teamStates = buildTeamStates(state);
   // C.4 포스트시즌 시드 = H(seasonSeed, "po", round, game)
   const seed = mixSeed(L.seasonSeed, 0x9000 + b.current, gameIndex + 1);
-  const result = simulateMatch(teamStates.get(homeId), teamStates.get(awayId), seed, LEAGUE_SIM_CONFIG, collectEvents);
+  const result = simulateMatch(teamStates.get(homeId), teamStates.get(awayId), seed, leagueSimConfig(), collectEvents);
   const homeWon = result.homeSets > result.awaySets;
   const winnerId = homeWon ? homeId : awayId;
 

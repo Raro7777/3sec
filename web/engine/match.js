@@ -66,6 +66,10 @@ class MatchSim {
     this._blockerPos = [0, 0, 0];
     this._blockN = 0;
     this._quickThreatMb = null;
+    // 흐름 모델(cfg.flow.enabled 일 때만 값이 바뀐다) — 연속 득점, 세트당 작전타임 잔여, 기록
+    this.streakSide = -1; this.streak = 0;
+    this.tos = [0, 0];
+    this.flowLog = { timeouts: [0, 0], maxStreak: [0, 0] };
     // 랠리 결과(재사용)
     this._res = { winner: 0, reason: 0, clutch: false, attacks: 0 };
     // 시퀀스 결과(재사용) — kind: 0 PointAttacking, 1 PointDefending, 2 Continue, 3 CoverContinue
@@ -112,6 +116,26 @@ class MatchSim {
   }
 
   eff(raw, p, team, clutch, noFatigue) { return raw * this.effMult(p, team, clutch, noFatigue); }
+
+  /** 압박 로짓: 상대가 연속 득점 중이면 이 팀 선수의 범실 확률이 오른다. 멘탈 100 은 절반, 멘탈 0 은 1.5배. 꺼져 있으면 0. */
+  pressureLogit(team, p) {
+    const fl = this.cfg.flow;
+    if (fl === undefined || !fl.enabled) return 0.0;
+    if (this.streakSide !== this.opponent(team).side || this.streak < fl.streakStart) return 0.0;
+    let x = (this.streak - fl.streakStart + 1) * fl.pressurePerPoint;
+    if (x > fl.pressureMax) x = fl.pressureMax;
+    const relief = clamp(1.0 - fl.mentalRelief * (p.stats[STAT.mental] - 50.0) / 50.0, 0.4, 1.6);
+    return x * relief;
+  }
+  /** 자신감 로짓: 연속 득점 중인 쪽의 킬 확률이 조금 오른다(압박의 절반). */
+  confidenceLogit(team) {
+    const fl = this.cfg.flow;
+    if (fl === undefined || !fl.enabled) return 0.0;
+    if (this.streakSide !== team.side || this.streak < fl.streakStart) return 0.0;
+    let x = (this.streak - fl.streakStart + 1) * fl.pressurePerPoint;
+    if (x > fl.pressureMax) x = fl.pressureMax;
+    return x * fl.confidenceShare;
+  }
 
   boxOf(p) {
     let b = this.box.get(p.id);
@@ -164,7 +188,7 @@ class MatchSim {
     const errBase = lerp(sp.errorBaseSafe, sp.errorBaseAggressive, aggression);
     const homeLogit = serving.side === SIDE.HOME ? cfg.match.homeCourtLogit : 0.0;
     const skServeErr = sk !== null ? sk.serveErrorLogit(serving, server, aggression) : 0.0;
-    const pServeErr = contest(errBase, -(serveRating - sp.errorRefRating), this.K(sp.errorK), -homeLogit + skServeErr);
+    const pServeErr = contest(errBase, -(serveRating - sp.errorRefRating), this.K(sp.errorK), -homeLogit + skServeErr + this.pressureLogit(serving, server));
 
     const serverBox = this.boxOf(server);
     serverBox.serves++;
@@ -186,7 +210,7 @@ class MatchSim {
     if (receiver.isLibero) recvRating = MatchSim.stretch(recvRating, cfg.receive.liberoRoleGain, cfg.receive.liberoRoleRefRating);
     const formationLogit = this.formationLogit(receiving, receiver);
     const skRecv = sk !== null ? sk.receiveXLogit(receiving, receiver, serving) : 0.0;
-    const x = (recvRating - serveRating) / this.K(sp.receiveK) - sp.aggressionLogit * (aggression - 0.5) + formationLogit + skRecv;
+    const x = (recvRating - serveRating) / this.K(sp.receiveK) - sp.aggressionLogit * (aggression - 0.5) + formationLogit + skRecv - this.pressureLogit(receiving, receiver);
     const skAce = sk !== null ? sk.aceLogit(serving, server) : 0.0;
     const pAce = sigmoid(logit(sp.aceBase) - x + homeLogit + skAce);
 
@@ -331,7 +355,7 @@ class MatchSim {
     if (type === ATK.Dump) attacking.stats.dumps++;
 
     const skAtkErr = sk !== null ? sk.attackErrorLogit(attacking, attacker) : 0.0;
-    const pErr = contest(clamp(ap.errorBase * typeErrMult * setErrMult, 0.0, 0.95), -(atk - ap.errorRefRating), this.K(ap.errorK), -homeLogit + skAtkErr);
+    const pErr = contest(clamp(ap.errorBase * typeErrMult * setErrMult, 0.0, 0.95), -(atk - ap.errorRefRating), this.K(ap.errorK), -homeLogit + skAtkErr + this.pressureLogit(attacking, attacker));
     if (rng.chance(pErr)) {
       atkBox.attackErrors++;
       attacking.stats.attackErrors++;
@@ -430,7 +454,7 @@ class MatchSim {
     const killExtra = typeKillLogit + setKillLogit - digBonus + homeLogit - predictLogit
       + decoyLogit * ap.mbDecoyKillShare
       + (attackIndex === 0 ? ap.firstBallKillLogit : ap.transitionKillLogitPerAttack * attackIndex)
-      + skKill - skDig;
+      + skKill - skDig + this.confidenceLogit(attacking);
     const pKill = contest(ap.killBase, atk - defense, this.K(ap.killK), killExtra);
 
     const digBox = this.boxOf(digger);
@@ -823,6 +847,10 @@ class MatchSim {
     home.resetForSet();
     away.resetForSet();
     if (this.sk !== null) this.sk.startSet(this.pointsToWin);
+    const fl = cfg.flow;
+    const flowOn = fl !== undefined && !!fl.enabled;
+    this.streakSide = -1; this.streak = 0;
+    this.tos[0] = flowOn ? fl.timeoutsPerSet : 0; this.tos[1] = this.tos[0];
 
     let serving = firstServer;
     let receiving = this.opponent(firstServer);
@@ -849,6 +877,18 @@ class MatchSim {
       if (this.log.enabled) {
         const pe = this.emit(EV.Point, winner, null, 0, Q.None, OUT.None, ATK.None, 0, r.reason, r.clutch);
         if (pe) pe.reason = r.reason;
+      }
+      if (flowOn) {
+        // 연속 득점 → 압박. 당하는 쪽 감독은 남은 작전타임으로 흐름을 끊는다(RNG 소비 없음).
+        if (winner.side === this.streakSide) this.streak++; else { this.streakSide = winner.side; this.streak = 1; }
+        if (this.streak > this.flowLog.maxStreak[winner.side]) this.flowLog.maxStreak[winner.side] = this.streak;
+        const loser = this.opponent(winner);
+        if (this.streak >= fl.timeoutAtStreak && this.tos[loser.side] > 0 && !isSetOver(home.score, away.score, target, margin)) {
+          this.tos[loser.side]--;
+          this.flowLog.timeouts[loser.side]++;
+          if (this.log.enabled) this.emit(EV.Timeout, loser, null, 0, Q.None, OUT.None, ATK.None, 0, this.streak, false);
+          this.streakSide = -1; this.streak = 0;
+        }
       }
 
       if (winner !== serving) {
@@ -934,9 +974,17 @@ export function simulateMatch(home, away, seed, config, collectEvents = true) {
   let firstServer = cfg.match.homeServesFirst ? homeState : (rng.chance(0.5) ? homeState : awayState);
   const maxSets = cfg.match.setsToWin * 2 - 1;
 
+  const fl = cfg.flow, flowOn = fl !== undefined && !!fl.enabled;
+  const baseAgg = [homeState.tactics.serveAggression, awayState.tactics.serveAggression];
   for (let set = 1; set <= maxSets; set++) {
     if (set === maxSets) firstServer = rng.chance(0.5) ? homeState : awayState;
     else if (set > 1) firstServer = sim.opponent(firstServer);
+    if (flowOn && set > 1) {
+      // 세트를 뒤진 팀은 서브를 더 세게(에이스도 범실도 늘어난다), 앞선 팀은 조금 안전하게. 동률이면 원래대로.
+      const d = homeState.setsWon - awayState.setsWon;
+      homeState.tactics.serveAggression = clamp(baseAgg[0] + (d < 0 ? fl.adjustTrailing : (d > 0 ? fl.adjustLeading : 0)), 0, 1);
+      awayState.tactics.serveAggression = clamp(baseAgg[1] + (d > 0 ? fl.adjustTrailing : (d < 0 ? fl.adjustLeading : 0)), 0, 1);
+    }
 
     result.sets.push(sim.playSet(set, firstServer));
     if (homeState.setsWon >= cfg.match.setsToWin || awayState.setsWon >= cfg.match.setsToWin) break;
@@ -946,6 +994,7 @@ export function simulateMatch(home, away, seed, config, collectEvents = true) {
   result.awaySets = awayState.setsWon;
   result.winner = homeState.setsWon > awayState.setsWon ? SIDE.HOME : SIDE.AWAY;
   result.eventCount = log.seq;
+  result.flow = flowOn ? sim.flowLog : null;   // 작전타임 횟수·최장 연속 득점 (표현·검증용)
 
   if (log.enabled) sim.emit(EV.MatchEnd, sim.team(result.winner), null, 0, Q.None, OUT.None, ATK.None, 0, result.homeSets * 10 + result.awaySets, false);
   return result;

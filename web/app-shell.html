@@ -250,6 +250,7 @@ details[open] summary::after{content:"▴"}
 .setb{position:absolute;left:0;right:0;top:38%;padding:10px 0;text-align:center;background:rgba(10,16,23,.9);border-top:2px solid var(--ssr);border-bottom:2px solid var(--ssr);
   font-family:"Barlow Condensed",sans-serif;font-size:26px;font-weight:700;letter-spacing:.08em;color:var(--ink);opacity:0;pointer-events:none;transform:translateX(-110%)}
 .setb small{display:block;font-family:"Gothic A1",sans-serif;font-size:12.5px;font-weight:600;letter-spacing:0;color:var(--ink2)}
+.setb.to{border-color:var(--hot);font-size:22px}
 .setb.show{animation:sweep 1.6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes sweep{0%{transform:translateX(-110%);opacity:0}18%{transform:translateX(0);opacity:1}78%{transform:translateX(0);opacity:1}100%{transform:translateX(110%);opacity:0}}
 .court.tense::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:10px;box-shadow:inset 0 0 46px rgba(233,161,59,.42)}
@@ -2226,10 +2227,11 @@ function spotXY(side, pos, isServe){
 }
 
 function buildRallies(m){
-  var rallies = [], cur = null;
+  var rallies = [], cur = null, pendingTO = null;
   var hs = 0, as = 0;
   m.events.forEach(function(e){
-    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[] }; rallies.push(cur); return; }
+    if (e.type === 18) { pendingTO = { side:e.side, streak:e.value }; return; }   // 작전타임 → 다음 랠리 앞에 띄운다
+    if (e.type === 2) { cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[], timeout: pendingTO }; pendingTO = null; rallies.push(cur); return; }
     if (!cur) return;
     if (e.type === 11) {
       cur.point = { side:e.side, reason:e.reason, clutch:e.clutch, home:e.homeScore, away:e.awayScore };
@@ -2297,6 +2299,16 @@ function loadRally(){
   cr.setRally(r.touches, r.point, 1000 + mv.ri * 7 + (lastMatch.seed|0));
   cr.onEnd = function(){ nextRally(); };
   paintLive(0);
+  if (r.timeout && (mv.speed || 1) < 4) timeoutBanner(r.timeout);
+}
+/** 작전타임 배너 — 흐름을 끊는 순간을 보여 주고 잠깐 멈춘다(4배속은 생략). */
+function timeoutBanner(to){
+  var el = document.getElementById('lvSetB'); if (!el || !mv) return;
+  var name = to.side === 0 ? lastMatch.ctx.homeName : lastMatch.ctx.awayName;
+  var mine = to.side === mySide;
+  el.innerHTML = '작전타임 · ' + esc(name) + '<small>' + (mine ? '상대의 ' : '우리의 ') + to.streak + '연속 득점을 끊습니다</small>';
+  el.className = 'setb'; void el.offsetWidth; el.className = 'setb show to';
+  if (cr) { cr.pause(); var sp = mv.speed || 1; clearTimeout(mv.toTimer); mv.toTimer = setTimeout(function(){ if (mv && mv.playing && cr) cr.play(); }, 1100 / sp); }
 }
 function unlockSkip(why){
   if (skipUnlocked) return;
@@ -2599,6 +2611,7 @@ function vMatchResult(){
      '<div class="tiny" style="margin-top:4px">'+esc(m.reward)+'</div>'+
    '</div>'+
    careerBlocks(m)+
+   flowLine(m)+
    '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">우리 팀 기록</div>'+
      (m.box.mine || m.box.home).map(function(b){
        return '<div class="bx"><span class="pill pos">'+b.positionCode+'</span><span class="nm">'+esc(b.name)+'</span>'+
@@ -2620,6 +2633,13 @@ function vMatchResult(){
   );
 }
 
+/** 흐름 기록 — 작전타임 횟수와 최장 연속 득점. 흐름 모델이 꺼져 있으면 빈 문자열. */
+function flowLine(m){
+  var f = m.flow; if (!f) return '';
+  var me = mySide, op = 1 - mySide;
+  return '<div class="card flat"><div class="tiny">흐름 · 최장 연속 득점 우리 '+(f.maxStreak[me]|0)+' / 상대 '+(f.maxStreak[op]|0)+
+    ' · 작전타임 우리 '+(f.timeouts[me]|0)+'회 / 상대 '+(f.timeouts[op]|0)+'회</div></div>';
+}
 /** 오늘 코트에서 한 일 한 마디 — 가장 큰 항목. */
 function deedText(b){
   var k = b.kills|0, bl = b.blockKills|0, a = b.aces|0, d = b.digs|0;

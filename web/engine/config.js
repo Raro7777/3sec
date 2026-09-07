@@ -111,6 +111,16 @@ export function createSimConfig() {
     fatigue: { lossPerSet: 0.03, pointsPerSetForProgress: 46.0, maxLoss: 0.30 },
     // SimConfig.cs:294 ClutchParams
     clutch: { scoreFromEnd: 5, maxDiff: 2, mentalScale: 0.15, mentalPivot: 60.0 },
+    // 흐름 모델(docs/match-sim.md 흐름 절) — 기본은 꺼짐: parity·기본 sim 은 기존 판정과 비트 단위로 같다. 게임 층(game.js·season.js)이 켠다.
+    //   연속 득점을 당하는 쪽은 범실 로짓이 오르고(멘탈이 덜어 준다), 내는 쪽은 킬 로짓이 조금 오른다.
+    //   AI 감독은 상대 N연속에 작전타임(세트당 2회)을 불러 연속을 끊고, 세트를 뒤진 팀은 다음 세트 서브를 더 세게 넣는다.
+    flow: {
+      enabled: false,
+      streakStart: 3, pressurePerPoint: 0.06, pressureMax: 0.20, mentalRelief: 0.5,
+      confidenceShare: 0.5,
+      timeoutsPerSet: 2, timeoutAtStreak: 3,
+      adjustTrailing: 0.10, adjustLeading: -0.05,
+    },
     // SimConfig.cs:304 ChemistryParams
     chemistry: { logitScale: 0.50 },
     // SimConfig.cs:310 FormationParams

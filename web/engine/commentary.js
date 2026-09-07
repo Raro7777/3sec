@@ -251,6 +251,8 @@ function lineOf(e, c) {
       return `  ⇄ ${c.teamName(e.side)} 리베로 ${who} 아웃, ${c.who(e.secondary ? e.secondary[0] : null)} 복귀.`;
     case EV.Substitution:
       return `  ⇄ ${c.teamName(e.side)} 선수교체: ${who} IN, ${c.who(e.secondary ? e.secondary[0] : null)} OUT (${e.value}/6).`;
+    case EV.Timeout:
+      return `  ⏸ ${c.teamName(e.side)} 작전타임 — 상대 ${e.value}연속 득점을 끊습니다.`;
     case EV.SetEnd:
       return `[${e.value}세트 종료] ${c.teamName(e.side)} 세트 승리 (${e.homeScore}-${e.awayScore})`;
     case EV.MatchEnd:

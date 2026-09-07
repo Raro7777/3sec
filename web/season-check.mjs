@@ -9,6 +9,7 @@
 //                                             권장: node web/season-check.mjs --long --n 120  (약 2분)
 //   node web/season-check.mjs --app           앱 경제로(시작 티켓 + 온보딩 미션 보상, engine/missions.js) — B.6.7
 //   node web/season-check.mjs --replace-always  재육성 졸업을 옛 규칙(항상 교체)으로 — 'best' 도입 전 수치 재현용
+//   node web/season-check.mjs --no-club-tactics --no-flow   경기 엔진 1단계(구단 전술·흐름 모델) 도입 전 수치 재현용
 //   node web/season-check.mjs --eval sim      육성 평가전을 실제 시뮬로(느림, 정합 확인용)
 //   node web/season-check.mjs --json          기계 판독용 출력
 // 종료 코드 0 = 전 목표 충족.
@@ -40,6 +41,17 @@ if (NO_ROOKIES) E.ROOKIES.firstSeason = 1e9;
 if (argv.includes('--no-club-skill')) E.ROOKIES.clubSkill = false;
 /** --legacy-vacancy = 결원 판정을 옛 규칙(슬롯 점유 여부와 무관하게 카드 id 기준)으로 되돌린다. */
 if (argv.includes('--legacy-vacancy')) E.VACANCY_TUNING.onlyCurrentOccupant = false;
+/** --no-club-tactics = 여섯 구단의 전술을 끈다(도입 전: 모두 기본 전술). --no-flow = 흐름 모델(연속 득점 압박·작전타임·세트 간 조정)을 끈다.
+ *  둘 다 끄면 v0.5.2 기준선을 비트 단위로 재현한다. */
+if (argv.includes('--no-club-tactics')) E.TACTICS.clubTactics = false;
+if (argv.includes('--no-flow')) E.FLOW.enabled = false;
+/** --flow-pressure X · --flow-relief X = 흐름 모델 상수 A/B (pressurePerPoint · mentalRelief). */
+{
+  const ov = {};
+  if (arg('flow-pressure', null) !== null) ov.pressurePerPoint = parseFloat(arg('flow-pressure', '0.06'));
+  if (arg('flow-relief', null) !== null) ov.mentalRelief = parseFloat(arg('flow-relief', '0.5'));
+  if (Object.keys(ov).length) E.FLOW.override = ov;
+}
 /** --replace-always = 재육성 졸업을 옛 규칙(항상 대표 교체)으로 되돌린다. 기본은 앱과 같은 'best'(더 좋을 때만 교체) —
  *  'best' 는 시즌 1~3 목표를 지키지만 시즌 9~15 우승률을 50~67% → 68~84% 로 올린다(D.2 열린 이슈). */
 const GRAD_DECISION = argv.includes('--replace-always') ? 0 : 'best';

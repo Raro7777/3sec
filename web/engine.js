@@ -21,6 +21,7 @@ export {
   canScout, scoutCost, departedCardIds, growthFor,
   addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
   recordCareer, careerOf, campTrace,          // 통산 기록·캠프 흔적 (육성→코트 연결 연출)
+  TACTICS, FLOW, gameSimConfig,               // 경기 엔진 고도화 1단계 스위치 (구단 전술·흐름 모델)
   CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
   CLUB_SKILL_LEVEL, clubSkillLevelFor,
   // 노화·전성기·은퇴 (league-and-economy.md A.3.6)

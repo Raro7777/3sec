@@ -1,6 +1,7 @@
 // 게임 루프: 구단 상태 · 스카우트(확률·천장·중복 조각·한계돌파) · 육성 시작/졸업 · 라인업 · 경기.
 // Play/GameState.cs · Play/Game.cs 포팅 + docs/league-and-economy.md B.2(천장·포지션 지정)·A.3(시즌 사다리·결원 보충).
 
+import { createSimConfig } from './config.js';
 import { PLAYERS, TEAMS } from '../data.js';
 import {
   POS, POS_CODES, RARITY, RARITIES, SIDE,
@@ -79,6 +80,26 @@ export const CLUB_TACTICS = {
   t05: { quickWeight: 1.2, openWeight: 0.9, backRowWeight: 0.8, delayedWeight: 1.0, serveAggression: 0.4, formation: FORMATION.Standard },
   t06: { quickWeight: 1.4, openWeight: 0.9, backRowWeight: 0.9, delayedWeight: 0.8, serveAggression: 0.8, formation: FORMATION.Spread },
 };
+
+/**
+ * 경기 엔진 고도화 1단계(docs/match-sim.md 흐름 절) — 게임 층의 스위치. 하네스가 A/B 로 끄고 켠다.
+ *   clubTactics: 여섯 구단이 CLUB_TACTICS 대로 뛴다(전에는 세이브 플래그 useClubTactics 가 기본 false 라 모두 같은 전술이었다)
+ *   flow:        흐름 모델(연속 득점 압박·작전타임·세트 간 서브 조정) — createSimConfig().flow 를 켠 설정을 경기에 넘긴다
+ */
+export const TACTICS = { clubTactics: true };
+export const FLOW = { enabled: true, override: null };   // override: { pressurePerPoint, mentalRelief, ... } — 하네스 A/B 용
+/** 게임 층이 경기에 넘기는 시뮬 설정 — 기본 설정에 흐름 모델 스위치만 얹는다. 호출마다 만들지 않고 스위치별로 캐시. */
+const _simCfgCache = {};
+export function gameSimConfig(homeCourtLogit = 0) {
+  const key = (FLOW.enabled ? 'f' : '-') + '|' + homeCourtLogit + '|' + (FLOW.override ? JSON.stringify(FLOW.override) : '');
+  if (_simCfgCache[key]) return _simCfgCache[key];
+  const c = createSimConfig();
+  c.match.homeCourtLogit = homeCourtLogit;
+  c.flow.enabled = !!FLOW.enabled;
+  if (FLOW.override) Object.assign(c.flow, FLOW.override);
+  _simCfgCache[key] = c;
+  return c;
+}
 
 // ---------------------------------------------------------------- 상수
 export const ECONOMY = {
@@ -1272,7 +1293,8 @@ export function clubTeamState(state, clubId, opts = {}) {
       roster.push(ap);
     }
   }
-  const tactics = (opts.useClubTactics ?? state.useClubTactics) && CLUB_TACTICS[clubId]
+  const useTactics = opts.useClubTactics !== undefined ? opts.useClubTactics : (TACTICS.clubTactics || state.useClubTactics);
+  const tactics = useTactics && CLUB_TACTICS[clubId]
     ? { ...defaultTactics(), ...CLUB_TACTICS[clubId] }
     : defaultTactics();
   return makeTeamState(club, roster, autoLineupFromRoster(roster), { tactics });
@@ -1290,7 +1312,7 @@ export function playMatch(state, opponentTeamId, opts = {}) {
   const away = clubTeamState(state, opponentTeamId, opts);
   const collectEvents = opts.collectEvents !== false;
   const seed = opts.seed !== undefined ? opts.seed : nextSeed(state);
-  const result = simulateMatch(home, away, seed, opts.config || null, collectEvents);
+  const result = simulateMatch(home, away, seed, opts.config || gameSimConfig(0), collectEvents);
   const won = result.winner === SIDE.HOME;
 
   let reward = '';
@@ -1417,6 +1439,7 @@ export function formatMatchResult(result, home, away, mySide, seed) {
     events: result.events,
     eventCount: result.eventCount,
     highlights: buildHighlights(result, box, home, away, won, isHome),
+    flow: result.flow || null,          // 흐름 모델 기록(작전타임 횟수·최장 연속) — 표현용
     ctx,
     reward: '',
     opponent: { id: (isHome ? away : home).team.id, name: (isHome ? away : home).team.name },

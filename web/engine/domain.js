@@ -23,6 +23,7 @@ export const EV = {
   MatchStart: 0, SetStart: 1, RallyStart: 2, Serve: 3, Reception: 4, Set: 5,
   Attack: 6, Block: 7, Dig: 8, Cover: 9, FreeBall: 10, Point: 11, Rotation: 12,
   LiberoIn: 13, LiberoOut: 14, Substitution: 15, SetEnd: 16, MatchEnd: 17,
+  Timeout: 18,   // 흐름 모델: 작전타임(value = 끊은 상대 연속 득점 수). 기본 sim 은 내지 않는다
 };
 // Log/MatchEvent.cs:32 Quality
 export const Q = { None: 0, Perfect: 1, Good: 2, Poor: 3, Error: 4 };
@@ -225,7 +226,7 @@ export class TeamMatchState {
   constructor(side, state) {
     this.side = side;
     this.state = state;
-    this.tactics = state.tactics;
+    this.tactics = { ...state.tactics };   // 경기 안에서 세트 간 조정을 할 수 있게 사본(흐름 모델). 읽기에는 원본과 동일
     validateTeamState(state);
     this.starters = new Array(6);
     for (let i = 0; i < 6; i++) this.starters[i] = getPlayer(state, state.lineup.startingIds[i]);
