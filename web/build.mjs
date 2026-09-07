@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectArt, ART_BUDGET_MB } from './art-pack.mjs';
+import { collectArt, collectRig, ART_BUDGET_MB } from './art-pack.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -48,8 +48,12 @@ const court = fs.readFileSync(path.join(HERE, 'court-render.js'), 'utf8');
 
 // 3) 아트 팩 — art/04_export 에 들어온 최종 이미지를 data: URI 로 인라인한다.
 //    한 장도 없으면 빈 객체가 들어가고 앱은 지금처럼 SVG 플레이스홀더를 그린다.
-const { art, bytes: artBytes, entries: artEntries, problems: artProblems } = collectArt();
-const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';</scr' + 'ipt>';
+//    스탠디·포즈 세트는 기본 제외(코트 그림은 리그, 16.9.2) — `--with-standee` 로 싣는다. 리그 파츠는 window.BLOOM_RIG.
+const withStandee = process.argv.includes('--with-standee');
+const { art, bytes: artBytes0, entries: artEntries, problems: artProblems } = collectArt({ standee: withStandee });
+const { rig, bytes: rigBytes } = collectRig();
+const artBytes = artBytes0 + rigBytes;
+const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';window.BLOOM_RIG=' + JSON.stringify(rig) + ';</scr' + 'ipt>';
 
 // 4) 빌드 태그 — 피드백 본문에 붙는다(어느 리비전에서 난 일인지). git 이 없으면 날짜만.
 function buildTag() {

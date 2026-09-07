@@ -116,7 +116,49 @@ function dataUri(hit) {
  *   art 은 { p001:{thumb,card}, ... } 형태. problems 는 규격 위반 목록(빌드는 막지 않고 경고만 한다 —
  *   비율이 조금 어긋난 그림이라도 화면에는 나오는 편이 작업 중에는 낫다).
  */
-export function collectArt() {
+/**
+ * 리그 파츠(art-pipeline 16.9.2): art/05_shared/rig/rig.json + {type}/{part}.webp → window.BLOOM_RIG.
+ *   { S: { bh, parts: { torso: { u, m, w, h, p:[px,py], t:[tx,ty], l }, ... } }, M, L }
+ *   u = 파츠 data: URI, m = 저지·반바지 마스크(있으면), p/t = 피벗·끝 관절(px), l = 몸 높이 대비 길이
+ */
+export function collectRig() {
+  const dir = path.join(ROOT, 'art', '05_shared', 'rig');
+  const f = path.join(dir, 'rig.json');
+  if (!fs.existsSync(f)) return { rig: null, bytes: 0 };
+  let src;
+  try { src = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return { rig: null, bytes: 0 }; }
+  const rig = {};
+  let bytes = 0;
+  for (const type of Object.keys(src)) {
+    const r = src[type], parts = {};
+    for (const name of Object.keys(r.parts || {})) {
+      if (name === 'head') continue;                       // 머리는 카드 얼굴을 쓴다
+      const p = r.parts[name];
+      const pf = path.join(dir, type, p.file);
+      if (!fs.existsSync(pf)) continue;
+      const one = { w: p.w, h: p.h, p: p.pivot, t: p.tip, l: p.len };
+      const b = fs.readFileSync(pf); one.u = `data:image/webp;base64,${b.toString('base64')}`; bytes += b.length;
+      if (p.mask && fs.existsSync(path.join(dir, type, p.mask))) {
+        const mb = fs.readFileSync(path.join(dir, type, p.mask)); one.m = `data:image/webp;base64,${mb.toString('base64')}`; bytes += mb.length;
+      }
+      parts[name] = one;
+    }
+    if (Object.keys(parts).length) {
+      // 골반 기준 관절 오프셋(몸 높이 단위, 위가 +): 어깨·엉덩이 — 렌더러가 뼈대에 그대로 쓴다
+      const J = r.joints || {}, bh = r.body_h || 1, pv = J.pelvis || [0, 0];
+      const off = k => (J[k] ? [Math.round((J[k][0] - pv[0]) / bh * 1000) / 1000, Math.round((pv[1] - J[k][1]) / bh * 1000) / 1000] : null);
+      rig[type] = { bh: r.body_h, parts, sho: off('shoR'), hip: off('hipR'), neck: off('neck') };
+    }
+  }
+  return { rig: Object.keys(rig).length ? rig : null, bytes };
+}
+
+/**
+ * @param {{standee?: boolean}} opts standee=false(기본) 면 단일 스탠디·포즈 세트·동작 프레임을 싣지 않는다 —
+ *   코트 그림은 리그가 기본이고(테스터 결정) 아티팩트 상한 16MB 예산을 리그 파츠에 쓴다. `node web/build.mjs --with-standee` 로 켠다.
+ */
+export function collectArt(opts = {}) {
+  const withStandee = !!opts.standee;
   const art = {}, entries = [], problems = [];
   let bytes = 0;
   if (!fs.existsSync(EXPORT_DIR)) return { art, bytes, entries, problems };
@@ -132,7 +174,7 @@ export function collectArt() {
       try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); }
       catch { problems.push(`${pid}: meta.json 을 읽을 수 없습니다`); }
     }
-    for (const kind of ['card', 'hero', 'stand']) {
+    for (const kind of (withStandee ? ['card', 'hero', 'stand'] : ['card', 'hero'])) {
       const hit = pick(dir, pid, kind);
       if (!hit) continue;
       const { uri, bytes: n, dim } = dataUri(hit);
@@ -169,7 +211,7 @@ export function collectArt() {
       }
     }
     // 포즈 세트(16.10): {pid}_pose_{name}.webp — 상태별 스탠디. p = {name: uri}, pm = {name: 앵커 7칸}
-    const poseFiles = fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_pose_([a-z]+)\\.(webp|png)$`).test(f)).sort();
+    const poseFiles = withStandee ? fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_pose_([a-z]+)\\.(webp|png)$`).test(f)).sort() : [];
     if (poseFiles.length) {
       one.p = {}; one.pm = {};
       const pm = (meta && meta.poses) || {}, man = (meta && meta.standee_manual && meta.standee_manual.poses) || {};
@@ -188,7 +230,7 @@ export function collectArt() {
       }
     }
     // 동작 애니메이션(16.10): {pid}_anim_{name}_{ii}.webp — a = {name: [uri...]}, am = {name: {m:[앵커...], c: 접촉 프레임}}
-    const animFiles = fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_anim_([a-z]+)_(\\d+)\\.webp$`).test(f)).sort();
+    const animFiles = withStandee ? fs.readdirSync(dir).filter(f => new RegExp(`^${pid}_anim_([a-z]+)_(\\d+)\\.webp$`).test(f)).sort() : [];
     if (animFiles.length) {
       one.a = {}; one.am = {};
       const an = (meta && meta.anims) || {};

@@ -2322,8 +2322,9 @@ var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
 // 코트 그림 방식(art-pipeline 16.9): 'rig'(공용 바디 리그, 기본) | 'standee'(전신 누끼). 경기 화면 버튼으로 바꾸고 기억한다.
 var FIG_KEY = 'bloom-figure-v1';
-var FIG = 'rig';   // 기본은 리그(16.9, 테스터 결정 2026-09). 스탠디(포즈 세트 파일럿 포함)는 비교용으로 남긴다
-try { var _f = localStorage.getItem(FIG_KEY); if (_f === 'standee' || _f === 'rig') FIG = _f; } catch(e){}
+var FIG = 'rig';   // 기본은 리그(16.9, 테스터 결정 2026-09). 스탠디(포즈 세트 파일럿 포함)는 빌드에 실렸을 때만 비교용으로
+function standeeAvailable(){ var A = window.BLOOM_ART || {}; for (var k in A) if (A[k].s || A[k].p) return true; return false; }
+try { var _f = localStorage.getItem(FIG_KEY); if ((_f === 'standee' && standeeAvailable()) || _f === 'rig') FIG = _f; } catch(e){}
 function figLabel(){ return FIG === 'rig' ? '그림: 리그' : '그림: 스탠디'; }
 /** 리그 머리(16.9): 선수 → {face(카드 원형 비트맵), hair:[팔레트, 스타일], skin, type(체형 S/M/L)}. 그림 정보는 빌드가 h 로 실어 준다. */
 function headInfo(p, onReady){
@@ -2357,8 +2358,9 @@ function mountCourt(){
   cr.faceOf = function(pid){ var p = players[pid]; return p ? faceBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
   // 스탠디(16.8): 누끼 전신이 있는 선수는 실루엣 대신 그림으로 선다
   cr.standOf = function(pid){ var p = players[pid]; return p ? standBitmap(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
-  // 리그(16.9): 그림 방식·머리 정보·유니폼(구단색)
+  // 리그(16.9): 그림 방식·머리 정보·유니폼(구단색) · 파츠 시트(16.9.2, 빌드가 BLOOM_RIG 로 실음)
   cr.figure = FIG;
+  cr.rigParts = window.BLOOM_RIG || null;
   cr.headOf = function(pid){ var p = players[pid]; return p ? headInfo(p, function(){ if (cr && mv && !mv.playing) cr.frame(); }) : null; };
   var kits = [null, null];
   [m.ctx.homeId, m.ctx.awayId].forEach(function(id, i){
@@ -2651,12 +2653,12 @@ function vMatchLive(){
          '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
          '<button data-mv="skipset">세트 건너뛰기</button>'+
          '<button data-mv="end">결과</button>'+
-         '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>'+
+         (standeeAvailable() ? '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>' : '')+
        '</div>'
-     : '<div class="ctrl" style="grid-template-columns:1fr 1fr 1fr">'+
+     : '<div class="ctrl" style="grid-template-columns:'+(standeeAvailable() ? '1fr 1fr 1fr' : '1fr 1fr')+'">'+
          '<button data-mv="play" class="pri" id="lvPlay">'+(mv&&mv.playing?'일시정지':'재생')+'</button>'+
          '<button data-mv="speed">속도 '+((mv&&mv.speed)||1)+'배</button>'+
-         '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>'+
+         (standeeAvailable() ? '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>' : '')+
        '</div>'+
        '<div class="card flat"><div class="tiny">1세트를 보고 나면 세트 건너뛰기와 결과 바로가기가 열립니다.</div></div>')+
    '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'

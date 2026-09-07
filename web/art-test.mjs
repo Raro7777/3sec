@@ -130,7 +130,7 @@ for (const pid of PIDS) { put(pid, 'card', '.png', CARD); put(pid, 'stand', '.pn
 
 // 2) art-pack 이 잡아내는가
 const { collectArt } = await import('./art-pack.mjs?t=' + Date.now());
-const packed = collectArt();
+const packed = collectArt({ standee: true });   // 스탠디 경로까지 검사(기본 빌드는 뺀다, 16.9.2)
 check('art-pack 이 넣은 아트를 전부 찾는다', Object.keys(packed.art).length === PIDS.length + REAL.length,
   Object.keys(packed.art).length + '/' + (PIDS.length + REAL.length) + (REAL.length ? ` (실물 ${REAL.length}명 포함)` : ''));
 check('카드와 얼굴 상자(f) 둘 다 잡힌다', !!packed.art[ART_PID]?.card && Array.isArray(packed.art[ART_PID]?.f) && packed.art[ART_PID].f.length === 3);
@@ -143,13 +143,13 @@ check('스탠디 규격 위반이 없다(세로 320)', !packed.problems.some(p =
 
 // 3) webp 우선순위 — 같은 이름의 webp 가 있으면 그쪽을 쓴다
 put(ART_PID, 'card', '.webp', Buffer.from('RIFF____WEBPVP8 ', 'ascii'));
-const packed2 = collectArt();
+const packed2 = collectArt({ standee: true });   // 스탠디 경로까지 검사(기본 빌드는 뺀다, 16.9.2)
 check('webp 가 png 보다 우선한다', /^data:image\/webp;/.test(packed2.art[ART_PID]?.card || ''),
   (packed2.art[ART_PID]?.card || '').slice(0, 24));
 fs.rmSync(made.pop(), { force: true });                       // webp 는 가짜라 브라우저 검사에서 빼둔다
 
 // 4) 빌드가 인라인하는가
-execFileSync('node', [path.join(HERE, 'build.mjs'), '--out', OUT], { stdio: ['ignore', 'pipe', 'pipe'] });
+execFileSync('node', [path.join(HERE, 'build.mjs'), '--out', OUT, '--with-standee'], { stdio: ['ignore', 'pipe', 'pipe'] });   // 스탠디 경로도 검사한다
 const html = fs.readFileSync(OUT, 'utf8');
 // 키 순서는 폴더 정렬 순이라 ART_PID 가 첫 키라고 가정하면 안 된다(실물 아트가 앞설 수 있다)
 check('빌드 산출물에 아트가 인라인된다',
@@ -230,11 +230,14 @@ if (courtUp) {
   });
   await page.waitForTimeout(1500);                                       // 42장 디코드 대기
   const st = await page.evaluate(() => {
-    const c = window.BLOOM_DEBUG && window.BLOOM_DEBUG.court(); if (!c || !c.debug) return -1;
-    c.frame(); const n = c.debug.standees; c.figure = 'rig'; c.frame(); return n;
+    const c = window.BLOOM_DEBUG && window.BLOOM_DEBUG.court(); if (!c || !c.debug) return null;
+    c.frame(); const n = c.debug.standees; c.figure = 'rig'; c.frame(); return { standees: n, parts: c.debug.parts, rigTypes: window.BLOOM_RIG ? Object.keys(window.BLOOM_RIG) : [] };
   });
-  if (figs) figs.standees = st;
+  if (figs && st) { figs.standees = st.standees; figs.parts = st.parts; figs.rigTypes = st.rigTypes; }
 }
+const RIG_JSON = path.join(ROOT, 'art', '05_shared', 'rig', 'rig.json');
+check(fs.existsSync(RIG_JSON) ? '리그 파츠 시트(S/M/L)가 실리고 코트 12명이 전원 그림 파츠로 선다' : '리그 파츠 시트가 없으면 코드 도형으로 선다',
+  !!figs && (fs.existsSync(RIG_JSON) ? (figs.rigTypes.length === 3 && figs.parts === 12) : figs.parts === 0), JSON.stringify(figs && { parts: figs.parts, rigTypes: figs.rigTypes }));
 check('경기 화면이 뜬다', courtUp);
 check('기본 그림 방식은 리그이고 코트 12명이 전원 리그로 선다', !!figs && figs.def === 'rig' && figs.rigs === 12, JSON.stringify(figs));
 check(REAL_STAND ? '스탠디로 바꾸면 12명이 전원 스탠디로 선다(실물 누끼 + 대역)' : '실물 누끼가 없으면 스탠디 방식은 실루엣으로 떨어진다',

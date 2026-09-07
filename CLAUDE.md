@@ -37,7 +37,8 @@ node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건
 node data/validate.mjs            # 로스터 스키마
 node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
 python3 tools/art-standee.py --check # 전신 42장 → 코트 스탠디(누끼) 유무·앵커 (만들기: --force, 미리보기: --preview)
-node web/art-test.mjs             # 아트 슬롯인 회귀 18건
+python3 tools/art-rig.py --check     # 리그 파츠 시트 S/M/L — A-포즈 생성본을 관절로 자른 것 (만들기: 인자 없이, 미리보기: --preview)
+node web/art-test.mjs             # 아트 슬롯인 회귀 19건
 ```
 
 밸런스 상수를 바꾸면 위 하네스를 돌려 **문서 수치를 함께 갱신한다.** 하네스 목표를 넓혀서 통과시키지 않는다.
