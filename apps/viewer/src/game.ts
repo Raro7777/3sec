@@ -19,7 +19,7 @@ import {
   titleClinched,
   MAX_STAFF, STAFF_ROLE_LABEL, ensureStaffMarket, expiringStaff, fireStaff, hireStaff, renewStaff, staffRenewalFee, staffRoomProblem, staffSeverance, staffSigningFee, staffWageBill, staffStyleTags, type StaffMember,
   avgHomeAttendance, clubCapacity, moodBand, moodLabel,
-  expectedAttendance, fixtureSeed, penaltyShootoutDetail, type ShootoutDetail,
+  expectedAttendance, fixtureSeed, penaltyShootoutDetail, shootoutTakers, userSideOf, type ShootoutDetail,
   EXPANSION_STEP, KIT_PATTERNS, KIT_PATTERN_LABEL, CLUB_NAME_MAX, SHORT_NAME_MAX, STADIUM_NAME_MAX, expandStadium, expansionAdvice, renameClub, renameStadium, resetClubKit, setClubKit, type ClubKit, type KitPatternName,
 } from "@3sec/game";
 import {
@@ -406,6 +406,10 @@ export class Game {
       <li><b>직접성</b>: 짧게 가면 점유율이 오르고, 롱볼은 빠르게 위협하지만 패스가 자주 끊깁니다.</li>
       <li><b>폭</b>: 넓게 서면 크로스가 늘고, 좁히면 중앙을 두껍게 막습니다.</li>
       <li>스쿼드 탭의 값이 기본 전술이고, 경기 중 바꾼 값은 다음 경기로 이어집니다.</li></ul>`)}
+    ${sec("결정적 순간", `<ul>
+      <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
+      <li><b>마지막 지시</b>: 75분부터 화면 오른쪽 아래에 📣 버튼이 뜹니다. 경기당 한 번, <b>총공격</b>(라인 올리고 전원 공격) / <b>잠그기</b>(내려앉아 지키기) / <b>시간 끌기</b>(느리게 안전하게) 중 하나로 남은 시간의 전술을 통째로 바꿉니다.</li>
+      <li><b>승부차기</b>에 들어가면 키커 5명과 순서를 직접 정합니다. 사기가 낮거나 지친 선수는 흔들리고, 정하지 않은 순서는 능력순으로 채워집니다.</li></ul>`)}
     ${sec("경기 화면", `<ul>
       <li><b>배속</b> 기본값 <span class="kbd">자동</span>은 골문 근처 공방은 천천히, 중원과 중단 시간은 빠르게 흘려 한 경기가 약 9분입니다. <span class="kbd">⏩ 결과로</span>는 남은 시간을 바로 계산합니다.</li>
       <li><b>교체</b>: 오른쪽(또는 ☰ 서랍)에서 나갈 선수와 들어올 선수를 차례로 고르고 <b>교체 예약</b>. 실제 규칙대로 다음 경기 중단 때 들어가며, 최대 5명입니다.</li>
@@ -3000,17 +3004,60 @@ export class Game {
     // 승부차기: the user's cup tie is level after 90 minutes → compute the kick-by-kick sequence before
     // recording (recordCupResult makes the identical seeded draw), then present it one kick per tap.
     const mineLive = kind === "cup" || (kind === "cl" && cupStage >= CL_GROUP_STAGES) ? this.live.find((x) => x.tie && (x.tie.home === s.userClub || x.tie.away === s.userClub)) : undefined;
-    const shootout = mineLive?.tie && mineLive.match.state.phase === "FULL_TIME" && mineLive.match.state.score[0] === mineLive.match.state.score[1]
-      ? { detail: penaltyShootoutDetail(s, mineLive.tie, mineLive.match), match: mineLive.match } : null;
-    this.settleLive();
-    this.screen.leave();
-    this.save();
-    this.renderAll();
-    if (shootout) {
-      this.showShootout(shootout.match, shootout.detail, () => this.afterRound(round, kind, cupStage));
-      return;
-    }
-    this.afterRound(round, kind, cupStage);
+    const drawn = !!mineLive?.tie && mineLive.match.state.phase === "FULL_TIME" && mineLive.match.state.score[0] === mineLive.match.state.score[1];
+    const finish = () => {
+      const shootout = drawn ? { detail: penaltyShootoutDetail(s, mineLive!.tie!, mineLive!.match), match: mineLive!.match } : null;
+      this.settleLive();
+      this.screen.leave();
+      this.save();
+      this.renderAll();
+      if (shootout) {
+        this.showShootout(shootout.match, shootout.detail, () => this.afterRound(round, kind, cupStage));
+        return;
+      }
+      this.afterRound(round, kind, cupStage);
+    };
+    // the manager names his five before the sequence is drawn
+    if (drawn) this.pickShootoutOrder(mineLive!.match, mineLive!.tie!, finish);
+    else finish();
+  }
+
+  /**
+   * 승부차기 키커 선택: the user's outfielders still on the pitch, tapped into an order (1~5); the rest follow
+   * by ability. Writes `tie.shootoutOrder`, which penaltyShootoutDetail and recordCupResult both read.
+   */
+  private pickShootoutOrder(m: Match, tie: CupTie, done: () => void): void {
+    const s = this.state;
+    const side = userSideOf(s, tie);
+    if (side === -1) { done(); return; }
+    const { takers } = shootoutTakers(m, side);
+    const me = this.me;
+    const need = Math.min(5, takers.length);
+    if (need === 0) { done(); return; }
+    const order: string[] = [];
+    this.sheetLock = true;
+    const paint = () => {
+      const rows = takers.map((d) => {
+        const st = m.state.players.find((p) => p.id === d.id);
+        const sp = me.squad.find((p) => p.id === d.id);
+        const idx = order.indexOf(d.id);
+        return `<div class="soRow ${idx >= 0 ? "on" : ""}" data-so="${d.id}"><span class="soNum">${idx >= 0 ? idx + 1 : ""}</span><span style="min-width:0"><b>${d.name}</b> <span style="color:var(--muted);font-size:11px">${d.role}</span></span><span class="soMeta">결정 ${d.attrs.finishing.toFixed(0)} · 침착 ${d.attrs.composure.toFixed(0)} · 사기 ${sp?.morale ?? 60} · 체력 ${Math.round((1 - (st?.fatigue ?? 0)) * 100)}%</span></div>`;
+      }).join("");
+      this.openSheet(`<div class="pc shootout soPick"><h3 style="margin:0">승부차기 — 키커 순서 <span style="color:var(--muted);font-weight:400;font-size:12px">${order.length}/${need}</span></h3>
+        <div class="hint" style="margin:4px 0 8px">누를 때마다 순서가 붙습니다. 결정력·침착성이 높고 덜 지친 선수가 잘 넣습니다. 사기가 낮으면 흔들립니다. 정하지 않은 순서는 능력순입니다.</div>
+        <div>${rows}</div>
+        <div class="actions" style="justify-content:flex-end;margin-top:10px"><button data-soact="auto">능력순으로</button><button class="primary" data-soact="go" ${order.length >= need ? "" : "disabled"}>확정</button></div></div>`);
+      this.sheetBody.querySelectorAll<HTMLElement>("[data-so]").forEach((el) => el.addEventListener("click", () => {
+        const id = el.dataset.so!;
+        const i = order.indexOf(id);
+        if (i >= 0) order.splice(i, 1); else if (order.length < need) order.push(id);
+        paint();
+      }));
+      const go = () => { tie.shootoutOrder = [...order]; this.sheetLock = false; this.closeSheet(); done(); };
+      this.sheetBody.querySelector<HTMLButtonElement>("[data-soact=auto]")?.addEventListener("click", () => { order.length = 0; this.sheetLock = false; this.closeSheet(); done(); });
+      this.sheetBody.querySelector<HTMLButtonElement>("[data-soact=go]")?.addEventListener("click", go);
+    };
+    paint();
   }
 
   /**
@@ -3162,10 +3209,13 @@ export class Game {
       await this.runChunked(() => match.fastForward(Infinity, 20 * 60), "90분을 시뮬레이션하는 중… 0:0");
       applyScenario(match, scen, side);
       const day = Math.floor(Date.now() / 86400000);
-      const tie: CupTie = { id: day % 997, stage: 3, home: me.id, away: -1, score: null, scorers: [] };
-      const detail = penaltyShootoutDetail(s, tie, match);
-      const { ok, mine, theirs } = challengeOutcome(match, scen, side, detail.score);
-      this.showShootout(match, detail, () => void this.finishChallenge(scen, ok, mine, theirs, " (승부차기)"), (won) => (won ? " · 도전 성공!" : " · 도전 실패…"));
+      // the tie's sides must match the match's, or the kicker order lands on the wrong team
+      const tie: CupTie = { id: day % 997, stage: 3, home: side === 0 ? me.id : -1, away: side === 0 ? -1 : me.id, score: null, scorers: [] };
+      this.pickShootoutOrder(match, tie, () => {
+        const detail = penaltyShootoutDetail(s, tie, match);
+        const { ok, mine, theirs } = challengeOutcome(match, scen, side, detail.score);
+        this.showShootout(match, detail, () => void this.finishChallenge(scen, ok, mine, theirs, " (승부차기)"), (won) => (won ? " · 도전 성공!" : " · 도전 실패…"));
+      });
       return;
     }
     if (scen.startAt > 0) {

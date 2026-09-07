@@ -380,6 +380,8 @@ export interface CupTie {
   score: [number, number] | null;
   /** shoot-out result when the tie was level after 90 minutes */
   penalties?: [number, number];
+  /** the user's chosen kickers, in order (cup.ts penaltyShootoutDetail); the rest follow by ability */
+  shootoutOrder?: string[];
   scorers: string[];
   /** man of the match (see ratings.ts) */
   motm?: { playerId: string; rating: number };

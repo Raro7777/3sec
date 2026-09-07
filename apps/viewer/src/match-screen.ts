@@ -6,7 +6,7 @@ import { Sfx } from "./sfx";
 import { Haptics } from "./haptics";
 import { CLIP_SECONDS, Recorder, cameraTarget, type Clip, type Frame } from "./replay";
 import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type MatchKits } from "./kits";
-import { TacticsRecorder, seasonRounds, table, type Fixture, type GameState, type TacticsReport } from "@3sec/game";
+import { LAST_CALLS, lastCallDue, TacticsRecorder, seasonRounds, table, type Fixture, type GameState, type TacticsReport } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, isNativeApp, shareFile } from "./share";
 
@@ -192,6 +192,12 @@ export class MatchScreen {
   private readonly btnSkip = document.getElementById("btnSkip") as HTMLButtonElement;
   private readonly btnContinue = document.getElementById("btnContinue") as HTMLButtonElement;
   private readonly ftOverlay = document.getElementById("ftOverlay") as HTMLDivElement;
+  /** 결정적 순간: the penalty-taker pick and the once-a-match last call share this overlay */
+  private readonly callOverlay = document.getElementById("callOverlay") as HTMLDivElement;
+  private readonly btnLastCall = document.getElementById("btnLastCall") as HTMLButtonElement;
+  private lastCallUsed = false;
+  /** the match was running when the overlay opened; resume on close */
+  private resumeAfterCall = false;
   private readonly btnFull = document.getElementById("btnFull") as HTMLButtonElement;
   private readonly btnPanel = document.getElementById("btnPanel") as HTMLButtonElement;
   /** user explicitly toggled immersive mode (otherwise it follows phone orientation) */
@@ -257,6 +263,7 @@ export class MatchScreen {
     this.btnSkip.addEventListener("click", () => void this.skipToEnd());
     this.btnContinue.addEventListener("click", () => this.onFinish?.());
     document.getElementById("btnContinue2")!.addEventListener("click", () => this.onFinish?.());
+    this.btnLastCall.addEventListener("click", () => this.openLastCall());
     this.speedSel.addEventListener("change", () => (this.speed = this.speedSel.value === "auto" ? "auto" : Number(this.speedSel.value)));
     this.debugChk.addEventListener("change", () => this.render());
     this.btnFull.addEventListener("click", () => this.setImmersive(!document.body.classList.contains("immersive"), true));
@@ -331,6 +338,9 @@ export class MatchScreen {
     this.effSpeed = 1;
     this.loggedEvents = 0;
     this.fxEvents = 0;
+    this.lastCallUsed = false;
+    this.closeCall(false);
+    this.btnLastCall.hidden = true;
     this.dangerAt = -1e9;
     this.celebT0 = -1e9;
     this.hudGifBtn = null;
@@ -441,6 +451,8 @@ export class MatchScreen {
 
   /** Called by the controller when leaving the match screen. */
   leave(): void {
+    this.closeCall(false);
+    this.btnLastCall.hidden = true;
     this.sfx.stopAmbient();
     this.replay = null;
     this.pendingReplay = null;
@@ -481,6 +493,70 @@ export class MatchScreen {
   }
 
   /** The manager's own before/after readout for this match, once it has been played (tactics-report.ts). */
+  // ------------------------------------------------------------------ 결정적 순간 (penalty taker, last call)
+
+  private openCall(html: string): void {
+    this.resumeAfterCall = this.playing && !this.finished;
+    if (this.playing) this.setPlaying(false);
+    this.callOverlay.innerHTML = html;
+    this.callOverlay.hidden = false;
+  }
+
+  private closeCall(resume = true): void {
+    if (this.callOverlay.hidden) return;
+    this.callOverlay.hidden = true;
+    this.callOverlay.innerHTML = "";
+    if (resume && this.resumeAfterCall && !this.finished) this.setPlaying(true);
+    this.resumeAfterCall = false;
+  }
+
+  /** Who steps up: the outfielders still on the pitch, best penalty men first, the engine's choice marked. */
+  private offerPenaltyTaker(): void {
+    const s = this.match.state;
+    const cur = s.restart?.takerId ?? null;
+    const cands = s.players.filter((p) => p.team === this.userTeam && p.onPitch && !p.sentOff)
+      .map((p) => ({ p, d: this.match.def(p.id) }))
+      .filter((x) => x.d.role !== "GK" || x.p.id === cur)
+      .sort((a, b) => (b.d.attrs.finishing * 0.7 + b.d.attrs.composure * 0.3) - (a.d.attrs.finishing * 0.7 + a.d.attrs.composure * 0.3))
+      .slice(0, 8);
+    if (!cands.length) return;
+    const rows = cands.map(({ p, d }) => `<button class="callOpt${p.id === cur ? " cur" : ""}" data-taker="${p.id}"><span class="ico">${p.id === cur ? "⚽" : ""}</span><span><b>${d.name}</b><small>${d.role}${p.id === cur ? " · 현재 키커" : ""}</small></span><span class="num">결정 ${d.attrs.finishing.toFixed(0)} · 침착 ${d.attrs.composure.toFixed(0)}<br>체력 ${Math.round((1 - p.fatigue) * 100)}%</span></button>`).join("");
+    this.openCall(`<div class="callCard"><div class="callTitle">⚽ 페널티킥 — 누가 찹니까?</div><div class="callSub">결정력과 침착성이 성공률을 좌우합니다. 지친 선수는 흔들립니다.</div>${rows}<div class="callActs"><button data-call="keep">그대로 간다</button></div></div>`);
+    this.callOverlay.querySelectorAll<HTMLButtonElement>("button[data-taker]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.taker!;
+      if (id !== cur && this.match.setRestartTaker(this.userTeam, id)) this.burst("PK 키커", `${this.match.def(id).name}이(가) 공을 놓습니다`, "#ffd166", 1600, false);
+      this.closeCall();
+    }));
+    this.callOverlay.querySelector<HTMLButtonElement>("button[data-call=keep]")?.addEventListener("click", () => this.closeCall());
+  }
+
+  private updateLastCallButton(): void {
+    const s = this.match.state;
+    const show = !this.finished && !this.lastCallUsed && s.phase !== "FULL_TIME" && this.callOverlay.hidden && lastCallDue(this.match.matchSeconds(), this.match.halfLength);
+    if (this.btnLastCall.hidden === show) this.btnLastCall.hidden = !show;
+  }
+
+  /** The once-a-match shout from the touchline: three ready-made tactical swings. */
+  private openLastCall(): void {
+    if (this.lastCallUsed || this.finished) return;
+    const s = this.match.state;
+    const mine = s.score[this.userTeam], theirs = s.score[1 - this.userTeam]!;
+    const state = mine > theirs ? "리드 중" : mine < theirs ? "뒤지는 중" : "동점";
+    const rows = LAST_CALLS.map((c) => `<button class="callOpt" data-lc="${c.id}"><span class="ico">${c.icon}</span><span><b>${c.label}</b><small>${c.hint}</small></span></button>`).join("");
+    this.openCall(`<div class="callCard"><div class="callTitle">📣 마지막 지시 <span style="color:var(--muted);font-weight:400;font-size:13px">${Math.floor(this.match.matchSeconds() / 60)}' · ${state}</span></div><div class="callSub">이번 경기에 한 번뿐입니다. 남은 시간 동안 전술이 통째로 바뀝니다.</div>${rows}<div class="callActs"><button data-call="keep">아직 아니다</button></div></div>`);
+    this.callOverlay.querySelectorAll<HTMLButtonElement>("button[data-lc]").forEach((b) => b.addEventListener("click", () => {
+      const call = LAST_CALLS.find((c) => c.id === b.dataset.lc);
+      if (!call) return;
+      this.match.setTactics(this.userTeam, call.patch);
+      this.lastCallUsed = true;
+      this.btnLastCall.hidden = true;
+      this.burst(`${call.icon} ${call.label}!`, call.shout, "#ffd166", 2200, true);
+      this.sfx.whistle(1, 0.3);
+      this.closeCall();
+    }));
+    this.callOverlay.querySelector<HTMLButtonElement>("button[data-call=keep]")?.addEventListener("click", () => this.closeCall());
+  }
+
   tacticsReport(): TacticsReport | null {
     return this.tactics?.report() ?? null;
   }
@@ -576,6 +652,7 @@ export class MatchScreen {
   /** React to new events of the user's match: text bursts, shake, sounds and highlight clips. */
   private processEvents(): void {
     const s = this.match.state;
+    this.updateLastCallButton();
     const fast = this.playing && this.effSpeed > 12;
     /** at 8x and above the ball ticks would machine-gun, so they stop there */
     const hurried = !this.playing || this.effSpeed >= 8;
@@ -654,6 +731,8 @@ export class MatchScreen {
         case "PENALTY":
           this.burst("페널티킥!", e.text, "#ffd166", 1800, true);
           this.shake(now, 5); this.sfx.whistle(1, 0.6); this.haptics.penalty();
+          // the manager names his kicker: only for a penalty of his own side, in a match he is watching
+          if (e.team === this.userTeam && this.playing && !this.finished && !this.replay) this.offerPenaltyTaker();
           break;
         case "INJURY":
           this.burst("🩹 부상", e.text, "#8ecae6", 1400, false);

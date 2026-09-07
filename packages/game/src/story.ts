@@ -245,7 +245,7 @@ function draft(s: GameState, me: Club, t: StoryTemplateId, rng: Rng): Draft | nu
         title: "이사회의 매각 요구",
         text: `${redWeeks(me)}주째 적자입니다. 이사회가 "구단이 먼저"라며 ${star.name}을(를) ${offer.club.name}에 ${offer.fee}억에 넘기라고 요구합니다.`,
         playerId: star.id, clubId: offer.club.id, amount: offer.fee,
-        choices: [{ label: `${offer.fee}억에 판다`, hint: "예산 +, 이사회 +5, 팬과 선수단은 실망" }, { label: "거부한다", hint: "이사회 −8, 선수단 사기 +2" }],
+        choices: [{ label: `${offer.fee}억에 판다`, hint: "예산 +, 이사회 +5, 팬과 선수단은 실망" }, { label: "거부한다", hint: "이사회 −8, 선수단 사기 +2" }, { label: "다음 창구까지 시간을 번다", hint: "이사회 −3" }],
       };
     }
     case "fanFunding": {
@@ -557,7 +557,8 @@ export function resolveEvent(s: GameState, eventId: string, choice: number, auto
         boardAdd(s, 5);
         adjustSquadMorale(me, -2);
         out = `${p.name}을(를) 팔았습니다. 이사회는 안도했고, 팬들은 "구단이 선수를 팔아 연명한다"고 씁쓸해합니다.`;
-      } else { boardAdd(s, -8); adjustSquadMorale(me, 2); out = `매각을 거부했습니다. 이사회는 "감독이 현실을 모른다"고 했지만 선수단은 감독 편에 섰습니다.`; }
+      } else if (choice === 1) { boardAdd(s, -8); adjustSquadMorale(me, 2); out = `매각을 거부했습니다. 이사회는 "감독이 현실을 모른다"고 했지만 선수단은 감독 편에 섰습니다.`; }
+      else { boardAdd(s, -3); out = "다음 이적 창구까지 시간을 달라고 했습니다. 이사회는 마지못해 고개를 끄덕였습니다."; }
       break;
     }
     case "fanFunding":

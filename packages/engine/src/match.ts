@@ -745,6 +745,19 @@ export class Match {
     if (kind !== "KICK_OFF") s.stoppages++;
   }
 
+  /**
+   * Hand a pending restart to another player of the same team (the manager naming his penalty taker).
+   * Returns false when there is no restart for that team or the player is not on the pitch.
+   */
+  setRestartTaker(team: TeamId, playerId: string): boolean {
+    const r = this.state.restart;
+    if (!r || r.team !== team) return false;
+    const p = this.state.players.find((q) => q.id === playerId);
+    if (!p || p.team !== team || !p.onPitch || p.sentOff) return false;
+    r.takerId = playerId;
+    return true;
+  }
+
   private stepRestartSetup(): void {
     const s = this.state;
     const r = s.restart!;

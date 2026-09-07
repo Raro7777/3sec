@@ -10,7 +10,7 @@ export {
 } from "./season";
 export {
   CUP_NAME, CUP_ROUNDS, CUP_STAGES, CUP_STAGE_LABEL, CUP_BYES, CUP_D2_ENTRANTS, CUP_PRIZE, cupByes, cupField, cupEntrants, drawCupRound, newCup, tieWinner, cupDone,
-  currentCupTies, pendingCupTies, userCupTie, userCupStatus, userEnteredCup, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, type ShootoutKick, type ShootoutDetail, recordCupResult,
+  currentCupTies, pendingCupTies, userCupTie, userCupStatus, userEnteredCup, cupDayDue, cupFixture, createCupMatch, penaltyShootout, penaltyShootoutDetail, shootoutTakers, userSideOf, kickerNerve, type ShootoutKick, type ShootoutDetail, recordCupResult,
   simulateCupDay, advanceCupDay, cupPrize, type CupStatus,
 } from "./cup";
 export { SAVE_KEY, serialize, deserialize } from "./save";
@@ -104,3 +104,4 @@ export { askingPriceFor } from "./transfers";
 export { RED_ARREARS_WEEKS, ARREARS_MORALE, LOAN_WEEKS, LOAN_INTEREST, redWeeks, inArrears, financeStatus, takeEmergencyLoan, financeWeek, financeRollover, type FinanceStatus } from "./finance";
 export { RETURN_AFTER, RETURN_FEE_SHARE, noteDeparture, returnable, returningPlayer, returnFee, forgetAlumnus, alumniRollover, type Alumnus } from "./alumni";
 export { FEUD_AT, FEUD_MAX, feudWith, adjustFeud, rivalManager, recordManagerH2H, h2hTable, tauntLine, derbyQuote, rivalryRollover, type ManagerH2H } from "./rivalry";
+export { LAST_CALL_FROM, LAST_CALL_MINUTE, LAST_CALLS, lastCallById, lastCallDue, type LastCall, type LastCallId } from "./lastcall";

@@ -1,4 +1,4 @@
-import { Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
+import { type PlayerDef, Rng, type Match, type MatchOptions, type TeamId } from "@3sec/engine";
 import type { Cup, CupTie, Fixture, GameState } from "./types";
 import { applyStaffRecovery } from "./staff";
 import { boardCupWin } from "./board";
@@ -130,21 +130,34 @@ export interface ShootoutDetail { kicks: ShootoutKick[]; score: [number, number]
  * The kick-by-kick sequence of `penaltyShootout` (same seed, same draws, same order, same result).
  * The forced tiebreak after 40 rounds (score[0]++ without a kick) is not a kick and appears only in `score`.
  */
+/** The user's side of a tie, or -1 when the user is not in it. */
+export const userSideOf = (s: GameState, t: Pick<CupTie, "home" | "away">): TeamId | -1 => (t.home === s.userClub ? 0 : t.away === s.userClub ? 1 : -1);
+
+/** Who would kick, in order, for a side: the named order first (kickers still on the pitch), then the rest by ability. */
+export function shootoutTakers(m: Match, team: TeamId, order: string[] = []): { keeper: PlayerDef; takers: PlayerDef[] } {
+  const onPitch = m.state.players.filter((p) => p.team === team && p.onPitch && !p.sentOff).map((p) => m.def(p.id));
+  const keeper = onPitch.find((p) => p.role === "GK") ?? onPitch[0]!;
+  const byAbility = onPitch.filter((p) => p !== keeper).sort((a, b) => (b.attrs.finishing + b.attrs.composure) - (a.attrs.finishing + a.attrs.composure));
+  const named = order.map((id) => byAbility.find((p) => p.id === id)).filter((p): p is PlayerDef => !!p);
+  const takers = [...named, ...byAbility.filter((p) => !named.includes(p))];
+  return { keeper, takers: takers.length ? takers : [keeper] };
+}
+
+/** 0..1 nerves-and-legs factor a kicker brings to the spot: low morale and heavy legs cost a little. */
+export const kickerNerve = (morale: number | undefined, fatigue: number): number => ((morale ?? 60) - 60) / 40 * 0.03 - Math.max(0, fatigue - 0.5) * 0.06;
+
 export function penaltyShootoutDetail(s: GameState, t: CupTie, m: Match): ShootoutDetail {
   const rng = new Rng(fixtureSeed(s, cupFixture(t)) ^ 0x9e3779b9);
-  const side = (team: TeamId) => {
-    const onPitch = m.state.players.filter((p) => p.team === team && p.onPitch && !p.sentOff).map((p) => m.def(p.id));
-    const keeper = onPitch.find((p) => p.role === "GK") ?? onPitch[0]!;
-    const takers = onPitch.filter((p) => p !== keeper).sort((a, b) => (b.attrs.finishing + b.attrs.composure) - (a.attrs.finishing + a.attrs.composure));
-    return { keeper, takers: takers.length ? takers : [keeper] };
-  };
-  const teams = [side(0), side(1)];
+  const userSide = userSideOf(s, t);
+  const teams = [shootoutTakers(m, 0, userSide === 0 ? t.shootoutOrder : undefined), shootoutTakers(m, 1, userSide === 1 ? t.shootoutOrder : undefined)];
+  const moraleOfId = (id: string): number | undefined => { for (const c of [clubOf(s, t.home), clubOf(s, t.away)]) { const p = c?.squad.find((q) => q.id === id); if (p) return p.morale; } return undefined; };
   const kicks: ShootoutKick[] = [];
   const kick = (team: 0 | 1, i: number): boolean => {
     const me = teams[team]!, them = teams[1 - team]!;
     const taker = me.takers[i % me.takers.length]!;
-    const edge = ((taker.attrs.finishing + taker.attrs.composure) / 2 - them.keeper.attrs.reflexes) * 0.016;
-    const scored = rng.chance(0.76 + Math.max(-0.08, Math.min(0.08, edge)));
+    const legs = m.state.players.find((p) => p.id === taker.id)?.fatigue ?? 0;
+    const edge = ((taker.attrs.finishing + taker.attrs.composure) / 2 - them.keeper.attrs.reflexes) * 0.016 + kickerNerve(moraleOfId(taker.id), legs);
+    const scored = rng.chance(0.76 + Math.max(-0.1, Math.min(0.1, edge)));
     kicks.push({ team, playerId: taker.id, name: taker.name, scored });
     return scored;
   };
