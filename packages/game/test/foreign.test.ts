@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Rng } from "@3sec/engine";
 import {
   FOREIGN_ON_PITCH, FOREIGN_PREMIUM, FOREIGN_QUOTA, askingPrice, askingPriceFor, autoSelect, buyPlayer, ensureForeign, foreignCount, foreignStarters,
-  isForeignId, isForeignPlayer, makeBid, newGame, overall, pendingEvents, resolveEvent, selectionProblem, storyWeek, transferTargets, type GameState, type SquadPlayer,
+  isForeignId, isForeignPlayer, makeBid, aiTransfers, newGame, overall, pendingEvents, resolveEvent, selectionProblem, storyWeek, transferTargets, type GameState, type SquadPlayer,
 } from "../src/index";
 
 /** Turn the user's n best outfield players into (nominal) foreigners. */
@@ -96,5 +96,24 @@ describe("foreign players: names and quota", () => {
     expect(s.foreign!.find((c) => c.id === ev!.clubId)!.squad.some((p) => p.id === star.id)).toBe(true);
     expect(me.budget).toBe(budget + ev!.amount!);
     expect(pendingEvents(s).length).toBe(0);
+  });
+
+  it("AI clubs sign foreigners too, one per window, never past the quota, and the world keeps its players", () => {
+    const s = newGame(506, 0);
+    ensureForeign(s);
+    const all = () => [...s.clubs, ...s.foreign!].reduce((n, c) => n + c.squad.length, 0);
+    const total = all();
+    for (const c of s.clubs) if (c.id !== s.userClub) c.budget = 3000;
+    let signed = 0;
+    for (let i = 0; i < 12; i++) {
+      s.aiDeals = [];
+      aiTransfers(s, new Rng(900 + i));
+      signed = s.clubs.filter((c) => c.id !== s.userClub).reduce((n, c) => n + foreignCount(c), 0);
+    }
+    expect(signed).toBeGreaterThan(0);
+    for (const c of s.clubs) { expect(foreignCount(c)).toBeLessThanOrEqual(FOREIGN_QUOTA); expect(selectionProblem(c)).toBeNull(); }
+    for (const c of s.foreign!) expect(selectionProblem(c)).toBeNull();
+    expect(all()).toBe(total);
+    expect(s.news.some((n) => n.includes("외국인 "))).toBe(true);
   });
 });

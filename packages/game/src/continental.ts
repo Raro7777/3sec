@@ -88,7 +88,11 @@ export const foreignCountry = (id: number): string => FOREIGN_DEFS[id - FOREIGN_
 
 /** The foreign field, created on first use (older saves). */
 export function ensureForeign(s: GameState): Club[] {
-  if (!Array.isArray(s.foreign) || s.foreign.length !== FOREIGN_DEFS.length) s.foreign = buildForeignClubs(s.seed);
+  if (!Array.isArray(s.foreign) || s.foreign.length !== FOREIGN_DEFS.length) {
+    s.foreign = buildForeignClubs(s.seed);
+    // squads are generated with season-1 contracts; an older save catching up is further along
+    for (const c of s.foreign) for (const p of c.squad) p.contractUntil += s.season - 1;
+  }
   return s.foreign;
 }
 
@@ -105,7 +109,8 @@ export function foreignRollover(s: GameState): void {
   for (const c of ensureForeign(s)) {
     const rng = new Rng((s.seed * 53 + c.id * 2003 + s.season * 331 + 29) >>> 0);
     c.squad = buildSquad(rng, `F${c.id}S${s.season}`, c.reputation, FOREIGN_DEFS[c.id - FOREIGN_ID_BASE]?.country ?? "한국");
-    for (const p of c.squad) p.wage = wageFor(p);
+    // buildSquad hands out season-1 contracts; shift them so a man bought from here has a live deal
+    for (const p of c.squad) { p.wage = wageFor(p); p.contractUntil += s.season - 1; }
     c.selection = autoSelect(c, c.selection.formation);
     ensureCaptain(c);
     lockerRoom(c);

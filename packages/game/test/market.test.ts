@@ -9,7 +9,7 @@ import {
 const fixed = (v: number) => ({ next: () => v });
 const ovr = (p: SquadPlayer) => overall(p.attrs, p.role);
 const boost = (p: SquadPlayer) => { for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) p.attrs[k] = 20; };
-const countPlayers = (s: GameState) => s.clubs.reduce((n, c) => n + c.squad.length, 0) + s.freeAgents.length;
+const countPlayers = (s: GameState) => [...s.clubs, ...(s.foreign ?? [])].reduce((n, c) => n + c.squad.length, 0) + s.freeAgents.length;
 
 describe("incoming offers", () => {
   it("a needy, rich AI club bids for a player who would start for it; offers lapse after two rounds or when the window shuts", () => {

@@ -30,6 +30,8 @@ export const FREE_AGENT_FEE = 0.3;
 export const FREE_AGENT_WAGE = 1.2;
 /** Purchases an AI club may make in one window. */
 export const AI_DEALS_PER_WINDOW = 2;
+/** How much better than the starter he replaces a foreign signing must be for an AI club to bother. */
+export const AI_FOREIGN_MARGIN = 2;
 /** An AI club with more than this in the bank (억원) gets an extra deal per window and shops for any weak starter. */
 export const RICH_BUDGET = 60;
 /** Lines kept in the league-wide market log. */
@@ -701,12 +703,14 @@ export function aiTransfers(s: GameState, rng: Rand): void {
     const pol = policy(club);
     // how far above value a manager will go: a big spender to 2×, a frugal one barely past the tag; money burns a hole in the pocket
     const maxRatio = (pol.spender ? 2 : pol.frugal ? 1.25 : 1.6) * (rich ? 1.25 : 1);
+    // Abroad too, within the quota and one foreign signing per window: a flop from overseas is a bigger risk,
+    // so the man has to be a clearer upgrade (AI_FOREIGN_MARGIN) than a domestic one.
+    const canAbroad = foreignCount(club) < FOREIGN_QUOTA && !s.aiDeals.includes(`${key}:${club.id}:abroad`);
     const candidates = transferTargets(s)
-      // AI clubs shop at home: the foreign field is the user's hunting ground (and the conservation of the league's players)
-      .filter((t) => !t.abroad)
+      .filter((t) => !t.abroad || canAbroad)
       .filter((t) => t.club.id !== club.id && needFor.has(t.player.role) && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
       .filter((t) => !pol.youth || t.player.age <= 24)
-      .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : 1.5))
+      .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : t.abroad ? AI_FOREIGN_MARGIN : 1.5))
       // A player has a say: a starter will not drop down the pyramid to sit in someone else's team
       // (transfers.ts refusalChanceBetween). Without this a moneyed second-division club simply buys
       // the top flight's best, which is not a transfer market so much as an auction.
@@ -718,7 +722,8 @@ export function aiTransfers(s: GameState, rng: Rand): void {
     const from = pick.club;
     movePlayer(s, from, club, pick.player, pick.price!);
     s.aiDeals.push(`${key}:${club.id}`);
-    s.news.unshift(`${club.shortName}: ${pick.player.name} 영입 (${from.shortName}, ${pick.price}억${surplusPlayers(from).length ? ", 잉여 자원 정리" : ""}).`);
+    if (pick.abroad) s.aiDeals.push(`${key}:${club.id}:abroad`);
+    s.news.unshift(`${club.shortName}: ${pick.abroad ? "외국인 " : ""}${pick.player.name} 영입 (${from.shortName}, ${pick.price}억${!pick.abroad && surplusPlayers(from).length ? ", 잉여 자원 정리" : ""}).`);
   }
 }
 

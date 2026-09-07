@@ -60,9 +60,10 @@ describe("transfer market", () => {
 
   it("AI clubs trade among themselves and stay legal", () => {
     const s = newGame(25);
-    const total = s.clubs.reduce((n, c) => n + c.squad.length, 0);
+    const all = () => [...s.clubs, ...(s.foreign ?? [])].reduce((n, c) => n + c.squad.length, 0);
+    const total = all();
     aiTransfers(s, new Rng(1));
-    expect(s.clubs.reduce((n, c) => n + c.squad.length, 0)).toBe(total);
+    expect(all()).toBe(total);
     for (const c of s.clubs) expect(selectionProblem(c)).toBeNull();
   });
 });
