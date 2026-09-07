@@ -50,6 +50,10 @@ export const PHYSIO_COST = 3;
 export const STORY_TEMPLATES: StoryTemplateId[] = ["sponsor", "localPress", "prospectTip", "personalLeave", "lockerConflict", "boardDemand", "derbyWeek", "awayBus", "coachOffer", "injuryCrisis", "mediaCriticism", "youthDebut", "topFlightBid", "relegationFear", "overseasBid",
   "wageArrears", "boardSellDemand", "fanFunding", "cityGrant", "veteranFarewell", "lateBloomer", "prodigalReturn", "rivalTaunt"];
 
+/** Templates tied to a moment that passes: drawn first when applicable (storyWeek). */
+export const URGENT_TEMPLATES = new Set<StoryTemplateId>(["derbyWeek", "rivalTaunt", "topFlightBid", "overseasBid", "relegationFear", "injuryCrisis", "wageArrears", "boardSellDemand", "cityGrant", "veteranFarewell", "prodigalReturn", "youthDebut"]);
+export const URGENT_SHARE = 0.7;
+
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 const isYouthProduct = (p: SquadPlayer): boolean => !!p.youthProduct || /-Y\d+$/.test(p.id);
@@ -382,7 +386,11 @@ export function storyWeek(s: GameState, rng: Rng): StoryEvent | null {
   const me = clubOf(s, s.userClub);
   const fits = STORY_TEMPLATES.filter((t) => applicable(s, me, t));
   if (!fits.length) return null;
-  const t = fits[Math.floor(rng.next() * fits.length)]!;
+  // A moment that is only possible this week (a derby, a bid, a veteran's last weeks, a crisis) must not be
+  // drowned out by the evergreen templates: when one is on, it is drawn URGENT_SHARE of the time.
+  const urgent = fits.filter((t) => URGENT_TEMPLATES.has(t));
+  const pool = urgent.length && (urgent.length === fits.length || rng.next() < URGENT_SHARE) ? urgent : fits.filter((t) => !URGENT_TEMPLATES.has(t));
+  const t = pool[Math.floor(rng.next() * pool.length)]!;
   const d = draft(s, me, t, rng);
   if (!d) return null;
   const ev: StoryEvent = { id: `ev-${s.season}-${s.round}-${t}`, template: t, season: s.season, round: s.round, expiresRound: s.round + STORY_TTL, ...d };

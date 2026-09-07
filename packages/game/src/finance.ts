@@ -9,12 +9,16 @@
  */
 import type { Club, GameState } from "./types";
 import { clubOf } from "./season";
-import { adjustSquadMorale } from "./morale";
+import { adjustSquadMorale, moraleOf } from "./morale";
+
+const squadMorale = (c: Club): number => (c.squad.length ? c.squad.reduce((n, p) => n + moraleOf(p), 0) / c.squad.length : 0);
 
 /** From this many consecutive weeks in the red the players' wages are late. */
 export const RED_ARREARS_WEEKS = 3;
 /** Squad morale lost every week the wages are late. */
 export const ARREARS_MORALE = -2;
+/** The bleed stops once the dressing room is this low: there is a floor to misery, and a spiral is not a game. */
+export const ARREARS_FLOOR = 35;
 /** The owner's emergency loan: repaid over this many rounds, at this interest. */
 export const LOAN_WEEKS = 20;
 export const LOAN_INTEREST = 0.15;
@@ -53,7 +57,7 @@ export function financeWeek(s: GameState): void {
   if (me.budget < 0) {
     me.redWeeks = redWeeks(me) + 1;
     if (me.redWeeks === RED_ARREARS_WEEKS) s.news.unshift(`재정: ${RED_ARREARS_WEEKS}주째 적자입니다. 이번 주 급여가 밀렸습니다 — 흑자로 돌아설 때까지 매주 선수단 사기가 떨어집니다.`);
-    if (inArrears(me)) adjustSquadMorale(me, ARREARS_MORALE);
+    if (inArrears(me) && squadMorale(me) > ARREARS_FLOOR) adjustSquadMorale(me, ARREARS_MORALE);
   } else if (redWeeks(me) > 0) {
     if (inArrears(me)) s.news.unshift("재정: 밀린 급여를 모두 지급했습니다. 라커룸이 한숨 돌립니다.");
     me.redWeeks = 0;

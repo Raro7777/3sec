@@ -8,6 +8,10 @@ import {
 /** A die that always says yes to a chance and returns a fixed fraction otherwise. */
 const forced = (next = 0, chance = true): Rng => ({ next: () => next, chance: () => chance, int: (lo: number) => lo, range: (lo: number) => lo, pick: <T>(a: T[]) => a[0]!, gauss: () => 0 }) as unknown as Rng;
 
+/** Like `forced`, but `next` cycles through the given values: [0.99, 0] skips the urgent draw and takes the first evergreen template. */
+const cycling = (vals: number[], chance = true): Rng => { let i = 0; return { next: () => vals[i++ % vals.length]!, chance: () => chance, int: (lo: number) => lo, range: (lo: number) => lo, pick: <T>(a: T[]) => a[0]!, gauss: () => 0 } as unknown as Rng; };
+const evergreen = (): Rng => cycling([0.99, 0]);
+
 /** A hand-made pending event for a template (resolveEvent only needs the fields). */
 function push(s: GameState, template: StoryTemplateId, extra: Partial<StoryEvent> = {}): StoryEvent {
   const ev: StoryEvent = { id: `ev-t-${template}-${(s.events ?? []).length}`, template, season: s.season, round: s.round, title: template, text: "", choices: [{ label: "A", hint: "" }, { label: "B", hint: "" }, { label: "C", hint: "" }], expiresRound: s.round + STORY_TTL, ...extra };
@@ -19,7 +23,7 @@ describe("story: events", () => {
   it("has at least ten templates and a forced week creates one pending event, no second while it waits", () => {
     expect(STORY_TEMPLATES.length).toBeGreaterThanOrEqual(10);
     const s = newGame(41, 0);
-    const ev = storyWeek(s, forced(0))!;
+    const ev = storyWeek(s, evergreen())!;
     expect(ev).toBeTruthy();
     expect(ev.template).toBe("sponsor");
     expect(ev.choices.length).toBeGreaterThanOrEqual(2);
@@ -53,7 +57,7 @@ describe("story: events", () => {
   it("a stale event settles itself with the last choice at the next story tick", () => {
     const s = newGame(43, 0);
     const me = s.clubs[0]!;
-    const ev = storyWeek(s, forced(0))!;
+    const ev = storyWeek(s, evergreen())!;
     const mood = me.fans.mood;
     s.round += STORY_TTL;
     storyWeek(s, forced(0, false));
