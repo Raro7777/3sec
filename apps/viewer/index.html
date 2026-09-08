@@ -293,6 +293,21 @@
       .docActs button:disabled { opacity:.4; }
       .docActs .info { color:#5d6773; border-color:rgba(0,0,0,.25); margin-right:auto; }
       .docActs .info:hover { color:#12181f; border-color:#12181f; }
+      /* 라커룸: four things the manager can say, and how the eleven took it */
+      .talk .talkOpts { display:flex; flex-direction:column; gap:7px; margin:10px 0 4px; }
+      .talkOpt { display:grid; grid-template-columns:52px 1fr; gap:10px; align-items:center; text-align:left; padding:9px 11px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); color:var(--text); font:inherit; cursor:pointer; }
+      .talkOpt b { font-size:14px; letter-spacing:.1em; color:var(--accent); text-align:center; }
+      .talkOpt span { font-size:12.5px; line-height:1.45; color:var(--muted); }
+      .talkOpt:hover { border-color:var(--accent); }
+      .talkOpt:hover span { color:var(--text); }
+      .talkSaid { margin:10px 0 2px; padding:10px 12px; border-left:3px solid var(--accent); background:rgba(242,193,78,.07); border-radius:0 6px 6px 0; font-size:14px; line-height:1.5; }
+      .talkRes { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:5px; margin-top:4px; max-height:44vh; overflow-y:auto; }
+      .talkRe { display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:7px; background:var(--panel2); border:1px solid var(--line); font-size:12px; }
+      .talkRe svg, .talkRe img { flex:none; }
+      .talkRe span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .talkRe b { font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .talkRe.up { border-color:rgba(95,211,138,.5); } .talkRe.up b { color:var(--good); }
+      .talkRe.down { border-color:rgba(239,91,91,.5); } .talkRe.down b { color:var(--bad); }
       .row.yt .pot { font-family:"IBM Plex Mono", monospace; font-size:12px; text-align:right; color:var(--muted); }
       .row.yt .acts { display:flex; gap:4px; justify-content:flex-end; }
       .row.yt .acts button { padding:3px 8px; font-size:12px; white-space:nowrap; }

@@ -596,6 +596,8 @@ export interface GameState {
   managerH2H?: Record<string, import("./rivalry").ManagerH2H>;
   /** feud level per opposing manager id (rivalry.ts) */
   feud?: Record<string, number>;
+  /** the last dressing-room talk (teamtalk.ts); `key` is the fixture, so a talk is given once per match */
+  lastTalk?: { key: string; tone: import("./teamtalk").TalkTone; lift: number };
   /** the running 시나리오 (scenario.ts): its rules bind, and its first season is judged */
   scenario?: import("./scenario").ScenarioState;
   /** ids of scenarios cleared on this save (the hall of fame) */

@@ -78,6 +78,10 @@ export {
   personalityFromId, ensurePersonality, personalityOf, moraleOf, personalityTags, moraleLabel, moraleBand, adjustMorale, adjustSquadMorale,
   leadership, pickCaptain, captainOf, ensureCaptain, setCaptain, lockerRoom, moraleTrainingFactor, matchAttrs, moraleOfferRefused, moraleWeek, moraleRollover, migrateMorale,
 } from "./morale";
+export {
+  TALK_MAX, TALK_NEUTRAL, TALK_SCALE, toneFit, reactionOf, talkOptions, talkGiven, giveTalk,
+  type TalkTone, type TalkContext, type TalkOption, type TalkReaction, type TalkResult,
+} from "./teamtalk";
 export { interviewContext, pressConference, answerInterview, skipInterview, type InterviewContext } from "./press";
 export {
   STORY_CHANCE, STORY_TTL, EVENT_LOG_MAX, CAP_RATING, CAP_MAX_AGE, CAP_MORALE, WONDERKID_AT, SCOUT_TIP_COST, AWAY_BUS_COST, PHYSIO_COST, STORY_TEMPLATES, URGENT_TEMPLATES, URGENT_SHARE,

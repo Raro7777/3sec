@@ -33,6 +33,7 @@ import {
 } from "@3sec/game";
 import {
   clubLore, derbyFor, answerInterview, resolveEvent, pendingEvents, setCaptain, moraleOf, moraleLabel, moraleBand, personalityTags, captainOf, type InterviewOption,
+  talkOptions, talkGiven, giveTalk, feudWith, type TalkTone, type TalkContext,
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
@@ -485,6 +486,10 @@ export class Game {
       <li>시나리오는 <b>첫 시즌</b>만 판정합니다. 목표를 이루면 성공, 못 이루거나 경질되면 실패이고, 어느 쪽이든 커리어는 그대로 이어집니다.</li>
       <li>일부 시나리오는 <b>제약</b>이 있습니다. 영입·임대·자유계약이 막히거나 외국인을 쓸 수 없습니다. 막힌 영입은 이적 화면에서 이유를 알려 줍니다.</li>
       <li>성공한 시나리오는 <b>명예의 전당</b> 탭에 남습니다.</li></ul>`)}
+    ${sec("팀 토크", `<ul>
+      <li>경기 시작을 누르면 라커룸에서 <b>한 번</b> 말할 수 있습니다. <b>격려·침착·요구·질책</b> 중 하나를 고르면 선발 열한 명의 사기가 각자의 성격대로 움직이고, 그 사기가 경기의 능력치가 됩니다.</li>
+      <li>상황을 읽어야 합니다. 부진하거나 전력이 열세면 <b>격려</b>, 더비처럼 흥분하기 쉬운 날은 <b>침착</b>, 전력이 우세하고 흐름이 좋으면 <b>요구</b>가 잘 먹힙니다. <b>질책</b>은 연패 중일 때만 통하고, 다혈질 선수는 등을 돌립니다.</li>
+      <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li></ul>`)}
     ${sec("결정적 순간", `<ul>
       <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
       <li><b>마지막 지시</b>: 75분부터 화면 오른쪽 아래에 📣 버튼이 뜹니다. 경기당 한 번, <b>총공격</b>(라인 올리고 전원 공격) / <b>잠그기</b>(내려앉아 지키기) / <b>시간 끌기</b>(느리게 안전하게) 중 하나로 남은 시간의 전술을 통째로 바꿉니다.</li>
@@ -1492,7 +1497,7 @@ export class Game {
     switch (a) {
       case "chalAbandon": this.abandonChallenge(); break;
       case "squad": this.show("squad"); break;
-      case "play": this.startMatch(); break;
+      case "play": this.openTeamTalk(); break;
       case "sim1": void this.simRounds(1); break;
       case "sim3": void this.simRounds(3); break;
       case "sim5": void this.simRounds(5); break;
@@ -3114,6 +3119,69 @@ export class Game {
     }
     this.liveKind = "league";
     return currentFixtures(s).filter((f) => !f.score).map((fixture) => ({ fixture, match: createMatch(s, fixture) }));
+  }
+
+  /**
+   * 라커룸: before the teams are built, the manager says one thing to the eleven. Every player answers it in
+   * his own way (teamtalk.ts) and his morale moves, which is what `createMatch` then strips into the engine's
+   * attributes — so the talk has to happen here, before `startMatch` builds anything.
+   */
+  private openTeamTalk(): void {
+    const s = this.state;
+    const fx = nextUserFixture(s);
+    const tie = userCupTie(s) ?? userClTie(s);
+    const home = fx ? fx.home === s.userClub : tie ? tie.home === s.userClub : true;
+    const oppId = fx ? (fx.home === s.userClub ? fx.away : fx.home) : tie ? (tie.home === s.userClub ? tie.away : tie.home) : -1;
+    const me = this.me;
+    const opp = oppId >= 0 ? clubOf(s, oppId) : null;
+    const key = `${s.season}:${s.round}:${this.liveKindNext()}`;
+    if (!opp || talkGiven(s, key)) { this.startMatch(); return; }
+    const ctx: TalkContext = {
+      home,
+      opponent: opp.shortName,
+      favourite: me.reputation >= opp.reputation,
+      derby: !!(fx && derbyFor(s, fx)) || (opp.manager ? feudWith(s, opp.manager.id) >= FEUD_AT : false),
+      form: this.form(me.id).split("").reverse().map((ch) => (ch === "승" ? "W" : ch === "패" ? "L" : "D")).join(""),
+    };
+    const opts = talkOptions(ctx);
+    const room = Math.round(me.lockerRoom ?? 60);
+    const head = `<div class="pcHead"><div class="pcNum" style="font-size:22px;line-height:0">${emblemSvg(me, 34)}</div>
+      <div class="pcMain"><div class="pcName">라커룸</div><div class="hint">${home ? "홈" : "원정"} · ${opp.name} 전${ctx.derby ? " · 더비" : ""}</div>
+        <div class="hint">최근 ${this.form(me.id) || "—"} · 전력 ${ctx.favourite ? "우세" : "열세"} · 라커룸 ${moraleLabel(room)} ${room}</div></div></div>`;
+    this.openSheet(`<div class="pc talk"><h3 style="margin:0">팀 토크 <span style="color:var(--muted);font-weight:400;font-size:12px">한 번만 말할 수 있습니다</span></h3>
+      ${head}
+      <div class="talkOpts">${opts.map((o) => `<button class="talkOpt" data-tone="${o.tone}"><b>${o.label}</b><span>${o.line}</span></button>`).join("")}</div>
+      <div class="actions" style="justify-content:flex-end"><button data-talk-skip>말없이 나간다</button></div></div>`);
+    const sheet = document.getElementById("sheet")!;
+    sheet.querySelector<HTMLButtonElement>("[data-talk-skip]")?.addEventListener("click", () => { this.closeSheet(); this.startMatch(); });
+    sheet.querySelectorAll<HTMLButtonElement>("button[data-tone]").forEach((b) => b.addEventListener("click", () => {
+      const roomBefore = Math.round(me.lockerRoom ?? 60);
+      const r = giveTalk(s, me, b.dataset.tone as TalkTone, ctx, key);
+      const roomAfter = Math.round(me.lockerRoom ?? 60);
+      this.save();
+      const line = opts.find((o) => o.tone === r.tone)!;
+      const row = (x: { id: string; name: string; delta: number }) => {
+        const p = me.squad.find((q) => q.id === x.id);
+        const up = x.delta > 0.4, down = x.delta < -0.4;
+        return `<div class="talkRe ${up ? "up" : down ? "down" : ""}">${p ? face(p, me, 26) : ""}<span>${x.name}</span><b>${x.delta > 0 ? "+" : ""}${x.delta.toFixed(1)}</b></div>`;
+      };
+      this.openSheet(`<div class="pc talk"><h3 style="margin:0">팀 토크 <span style="color:var(--muted);font-weight:400;font-size:12px">${line.label}</span></h3>
+        ${head}
+        <div class="talkSaid">“${line.line}”</div>
+        <div class="hint" style="margin:6px 0">${r.note} · 라커룸 ${roomBefore} → <b style="color:${roomAfter > roomBefore ? "var(--good)" : roomAfter < roomBefore ? "var(--bad)" : "var(--text)"}">${roomAfter}</b></div>
+        <div class="talkRes">${r.reactions.map(row).join("")}</div>
+        <div class="actions" style="justify-content:flex-end"><button class="primary" data-talk-go>경기장으로 ▶</button></div></div>`);
+      document.getElementById("sheet")!.querySelector<HTMLButtonElement>("[data-talk-go]")
+        ?.addEventListener("click", () => { this.closeSheet(); this.startMatch(); });
+    }));
+  }
+
+  /** Which competition the next user match belongs to (the talk key needs it: cup and league share a round). */
+  private liveKindNext(): string {
+    const s = this.state;
+    if (s.pendingClDay && userClTie(s)) return "cl";
+    if (s.pendingCupDay && userCupTie(s)) return "cup";
+    return "league";
   }
 
   private startMatch(): void {
