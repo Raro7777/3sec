@@ -335,7 +335,7 @@ const SEC5 = '의도적 차이 (PARITY.md 참조)';
   const subs = clubAfter.roster.filter(p => p.isSubstitute).length;
   must(SEC5, '② 졸업생 원소속 이탈', before && !stillThere, `${card.name}(t05)`);
   must(SEC5, '② 결원 = 대체 선수 1명', subs === 1, `대체 ${subs}명`);
-  must(SEC5, '② 구단 인원 7명 유지', clubAfter.roster.length === 7, `${clubAfter.roster.length}명`);
+  must(SEC5, '② 구단 인원 7명 유지(생성 벤치 제외)', clubAfter.roster.filter(p => !p.isBench).length === 7, `${clubAfter.roster.filter(p => !p.isBench).length}명`);
 
   // ③ 노화·전성기·은퇴 (league-and-economy.md A.3.6 · v0.3). C# 프로토타입에는 없는 계층이다.
   const g3 = G.createGame({ seed: 12 });
@@ -367,7 +367,7 @@ const SEC5 = '의도적 차이 (PARITY.md 참조)';
       }
       return sum / k;
     });
-    return { ovr: v.reduce((a, b) => a + b, 0) / v.length, size: G.clubTeamState(g3, 't01').roster.length };
+    return { ovr: v.reduce((a, b) => a + b, 0) / v.length, size: G.clubTeamState(g3, 't01').roster.filter(p => !p.isBench).length };
   };
   const L8 = ladderAt(8), L12 = ladderAt(12);
   g3.season = 1;
@@ -709,7 +709,7 @@ const SEC8 = '신인 세대 생성기 (docs/rookies.md)';
       let sum = 0, k = 0, size = 0, heirs = 0;
       for (const c of G.CLUBS) {
         const ts = G.clubTeamState(g, c.id);
-        size += ts.roster.length;
+        size += ts.roster.filter(p => !p.isBench).length;   // 생성 벤치(match-sim 16절)는 슬롯이 아니다
         heirs += ts.roster.filter(x => x.isRookieHeir).length;
         for (const id of ts.lineup.startingIds.concat([ts.lineup.liberoId])) {
           const pl = ts.index.get(id);

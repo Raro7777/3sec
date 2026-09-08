@@ -29,7 +29,8 @@ node web/app-test.mjs     # 화면 흐름 회귀 테스트 114건 (playwright �
 node web/parity.mjs               # 경기·육성 지표가 목표 범위 안인가 (약 15초)
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 9건 (약 40초)
 node web/season-check.mjs --app   # 같은 목표를 앱 경제(시작 티켓·온보딩 미션 보상)로
-node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건 (약 60초)
+node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건
+node web/season-check.mjs --no-subs --no-bench --no-condition --no-injury --no-chemistry --no-ops   # 경기 엔진 2단계(match-sim 16~19절) 도입 전 수치 재현 (약 60초)
 node data/validate.mjs            # 로스터 스키마·분포
 node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
 python3 tools/art-standee.py --check # 전신 42장 → 코트 스탠디(누끼) 유무·앵커 (만들기: --force, pillow·scipy·opencv·rembg 필요)

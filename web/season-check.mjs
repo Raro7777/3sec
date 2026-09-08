@@ -45,6 +45,20 @@ if (argv.includes('--legacy-vacancy')) E.VACANCY_TUNING.onlyCurrentOccupant = fa
  *  둘 다 끄면 v0.5.2 기준선을 비트 단위로 재현한다. */
 if (argv.includes('--no-club-tactics')) E.TACTICS.clubTactics = false;
 if (argv.includes('--no-flow')) E.FLOW.enabled = false;
+/** --no-subs = 선수 교체(감독 AI, match-sim 16절)를 끈다. --no-bench = AI 구단 생성 벤치를 뺀다(둘 다 끄면 2단계 도입 전 수치). */
+if (argv.includes('--no-subs')) E.SUBS.enabled = false;
+if (argv.includes('--no-bench')) E.BENCH.enabled = false;
+/** --no-condition / --no-injury = 매치데이 컨디션·경상(17절) 끄기. --no-chemistry = 케미 표를 비운다(엔진 기본 50, 18절). --no-ops = AI 구단 운영(19절) 끄기. */
+if (argv.includes('--no-condition')) E.MATCHDAY.condition = false;
+if (argv.includes('--no-injury')) E.MATCHDAY.injury = false;
+if (argv.includes('--no-chemistry')) E.CHEMISTRY.enabled = false;
+if (argv.includes('--no-ops')) E.CLUB_OPS.enabled = false;
+/** --chem-club-base N = AI 구단 원소속 짝의 케미 기본 보정(18절, 기본 12). --injury-base P = 경기당 경상 확률. --ops-ovr X = 집중 육성 OVR. */
+if (arg('chem-club-base', null) !== null) E.CHEMISTRY.clubBase = parseFloat(arg('chem-club-base', '12'));
+if (arg('chem-per-game', null) !== null) E.CHEMISTRY.perGame = parseFloat(arg('chem-per-game', '2'));
+if (arg('injury-base', null) !== null) E.MATCHDAY.injuryBase = parseFloat(arg('injury-base', '0.01'));
+if (arg('ops-ovr', null) !== null) E.CLUB_OPS.keyPlayerOvr = parseFloat(arg('ops-ovr', '0.75'));
+if (arg('slump-logit', null) !== null) E.SUBS.override = Object.assign(E.SUBS.override || {}, { slumpLogit: parseFloat(arg('slump-logit', '0.2')) });
 /** --flow-pressure X · --flow-relief X = 흐름 모델 상수 A/B (pressurePerPoint · mentalRelief). */
 {
   const ov = {};
@@ -639,7 +653,7 @@ function must(label, ok, note) { invariants.push({ label, ok, note: note || '' }
     const gc = E.createGame({ seed: 4711, evaluation: 'stub' });
     gc.season = 12;
     let heirs = 0, size = 0;
-    for (const c of E.CLUBS) { const ts = E.clubTeamState(gc, c.id); size += ts.roster.length; heirs += ts.roster.filter(x => x.isRookieHeir).length; }
+    for (const c of E.CLUBS) { const ts = E.clubTeamState(gc, c.id); size += ts.roster.filter(p => !p.isBench).length; heirs += ts.roster.filter(x => x.isRookieHeir).length; }
     must('신인: AI 구단 42 슬롯을 신인이 채운다 (시즌 12)', heirs >= 20 && size === 42, `${heirs}/42 슬롯`);
   }
 

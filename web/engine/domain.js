@@ -109,9 +109,13 @@ export function standard51(setter, oh1, mb1, op, oh2, mb2, libero) {
 export function autoLineupFromRoster(roster) {
   if (!roster || roster.length < 6) throw new Error('라인업에는 리베로를 제외한 6명 이상이 필요합니다');
   const used = new Set();
+  // 벤치 표시(isBench, AI 구단의 생성 벤치)는 선발 후보에서 뺀다 — 벤치가 주전을 밀어내면 캘리브레이션이 흔들린다.
+  // 벤치를 빼고 6명이 안 되면(결원이 심한 경우) 전원을 후보로.
+  const core = roster.filter(p => !p.isBench);
+  const cand = core.filter(p => !p.isLibero).length >= 6 ? core : roster;
   const pick = (pos, score) => {
     let best = null, bestV = -Infinity;
-    for (const p of roster) {
+    for (const p of cand) {
       if (p.pos !== pos || used.has(p.id)) continue;
       const v = score(p);
       if (v > bestV) { bestV = v; best = p; }
@@ -132,7 +136,7 @@ export function autoLineupFromRoster(roster) {
   for (let i = 0; i < 6; i++) {
     if (slots[i]) continue;
     let best = null, bestV = -Infinity;
-    for (const p of roster) {
+    for (const p of cand) {
       if (p.isLibero || used.has(p.id)) continue;
       const v = statAverage(p.stats);
       if (v > bestV) { bestV = v; best = p; }
@@ -230,7 +234,14 @@ export class TeamMatchState {
     validateTeamState(state);
     this.starters = new Array(6);
     for (let i = 0; i < 6; i++) this.starters[i] = getPlayer(state, state.lineup.startingIds[i]);
+    this.baseStarters = this.starters.slice();     // 세트 시작 라인업(교체는 세트 안에서만 유효)
     this.libero = state.lineup.liberoId ? getPlayer(state, state.lineup.liberoId) : null;
+    // 벤치(선수 교체용, 리베로 제외). lineup.benchIds 가 없으면 빈 벤치 = 교체 없음
+    this.bench = [];
+    for (const id of (state.lineup.benchIds || [])) { const p = getPlayer(state, id); if (p && !p.isLibero) this.bench.push(p); }
+    this.benchUsed = new Set();                     // 이 세트에 들어간 벤치 선수 id
+    this.subbedOut = new Set();                     // 이 세트에 빠진 선발 id
+    this.setStats = new Map();                      // 이 세트 개인 공격 기록 {a, k, e} — 부진 판단용(RNG 무관)
     this.rotationIndex = 0;
     this.onCourt = new Array(6);
     this.liberoReplacing = null;
@@ -250,7 +261,30 @@ export class TeamMatchState {
     this.score = 0;
     this.substitutionsUsed = 0;
     this.liberoReplacing = null;
+    for (let i = 0; i < 6; i++) this.starters[i] = this.baseStarters[i];
+    this.benchUsed.clear(); this.subbedOut.clear(); this.setStats.clear();
     this.rebuildCourt();
+  }
+
+  /** 이 세트 개인 공격 기록. kind 0 시도 · 1 범실(피블로킹 포함) · 2 킬 */
+  noteAtk(p, kind) {
+    let s = this.setStats.get(p.id);
+    if (s === undefined) { s = { a: 0, k: 0, e: 0 }; this.setStats.set(p.id, s); }
+    if (kind === 0) s.a++; else if (kind === 1) s.e++; else s.k++;
+  }
+
+  /**
+   * 선수 교체(랠리 사이). 선발 자리 slot(0~5)의 선수를 벤치 sub 로 바꾼다. 로테이션 자리는 그대로.
+   * 빠진 선수는 이 세트에 못 돌아오고, 들어온 선수는 다시 벤치로 못 나간다(단순화한 FIVB 규칙). docs/match-sim.md 16절
+   */
+  substitute(slot, sub) {
+    const out = this.starters[slot];
+    this.starters[slot] = sub;
+    this.subbedOut.add(out.id); this.benchUsed.add(sub.id);
+    this.substitutionsUsed++; this.stats.substitutions++;
+    if (this.liberoReplacing === out) this.liberoReplacing = null;   // 리베로가 대신 서던 선수가 빠지면 리베로 규칙을 다시 본다
+    this.rebuildCourt();
+    return out;
   }
 
   /** 시계방향 로테이션(2→1→6→5→4→3→2). TeamMatchState.cs:66 Rotate */

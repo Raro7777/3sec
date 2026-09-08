@@ -353,6 +353,7 @@ class MatchSim {
 
     const atkBox = this.boxOf(attacker);
     atkBox.attacks++;
+    attacking.noteAtk(attacker, 0);
     attacking.stats.attacks++;
     attacking.stats.attacksByType[type]++;
     if (attackIndex === 0) attacking.stats.firstBallAttacks++; else attacking.stats.transitionAttacks++;
@@ -362,6 +363,7 @@ class MatchSim {
     const pErr = contest(clamp(ap.errorBase * typeErrMult * setErrMult, 0.0, 0.95), -(atk - ap.errorRefRating), this.K(ap.errorK), -homeLogit + skAtkErr + this.pressureLogit(attacking, attacker));
     if (rng.chance(pErr)) {
       atkBox.attackErrors++;
+      attacking.noteAtk(attacker, 1);
       attacking.stats.attackErrors++;
       if (logging) this.emit(EV.Attack, attacking, attacker, attackPos, setQuality, OUT.Error, type, pErr, this._blockN, clutch);
       seq.kind = 1; seq.reason = REASON.AttackError;
@@ -378,6 +380,7 @@ class MatchSim {
       const pBlock = contest(bp.killBase, blockStrength - atk, this.K(bp.k), blockExtra);
       if (rng.chance(pBlock)) {
         atkBox.blocked++;
+        attacking.noteAtk(attacker, 1);
         attacking.stats.blocked++;
         this.creditBlock(defending, primary);
         if (logging) {
@@ -395,6 +398,7 @@ class MatchSim {
         if (r < bp.touchOutRatio) {
           // 블록 아웃: 공격팀 득점(킬로 집계)
           atkBox.kills++;
+          attacking.noteAtk(attacker, 2);
           attacking.stats.kills++;
           attacking.stats.killsByType[type]++;
           attacking.stats.blockOuts++;
@@ -431,6 +435,7 @@ class MatchSim {
           }
           // 커버 실패 = 블로킹 득점
           atkBox.blocked++;
+          attacking.noteAtk(attacker, 1);
           attacking.stats.blocked++;
           this.creditBlock(defending, primary);
           if (logging) this.emit(EV.Cover, attacking, coverer, coverPos, Q.Error, OUT.Error, type, pCover, 0, clutch);
@@ -458,7 +463,7 @@ class MatchSim {
     const killExtra = typeKillLogit + setKillLogit - digBonus + homeLogit - predictLogit
       + decoyLogit * ap.mbDecoyKillShare
       + (attackIndex === 0 ? ap.firstBallKillLogit : ap.transitionKillLogitPerAttack * attackIndex)
-      + skKill - skDig + this.confidenceLogit(attacking);
+      + skKill - skDig + this.confidenceLogit(attacking) + this.slumpLogit(attacking, attacker);
     const pKill = contest(ap.killBase, atk - defense, this.K(ap.killK), killExtra);
 
     const digBox = this.boxOf(digger);
@@ -467,6 +472,7 @@ class MatchSim {
 
     if (rng.chance(pKill)) {
       atkBox.kills++;
+      attacking.noteAtk(attacker, 2);
       attacking.stats.kills++;
       attacking.stats.killsByType[type]++;
       if (attackIndex === 0) attacking.stats.firstBallKills++;
@@ -839,6 +845,67 @@ class MatchSim {
     }
   }
 
+  // ---------------------------------------------------------------- 선수 교체 (docs/match-sim.md 16절)
+  /**
+   * 감독 AI 교체 판단 — 랠리 사이, RNG 를 쓰지 않는다(켜도 난수열이 같고 라인업만 달라진다).
+   *   부진: 이 세트 공격 slumpAttacks 회 이상이고 성공률 < slumpKillRate 또는 범실 ≥ slumpErrors → 같은 포지션(OH↔OP 허용) 벤치 중
+   *         실효 핵심 레이팅이 선발의 slumpRatio 이상인 최고 후보와 교체
+   *   피로: fatigueSet 세트부터, 벤치 후보의 실효 레이팅(피로·컨디션 반영)이 선발 × fatigueRatio 를 넘으면 교체
+   * 세트당 perSet 회. 들어온 벤치 선수는 다시 안 빼고, 빠진 선발은 그 세트에 못 돌아온다. state.autoSubs === false 면 그 팀은 교체하지 않는다.
+   */
+  considerSubs(team) {
+    const sc = this.cfg.subs;
+    if (team.bench.length === 0 || team.substitutionsUsed >= sc.perSet) return;
+    if (team.state.autoSubs === false) return;
+    const clutch = this.isClutch();
+    const early = (this.home.score + this.away.score) < sc.minPoints;
+    const fatigueSet = this.setIndex >= sc.fatigueSet;
+    for (let i = 0; i < 6; i++) {
+      if (team.substitutionsUsed >= sc.perSet) return;
+      const p = team.starters[i];
+      if (team.benchUsed.has(p.id)) continue;
+      const st = team.setStats.get(p.id);
+      const slump = !early && st !== undefined && st.a >= sc.slumpAttacks && (st.k / st.a < sc.slumpKillRate || st.e >= sc.slumpErrors);
+      if (!slump && !fatigueSet) continue;
+      const own = this.coreRating(p, team, clutch);
+      let best = null, bestV = -Infinity;
+      for (let j = 0; j < team.bench.length; j++) {
+        const b = team.bench[j];
+        if (team.benchUsed.has(b.id) || team.subbedOut.has(b.id)) continue;
+        if (b.pos !== p.pos && !((p.pos === POS.OH && b.pos === POS.OP) || (p.pos === POS.OP && b.pos === POS.OH))) continue;
+        const v = this.coreRating(b, team, clutch);
+        if (v > bestV) { bestV = v; best = b; }
+      }
+      if (best === null) continue;
+      const ratio = bestV / (own > 1 ? own : 1);
+      if (slump ? ratio < sc.slumpRatio : ratio < sc.fatigueRatio) continue;
+      const out = team.substitute(i, best);
+      if (this.log.enabled) {
+        const e = this.emit(EV.Substitution, team, best, team.positionOf(best), Q.None, OUT.None, ATK.None, 0, team.substitutionsUsed, clutch);
+        if (e !== null) { e.secondary = [out.id]; e.reason = slump ? 1 : 2; }   // reason 1 부진 · 2 피로
+      }
+    }
+  }
+  /** 부진(슬럼프) 로짓: 이 세트 공격 slumpAttacks 회 이상에 성공률 < slumpKillRate 이거나 범실 ≥ slumpErrors 인 공격수는 킬 로짓 −slumpLogit. 교체가 꺼져 있으면 0. */
+  slumpLogit(team, p) {
+    const sc = this.cfg.subs;
+    if (sc === undefined || !sc.enabled) return 0.0;
+    const st = team.setStats.get(p.id);
+    if (st === undefined || st.a < sc.slumpAttacks) return 0.0;
+    return (st.k / st.a < sc.slumpKillRate || st.e >= sc.slumpErrors) ? -sc.slumpLogit : 0.0;
+  }
+  /** 포지션 핵심 레이팅 × 실효 배수 — 교체 비교용. S 토스, OH 공격·리시브 평균, MB 블로킹 2 : 공격 1, OP 공격 */
+  coreRating(p, team, clutch) {
+    const r = this.cfg.rating; let v;
+    switch (p.pos) {
+      case POS.S: v = ratingSet(p, r); break;
+      case POS.OH: v = (ratingAttack(p, r) + ratingReceive(p, r)) / 2; break;
+      case POS.MB: v = (ratingBlock(p, r) * 2 + ratingAttack(p, r)) / 3; break;
+      default: v = ratingAttack(p, r); break;
+    }
+    return this.eff(v, p, team, clutch);
+  }
+
   // ---------------------------------------------------------------- 세트
   /** SetEngine.cs:20 PlaySet */
   playSet(setIndex, firstServer) {
@@ -853,6 +920,7 @@ class MatchSim {
     if (this.sk !== null) this.sk.startSet(this.pointsToWin);
     const fl = cfg.flow;
     const flowOn = fl !== undefined && !!fl.enabled;
+    const subsOn = cfg.subs !== undefined && !!cfg.subs.enabled;
     this.streakSide = -1; this.streak = 0;
     this.tos[0] = flowOn ? fl.timeoutsPerSet : 0; this.tos[1] = this.tos[0];
 
@@ -903,6 +971,7 @@ class MatchSim {
       }
 
       if (!isSetOver(home.score, away.score, target, margin)) {
+        if (subsOn) { this.considerSubs(serving); this.considerSubs(receiving); }
         serving.applyLiberoRule(true, this.log, setIndex, rallies, home.score, away.score);
         receiving.applyLiberoRule(false, this.log, setIndex, rallies, home.score, away.score);
       }

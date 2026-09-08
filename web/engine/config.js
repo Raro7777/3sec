@@ -121,6 +121,19 @@ export function createSimConfig() {
       timeoutsPerSet: 2, timeoutAtStreak: 3,
       adjustTrailing: 0.10, adjustLeading: -0.05,
     },
+    // 선수 교체(docs/match-sim.md 16절 — 12명 로스터) — 기본은 꺼짐: parity·기본 sim 은 기존 판정과 비트 단위로 같다. 게임 층이 켠다.
+    //   감독 AI 가 랠리 사이에 벤치를 쓴다: 부진(이 세트 공격 4회 이상 · 성공률 22% 미만 또는 범실 3회)과
+    //   피로(3세트부터, 벤치 후보의 실효 레이팅이 선발보다 높을 때). 세트당 6회, 교체된 선발은 그 세트에 못 돌아온다(다음 세트에 원래 라인업).
+    //   RNG 를 소비하지 않는다(결정적 판단) — 켜도 난수열은 같고 라인업만 달라진다.
+    subs: {
+      enabled: false,
+      perSet: 6,
+      slumpAttacks: 4, slumpKillRate: 0.22, slumpErrors: 3,
+      slumpRatio: 0.92,        // 부진 교체: 벤치 후보 실효 핵심 레이팅 / 선발 ≥ 0.92
+      fatigueSet: 3, fatigueRatio: 1.0,   // 피로 교체: 3세트부터, 후보의 실효 레이팅(피로 반영)이 선발보다 높으면
+      minPoints: 6,            // 세트 초반(양 팀 합계 6점 미만)에는 부진 판단을 하지 않는다
+      slumpLogit: 0.20,        // 부진 중인 공격수는 킬 로짓 −0.20(자신감 하락) — 교체될 때까지, 세트가 끝날 때까지. 교체가 손해가 아니게 하는 축
+    },
     // SimConfig.cs:304 ChemistryParams
     chemistry: { logitScale: 0.50 },
     // SimConfig.cs:310 FormationParams

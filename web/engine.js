@@ -22,6 +22,10 @@ export {
   addTickets, addGold, spendGold, addFragments, formatMatchResult, createFillers,
   recordCareer, careerOf, campTrace,          // 통산 기록·캠프 흔적 (육성→코트 연결 연출)
   TACTICS, FLOW, gameSimConfig,               // 경기 엔진 고도화 1단계 스위치 (구단 전술·흐름 모델)
+  SUBS, BENCH, myBench,                       // 경기 엔진 2단계 — 12명 로스터·선수 교체 (match-sim 16절)
+  MATCHDAY, conditionRoll, conditionMap, isInjured, injuryGamesLeft, myInjured, pruneInjuries,   // 매치데이 컨디션·경상 (17절)
+  CHEMISTRY, chemistryValue, pairBonus, lineupChemistry, recordPairGames,   // 케미·성격 판정 (18절)
+  CLUB_OPS, clubOpsFor, clubOpsNews,                                          // AI 구단 운영 (19절)
   CLUBS, CARD_POOL, CLUB_TACTICS, ECONOMY, REWARDS, SCOUT_RATES, SEASON_GROWTH, VACANCY_TUNING,
   CLUB_SKILL_LEVEL, clubSkillLevelFor,
   // 노화·전성기·은퇴 (league-and-economy.md A.3.6)
@@ -51,7 +55,7 @@ export {
 export {
   startSeason, seasonView, standings, schedule, advanceMatchday, skipTrainingSlot,
   playoffState, advancePlayoff, autoFinishPlayoff, finishSeason, seasonHistory,
-  seasonAwards, canTrain, myRank, matchPoints, buildSchedule,
+  seasonAwards, canTrain, myRank, matchPoints, buildSchedule, matchdayReport,
   SEASON_CONFIG, PHASE as SEASON_PHASE,
 } from './engine/season.js';
 

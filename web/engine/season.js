@@ -12,6 +12,7 @@ import {
   myTeamState, myTeam, clubTeamState, departedCardIds, activeCardPool,
   formatMatchResult, nextSeed, addHistory, addTickets, addGold, addFragments,
   createFillers, newClubRecords, TRAINING_CFG, rookieClassOf, recordCareer, gameSimConfig, TACTICS,
+  MATCHDAY, conditionMap, injuryRoll, pruneInjuries, isInjured, myInjured, recordPairGames, clubOpsNews,
 } from './game.js';
 // 골드 소비처(B.6) — 결산에서 구단 운영비를 정산한다.
 import { payUpkeep, facilityUpkeep, clubPrestige } from './facility.js';
@@ -134,6 +135,8 @@ export function startSeason(state, opts = {}) {
   if (!state.leagueHistory) state.leagueHistory = [];
   if (!state.clubRecords) state.clubRecords = newClubRecords();
   addHistory(state, `시즌 ${number} 개막 — 블룸 리그 ${teams.length}팀 · ${SEASON_CONFIG.matchdays} 매치데이 (AI 성장률 ${(growthFor(number) * 100).toFixed(0)}%)`);
+  // AI 구단 운영(19절) — 개막 뉴스. 세이브에 넣지 않는다(시드에서 다시 만든다)
+  for (const o of clubOpsNews(state, number)) for (const line of o.news) addHistory(state, '개막 뉴스 · ' + line);
   return next;
 }
 
@@ -282,9 +285,14 @@ function myFixture(L, clubId, md) {
  * 계정별 약한 캐시를 둔다 — 매치데이 1회 비용을 6번의 로스터 복제에서 0 으로 줄인다.
  */
 const CLUB_TS_CACHE = new WeakMap();
+/** 결장 중인 선수 id 목록(캐시 토큰용) — 바뀌면 AI 구단 로스터를 다시 만든다(17절). */
+function injuryToken(state) {
+  if (!state.injuries) return '';
+  return Object.keys(state.injuries).filter(id => isInjured(state, id)).sort().join(',');
+}
 function buildTeamStates(state) {
   const departed = departedCardIds(state);
-  const token = state.season + '|' + (TACTICS.clubTactics || state.useClubTactics) + '|' + Array.from(departed).sort().join(',');
+  const token = state.season + '|' + (TACTICS.clubTactics || state.useClubTactics) + '|' + Array.from(departed).sort().join(',') + '|' + injuryToken(state);
   let hit = CLUB_TS_CACHE.get(state);
   if (!hit || hit.token !== token) {
     const g = growthFor(state.season);
@@ -374,17 +382,36 @@ export function advanceMatchday(state, opts = {}) {
   if (md > SEASON_CONFIG.matchdays) throw new Error('매치데이가 모두 끝났습니다');
 
   const collectEvents = opts.collectEvents !== false;
+  pruneInjuries(state);
   const teamStates = buildTeamStates(state);
   const round = L.schedule[md - 1];
   const mine = myFixture(L, state.clubId, md);
+  // 매치데이 컨디션(17절): 오늘 경기하는 팀의 로스터 전원에게 결정적으로 뽑아 실효 배수로 넣는다. AI 구단 상태는 캐시라 매치데이마다 덮어쓴다.
+  const condLevels = new Map();
+  for (const f of round) for (const tid of [L.teams[f.h], L.teams[f.a]]) {
+    const ts = teamStates.get(tid);
+    const c = conditionMap(L.seasonSeed, md, ts.roster);
+    ts.playerCondition = MATCHDAY.condition ? c.map : null;
+    condLevels.set(tid, c.levels);
+  }
 
   let myMatch = null;
   const otherResults = [];
+  const injuries = [];
   for (let i = 0; i < round.length; i++) {
     const f = round[i];
     const homeId = L.teams[f.h], awayId = L.teams[f.a];
     const isMine = mine !== null && mine.index === i;
     const { seed, result } = simFixture(L, md, i, teamStates.get(homeId), teamStates.get(awayId), isMine && collectEvents);
+    // 경상(17절): 경기에 나선 7명(선발 + 리베로)이 경기 뒤 결정적으로 롤. 생성 벤치는 굴리지 않는다
+    for (const tid of [homeId, awayId]) {
+      const ts = teamStates.get(tid), lv = condLevels.get(tid) || {};
+      for (const id of ts.lineup.startingIds.concat(ts.lineup.liberoId ? [ts.lineup.liberoId] : [])) {
+        const p = ts.index.get(id); if (!p || p.isBench) continue;
+        const rec = injuryRoll(state, L.seasonSeed, md, p, lv[id] === undefined ? 2 : lv[id]);
+        if (rec) injuries.push({ id, name: p.name, teamId: tid, teamName: teamMeta(state, tid).name, mine: tid === state.clubId, days: rec.days, part: rec.part });
+      }
+    }
     L.results[md - 1][i] = {
       hs: result.homeSets, as: result.awaySets,
       hp: setPoints(result, SIDE.HOME), ap: setPoints(result, SIDE.AWAY),
@@ -394,6 +421,7 @@ export function advanceMatchday(state, opts = {}) {
       const mySide = mine.isHome ? SIDE.HOME : SIDE.AWAY;
       myMatch = formatMatchResult(result, teamStates.get(homeId), teamStates.get(awayId), mySide, seed);
       myMatch.matchday = md;
+      myMatch.condition = condLevels.get(state.clubId) || null;   // 오늘 우리 선수들의 컨디션 레벨(0~4) — 결과 화면용
       const won = myMatch.won;
       if (won) { state.wins++; state.winsByClub[mine.opponentId] = (state.winsByClub[mine.opponentId] || 0) + 1; }
       else { state.losses++; state.lossesByClub[mine.opponentId] = (state.lossesByClub[mine.opponentId] || 0) + 1; }
@@ -401,6 +429,7 @@ export function advanceMatchday(state, opts = {}) {
       myMatch.reward = rw.text;
       myMatch.rewardDetail = rw;
       recordCareer(state, myMatch);
+      recordPairGames(state, myMatch);
       addHistory(state, `MD${md} vs ${myMatch.opponent.name}(${mine.isHome ? '홈' : '원정'}): ${won ? '승' : '패'} ${myMatch.myScore}-${myMatch.oppScore}`);
     } else {
       otherResults.push({
@@ -424,6 +453,7 @@ export function advanceMatchday(state, opts = {}) {
     L.trainingsLeft += SEASON_CONFIG.trainingsPerMatchday;   // 다음 매치데이 육성 슬롯
   }
 
+  if (injuries.length) for (const j of injuries) if (j.mine) addHistory(state, `MD${md} 경상: ${j.name} ${j.part} — ${j.days}경기 결장`);
   return {
     matchday: md,
     myMatch,
@@ -432,7 +462,30 @@ export function advanceMatchday(state, opts = {}) {
     standings: standings(state),
     seasonEnded,
     reward: myMatch ? myMatch.reward : '',
+    injuries,                       // 이번 매치데이에 생긴 경상(내 팀·AI 구단 모두)
   };
+}
+
+/**
+ * 다음 매치데이 준비 보고(17절) — 화면이 경기 전에 보여 준다: 내 라인업 7명의 컨디션 레벨, 결장자, 상대 결장자.
+ * 컨디션은 결정적이라 여기서 보여 준 값이 그대로 경기에 쓰인다 → "오늘 컨디션이 나쁜 선수를 뺄까" 를 고를 수 있다.
+ */
+export function matchdayReport(state) {
+  const L = state.league; if (!L) return null;
+  const md = L.matchday + 1;
+  const mf = (L.phase === PHASE.Preseason || L.phase === PHASE.Matchday) && md <= SEASON_CONFIG.matchdays ? myFixture(L, state.clubId, md) : null;
+  const ts = myTeamState(state);
+  const c = conditionMap(L.seasonSeed, md, ts.roster);
+  const ids = ts.lineup.startingIds.concat(ts.lineup.liberoId ? [ts.lineup.liberoId] : []);
+  const lineup = ids.map(id => { const p = ts.index.get(id); return p ? { id, name: p.name, pos: p.pos, level: c.levels[id], levelName: MATCHDAY.levelNames[c.levels[id]], mult: MATCHDAY.levels[c.levels[id]] } : null; }).filter(Boolean);
+  const bench = (ts.lineup.benchIds || []).map(id => { const p = ts.index.get(id); return p ? { id, name: p.name, pos: p.pos, level: c.levels[id], levelName: MATCHDAY.levelNames[c.levels[id]] } : null; }).filter(Boolean);
+  const oppInjured = [];
+  if (mf && state.injuries) for (const id of Object.keys(state.injuries)) {
+    const r = state.injuries[id];
+    if (r.teamId === mf.opponentId && isInjured(state, id)) oppInjured.push({ id, name: r.name, part: r.part, gamesLeft: r.until - L.matchday });
+  }
+  return { matchday: md, isBye: mf === null, opponentId: mf ? mf.opponentId : null, lineup, bench, injured: myInjured(state), oppInjured,
+    enabled: !!MATCHDAY.condition };
 }
 
 // ---------------------------------------------------------------- 포스트시즌 (A.1.3)
@@ -530,6 +583,7 @@ export function advancePlayoff(state, opts = {}) {
     myMatch.reward = rw.text;
     myMatch.rewardDetail = rw;
     recordCareer(state, myMatch);
+    recordPairGames(state, myMatch);
     addHistory(state, `${s.name} ${gameIndex + 1}차전 vs ${myMatch.opponent.name}: ${won ? '승' : '패'} ${myMatch.myScore}-${myMatch.oppScore}`);
   }
 
@@ -800,6 +854,7 @@ export function seasonView(state) {
     growth: growthFor(L.number),
     lineupOvr: lineupOvrOf(state),
     history: seasonHistory(state),
+    news: clubOpsNews(state, L.number),   // AI 구단 운영(19절)
   };
 }
 

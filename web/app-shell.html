@@ -251,6 +251,7 @@ details[open] summary::after{content:"▴"}
   font-family:"Barlow Condensed",sans-serif;font-size:26px;font-weight:700;letter-spacing:.08em;color:var(--ink);opacity:0;pointer-events:none;transform:translateX(-110%)}
 .setb small{display:block;font-family:"Gothic A1",sans-serif;font-size:12.5px;font-weight:600;letter-spacing:0;color:var(--ink2)}
 .setb.to{border-color:var(--hot);font-size:22px}
+.setb.sub{border-color:var(--court);font-size:20px}
 .setb.show{animation:sweep 1.6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes sweep{0%{transform:translateX(-110%);opacity:0}18%{transform:translateX(0);opacity:1}78%{transform:translateX(0);opacity:1}100%{transform:translateX(110%);opacity:0}}
 .court.tense::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:10px;box-shadow:inset 0 0 46px rgba(233,161,59,.42)}
@@ -504,6 +505,7 @@ var view = 'home';
 var ses = null;               // 진행 중 육성 세션
 var feed = [];                // 육성 턴 피드
 var lastGrad = null, lastScout = null, lastMatch = null, lastPulls = null;
+var lastInjuries = [];        // 이번 매치데이에 생긴 경상(결과 화면용)
 var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
 var detailId = null;   // 상세 화면에서 보고 있는 인스턴스
 var reportId = null;   // 스카우트 리포트 화면의 카드 id
@@ -958,7 +960,7 @@ function newGame(){
 function save(){
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(E.saveGame(G))); } catch(e){}
 }
-function go(v){ if (v !== 'matchLive') stopViewer(); if (v === 'feedback' && view !== 'feedback') fbBack = (view === 'matchLive') ? 'home' : view; view = v; window.scrollTo(0,0); render(); }
+function go(v){ if (v !== 'lineup') lineupPick = null; if (v !== 'matchLive') stopViewer(); if (v === 'feedback' && view !== 'feedback') fbBack = (view === 'matchLive') ? 'home' : view; view = v; window.scrollTo(0,0); render(); }
 function toast(msg){
   var t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg;
@@ -1188,6 +1190,7 @@ function vHome(){
    (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
       hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
    '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
+     '<button data-act="sndtoggle" style="font-size:12px;padding:4px;text-decoration:underline">'+sndLabel()+'</button> '+
      '<button data-act="reset" style="color:var(--bad);text-decoration:underline;font-size:12px;padding:4px">처음부터 다시</button></div></div>'
   );
 }
@@ -1234,7 +1237,7 @@ function pcard(inst, plain, tapId){
     '<div style="flex:1;min-width:0">'+
       '<div class="pname">'+esc(inst.name)+' <span class="pill pos">'+POSK[inst.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
       '<div class="pmeta">'+(inst.grade!==undefined?'등급 <span class="grade g-'+['S','A','B','C','D'][inst.grade]+'">'+['S','A','B','C','D'][inst.grade]+'</span> · ':'')+
-        (inst.skillName?esc(inst.skillName):'고유 스킬 없음')+ageBadge(inst,true)+'</div>'+
+        (inst.skillName?esc(inst.skillName):'고유 스킬 없음')+ageBadge(inst,true)+injuryBadge(inst)+'</div>'+
     '</div>'+
     '<div class="povr num">'+(inst.ovr!==undefined?inst.ovr.toFixed(1):'')+'<small>OVR</small></div></'+tag+'>';
 }
@@ -1907,22 +1910,81 @@ function squadGauge(){
     '<div class="gauge'+(over?' hot':'')+'"><span style="width:'+Math.min(100, n/free*100)+'%"></span></div>'+
     '<div class="tiny" style="margin-top:5px">'+free+'명을 넘으면 1명당 '+per+'골드가 시즌마다 붙습니다.</div></div>';
 }
+var lineupPick = null;   // 바꾸는 중인 슬롯(0~5 선발, 6 리베로)
+/** 컨디션 배지(17절): 다음 매치데이 기준. 리그 밖이면 빈 문자열. */
+var COND_ICON = ['▼▼', '▼', '', '▲', '▲▲'];
+function condBadge(level){
+  if (level === undefined || level === null || level === 2) return '';
+  var col = level < 2 ? 'var(--bad)' : 'var(--court)';
+  return '<span class="agb" style="color:'+col+'">'+COND_ICON[level]+' '+E.MATCHDAY.levelNames[level]+'</span>';
+}
+function chemBadge(ch){
+  if (!ch) return '';
+  var col = ch.value >= 62 ? 'var(--court)' : (ch.value < 50 ? 'var(--bad)' : 'var(--ink3)');
+  return '<span class="agb" style="color:'+col+'" title="함께 '+ch.games+'경기">케미 '+ch.value+'</span>';
+}
 function vLineup(){
   var ts = E.myTeamState(G);
   var slots = ['S (서버)','OH 1','MB 1','OP','OH 2','MB 2'];
   var starters = ts.lineup.startingIds.map(function(id){ return ts.index.get(id); });
   var lib = ts.index.get(ts.lineup.liberoId);
-  return h('<h2>라인업</h2><p class="sub">표준 5-1 자동 편성입니다. 로테이션 순서대로 코트에 섭니다. 라인업 OVR '+E.lineupOvr(G).toFixed(1)+'.</p>'+
+  var rep = null; try { rep = G.league ? E.matchdayReport(G) : null; } catch(e){}
+  var lv = {}; if (rep) rep.lineup.concat(rep.bench).forEach(function(x){ lv[x.id] = x.level; });
+  var chem = { pairs: {} }; try { chem = E.lineupChemistry(G); } catch(e){}
+  if (lineupPick !== null) return vLineupPick(ts, lv, chem);
+  var injured = []; try { injured = E.myInjured(G); } catch(e){}
+  return h('<h2>라인업</h2><p class="sub">표준 5-1 자동 편성입니다. 로테이션 순서대로 코트에 섭니다. 라인업 OVR '+E.lineupOvr(G).toFixed(1)+'.'+
+      (rep && !rep.isBye ? ' 매치데이 '+rep.matchday+' 컨디션은 이미 정해져 있습니다 — 나쁜 선수는 바꿀 수 있습니다.' : '')+'</p>'+
     starters.map(function(p,i){
       return '<div class="pcard"><span class="ava" style="border-color:'+(clubColor[p.teamId]||'var(--n)')+'">'+portraitSvg(p,40)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="pname" style="font-size:14.5px">'+esc(p.name)+'</div>'+
-        '<div class="pmeta">'+slots[i]+lineupAgeWarn(p)+'</div></div>'+
-        '<div class="povr num" style="font-size:15px">'+POSK[p.pos]+'</div></div>';
+        '<div class="pmeta">'+slots[i]+lineupAgeWarn(p)+condBadge(lv[p.id])+(p.pos !== 0 ? chemBadge(chem.pairs[p.id]) : '')+'</div></div>'+
+        '<button class="povr num tap" data-slot="'+i+'" style="font-size:15px;min-height:44px;min-width:56px">'+POSK[p.pos]+'<small>바꾸기</small></button></div>';
     }).join('')+
     (lib?'<div class="pcard"><span class="ava" style="border-color:'+(clubColor[lib.teamId]||'var(--n)')+'">'+portraitSvg(lib,40)+'</span>'+
-      '<div style="flex:1"><div class="pname" style="font-size:14.5px">'+esc(lib.name)+'</div><div class="pmeta">리베로 (후위 전담)</div></div>'+
-      '<div class="povr num" style="font-size:15px">L</div></div>':'')+
-    '<button class="btn ghost" data-act="autolineup">자동 편성 다시</button>');
+      '<div style="flex:1"><div class="pname" style="font-size:14.5px">'+esc(lib.name)+'</div><div class="pmeta">리베로 (후위 전담)'+condBadge(lv[lib.id])+'</div></div>'+
+      '<button class="povr num tap" data-slot="6" style="font-size:15px;min-height:44px;min-width:56px">L<small>바꾸기</small></button></div>':'')+
+    (chem.setterId ? '<div class="tiny" style="margin:4px 0 8px">케미 = 세터와 함께 뛴 경기(경기당 +2, 최대 +20) + 성격 궁합(±6). 토스 품질에 들어갑니다.</div>' : '')+
+    (injured.length ? '<div class="card flat" style="border-color:var(--bad)"><div class="muted">경상 결장 '+injured.length+'명</div>'+
+      injured.map(function(j){ return '<div class="tiny">'+esc(j.name)+' <span class="pill pos">'+POSK[j.pos]+'</span> '+esc(j.part)+' — '+j.gamesLeft+'경기 남음</div>'; }).join('')+'</div>' : '')+
+    '<button class="btn ghost" data-act="autolineup">자동 편성 다시</button>'+
+    benchBlock());
+}
+/** 슬롯 바꾸기 — 같은 포지션 후보를 먼저, 나머지는 아래. 탭하면 바로 들어간다(engine setLineupSlot 이 유효성을 본다). */
+function vLineupPick(ts, lv, chem){
+  var slot = lineupPick, curId = slot === 6 ? ts.lineup.liberoId : ts.lineup.startingIds[slot];
+  var cur = ts.index.get(curId);
+  var wantPos = slot === 6 ? 4 : (cur ? cur.pos : -1);
+  var roster = E.myRoster(G).filter(function(p){ return p.id !== curId && (slot === 6 ? p.isLibero : !p.isLibero); });
+  var ovr = function(p){ var o = 0; for (var k=0;k<10;k++) o += p.stats[k]; return o/10; };
+  roster.sort(function(a,b){ return (a.pos===wantPos?0:1)-(b.pos===wantPos?0:1) || ovr(b)-ovr(a); });
+  var inLineup = {}; ts.lineup.startingIds.forEach(function(id){ inLineup[id] = 1; });
+  return h('<h2>'+(cur ? esc(cur.name) : '빈 자리')+' 대신</h2><p class="sub">'+(slot === 6 ? '리베로' : POSK[wantPos]+' 자리')+'에 세울 선수를 고르세요. 다른 선발을 고르면 둘의 자리가 바뀝니다.</p>'+
+    (roster.length ? roster.map(function(p){
+      var o = ovr(p);
+      return '<button class="pcard tap" data-slotpick="'+p.id+'"><span class="ava" style="border-color:'+(clubColor[p.teamId]||'var(--n)')+'">'+portraitSvg(p,40)+'</span>'+
+        '<div style="flex:1;min-width:0"><div class="pname" style="font-size:14.5px">'+esc(p.name)+' <span class="pill pos">'+POSK[p.pos]+'</span>'+(inLineup[p.id] ? ' <span class="pill">선발</span>' : '')+'</div>'+
+        '<div class="pmeta">'+(p.pos !== wantPos ? '포지션 다름 · ' : '')+condBadge(lv[p.id])+(p.pos !== 0 && chem.pairs[p.id] ? chemBadge(chem.pairs[p.id]) : '')+'</div></div>'+
+        '<div class="povr num">'+o.toFixed(1)+'<small>OVR</small></div></button>';
+    }).join('') : '<div class="empty">바꿀 선수가 없습니다.</div>')+
+    '<button class="btn ghost" data-act="slotcancel">취소</button>');
+}
+/** 벤치(12명 로스터, match-sim 16절): 라인업 7명을 뺀 로스터. 감독 AI 가 부진·피로 때 같은 포지션 벤치와 바꾼다 — 토글로 끈다. */
+function benchBlock(){
+  var bench = []; try { bench = E.myBench(G); } catch(e){ return ''; }
+  var auto = G.subsAuto !== false;
+  var ovr = function(p){ var o = 0; for (var k=0;k<10;k++) o += p.stats[k]; return o/10; };
+  bench = bench.slice().sort(function(a,b){ return ovr(b)-ovr(a); });
+  return '<div class="muted" style="margin:18px 0 8px">벤치 '+bench.length+'명 · 자동 교체 '+(auto?'켬':'끔')+'</div>'+
+    '<div class="card flat" style="padding:11px 13px"><div class="tiny">경기 중 감독이 <b>부진</b>(한 세트에 공격 4회 이상·성공률 22% 미만이나 범실 3회)이나 <b>피로</b>(3세트부터, 벤치가 더 나을 때) 때 같은 포지션 벤치와 바꿉니다. 세트당 6회, 다음 세트엔 원래 라인업으로. 벤치가 주전의 92% 는 돼야 들어갑니다 — 졸업생이 많을수록 벤치가 두터워집니다.</div>'+
+    '<button class="btn ghost" style="margin-top:9px" data-act="subsauto">자동 교체 '+(auto?'끄기':'켜기')+'</button></div>'+
+    (bench.length ? bench.map(function(p){
+      var o = ovr(p);
+      return '<div class="pcard"><span class="ava" style="border-color:'+(clubColor[p.teamId]||'var(--n)')+'">'+portraitSvg(p,40)+'</span>'+
+        '<div style="flex:1;min-width:0"><div class="pname" style="font-size:14px;color:var(--ink2)">'+esc(p.name)+' <span class="pill pos">'+POSK[p.pos]+'</span></div>'+
+        '<div class="pmeta">'+(p.rarity===0 ? '연습생' : '졸업생')+'</div></div>'+
+        '<div class="povr num" style="color:var(--ink3)">'+o.toFixed(1)+'<small>OVR</small></div></div>';
+    }).join('') : '<div class="empty">벤치가 비었습니다. 선수를 더 키우면 여기에 섭니다.</div>');
 }
 
 // ---------- 리그 (시즌)
@@ -1983,6 +2045,7 @@ function vMatchdayNow(sv){
            '<div class="tiny">'+esc(opp?opp.identity.split('.')[0]:'')+'</div></div>'+
        '</div>'+
        matchStory(nx.opponentId, sv).map(function(l){ return '<div class="mstory">'+esc(l)+'</div>'; }).join('')+
+       matchdayCard(sv, nx.opponentId)+
        (sv.canTrain
          ? '<div class="tiny" style="margin:11px 0 7px;color:var(--hot)">이번 매치데이에 육성 기회가 '+sv.trainingsLeft+'번 남았습니다. 경기 전에 키우면 바로 전력이 됩니다.</div>'+
            '<button class="btn ghost" data-go="train">먼저 육성하기</button>'+
@@ -1994,6 +2057,22 @@ function vMatchdayNow(sv){
    '<details><summary>친선 경기</summary><div style="padding:0 12px 12px">'+friendlyList()+'</div></details>';
 }
 
+/** 매치데이 준비(17·19절): 오늘 우리 7명의 컨디션, 결장자, 상대 결장자·운영 뉴스. 컨디션은 결정적이라 경기 전에 알 수 있다. */
+function matchdayCard(sv, oppId){
+  var rep = null; try { rep = E.matchdayReport(G); } catch(e){ return ''; }
+  if (!rep || rep.isBye) return '';
+  var up = rep.lineup.filter(function(x){ return x.level > 2; }), down = rep.lineup.filter(function(x){ return x.level < 2; });
+  var news = (sv.news || []).filter(function(o){ return o.clubId === oppId; })[0];
+  return '<div class="card flat" style="margin-top:10px"><div class="muted">오늘 컨디션</div>'+
+    '<div class="tiny" style="margin-top:3px">'+(rep.enabled ? '좋음 '+up.length+'명 · 나쁨 '+down.length+'명' : '컨디션 꺼짐')+
+      (down.length ? ' — ' + down.map(function(x){ return esc(x.name)+' '+COND_ICON[x.level]; }).join(', ') : '')+
+      (up.length ? ' / ' + up.map(function(x){ return esc(x.name)+' '+COND_ICON[x.level]; }).join(', ') : '')+'</div>'+
+    (rep.injured.length ? '<div class="tiny" style="margin-top:4px;color:var(--bad)">결장: '+rep.injured.map(function(j){ return esc(j.name)+'('+esc(j.part)+' '+j.gamesLeft+'경기)'; }).join(', ')+'</div>' : '')+
+    (rep.oppInjured.length ? '<div class="tiny" style="margin-top:4px">상대 결장: '+rep.oppInjured.map(function(j){ return esc(j.name)+'('+j.gamesLeft+'경기)'; }).join(', ')+'</div>' : '')+
+    (news ? '<div class="tiny" style="margin-top:4px">상대 소식: '+esc(news.news.join(' · '))+'</div>' : '')+
+    (down.length ? '<button class="btn ghost" style="margin-top:8px" data-go="lineup">라인업에서 바꾸기</button>' : '')+
+  '</div>';
+}
 // ---------- 리그: 일정
 function vSchedule(sv){
   var sch = E.schedule(G);
@@ -2246,6 +2325,11 @@ function hallBadge(){
 
 // ---------- 친선 경기 (리그 밖)
 /** 라인업에 선 선수가 하락기면 표시(엔진이 실효 능력치를 이미 깎아 내보낸다). */
+/** 경상 결장 배지(17절) — 로스터 카드. */
+function injuryBadge(inst){
+  var n = 0; try { n = E.injuryGamesLeft(G, inst.instanceId); } catch(e){}
+  return n > 0 ? ' <span class="agb" style="color:var(--bad)">경상 '+n+'경기 결장</span>' : '';
+}
 function lineupAgeWarn(p){
   if (p.ageFactor === undefined || p.ageFactor >= 1) return '';
   return '<span class="agb" style="color:var(--hot)">하락기 '+Math.round((1-p.ageFactor)*100)+'%↓</span>';
@@ -2289,14 +2373,19 @@ function spotXY(side, pos, isServe){
 }
 
 function buildRallies(m){
-  var rallies = [], cur = null, pendingTO = null;
+  var rallies = [], cur = null, pendingTO = null, pendingSubs = [];
   var hs = 0, as = 0;
   m.events.forEach(function(e){
     if (e.type === 18) { pendingTO = { side:e.side, streak:e.value }; return; }   // 작전타임 → 다음 랠리 앞에 띄운다
+    if (e.type === 15) {                                                            // 선수 교체(match-sim 16절) → 다음 랠리 앞에 배너
+      var pin = m.ctx.players[e.playerId], pout = m.ctx.players[e.secondary ? e.secondary[0] : null];
+      pendingSubs.push({ side:e.side, inId:e.playerId, outId:e.secondary ? e.secondary[0] : null, inName: pin ? pin.name : '', outName: pout ? pout.name : '', reason: e.reason, n: e.value });
+      return;
+    }
     if (e.type === 2) {
       // 코트 위 12명(자리 1~6 순) — 공을 안 만진 선수도 스탠디로 세운다(art-pipeline 16.8)
       var lineup = e.lineup ? e.lineup.map(function(ids){ return ids.map(function(id){ var q = m.ctx.players[id]; return q ? { id:id, name:q.name, jersey:q.jersey } : { id:id, name:'', jersey:0 }; }); }) : null;
-      cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[], timeout: pendingTO, lineup: lineup }; pendingTO = null; rallies.push(cur); return;
+      cur = { set:e.set, touches:[], point:null, before:[hs,as], skills:[], timeout: pendingTO, subs: pendingSubs.length ? pendingSubs : null, lineup: lineup }; pendingTO = null; pendingSubs = []; rallies.push(cur); return;
     }
     if (!cur) return;
     if (e.type === 11) {
@@ -2321,6 +2410,71 @@ function buildRallies(m){
 var mv = null;   // { rallies, ri, playing, speed, done }
 var cr = null;   // 코트 렌더러
 // 코트 그림 방식(art-pipeline 16.9): 'rig'(공용 바디 리그, 기본) | 'standee'(전신 누끼). 경기 화면 버튼으로 바꾸고 기억한다.
+/* ── 사운드·햅틱 (art-pipeline 16.12) ───────────────────────────────────────────
+ * 파일 없이 WebAudio 로 합성한다(단일 HTML, 외부 자원 금지). 첫 탭에서 AudioContext 를 만든다(모바일 정책).
+ * 소리: 타구(강타·서브·블로킹·토스·리시브), 휘슬(득점), 환호/탄식(우리·상대 득점), 큰 득점(에이스·강타·블로킹), 세트 종료 차임, 교체·작전타임, 버튼.
+ * 진동: navigator.vibrate — 우리 득점 30ms, 큰 득점 60ms, 상대 득점 12ms, 세트 종료 [40,60,40], 경기 종료 [60,80,60,80,120], SSR 뽑기 80ms.
+ * 4배속에서는 타구음을 내지 않는다(득점만). 설정은 localStorage bloom-sound-v1 {on, haptic}. */
+var SND_KEY = 'bloom-sound-v1';
+var snd = { on: true, haptic: true };
+try { var _s = JSON.parse(localStorage.getItem(SND_KEY) || 'null'); if (_s) snd = { on: _s.on !== false, haptic: _s.haptic !== false }; } catch(e){}
+function saveSnd(){ try { localStorage.setItem(SND_KEY, JSON.stringify(snd)); } catch(e){} }
+var AC = null, NOISE = null, sfxLast = {};
+function ensureAudio(){
+  if (AC) { if (AC.state === 'suspended') AC.resume().catch(function(){}); return AC; }
+  try {
+    var Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return null;
+    AC = new Ctx();
+    var n = AC.sampleRate * 0.6, buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    NOISE = buf;
+  } catch(e){ AC = null; }
+  return AC;
+}
+/** 짧은 음 하나: type 파형, f0→f1 주파수, 길이 dur, 세기 g, 시작 지연 t0 */
+function tone(type, f0, f1, dur, g, t0){
+  var ac = AC; if (!ac) return;
+  var o = ac.createOscillator(), a = ac.createGain(), t = ac.currentTime + (t0 || 0);
+  o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(g, t + 0.008); a.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(a); a.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+/** 잡음 한 조각: 밴드패스 중심 f, 길이 dur, 세기 g */
+function burst(f, q, dur, g, t0){
+  var ac = AC; if (!ac || !NOISE) return;
+  var src = ac.createBufferSource(), fl = ac.createBiquadFilter(), a = ac.createGain(), t = ac.currentTime + (t0 || 0);
+  src.buffer = NOISE; fl.type = 'bandpass'; fl.frequency.value = f; fl.Q.value = q;
+  a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(g, t + 0.005); a.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(fl); fl.connect(a); a.connect(ac.destination); src.start(t); src.stop(t + dur + 0.02);
+}
+/** 효과음 이름 → 합성. 같은 소리는 60ms 안에 다시 내지 않는다. */
+function sfx(name){
+  if (!snd.on) return;
+  var ac = ensureAudio(); if (!ac) return;
+  var now = Date.now(); if (sfxLast[name] && now - sfxLast[name] < 60) return; sfxLast[name] = now;
+  switch (name) {
+    case 'hit':     burst(1800, 0.8, 0.09, 0.5); tone('sine', 160, 60, 0.12, 0.35); break;                 // 강타: 찰싹 + 둔탁
+    case 'serve':   burst(1400, 1.2, 0.07, 0.35); tone('sine', 220, 120, 0.08, 0.2); break;
+    case 'block':   burst(700, 1.0, 0.10, 0.45); tone('sine', 110, 50, 0.14, 0.4); break;                 // 블로킹: 벽
+    case 'touch':   burst(2600, 1.5, 0.045, 0.18); break;                                                  // 토스·리시브·디그: 톡
+    case 'whistle': tone('square', 2350, 2350, 0.16, 0.08); tone('square', 2350, 2350, 0.16, 0.08, 0.2); break;
+    case 'cheer':   burst(900, 0.5, 0.55, 0.22); burst(1600, 0.6, 0.45, 0.14, 0.05); tone('triangle', 520, 660, 0.35, 0.08, 0.05); break;
+    case 'aww':     tone('triangle', 420, 240, 0.4, 0.12); burst(500, 0.6, 0.3, 0.08); break;
+    case 'big':     burst(1800, 0.8, 0.10, 0.6); tone('sine', 90, 40, 0.28, 0.55); tone('sine', 55, 35, 0.35, 0.4, 0.02); break;   // 큰 득점: 강타 + 서브베이스
+    case 'setend':  tone('sine', 660, 660, 0.14, 0.14); tone('sine', 880, 880, 0.14, 0.14, 0.15); tone('sine', 1320, 1320, 0.28, 0.14, 0.3); break;
+    case 'matchend':tone('sine', 523, 523, 0.18, 0.15); tone('sine', 659, 659, 0.18, 0.15, 0.18); tone('sine', 784, 784, 0.18, 0.15, 0.36); tone('sine', 1047, 1047, 0.5, 0.16, 0.54); break;
+    case 'sub':     tone('sine', 988, 988, 0.1, 0.1); tone('sine', 1319, 1319, 0.18, 0.1, 0.11); break;
+    case 'timeout': tone('square', 2350, 2350, 0.45, 0.08); break;
+    case 'ui':      burst(3200, 2.0, 0.03, 0.10); break;
+    case 'ssr':     tone('sine', 880, 880, 0.12, 0.12); tone('sine', 1109, 1109, 0.12, 0.12, 0.12); tone('sine', 1319, 1319, 0.12, 0.12, 0.24); tone('sine', 1760, 1760, 0.6, 0.14, 0.36); burst(2000, 0.7, 0.5, 0.1, 0.36); break;
+  }
+}
+/** 햅틱 — 지원 안 하면 조용히 넘어간다. */
+function haptic(pattern){
+  if (!snd.haptic) return;
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(e){}
+}
+function sndLabel(){ return '소리 ' + (snd.on ? '켬' : '끔') + ' · 진동 ' + (snd.haptic ? '켬' : '끔'); }
 var FIG_KEY = 'bloom-figure-v1';
 var FIG = 'rig';   // 기본은 리그(16.9, 테스터 결정 2026-09). 스탠디(포즈 세트 파일럿 포함)는 빌드에 실렸을 때만 비교용으로
 function standeeAvailable(){ var A = window.BLOOM_ART || {}; for (var k in A) if (A[k].s || A[k].p) return true; return false; }
@@ -2420,12 +2574,25 @@ function loadRally(){
   cr.onEnd = function(){ nextRally(); };
   paintLive(0);
   if (r.timeout && (mv.speed || 1) < 4) timeoutBanner(r.timeout);
+  else if (r.subs && (mv.speed || 1) < 4) subBanner(r.subs);
+}
+/** 선수 교체 배너 — "IN 이름 · OUT 이름 (부진/피로)". 여러 명이면 한 줄에 이어 쓴다. 4배속은 생략. */
+function subBanner(subs){
+  var el = document.getElementById('lvSetB'); if (!el || !mv || !subs.length) return;
+  var s0 = subs[0], mine = s0.side === mySide;
+  var name = s0.side === 0 ? lastMatch.ctx.homeName : lastMatch.ctx.awayName;
+  var why = s0.reason === 2 ? '피로' : '부진';
+  sfx('sub');
+  el.innerHTML = '선수 교체 · ' + esc(name) + '<small>' + subs.map(function(x){ return 'IN ' + esc(x.inName) + ' · OUT ' + esc(x.outName); }).join(' / ') + ' (' + why + (mine ? ' · 감독 판단' : '') + ')</small>';
+  el.className = 'setb'; void el.offsetWidth; el.className = 'setb show sub';
+  if (cr) { cr.pause(); var sp = mv.speed || 1; clearTimeout(mv.toTimer); mv.toTimer = setTimeout(function(){ if (mv && mv.playing && cr) cr.play(); }, 1000 / sp); }
 }
 /** 작전타임 배너 — 흐름을 끊는 순간을 보여 주고 잠깐 멈춘다(4배속은 생략). */
 function timeoutBanner(to){
   var el = document.getElementById('lvSetB'); if (!el || !mv) return;
   var name = to.side === 0 ? lastMatch.ctx.homeName : lastMatch.ctx.awayName;
   var mine = to.side === mySide;
+  sfx('timeout');
   el.innerHTML = '작전타임 · ' + esc(name) + '<small>' + (mine ? '상대의 ' : '우리의 ') + to.streak + '연속 득점을 끊습니다</small>';
   el.className = 'setb'; void el.offsetWidth; el.className = 'setb show to';
   if (cr) { cr.pause(); var sp = mv.speed || 1; clearTimeout(mv.toTimer); mv.toTimer = setTimeout(function(){ if (mv && mv.playing && cr) cr.play(); }, 1100 / sp); }
@@ -2447,7 +2614,7 @@ function nextRally(){
   if (nextSet > doneSet) {
     unlockSkip('1세트 완료 · 건너뛰기가 열렸습니다');   // 첫 해금은 화면을 다시 그리므로 배너는 그 뒤에
     var last = mv.rallies[mv.ri - 1];
-    if (last && last.point) setBanner(doneSet, [last.point.home, last.point.away]);
+    if (last && last.point) { setBanner(doneSet, [last.point.home, last.point.away]); sfx('setend'); haptic([40, 60, 40]); }
   }
   var sp = (mv.speed || 1);
   if (mv.ri >= mv.rallies.length) { setTimeout(finishViewer, 700 / sp); return; }
@@ -2456,6 +2623,7 @@ function nextRally(){
 function finishViewer(){
   stopViewer();
   if (mv) mv.done = true;
+  sfx('matchend'); haptic(lastMatch && lastMatch.won ? [60, 80, 60, 80, 120] : [30]);
   if (!skipUnlocked) { skipUnlocked = true; try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){} }
   view = 'matchResult'; render(); window.scrollTo(0,0);
 }
@@ -2525,6 +2693,21 @@ function paintLive(ti){
   var serving = r.touches[0] ? r.touches[0].side : 0;
   el = document.getElementById('lvSvH'); if (el) el.className = 'bserve' + (serving===0?'':' off');
   el = document.getElementById('lvSvA'); if (el) el.className = 'bserve' + (serving===1?'':' off');
+  // 소리·진동(16.12): 터치 순간의 타구음, 득점 순간의 휘슬 + 환호/탄식. 4배속은 득점만
+  var spd = mv.speed || 1;
+  if (!ended && spd < 4 && !mv.sndTi) mv.sndTi = {};
+  if (!ended && spd < 4) {
+    var tk = mv.ri + ':' + ti;
+    if (!mv.sndTi[tk]) { mv.sndTi[tk] = 1; var tt0 = r.touches[ti];
+      if (tt0) sfx(tt0.type === 6 ? (tt0.attackType === 6 ? 'touch' : 'hit') : tt0.type === 3 ? 'serve' : tt0.type === 7 ? 'block' : 'touch'); }
+  }
+  if (ended && r.point && mv.sndPt !== mv.ri) {
+    mv.sndPt = mv.ri;
+    var bigPt = r.point.reason === 1 || r.point.reason === 3 || r.point.reason === 5;
+    if (bigPt && spd < 4) sfx('big');
+    sfx('whistle');
+    if (r.point.side === mySide) { sfx('cheer'); haptic(bigPt ? 60 : 30); } else { sfx('aww'); haptic(12); }
+  }
   var fl = document.getElementById('lvFlash');
   if (fl) {
     if (ended && r.point) {
@@ -2687,7 +2870,8 @@ function vMatchLive(){
          (standeeAvailable() ? '<button data-mv="figure" id="lvFig">'+figLabel()+'</button>' : '')+
        '</div>'+
        '<div class="card flat"><div class="tiny">1세트를 보고 나면 세트 건너뛰기와 결과 바로가기가 열립니다.</div></div>')+
-   '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'
+   '<button class="help-open" data-act="help">코트에서 무슨 일이 일어나는지 보기</button>'+
+   '<button class="help-open" data-act="sndtoggle">'+sndLabel()+' — 탭해서 바꾸기</button>'
   );
 }
 
@@ -2734,6 +2918,7 @@ function vMatchResult(){
    '</div>'+
    careerBlocks(m)+
    flowLine(m)+
+   injuryLine(m)+
    '<div class="card" style="padding:4px 2px"><div class="muted" style="padding:8px 10px 4px">우리 팀 기록</div>'+
      (m.box.mine || m.box.home).map(function(b){
        return '<div class="bx"><span class="pill pos">'+b.positionCode+'</span><span class="nm">'+esc(b.name)+'</span>'+
@@ -2759,8 +2944,32 @@ function vMatchResult(){
 function flowLine(m){
   var f = m.flow; if (!f) return '';
   var me = mySide, op = 1 - mySide;
+  var sub = subsLine(m);
   return '<div class="card flat"><div class="tiny">흐름 · 최장 연속 득점 우리 '+(f.maxStreak[me]|0)+' / 상대 '+(f.maxStreak[op]|0)+
-    ' · 작전타임 우리 '+(f.timeouts[me]|0)+'회 / 상대 '+(f.timeouts[op]|0)+'회</div></div>';
+    ' · 작전타임 우리 '+(f.timeouts[me]|0)+'회 / 상대 '+(f.timeouts[op]|0)+'회'+(sub ? '<br>'+sub : '')+'</div></div>';
+}
+/** 이번 경기의 경상(17절) — 우리 선수가 다쳤으면 결장 기간을, 상대 선수면 한 줄. 컨디션이 나빴던 선수도 적는다. */
+function injuryLine(m){
+  var mine = (lastInjuries || []).filter(function(j){ return j.mine; }), theirs = (lastInjuries || []).filter(function(j){ return !j.mine; });
+  var bad = [];
+  if (m.condition) { var lu = m.isHome ? m.ctx.homeLineup : m.ctx.awayLineup; (lu || []).forEach(function(id){ var lvl = m.condition[id]; if (lvl !== undefined && lvl < 2) { var p = m.ctx.players[id]; if (p) bad.push(p.name + ' ' + COND_ICON[lvl]); } }); }
+  if (!mine.length && !theirs.length && !bad.length) return '';
+  return '<div class="card flat"'+(mine.length ? ' style="border-color:var(--bad)"' : '')+'>'+
+    (mine.length ? '<div style="font-weight:700;color:var(--bad)">경상 — '+mine.map(function(j){ return esc(j.name)+' '+esc(j.part)+' ('+j.days+'경기 결장)'; }).join(', ')+'</div><div class="tiny">라인업은 다음 경기 전에 자동으로 다시 짜입니다. 벤치가 두터우면 덜 흔들립니다.</div>' : '')+
+    (theirs.length ? '<div class="tiny">다른 구단 경상: '+theirs.map(function(j){ return esc(j.name)+'('+esc(j.teamName)+')'; }).join(', ')+'</div>' : '')+
+    (bad.length ? '<div class="tiny">오늘 컨디션이 나빴던 우리 선수: '+bad.join(', ')+'</div>' : '')+
+  '</div>';
+}
+/** 선수 교체 기록(match-sim 16절) — 이벤트에서 센다. 없으면 빈 문자열. */
+function subsLine(m){
+  var mine = [], theirs = [];
+  (m.events || []).forEach(function(e){
+    if (e.type !== 15) return;
+    var pin = m.ctx.players[e.playerId], pout = m.ctx.players[e.secondary ? e.secondary[0] : null];
+    (e.side === mySide ? mine : theirs).push((pin ? pin.name : '?') + '↔' + (pout ? pout.name : '?') + (e.reason === 2 ? '(피로)' : '(부진)'));
+  });
+  if (!mine.length && !theirs.length) return '';
+  return '교체 · 우리 ' + mine.length + '회' + (mine.length ? ' ' + mine.join(', ') : '') + ' / 상대 ' + theirs.length + '회';
 }
 /** 오늘 코트에서 한 일 한 마디 — 가장 큰 항목. */
 function deedText(b){
@@ -2812,13 +3021,14 @@ function doScout(pos){
   revealPending = true;
   save(); checkMissions(); view='scout'; render();
   window.scrollTo({ top:0, behavior:'smooth' });
-  preloadArt([lastScout.card], 1500, function(){ revealPending = false; if (view === 'scout') render(); });
+  preloadArt([lastScout.card], 1500, function(){ revealPending = false; if (view === 'scout') render(); if (lastScout && lastScout.rarity === 'SSR') { sfx('ssr'); haptic(80); } else sfx('ui'); });
 }
 function doScout10(){
   if (G.tickets < 10) { toast('티켓이 10장 필요합니다'); return; }
   var out = [];
   for (var i=0;i<10 && E.canScout(G);i++) out.push(E.scout(G, {}));
   lastPulls = out; lastScout = null;
+  if (out.some(function(x){ return x.rarity === 'SSR'; })) { sfx('ssr'); haptic(80); } else sfx('ui');
   revealPending = true;
   save(); checkMissions(); view='scout'; render();
   window.scrollTo({ top:0, behavior:'smooth' });
@@ -2905,6 +3115,7 @@ function doAdvance(){
   if (sv && sv.phase === 'matchday' && !sv.nextMatchday) { save(); go('match'); return; }
   var res = E.advanceMatchday(G, { collectEvents:true });
   save(); checkMissions();
+  lastInjuries = res.injuries || [];
   if (res.myMatch) {
     mySide = res.myMatch.isHome === false ? 1 : 0;
     lastMatch = res.myMatch;
@@ -3034,7 +3245,8 @@ function copyFallback(txt){
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown],[data-fbkind]');
+  ensureAudio();
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown],[data-fbkind],[data-slot],[data-slotpick]');
   if (!t) return;
   var d = t.dataset;
 
@@ -3124,6 +3336,19 @@ document.addEventListener('click', function(e){
   if (d.viewreport) { reportId = d.viewreport; facilityBack = (view==='player') ? 'player' : 'scout'; go('report'); return; }
   if (d.act === 'facility-settle') { facilityBack = 'settle'; go('facility'); return; }
   if (d.act === 'autolineup') { E.autoLineup(G); save(); render(); toast('자동 편성했습니다'); return; }
+  if (d.act === 'sndtoggle') {
+    // 소리 → 진동 → 둘 다 끔 → 둘 다 켬 순환(버튼 하나로, 44px 타깃)
+    if (snd.on && snd.haptic) { snd.on = false; } else if (!snd.on && snd.haptic) { snd.haptic = false; } else if (!snd.on && !snd.haptic) { snd.on = true; } else { snd.haptic = true; }
+    saveSnd(); render(); sfx('ui'); toast(sndLabel()); return;
+  }
+  if (d.act === 'subsauto') { G.subsAuto = G.subsAuto === false; save(); render(); toast(G.subsAuto ? '자동 교체를 켰습니다' : '자동 교체를 껐습니다'); return; }
+  if (d.slot !== undefined) { if (!E.lineupValid(G)) E.autoLineup(G); lineupPick = +d.slot; render(); window.scrollTo(0,0); return; }
+  if (d.act === 'slotcancel') { lineupPick = null; render(); return; }
+  if (d.slotpick) {
+    var okSlot = E.setLineupSlot(G, lineupPick, d.slotpick);
+    lineupPick = null; save(); render();
+    toast(okSlot ? '라인업을 바꿨습니다' : '그 자리에는 세울 수 없습니다'); return;
+  }
   if (d.act === 'reset') {
     if (!confirm('저장된 진행을 지우고 처음부터 시작할까요?')) return;
     try { localStorage.removeItem(SAVE_KEY); } catch(err){}

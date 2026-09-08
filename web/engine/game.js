@@ -4,12 +4,12 @@
 import { createSimConfig } from './config.js';
 import { PLAYERS, TEAMS } from '../data.js';
 import {
-  POS, POS_CODES, RARITY, RARITIES, SIDE,
+  POS, POS_CODES, RARITY, RARITIES, SIDE, STAT,
   playerFromJson, makePlayer, clonePlayer, clampStat, statAverage,
   makeTeamState, autoLineupFromRoster, validateTeamState, defaultTactics, FORMATION,
 } from './domain.js';
 import { Rng, derivedSeed, mixSeed } from './rng.js';
-import { roundHalfEven } from './mathx.js';
+import { roundHalfEven, clamp } from './mathx.js';
 import { generatePlayer } from './generator.js';
 import { simulateMatch } from './match.js';
 import { SKILL_BY_NAME } from './skills.js';
@@ -88,15 +88,215 @@ export const CLUB_TACTICS = {
  */
 export const TACTICS = { clubTactics: true };
 export const FLOW = { enabled: true, override: null };   // override: { pressurePerPoint, mentalRelief, ... } — 하네스 A/B 용
-/** 게임 층이 경기에 넘기는 시뮬 설정 — 기본 설정에 흐름 모델 스위치만 얹는다. 호출마다 만들지 않고 스위치별로 캐시. */
+/**
+ * 경기 엔진 2단계 — 12명 로스터·선수 교체(docs/match-sim.md 16절).
+ *   SUBS.enabled: 감독 AI 가 랠리 사이에 부진·피로 교체를 한다(config.subs). 기본 sim 은 꺼져 있어 parity 불변
+ *   BENCH: AI 6구단에 생성 벤치 4명(OH·MB·OP·S, 구단 사다리 OVR + ovrDelta)을 붙인다. 벤치는 선발보다 약해 자동 편성에서 선발이 되지 않는다.
+ *          플레이어 벤치 = 로스터에서 라인업 7명을 뺀 전원(연습생 + 남는 졸업생)
+ */
+export const SUBS = { enabled: true, override: null };
+export const BENCH = { enabled: true, size: 4, ovrDelta: -8, positions: [POS.OH, POS.MB, POS.OP, POS.S] };
+/**
+ * 경기 엔진 2단계 — 매치데이 컨디션·경상(docs/match-sim.md 17절).
+ *   컨디션: 매치데이마다 선수별로 5단계 중 하나(0.94 / 0.97 / 1.00 / 1.03 / 1.06)를 시즌 시드·매치데이·선수 id 에서 결정적으로 뽑는다.
+ *           스태미나가 높을수록 나쁜 날이 줄고 좋은 날이 는다. 엔진의 playerCondition(실효 배수)으로 들어간다 — 판정식은 그대로.
+ *   경상:   경기에 나선 7명(선발 + 리베로)은 경기 뒤 injuryBase 확률로 1~3 매치데이 결장. 컨디션 나쁨·저스태미나면 배수.
+ *           결장 선수는 로스터에서 빠진다(플레이어는 연습생·벤치가, AI 구단은 생성 벤치가 메운다). 시즌이 바뀌면 낫는다.
+ *   친선 경기(playMatch)는 둘 다 없다. 하네스 --no-condition / --no-injury.
+ */
+export const MATCHDAY = {
+  condition: true,
+  levels: [0.94, 0.97, 1.0, 1.03, 1.06],
+  levelNames: ['나쁨', '조금 나쁨', '보통', '좋음', '최상'],
+  baseProb: [0.10, 0.18, 0.44, 0.18, 0.10],   // 스태미나 50 기준
+  staminaShift: 0.05,                          // 스태미나 100: 나쁨·조금 나쁨 각 −5%p, 좋음·최상 각 +5%p (0 이면 반대)
+  injury: true,
+  injuryBase: 0.010,                           // 경기당 경상 확률 (1.2% 에서 내림 — 플레이어는 결장자를 연습생으로 메워 AI 보다 더 아프다, 17절)
+  injuryLowCond: 2.0,                          // 컨디션 나쁨(레벨 0)이면 ×2
+  injuryLowStamina: 1.5,                       // 스태미나 < 55 면 ×1.5
+  injuryDays: [1, 3],                          // 결장 매치데이 수
+  parts: ['발목', '무릎', '손가락', '허리', '어깨', '종아리'],
+};
+function hash01(s) { return (hashString(s) >>> 0) / 2147483648; }
+/**
+ * 경기 엔진 2단계 — 케미·성격 판정(docs/match-sim.md 18절).
+ *   엔진의 chemistry 표(세터|공격수 → 0~100, 기본 50, 토스 품질 로짓 ±0.5)를 게임 층이 채운다:
+ *   케미 = 50 + 함께 뛴 경기(perGame × 경기 수, 최대 maxGames) + 성격 궁합(아키타입 표 ±6).
+ *   AI 구단 원소속 짝은 오래 같이 뛴 사이라 clubBase(플레이어 6경기 분)를 받고, 생성 선수(벤치·대체·신인)와의 짝은 newBase.
+ *   함께 뛴 경기는 라인업 7명이 한 경기를 뛰면 세터와의 짝마다 +1(친선 포함) — state.pairGames.
+ */
+export const CHEMISTRY = {
+  enabled: true,
+  perGame: 2, maxGames: 20,
+  clubBase: 12, newBase: 4,
+  // 세터 아키타입 × 공격수 아키타입 → 궁합 (commentary.js ARCHETYPES: fire 승부사 · ice 냉정파 · sun 분위기 메이커 · rock 노력파 · shy 수줍음 · show 스타 기질)
+  pair: {
+    fire: { fire: 2, ice: -4, sun: 3, rock: 2, shy: -3, show: 4 },
+    ice:  { fire: -4, ice: 4, sun: -2, rock: 5, shy: 3, show: -3 },
+    sun:  { fire: 3, ice: -2, sun: 5, rock: 2, shy: 4, show: 2 },
+    rock: { fire: 2, ice: 5, sun: 2, rock: 3, shy: 4, show: -2 },
+    shy:  { fire: -3, ice: 3, sun: 4, rock: 4, shy: 0, show: -4 },
+    show: { fire: 4, ice: -3, sun: 2, rock: -2, shy: -4, show: -1 },
+  },
+};
+/** 성격 궁합(세터 → 공격수). 성격 태그가 없으면 0. */
+export function pairBonus(setter, attacker) {
+  const a = archetypeOf(setter.personality || []), b = archetypeOf(attacker.personality || []);
+  const row = CHEMISTRY.pair[a]; return row && row[b] !== undefined ? row[b] : 0;
+}
+/** 세터·공격수 한 쌍의 케미(0~100). games = 함께 뛴 경기 수, base = 소속 보정. */
+export function chemistryValue(setter, attacker, games, base) {
+  const v = 50 + Math.min(CHEMISTRY.maxGames, CHEMISTRY.perGame * (games | 0)) + (base | 0) + pairBonus(setter, attacker);
+  return v < 0 ? 0 : (v > 100 ? 100 : v);
+}
+/** 내 팀 케미 표(세터 전원 × 나머지). 함께 뛴 경기는 state.pairGames. 꺼져 있으면 null(엔진 기본 50). */
+export function myChemistry(state, roster) {
+  if (!CHEMISTRY.enabled) return null;
+  const map = new Map(), pg = state.pairGames || {};
+  for (const sp of roster) {
+    if (sp.pos !== POS.S) continue;
+    for (const ap of roster) {
+      if (ap === sp || ap.isLibero) continue;
+      map.set(sp.id + '|' + ap.id, chemistryValue(sp, ap, pg[sp.id + '|' + ap.id] | 0, 0));
+    }
+  }
+  return map;
+}
+/** AI 구단 케미 표 — 원소속 슬롯 선수끼리는 clubBase, 생성 선수가 끼면 newBase. */
+export function clubChemistry(roster) {
+  if (!CHEMISTRY.enabled) return null;
+  const map = new Map();
+  const generated = p => !!(p.isBench || p.isSubstitute || p.isSigning || p.isRecruit);
+  for (const sp of roster) {
+    if (sp.pos !== POS.S) continue;
+    for (const ap of roster) {
+      if (ap === sp || ap.isLibero) continue;
+      map.set(sp.id + '|' + ap.id, chemistryValue(sp, ap, 0, (generated(sp) || generated(ap)) ? CHEMISTRY.newBase : CHEMISTRY.clubBase));
+    }
+  }
+  return map;
+}
+/** 경기를 뛴 뒤 함께 뛴 경기 수를 쌓는다(내 팀 라인업 7명: 세터와의 짝마다 +1). 판정·RNG 와 무관. */
+export function recordPairGames(state, view) {
+  const lineup = view.isHome ? view.ctx.homeLineup : view.ctx.awayLineup;
+  if (!lineup || !lineup.length) return;
+  if (!state.pairGames) state.pairGames = {};
+  const setters = lineup.filter(id => { const p = view.ctx.players[id]; return p && p.pos === POS.S; });
+  for (const sid of setters) for (const id of lineup) {
+    if (id === sid) continue;
+    const p = view.ctx.players[id]; if (!p || p.pos === POS.L) continue;
+    const k = sid + '|' + id;
+    state.pairGames[k] = (state.pairGames[k] | 0) + 1;
+  }
+}
+/** 라인업 화면용: 선발 세터와 각 공격수의 케미 {id → {value, games, bonus}}. */
+export function lineupChemistry(state) {
+  const ts = myTeamState(state);
+  const setterId = ts.lineup.startingIds.find(id => { const p = ts.index.get(id); return p && p.pos === POS.S; });
+  const out = {};
+  if (!setterId || !CHEMISTRY.enabled) return { setterId: setterId || null, pairs: out };
+  const sp = ts.index.get(setterId), pg = state.pairGames || {};
+  for (const id of ts.lineup.startingIds.concat(ts.lineup.benchIds || [])) {
+    const ap = ts.index.get(id); if (!ap || ap === sp || ap.isLibero) continue;
+    const games = pg[setterId + '|' + id] | 0;
+    out[id] = { value: chemistryValue(sp, ap, games, 0), games, bonus: pairBonus(sp, ap) };
+  }
+  return { setterId, pairs: out };
+}
+/**
+ * 경기 엔진 2단계 — AI 구단 운영(docs/match-sim.md 19절). 시즌마다 구단이 하나의 방침을 정한다(계정 시드·구단·시즌에서 결정적):
+ *   집중 육성: 슬롯 선수 중 잠재력 여유가 가장 큰 현역 한 명의 OVR +keyPlayerOvr (그 시즌만)
+ *   방침(공격·수비·서브·균형): 구단 전술을 조금 기운다(focusTactic)
+ * 뉴스 문장으로 리그 화면에 나온다. fromSeason 전에는 없다(시즌 1 캘리브레이션 불변).
+ */
+export const CLUB_OPS = { enabled: true, fromSeason: 2, keyPlayerOvr: 0.75, focusTactic: 0.10 };   // 1.5/0.15 는 첫 우승 S2~3 을 −4.5%p 깎았다(19절 표)
+const OPS_FOCUS = ['attack', 'defense', 'serve', 'balance'];
+const OPS_FOCUS_KO = { attack: '공격 중심 — 오픈·후위 공격 비중을 올렸다', defense: '수비 중심 — 리베로 중심 수비 대형으로', serve: '서브 강화 — 공격적인 서브를 주문했다', balance: '균형 — 속공과 지연 공격을 섞는다' };
+export function clubOpsFor(state, clubId, season) {
+  if (!CLUB_OPS.enabled || (season | 0) < CLUB_OPS.fromSeason) return null;
+  const club = CLUB_BY_ID.get(clubId); if (!club) return null;
+  const pool = POOL_BY_CLUB.get(clubId) || [];
+  const focus = OPS_FOCUS[Math.floor(hash01(state.seed + '/' + clubId + '/' + season + '/focus') * OPS_FOCUS.length)];
+  // 집중 육성 대상: 그 시즌 슬롯을 지키는 현역 중 (잠재력 − 스탯) 여유가 가장 큰 선수. 떠난(스카우트된) 선수는 제외
+  const departed = departedCardIds(state);
+  let key = null, keyV = -Infinity;
+  for (const p of pool) {
+    if (departed.has(p.id) || isRetiredAge(p.age, p.pos, season)) continue;
+    const room = statAverage(p.potential) - statAverage(p.stats);
+    if (room > keyV) { keyV = room; key = p; }
+  }
+  return {
+    clubId, season, focus, keyPlayerId: key ? key.id : null, keyPlayerName: key ? key.name : null,
+    news: [`${club.name}: ${OPS_FOCUS_KO[focus]}`].concat(key ? [`${club.name}, ${key.name} 집중 육성 — 이번 시즌 조금 더 강하다`] : []),
+  };
+}
+/** 시즌의 AI 구단 운영 뉴스 전부(리그 화면·개막 히스토리용). */
+export function clubOpsNews(state, season) {
+  const out = [];
+  for (const c of CLUBS) { const o = clubOpsFor(state, c.id, season); if (o) out.push(o); }
+  return out;
+}
+/** 매치데이 컨디션 1명. {level 0~4, mult}. 시즌 밖(md 0)이나 꺼짐이면 보통. */
+export function conditionRoll(seasonSeed, md, playerId, stamina) {
+  const M = MATCHDAY;
+  if (!M.condition || !md) return { level: 2, mult: 1.0 };
+  const u = hash01(seasonSeed + '/' + md + '/' + playerId + '/cond');
+  const st = clamp(((stamina | 0) - 50) / 50, -1, 1) * M.staminaShift;
+  const p = [M.baseProb[0] - st, M.baseProb[1] - st, 0, M.baseProb[3] + st, M.baseProb[4] + st];
+  p[2] = 1 - p[0] - p[1] - p[3] - p[4];
+  let acc = 0;
+  for (let i = 0; i < 5; i++) { acc += p[i]; if (u < acc) return { level: i, mult: M.levels[i] }; }
+  return { level: 4, mult: M.levels[4] };
+}
+/** 로스터 전원의 컨디션 — 엔진용 Map(id → 배수)과 표기용 레벨 표. */
+export function conditionMap(seasonSeed, md, roster) {
+  const map = new Map(), levels = {};
+  for (const p of roster) { const c = conditionRoll(seasonSeed, md, p.id, p.stats[STAT.stamina]); map.set(p.id, c.mult); levels[p.id] = c.level; }
+  return { map, levels };
+}
+/** 결장 중인가 — 다음 매치데이(L.matchday + 1) 기준. state.injuries[id] = { until, season, days, part } */
+export function isInjured(state, playerId) {
+  const inj = state.injuries ? state.injuries[playerId] : undefined; if (!inj) return false;
+  const L = state.league; if (!L || inj.season !== L.number) return false;
+  return inj.until >= L.matchday + 1;
+}
+/** 남은 결장 경기 수(다음 매치데이 포함). 결장이 아니면 0. */
+export function injuryGamesLeft(state, playerId) {
+  if (!isInjured(state, playerId)) return 0;
+  return state.injuries[playerId].until - state.league.matchday;
+}
+/** 경기 뒤 경상 롤 — 결정적. 걸리면 state.injuries 에 넣고 기록을 돌려준다(없으면 null). */
+export function injuryRoll(state, seasonSeed, md, p, condLevel) {
+  const M = MATCHDAY;
+  if (!M.injury) return null;
+  let prob = M.injuryBase;
+  if (condLevel === 0) prob *= M.injuryLowCond;
+  if (p.stats[STAT.stamina] < 55) prob *= M.injuryLowStamina;
+  if (hash01(seasonSeed + '/' + md + '/' + p.id + '/inj') >= prob) return null;
+  const span = M.injuryDays[1] - M.injuryDays[0] + 1;
+  const days = M.injuryDays[0] + Math.floor(hash01(seasonSeed + '/' + md + '/' + p.id + '/days') * span);
+  const part = M.parts[Math.floor(hash01(seasonSeed + '/' + md + '/' + p.id + '/part') * M.parts.length)];
+  if (!state.injuries) state.injuries = {};
+  const rec = { until: md + days, season: state.league ? state.league.number : 0, days, part, name: p.name, teamId: p.teamId };
+  state.injuries[p.id] = rec;
+  return rec;
+}
+/** 지난 결장 기록 정리(시즌이 바뀌었거나 다 나은 것). */
+export function pruneInjuries(state) {
+  if (!state.injuries) return;
+  for (const id of Object.keys(state.injuries)) if (!isInjured(state, id)) delete state.injuries[id];
+}
+/** 게임 층이 경기에 넘기는 시뮬 설정 — 기본 설정에 흐름·교체 스위치만 얹는다. 호출마다 만들지 않고 스위치별로 캐시. */
 const _simCfgCache = {};
 export function gameSimConfig(homeCourtLogit = 0) {
-  const key = (FLOW.enabled ? 'f' : '-') + '|' + homeCourtLogit + '|' + (FLOW.override ? JSON.stringify(FLOW.override) : '');
+  const key = (FLOW.enabled ? 'f' : '-') + (SUBS.enabled ? 's' : '-') + '|' + homeCourtLogit + '|' + (FLOW.override ? JSON.stringify(FLOW.override) : '') + '|' + (SUBS.override ? JSON.stringify(SUBS.override) : '');
   if (_simCfgCache[key]) return _simCfgCache[key];
   const c = createSimConfig();
   c.match.homeCourtLogit = homeCourtLogit;
   c.flow.enabled = !!FLOW.enabled;
   if (FLOW.override) Object.assign(c.flow, FLOW.override);
+  c.subs.enabled = !!SUBS.enabled;
+  if (SUBS.override) Object.assign(c.subs, SUBS.override);
   _simCfgCache[key] = c;
   return c;
 }
@@ -451,6 +651,9 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     // — game.js 가 시설을 몰라야 순환 import 가 생기지 않는다.
     facilities: null,           // { analysis, stadium, hall } — facilityLevels() 가 지연 초기화
     reports: [],                // 스카우트 리포트를 산 카드 id 목록
+    injuries: {},               // 경상 결장(match-sim 17절) — id → { until, season, days, part }
+    subsAuto: true,             // 자동 교체 방침(match-sim 16절)
+    pairGames: {},              // 세터|공격수 함께 뛴 경기 수 — 케미(match-sim 18절)
   };
   state.fillers = createFillers(state);
   return state;
@@ -537,6 +740,9 @@ export function saveGame(state) {
     fc: state.facilities || null,
     rp: state.reports || [],
     ca: state.career || {},
+    sa: state.subsAuto === false ? 0 : 1,   // 자동 교체 방침(match-sim 16절)
+    ij: state.injuries || {},                // 경상 결장(17절)
+    pg: state.pairGames || {},               // 케미 — 함께 뛴 경기 수(18절)
   };
 }
 
@@ -628,6 +834,9 @@ export function loadGame(json) {
   state.facilities = j.fc || null;
   state.reports = j.rp || [];
   state.career = j.ca || {};
+  state.subsAuto = j.sa === 0 ? false : true;
+  state.injuries = j.ij || {};
+  state.pairGames = j.pg || {};
   state.fillers = createFillers(state);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
   return state;
@@ -1056,10 +1265,21 @@ export function myRoster(state) {
   const list = [];
   for (const i of representatives(state)) {
     if (isRetiredAge(i.age, i.pos, state.season)) continue;
+    if (isInjured(state, i.instanceId)) continue;     // 경상 결장(17절) — 코트에 못 선다
     list.push(instanceToPlayer(i, state.clubId, state.season, state));
   }
   for (const f of state.fillers) list.push(f);
   return list;
+}
+/** 결장 중인 내 대표 선수(표기용). */
+export function myInjured(state) {
+  const out = [];
+  for (const i of representatives(state)) {
+    if (!isInjured(state, i.instanceId)) continue;
+    const r = state.injuries[i.instanceId];
+    out.push({ id: i.instanceId, name: i.name, pos: i.pos, part: r.part, gamesLeft: injuryGamesLeft(state, i.instanceId), days: r.days });
+  }
+  return out;
 }
 
 /** 은퇴한 대표 인스턴스(코치·서포터로만 남는다). UI 결산 화면용. */
@@ -1103,13 +1323,23 @@ export function lineupValid(state) {
  */
 export function myTeamState(state) {
   const roster = myRoster(state);
+  let ts = null;
   if (state.lineupStarters) {
     const lineup = { startingIds: state.lineupStarters.slice(), liberoId: state.lineupLibero, benchIds: [] };
     for (const p of roster) if (lineup.startingIds.indexOf(p.id) < 0 && p.id !== state.lineupLibero) lineup.benchIds.push(p.id);
-    const ts = makeTeamState(myTeam(state), roster, lineup, { tactics: defaultTactics() });
-    try { validateTeamState(ts); return ts; } catch { /* 무효 → 자동 편성 */ }
+    const t = makeTeamState(myTeam(state), roster, lineup, { tactics: defaultTactics() });
+    try { validateTeamState(t); ts = t; } catch { /* 무효 → 자동 편성 */ }
   }
-  return makeTeamState(myTeam(state), roster, autoLineupFromRoster(roster), { tactics: defaultTactics() });
+  if (ts === null) ts = makeTeamState(myTeam(state), roster, autoLineupFromRoster(roster), { tactics: defaultTactics() });
+  ts.autoSubs = state.subsAuto !== false;   // 감독 방침: 부진·피로 자동 교체(기본 켬). 라인업 화면에서 끈다
+  ts.chemistry = myChemistry(state, roster); // 케미(18절): 함께 뛴 경기 + 성격 궁합
+  return ts;
+}
+
+/** 내 벤치(라인업 7명을 뺀 로스터) — 라인업 화면·교체 후보 표시용. 포지션 핵심 스탯 순. */
+export function myBench(state) {
+  const ts = myTeamState(state);
+  return (ts.lineup.benchIds || []).map(id => ts.index.get(id)).filter(p => p && !p.isLibero);
 }
 
 /** 자동 편성. Game.cs:175 AutoLineup */
@@ -1293,11 +1523,47 @@ export function clubTeamState(state, clubId, opts = {}) {
       roster.push(ap);
     }
   }
+  // 경상 결장(17절): 결장 중인 선수는 이번 매치데이 로스터에서 빠진다 — 벤치가 그 자리를 메운다
+  if (state.injuries) for (let i = roster.length - 1; i >= 0; i--) if (isInjured(state, roster[i].id)) roster.splice(i, 1);
+  // 12명 로스터(match-sim 16절): 생성 벤치. 구단·자리별로 결정적(시드 = 구단 id + 자리), 세기는 사다리 OVR + BENCH.ovrDelta 라
+  // 시즌이 갈수록 같이 오른다. 결원 대체 선수(−7.4 OVR)보다 약해 자동 편성 순서를 바꾸지 않는다 — 벤치는 벤치다.
+  const withBench = opts.bench !== undefined ? !!opts.bench : !!BENCH.enabled;
+  if (withBench) {
+    // 벤치 세기 = min(사다리 OVR + ovrDelta, 가장 약한 주전 − 2). 시즌 1 의 R 카드 주전(52% 성장)은 사다리 평균보다 10 가까이
+    // 낮을 수 있어, 그보다 아래로 눌러야 벤치가 주전을 밀어내지 않는다 — AI 라인업(캘리브레이션)이 그대로다.
+    let minOvr = Infinity;                                   // 슬롯 7명(결장자를 뺀 뒤라 6명일 수도) 중 가장 약한 선수
+    for (const q of roster) { const v = ovrOf(TRAINING_CFG, q.stats, q.pos); if (v < minOvr) minOvr = v; }
+    if (minOvr === Infinity) minOvr = ovrAvg;
+    const benchOvr = Math.min(ovrAvg + BENCH.ovrDelta, minOvr - 2);
+    for (let i = 0; i < BENCH.size; i++) {
+      const pos = BENCH.positions[i % BENCH.positions.length];
+      const b = generatePlayer(new Rng(hashString(clubId + '/bench/' + i)), `${clubId}-bench-${i + 1}`, clubId, pos, 20 + i, avg, 3.0);
+      shiftToOvr(b, benchOvr);
+      b.rarity = RARITY.N;
+      b.age = 21 + (i % 3);
+      b.isBench = true;
+      assignGeneratedLook(b, takenLooks);
+      roster.push(b);
+    }
+  }
   const useTactics = opts.useClubTactics !== undefined ? opts.useClubTactics : (TACTICS.clubTactics || state.useClubTactics);
   const tactics = useTactics && CLUB_TACTICS[clubId]
     ? { ...defaultTactics(), ...CLUB_TACTICS[clubId] }
     : defaultTactics();
-  return makeTeamState(club, roster, autoLineupFromRoster(roster), { tactics });
+  // AI 구단 운영(19절): 방침에 따라 전술을 기울이고 집중 육성 선수를 조금 키운다(그 시즌만)
+  const ops = opts.ops !== undefined ? opts.ops : clubOpsFor(state, clubId, season);
+  if (ops) {
+    const k = CLUB_OPS.focusTactic;
+    if (ops.focus === 'attack') { tactics.openWeight += k; tactics.backRowWeight += k * 0.5; }
+    else if (ops.focus === 'defense') { tactics.formation = FORMATION.LiberoCentered; tactics.serveAggression = Math.max(0, tactics.serveAggression - k * 0.5); }
+    else if (ops.focus === 'serve') tactics.serveAggression = Math.min(1, tactics.serveAggression + k);
+    else { tactics.quickWeight += k * 0.5; tactics.delayedWeight += k * 0.5; }
+    if (ops.keyPlayerId) {
+      const i = roster.findIndex(x => x.id === ops.keyPlayerId);
+      if (i >= 0) { const c = clonePlayer(roster[i]); shiftToOvr(c, ovrOf(TRAINING_CFG, c.stats, c.pos) + CLUB_OPS.keyPlayerOvr); c.isKeyPlayer = true; roster[i] = c; }
+    }
+  }
+  return makeTeamState(club, roster, autoLineupFromRoster(roster), { tactics, chemistry: clubChemistry(roster) });
 }
 
 // ---------------------------------------------------------------- 경기
@@ -1335,7 +1601,7 @@ export function playMatch(state, opponentTeamId, opts = {}) {
   const view = formatMatchResult(result, home, away, SIDE.HOME, seed);
   view.reward = reward;
   view.opponent = { id: club.id, name: club.name };
-  if (opts.record !== false) recordCareer(state, view);
+  if (opts.record !== false) { recordCareer(state, view); recordPairGames(state, view); }
   return view;
 }
 

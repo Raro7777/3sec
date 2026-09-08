@@ -34,6 +34,7 @@ node web/parity.mjs               # 경기·육성 지표 정합
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 9건 (엔진 기본 경제)
 node web/season-check.mjs --app   # 같은 목표를 앱 경제(시작 티켓·온보딩 미션)로
 node web/season-check.mjs --long  # 시즌 1~15 장기 목표 20건
+node web/season-check.mjs --no-subs --no-bench --no-condition --no-injury --no-chemistry --no-ops   # 경기 엔진 2단계(match-sim 16~19절) 도입 전 수치 재현
 node data/validate.mjs            # 로스터 스키마
 node tools/art-prompts.mjs --check # 아트 프롬프트 어휘 커버리지
 python3 tools/art-standee.py --check # 전신 42장 → 코트 스탠디(누끼) 유무·앵커 (만들기: --force, 미리보기: --preview)
