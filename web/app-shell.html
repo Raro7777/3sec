@@ -3,22 +3,34 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=Barlow+Condensed:wght@500;600;700;800&family=Black+Han+Sans&display=swap">
 <style>
+/* ================================================================
+   디자인 시스템 토큰 — 단일 소스. 기준 문서: docs/design-system.md
+   밝고 캐주얼한 바탕 + 가챠 프리미엄 광택(2026-09 오버홀).
+   표면은 흰색/연한 하늘빛, 글씨는 진한 남색. 카드 일러스트·코트 뷰어는
+   원래대로 어둡게 둔다(밝은 UI 위의 극적인 뽑기 순간).
+   색·모양을 바꾸려면 문서 표를 함께 갱신할 것.
+   ================================================================ */
 :root{
-  /* 밝고 캐주얼한 바탕 + 가챠 프리미엄 광택(2026-09 디자인 오버홀).
-     표면은 흰색/연한 하늘빛, 글씨는 진한 남색. 카드 일러스트·코트 뷰어는 원래대로 어둡게 둔다(밝은 UI 위의 극적인 뽑기 순간). */
+  /* 색 — 바탕/표면 */
   --bg:#E7EFF8; --bg2:#DCE8F5;
   --panel:#FFFFFF; --panel2:#F1F6FC; --panel3:#E5EEF7;
   --line:#DCE6F1; --line2:#C4D4E4;
+  /* 색 — 글씨 */
   --ink:#16242F; --ink2:#57697A; --ink3:#8F9EAD;
+  /* 색 — 액센트(코트 블루=주 액션, 핫 오렌지=보상/경고, 굿/배드) */
   --court:#2E86E6; --court-2:#57A6F5; --court-bg:#E3EEFC;
   --hot:#F1913C; --hot-2:#FFB05E; --hot-bg:#FDEEDC;
   --good:#1FB884; --bad:#E15748;
+  /* 색 — 등급(카드 프레임·소환·졸업 등급 리빌 공용): N 회색·R 파랑·SR 보라·SSR 금 */
   --n:#7C8B9A; --r:#4C8FE0; --sr:#9B63E0; --ssr:#E0A81E;
+  /* 그림자(고도) · 라운드 · 터치 타깃 */
   --sh1:0 1px 3px rgba(21,45,74,.06), 0 3px 10px rgba(21,45,74,.06);
   --sh2:0 6px 22px rgba(21,45,74,.12);
   --shg:0 4px 14px rgba(46,134,230,.35);
   --rad:16px;
   --tap:48px;
+  /* 타이포 — 본문 Gothic A1, 숫자 Barlow Condensed, 디스플레이(로고·헤더·큰 숫자) Black Han Sans */
+  --display:"Black Han Sans","Gothic A1",sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -487,9 +499,9 @@ details[open] summary::after{content:"▴"}
 }
 
 /* ================= 게임 UI 키트 + 홈 허브 씬 (2026-09, 디자인 오버홀 2차) ================= */
-:root{ --display:"Black Han Sans","Gothic A1",sans-serif; }
 .disp{font-family:var(--display);font-weight:400;letter-spacing:0}
-/* 9-슬라이스 게임 버튼 프레임(SVG 스프라이트) — 베벨 테두리·상단 유리광 하이라이트·모서리 리벳. 색은 버튼 배경 그라데이션이 담당하고 이 프레임이 위에 얹힌다. */
+/* ── UI 키트 스프라이트 ── 9-슬라이스 게임 버튼 프레임(SVG). 베벨·상단 유리광·모서리 리벳.
+   색은 버튼 배경 그라데이션이 담당하고 이 프레임이 위에 얹힌다. 편집 규격은 docs/design-system.md */
 :root{ --gframe:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ffffff' stop-opacity='.85'/%3E%3Cstop offset='.4' stop-color='%23ffffff' stop-opacity='.08'/%3E%3Cstop offset='.62' stop-color='%23000000' stop-opacity='.06'/%3E%3Cstop offset='1' stop-color='%23000000' stop-opacity='.42'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='3.5' width='92' height='93' rx='24' fill='none' stroke='url(%23g)' stroke-width='8'/%3E%3Crect x='8.5' y='8' width='83' height='84' rx='19' fill='none' stroke='%23ffffff' stroke-opacity='.5' stroke-width='2'/%3E%3Cg fill='%23ffffff' fill-opacity='.9'%3E%3Ccircle cx='18' cy='17' r='3.1'/%3E%3Ccircle cx='82' cy='17' r='3.1'/%3E%3Ccircle cx='18' cy='83' r='3.1'/%3E%3Ccircle cx='82' cy='83' r='3.1'/%3E%3C/g%3E%3C/svg%3E"); }
 .gframe,.gbtn,.btn{border-style:solid;border-width:0;border-image:var(--gframe) 27 fill;border-image-width:13px;border-image-repeat:stretch}
 .btn.ghost{border-image-width:11px}
