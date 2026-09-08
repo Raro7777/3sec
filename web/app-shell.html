@@ -833,9 +833,10 @@ function artImg(src, alt){
  */
 function artThumb(p, alt){ return artCrop(p, alt, 2.2, 0.15, 1); }
 
-/** 전신 일러스트 배너 — 선수 상세 화면 상단. 없으면 null 을 돌려주고 기존 레이아웃으로 떨어진다. */
+/** 전신 일러스트 배너 — 선수 상세 화면 상단. 전신(hero)이 없으면 카드로 떨어진다(신인 풀은 카드가 곧 3/4 전신이다).
+ *  그래도 없으면(플레이스홀더뿐) null 을 돌려주고 기존 레이아웃으로 떨어진다. */
 function heroBanner(p, name){
-  var src = artOf(p, 'hero');
+  var src = artOf(p, 'hero') || artOf(p, 'card');
   if (!src) return null;
   return '<div style="position:relative;margin:-14px -14px 14px;overflow:hidden">'+
     '<img src="'+src+'" alt="'+String(name||'').replace(/"/g,'')+'" loading="lazy" decoding="async" '+
@@ -1165,7 +1166,7 @@ function vHome(){
   var fillers = E.myRoster(G).filter(function(p){ return p.rarity===0; }).length;
   var hist = (G.history||[]).slice(-6).reverse();
   var best = reps.slice().sort(function(a,b){ return b.ovr-a.ovr; })[0];
-  var bg = best ? artOf(best, 'hero') : null;      // 간판 선수 전신을 헤더 배경으로(art-pipeline 16.4)
+  var bg = best ? (artOf(best, 'hero') || artOf(best, 'card')) : null;      // 간판 선수 전신을 헤더 배경으로(art-pipeline 16.4). 신인은 카드가 3/4 전신
   var dexN = 0, dexAll = 0;
   try { var allc = E.allCards(G), own = G.ownedCards || {}; dexAll = allc.length; dexN = allc.filter(function(c){ return own[c.id] !== undefined; }).length; } catch(e){}
   return h(
