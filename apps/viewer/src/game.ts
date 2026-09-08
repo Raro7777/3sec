@@ -55,6 +55,7 @@ import { MatchScreen } from "./match-screen";
 import { formationSvg } from "./formation-svg";
 import { getSimPool } from "./sim/pool";
 import { asMatch, cupJob, leagueJob } from "./sim/adapter";
+import { OfficeScene, officeLook, officeSpots, type OfficeAct } from "./office";
 
 type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results" | "match" | "guide" | "onboarding" | "review" | "settings" | "profile" | "sacked";
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
@@ -196,6 +197,8 @@ export class Game {
   private lastTactics: TacticsReport | null = null;
   /** a round simulation is in flight (simRounds is not re-entrant) */
   private simming = false;
+  /** 감독실: the canvas room at the top of the home screen */
+  private office: OfficeScene | null = null;
   /** the running 도전 모드 match (outside the season: never settled, never saved) */
   private challenge: { scen: ChallengeScenario; match: Match; side: TeamId } | null = null;
   private selA: string | null = null;
@@ -653,6 +656,8 @@ export class Game {
     for (const b of document.querySelectorAll<HTMLButtonElement>("#nav button.tab")) b.classList.toggle("active", b.dataset.screen === name);
     this.closeSheet();
     this.updateCta();
+    // the room only paints while it is on screen (a background canvas loop costs battery for nothing)
+    if (name === "home") { this.office?.resize(); this.office?.start(); } else this.office?.stop();
     window.dispatchEvent(new Event("resize"));
   }
 
@@ -829,7 +834,8 @@ export class Game {
     const fx = nextUserFixture(s);
     const over = seasonOver(s);
     const h: string[] = [];
-    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">${userArt(s, 22, me.color)} 감독 ${s.managerName}</span><span>${divisionName(userDivision(s))} ${over ? "종료" : `${pos}위 · ${rows[pos - 1]!.pts}점`} · 예산 ${me.budget}억 · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}${this.financeBadge()}</span></h3>`);
+    h.push(this.officeHtml(fx));
+    h.push(`<div class="card"><h3><span data-customize title="구단 꾸미기" style="cursor:pointer;white-space:nowrap">${me.name} <small style="color:var(--muted);font-size:11px">✎</small></span> <span class="mgr">${userArt(s, 22, me.color)} 감독 ${s.managerName}</span><span>${over ? "시즌 종료" : `승점 ${rows[pos - 1]!.pts}`} · 연봉 ${wageBill(me)}억/시즌${windowOpen(s) ? ' · <b style="color:var(--good)">이적시장 열림</b>' : ""}${this.financeBadge()}</span></h3>`);
     h.push(this.todoHtml());
     h.push(this.careerStripHtml());
     // the pending interview (press.ts) and the story events with their choices (story.ts)
@@ -926,6 +932,7 @@ export class Game {
     h.push(`</div>`);
     h.push(`<div class="actions"><button class="danger" data-act="newGame">새 게임</button><span class="hint">진행 상황은 이 브라우저에 자동 저장됩니다. · 가난한자의 FM · 만든이 raro</span></div>`);
     this.el.home.innerHTML = h.join("");
+    this.mountOffice(fx);
     this.wireClubTaps(this.el.home);
     this.el.home.querySelectorAll<HTMLButtonElement>("button[data-news]").forEach((b) => b.addEventListener("click", () => { this.newsFilter = b.dataset.news!; this.applyNewsFilter(); }));
     this.applyNewsFilter();
@@ -1270,6 +1277,96 @@ export class Game {
   }
 
   /** What needs the manager's attention right now, as tappable rows (empty string when nothing does). */
+  // ------------------------------------------------------------ 감독실 (office.ts)
+
+  /** The room, with a hit box on every object and the assistant's word before a match. */
+  private officeHtml(fx: Fixture | null): string {
+    const s = this.state;
+    const me = this.me;
+    const look = officeLook(s, managerRep(s), hallOfFame(s).titles.length + hallOfFame(s).cups.length);
+    const hasMatch = !!fx && !seasonOver(s) && !s.board.sacked;
+    const spots = officeSpots(hasMatch)
+      .map((sp) => `<button class="spot${sp.hot ? " hot" : ""}" data-office="${sp.act}" title="${sp.label}" style="left:${(sp.x * 100).toFixed(2)}%;top:${(sp.y * 100).toFixed(2)}%;width:${(sp.w * 100).toFixed(2)}%;height:${(sp.h * 100).toFixed(2)}%"><b>${sp.label}</b></button>`)
+      .join("");
+    const wx = { clear: "맑음", cloud: "흐림", rain: "비", snow: "눈" }[look.weather];
+    const opp = fx ? clubOf(s, fx.home === me.id ? fx.away : fx.home) : null;
+    const m = opp?.manager;
+    const say = m && hasMatch
+      ? `<div class="officeSay">${managerArt(s, m, 44, opp!.color).replace('class="mgrArt"', 'class="mgrArt say"')}<div class="bub"><b>${opp!.shortName} ${m.name}</b> 감독 · ${managerPreview(m, me, opp!)}</div></div>`
+      : "";
+    return `<div class="office" id="office">
+      <div class="officeStage">
+        <canvas id="officeCanvas"></canvas>
+        ${spots}
+        <div class="weather">${look.night ? "야간" : "주간"} · ${wx}</div>
+        <div class="officeHud">
+          <span class="cn" data-customize title="구단 꾸미기"><i style="background:${me.color}"></i>${me.name}</span>
+          <span class="st">${divisionName(userDivision(s))} <b>${seasonOver(s) ? "종료" : `${table(s).findIndex((r) => r.club === me.id) + 1}위`}</b> · 예산 ${me.budget}억</span>
+        </div>
+      </div>
+      ${say}
+    </div>`;
+  }
+
+  /** Paints the room and wires its objects; the loop is only alive while the home screen is on show. */
+  private mountOffice(fx: Fixture | null): void {
+    const canvas = document.getElementById("officeCanvas") as HTMLCanvasElement | null;
+    if (!canvas) { this.office?.stop(); this.office = null; return; }
+    const s = this.state;
+    this.office?.stop();
+    this.office = new OfficeScene(canvas);
+    window.addEventListener("resize", () => this.office?.resize());
+    const hof = hallOfFame(s);
+    this.office.set(officeLook(s, managerRep(s), hof.titles.length + hof.cups.length));
+    if (this.current === "home") this.office.start();
+    const hasMatch = !!fx && !seasonOver(s) && !s.board.sacked;
+    for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#office .spot"))) {
+      b.addEventListener("click", () => this.officeGo(b, b.dataset.office as OfficeAct, hasMatch));
+    }
+  }
+
+  /**
+   * An object carries you into its screen: the tapped rect grows into the page, so the room and the page
+   * are the same place rather than two documents.
+   */
+  private officeGo(from: HTMLElement, act: OfficeAct, hasMatch: boolean): void {
+    this.zoomFrom(from);
+    if (act === "match") {
+      if (hasMatch) { this.act("play"); return; }
+      this.openTable("sched");
+      return;
+    }
+    if (act === "records") { this.openTable("annals"); return; }
+    if (act === "table") { this.openTable("standings"); return; }
+    this.show(act as ScreenName);
+  }
+
+  /** The 순위 screen on a named tab (the room's objects each open their own page of it). */
+  private openTable(tab: string): void {
+    this.tabSel.table = tab;
+    try { localStorage.setItem("3sec.tabs", JSON.stringify(this.tabSel)); } catch { /* ignore */ }
+    this.renderTable();
+    this.show("table");
+  }
+
+  /** The zoom itself: a lit rectangle that travels from the object to the page and fades out. */
+  private zoomFrom(el: HTMLElement): void {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const z = document.createElement("div");
+    z.id = "zoomer";
+    z.style.left = `${r.left}px`; z.style.top = `${r.top}px`; z.style.width = `${r.width}px`; z.style.height = `${r.height}px`;
+    z.style.opacity = "1";
+    document.body.appendChild(z);
+    const end = document.getElementById("app")!.getBoundingClientRect();
+    z.animate(
+      [{ transform: "translate(0,0) scale(1)", opacity: 0.9 },
+       { transform: `translate(${end.left - r.left + (end.width - r.width) / 2}px, ${end.top - r.top + (end.height - r.height) / 2}px) scale(${Math.max(end.width / r.width, end.height / r.height)})`, opacity: 0 }],
+      { duration: 260, easing: "cubic-bezier(.2,.8,.2,1)" },
+    ).addEventListener("finish", () => z.remove());
+    window.setTimeout(() => z.remove(), 400);
+  }
+
   private todoHtml(): string {
     const s = this.state;
     const me = this.me;
