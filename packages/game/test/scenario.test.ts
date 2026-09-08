@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SCENARIOS, activeScenario, advanceRound, buyPlayer, clearedScenarios, judgeScenario, loanIn, newScenarioGame, scenarioBlock, scenarioById,
-  seasonOver, signFreeAgent, simulateRound, startNextSeason, transferTargets, isForeignPlayer, type GameState, type SeasonRecord,
+  seasonOver, selectionProblem, signFreeAgent, simulateRound, startNextSeason, transferTargets, isForeignPlayer, type GameState, type SeasonRecord,
 } from "../src/index";
 
 const SHORT = { halfLength: 60, autoUser: true };
@@ -94,5 +94,23 @@ describe("시나리오 모드", () => {
     expect(scenarioById("nope")).toBeUndefined();
     expect(scenarioById(undefined)).toBeUndefined();
     expect(() => newScenarioGame(606, "nope")).toThrow();
+  });
+});
+
+describe("시나리오 시작 상태의 정합성", () => {
+  it("a setup that takes players away leaves no offer, loan or captain pointing at them", () => {
+    for (const sc of SCENARIOS) {
+      for (const seed of [11, 77, 313]) {
+        const s = newScenarioGame(seed, sc.id, "측정");
+        const me = s.clubs[s.userClub]!;
+        const here = new Set(me.squad.map((p) => p.id));
+        for (const o of s.offers) expect(here.has(o.playerId)).toBe(true);
+        for (const l of s.loans) if (l.to === me.id || l.from === me.id) expect(here.has(l.playerId)).toBe(true);
+        if (me.captain) expect(here.has(me.captain)).toBe(true);
+        for (const id of [...me.selection.starters, ...me.selection.bench]) expect(here.has(id)).toBe(true);
+        expect(me.selection.starters.length).toBe(11);
+        expect(selectionProblem(me)).toBeNull();
+      }
+    }
   });
 });

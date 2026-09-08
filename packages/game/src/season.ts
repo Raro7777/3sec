@@ -19,7 +19,7 @@ import { appendCareer, applyRatings, emptyStats } from "./ratings";
 import { BOARD_FROM_ROUND, boardCupWin, boardRollover, boardWeek, newBoard } from "./board";
 import { fanHomeEdge, fansRollover, fansWeek, recordAttendance } from "./fans";
 import { derbyPreview, derbyResult, isDerby } from "./lore";
-import { matchAttrs, migrateMorale, moraleRollover, moraleWeek } from "./morale";
+import { matchAttrs, migrateMorale, moraleRollover, moraleWeek, ensureCaptain, lockerRoom } from "./morale";
 import { pressConference, skipInterview } from "./press";
 import { financeRollover, financeWeek } from "./finance";
 import { alumniRollover } from "./alumni";
@@ -52,7 +52,15 @@ export function newScenarioGame(seed: number, scenarioId: string, managerName: s
   s.scenario = { id: sc.id, season: s.season, outcome: "running" };
   sc.setup?.(s);
   const me = s.clubs[s.userClub]!;
+  // A setup may take players off the books (매각 지시, 토종 군단). Everything that pointed at them has to let
+  // go, or the home screen renders an offer for a player who is not there any more.
+  const here = new Set(me.squad.map((p) => p.id));
+  s.offers = s.offers.filter((o) => here.has(o.playerId));
+  s.loans = s.loans.filter((l) => (l.to !== me.id && l.from !== me.id) || here.has(l.playerId));
+  me.captain = me.captain && here.has(me.captain) ? me.captain : undefined;
   me.selection = repairSelection(me);
+  ensureCaptain(me);
+  lockerRoom(me);
   me.seasonStartBudget = me.budget;
   s.news.unshift(`시나리오 «${sc.name}» 시작. 목표: ${sc.goal}.`);
   return s;

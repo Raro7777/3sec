@@ -161,6 +161,12 @@ const ATTR_GROUPS: { title: string; keys: (keyof Attributes)[]; gk?: boolean }[]
 ];
 const INFO_BTN = (key: string) => `<button class="info" data-info="${key}" title="선수 프로필" aria-label="선수 프로필">ℹ</button>`;
 /** A small nationality tag after a foreign player's name; Koreans get nothing. */
+/**
+ * A collapsed explanation. The screens carry a lot of rules; showing them all at once buries the numbers a
+ * manager actually reads, so the detail sits one tap away under a small ？ and the card stays short.
+ */
+const tip = (label: string, body: string): string => `<details class="tip"><summary>${label}</summary><div class="tipBody">${body}</div></details>`;
+
 const natTag = (p: SquadPlayer): string => isForeignPlayer(p) ? ` <span class="nat" title="${p.nat}">${NAT_CODE[p.nat as keyof typeof NAT_CODE] ?? p.nat}</span>` : "";
 
 /** 1..5 전력 stars derived from reputation (10 → 1, 14.5 → 5). */
@@ -295,7 +301,8 @@ export class Game {
     const pack = loadRosterPack();
     const cur = this.state.roster;
     return `<div class="card"><h3>로스터 팩 <span>${pack ? `${pack.name} · ${pack.clubs.length}개 구단` : "없음"}</span></h3>
-      <div class="hint">구단·선수 이름을 담은 JSON 파일을 불러오면 <b>새 게임</b>을 시작할 때 적용됩니다. 진행 중인 게임${cur ? `(현재: ${cur})` : ""}은 바뀌지 않습니다. 파일은 이 기기에만 저장되고, 게임에는 가상의 구단과 선수만 들어 있습니다. 만드는 법은 저장소의 tools/roster를 보세요.</div>
+      <div class="hint">JSON 파일로 구단·선수 이름을 바꿔 <b>새 게임</b>에 적용합니다.${cur ? ` 현재: ${cur}.` : ""}</div>
+      ${tip("자세히", "진행 중인 게임은 바뀌지 않습니다. 파일은 이 기기에만 저장되고, 게임에는 가상의 구단과 선수만 들어 있습니다. 만드는 법은 저장소의 tools/roster를 보세요.")}
       <div class="actions"><label style="cursor:pointer"><input type="file" id="setRosterFile" accept=".json,application/json" style="display:none"><span style="border:1px solid #2c3d4b;border-radius:6px;padding:6px 10px;background:#1a2530;color:var(--text)">로스터 파일 불러오기</span></label><button data-set="rosterTemplate">템플릿 복사</button>${pack ? '<button class="danger" data-set="rosterClear">해제</button>' : ""}</div>
       <div class="hint" id="rosterMsg"></div></div>`;
   }
@@ -324,18 +331,19 @@ export class Game {
   private renderOnboarding(): void {
     const stars = (n: number) => `<span class="stars" title="전력 ${n}/5">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
     const h: string[] = [];
-    h.push(`<div class="card onb-welcome"><img class="onbArt" src="./art/splash.webp" alt=""><h3>환영합니다</h3>
-      <div class="onb-title">가난한자의 FM에 오신 것을 환영합니다</div>
-      <div class="hint">1부·2부 각각 12개 구단이 22라운드 리그를 치릅니다. 매 시즌 1부 하위 2팀이 강등되고 2부 상위 2팀이 승격합니다. 감독 이름을 정하고 이끌 팀을 하나 고르세요.</div>
-      <div class="hint" style="color:var(--accent)">커리어 모드 추천: 평판 낮은 구단에서 시작하세요. 기대를 넘는 성적은 감독 평판을 빠르게 올리고, 시즌 중 큰 구단의 감독직 제안으로 이어집니다.</div>
+    h.push(`<div class="card onb-welcome"><img class="onbArt" src="./art/splash.webp" alt=""><h3>새 커리어</h3>
+      <div class="onb-title">가난한자의 FM</div>
+      <div class="hint">이름을 정하고 팀을 고르세요. 시나리오나 🎲 랜덤으로 시작해도 됩니다.</div>
+      ${tip("리그는 어떻게 굴러가나요", "1부·2부 각각 12개 구단이 22라운드를 치릅니다. 매 시즌 1부 하위 2팀이 강등되고 2부 상위 2팀이 승격합니다. 평판 낮은 구단에서 시작하면 기대를 넘는 성적이 감독 평판을 빠르게 올리고, 큰 구단의 감독직 제안으로 이어집니다.")}
       <label style="margin-top:4px">감독 이름 <input id="onbName" type="text" placeholder="감독 이름" maxlength="12" autocomplete="off" /></label>
-      <div class="hint">비워두면 "감독"으로 불립니다.</div>
-      <div class="onb-diff-title">난이도 <small>시작 후에는 바꿀 수 없습니다</small></div>
+      <div class="onb-diff-title">난이도 <small>나중에 못 바꿉니다</small></div>
       <div class="onb-diff">${DIFFICULTY_ORDER.map((d) => `<button type="button" class="diff-card${this.pickedDifficulty === d ? " sel" : ""}" data-diff="${d}"><b>${DIFFICULTIES[d].label}</b><small>${DIFFICULTIES[d].blurb}</small></button>`).join("")}</div></div>`);
     // 시나리오 모드: a named run with its own club, its own opening state and one goal for the first season.
     const cleared = new Set(this.state.scenariosCleared ?? []);
     h.push(`<div class="card"><h3>시나리오 <span>${this.pickedScenario ? scenarioById(this.pickedScenario)!.name : `${SCENARIOS.length}개 · 선택 사항`}</span></h3>
-      <div class="hint">조건이 정해진 커리어입니다. 시나리오를 고르면 구단과 시작 상황이 함께 정해지고, 첫 시즌이 끝날 때 성공·실패가 판정됩니다. 그 뒤로는 평범한 커리어처럼 계속 이어집니다.</div>
+      <div class="actions" style="margin:0 0 6px"><button type="button" id="onbRandScen">🎲 랜덤 시나리오</button></div>
+      <div class="hint">조건이 정해진 커리어. 구단과 시작 상황이 함께 정해집니다.</div>
+      ${tip("판정은 어떻게 되나요", "첫 시즌이 끝날 때 목표 달성 여부로 성공·실패가 갈립니다. 경질되면 실패입니다. 어느 쪽이든 커리어는 평범하게 이어지고, 성공은 명예의 전당에 남습니다.")}
       <div class="scen-grid">${SCENARIOS.map((sc) => `<button type="button" class="scen-card${this.pickedScenario === sc.id ? " sel" : ""}" data-scen="${sc.id}">
         <div class="sc-head"><b>${sc.name}</b><span class="stars" title="난이도 ${sc.stars}/3">${"★".repeat(sc.stars)}<i>${"★".repeat(3 - sc.stars)}</i></span>${cleared.has(sc.id) ? '<span class="sc-done">클리어</span>' : ""}</div>
         <div class="sc-tag">${sc.tagline}</div>
@@ -366,7 +374,7 @@ export class Game {
     }
     const scen = scenarioById(this.pickedScenario ?? undefined);
     const ready = !!scen || this.pickedClub !== null;
-    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${ready ? "" : "disabled"}>${scen ? `«${scen.name}» 시작 →` : "이 팀으로 시작 →"}</button><span class="hint" id="onbHint">${scen ? `구단은 시나리오가 정합니다 · 목표: ${scen.goal}` : this.pickedClub === null ? "팀을 먼저 선택하세요." : `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
+    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${ready ? "" : "disabled"}>${scen ? `«${scen.name}» 시작 →` : "이 팀으로 시작 →"}</button><button type="button" id="onbRandClub">🎲 랜덤 팀</button><button type="button" id="onbRandAll">🎲 전부 랜덤으로 시작</button><span class="hint" id="onbHint">${scen ? `구단은 시나리오가 정합니다 · 목표: ${scen.goal}` : this.pickedClub === null ? "팀을 먼저 선택하세요." : `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
     this.el.onboarding.innerHTML = h.join("");
 
     const nameInput = document.getElementById("onbName") as HTMLInputElement;
@@ -392,6 +400,36 @@ export class Game {
       this.pickedDifficulty = b.dataset.diff as Difficulty;
       this.el.onboarding.querySelectorAll<HTMLElement>(".diff-card").forEach((x) => x.classList.toggle("sel", x === b));
     }));
+    // 🎲: a random club, a random scenario, or both at once — for a manager who would rather be dealt a hand.
+    const pickRandomClub = (): void => {
+      this.pickedScenario = null;
+      this.pickedClub = Math.floor(Math.random() * WORLD_CLUBS.length);
+      const name = nameInput.value;
+      this.renderOnboarding();
+      (document.getElementById("onbName") as HTMLInputElement).value = name;
+      document.querySelector<HTMLElement>(`.club-card[data-club="${this.pickedClub}"]`)?.scrollIntoView({ block: "center" });
+    };
+    document.getElementById("onbRandClub")?.addEventListener("click", pickRandomClub);
+    document.getElementById("onbRandScen")?.addEventListener("click", () => {
+      this.pickedClub = null;
+      this.pickedScenario = SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)]!.id;
+      const name = nameInput.value;
+      this.renderOnboarding();
+      (document.getElementById("onbName") as HTMLInputElement).value = name;
+      document.querySelector<HTMLElement>(`.scen-card[data-scen="${this.pickedScenario}"]`)?.scrollIntoView({ block: "center" });
+    });
+    document.getElementById("onbRandAll")?.addEventListener("click", () => {
+      // half the time a scenario, half the time a plain club: both are a real career
+      const name = nameInput.value;
+      if (Math.random() < 0.5) {
+        this.pickedScenario = SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)]!.id;
+        this.pickedClub = null;
+        this.finishOnboarding(null, name);
+      } else {
+        this.pickedScenario = null;
+        this.finishOnboarding(Math.floor(Math.random() * WORLD_CLUBS.length), name);
+      }
+    });
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) startBtn.click(); });
     startBtn.addEventListener("click", () => {
       if (this.pickedScenario) { this.finishOnboarding(null, nameInput.value); return; }
@@ -1627,7 +1665,7 @@ export class Game {
         <div class="pcStats wrap"><div>좌석<b>${a.capacity.toLocaleString("ko-KR")}석</b><small>${a.pendingSeats ? `다음 시즌 +${a.pendingSeats.toLocaleString("ko-KR")}` : `원래 ${a.baseCapacity.toLocaleString("ko-KR")}석`}</small></div><div>객석 점유<b>${occ}</b><small>홈 ${a.homeMatches}경기</small></div><div>매진<b>${a.sellouts}회</b><small>이번 시즌</small></div><div>입장 수입<b>${(me.seasonGate ?? 0).toFixed(1)}억</b><small>이번 시즌</small></div></div>
         ${a.maxSeats > 0 ? `<div class="kitInputs"><label style="flex:1">확장 규모 <input type="range" id="expSeats" min="${EXPANSION_STEP}" max="${a.maxSeats}" step="${EXPANSION_STEP}" value="${EXPANSION_STEP}"></label></div>
         <div class="hint" id="expInfo"></div>
-        <div class="hint">좌석당 비용은 구단 평판에 따라 오릅니다 (1,000석당 ${a.costPer1000}억). 원래 좌석의 50%까지, 시즌마다 한 번 확장할 수 있고 공사는 다음 시즌 개막에 끝납니다. 관중은 좌석을 넘지 못하므로 매진이 잦을 때만 확장이 남습니다.</div>
+        ${tip("자세히", `좌석당 비용은 구단 평판에 따라 오릅니다 (1,000석당 ${a.costPer1000}억). 원래 좌석의 50%까지, 시즌마다 한 번 확장할 수 있고 공사는 다음 시즌 개막에 끝납니다. 관중은 좌석을 넘지 못하므로 매진이 잦을 때만 확장이 남습니다.`)}
         <div class="pcActions"><button class="primary" data-sheet="custom" data-act="expand">🏗 구장 확장</button></div>` : `<div class="hint">이 구장은 더 이상 확장할 수 없습니다 (원래 좌석의 50%까지).</div>`}
       </div>
       <div class="pcActions"><button data-sheet="close">닫기</button></div>
@@ -1972,7 +2010,7 @@ export class Game {
         <label>초점 <select id="trFocus">${(Object.keys(FOCUS_LABEL) as TrainingFocus[]).map((f) => `<option value="${f}" ${f === tr.focus ? "selected" : ""}>${FOCUS_LABEL[f]}</option>`).join("")}</select></label>
         <label>강도 <select id="trIntensity">${(Object.keys(INTENSITY_LABEL) as TrainingIntensity[]).map((i) => `<option value="${i}" ${i === tr.intensity ? "selected" : ""}>${INTENSITY_LABEL[i]}</option>`).join("")}</select></label>
       </div>
-      <div class="hint">어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만(강하게 ×1.4, 가볍게 ×0.7) 회복이 느리고 부상이 잦아집니다. 23세 이하는 경기에 60분 이상 뛰면 추가로 성장하고, 한 주 내내 결장하면 성장이 20% 느려집니다.</div></div>`);
+      ${tip("자세히", `어린 선수는 잠재력까지 성장하고 30대는 서서히 쇠퇴합니다. 초점을 둔 능력치가 먼저 오르고, 강도를 높이면 성장은 빠르지만(강하게 ×1.4, 가볍게 ×0.7) 회복이 느리고 부상이 잦아집니다. 23세 이하는 경기에 60분 이상 뛰면 추가로 성장하고, 한 주 내내 결장하면 성장이 20% 느려집니다.`)}</div>`);
     hTrain.push(this.staffCardHtml(locked));
     hTac.push(`<div class="card"><h3>기본 전술 <span>경기 중에도 변경 가능</span></h3>
       <div class="actions">${Object.keys(TACTIC_PRESETS).map((n) => `<button data-preset="${n}" ${locked ? "disabled" : ""}>${n}</button>`).join("")}<button data-autoroles ${locked ? "disabled" : ""}>역할 자동</button></div>
@@ -2116,7 +2154,7 @@ export class Game {
       : '<div class="hint">지금은 시장에 나온 코치가 없습니다. 다음 이적 시장에 새 코치가 나옵니다.</div>';
     return `<div class="card"><h3>코칭스태프 <span>${staff.length}/${MAX_STAFF}명 · 연봉 합계 ${staffWageBill(me)}억</span></h3>
       <div class="roster">${mine}</div>
-      <div class="hint">수석코치는 1군 훈련 성장을 돕고, <b>자동 진행 라운드에서는 내 기본 전술에 자신의 성향(공격적·압박·점유 등)을 더해 교체와 전술 조정을 맡습니다</b>. GK 코치는 골키퍼 성장, 유스 코치는 아카데미 성장·스카우팅 정밀도, 피지컬 코치는 주간 회복과 부상 예방, 의무 팀장은 부상 기간, 스카우트는 이적 타깃의 잠재력 보고서를 담당합니다. 능력 8이 평균이며, 그 이상이면 효과가 커집니다. 연봉은 시즌 중 매주 예산에서 나갑니다.</div>
+      ${tip("자세히", `수석코치는 1군 훈련 성장을 돕고, <b>자동 진행 라운드에서는 내 기본 전술에 자신의 성향(공격적·압박·점유 등)을 더해 교체와 전술 조정을 맡습니다</b>. GK 코치는 골키퍼 성장, 유스 코치는 아카데미 성장·스카우팅 정밀도, 피지컬 코치는 주간 회복과 부상 예방, 의무 팀장은 부상 기간, 스카우트는 이적 타깃의 잠재력 보고서를 담당합니다. 능력 8이 평균이며, 그 이상이면 효과가 커집니다. 연봉은 시즌 중 매주 예산에서 나갑니다.`)}
       <h3 style="margin-top:10px">코치 시장 <span>${market.length}명 · 계약금 = 연봉 1년치</span></h3>
       <div class="roster">${pool}</div></div>`;
   }
@@ -2395,14 +2433,14 @@ export class Game {
         <span style="text-align:right">${right}</span>${INFO_BTN(`${clubId}:${p.id}`)}</div>`;
     const h: string[] = [], hOff: string[] = [], hBuy: string[] = [], hSell: string[] = [], hFree: string[] = [];
     h.push(`<div class="card"><h3>이적 시장 <span>예산 ${me.budget}억 · 스쿼드 ${me.squad.length}/${MAX_SQUAD} · 외국인 ${foreignCount(me)}/${FOREIGN_QUOTA}</span></h3>
-      <div class="hint">${open ? `<b style="color:var(--good)">열림</b>${deadlineDay(s) ? ' · <b style="color:var(--accent)">마감일</b> — 구단들이 평소보다 쉽게 응합니다' : ""} — 프리시즌(1R 전), 겨울(11~12R 전), 시즌 종료 후에 거래할 수 있습니다.` : '<b style="color:var(--warn)">닫힘</b> — 다음 창구: ' + (s.round < 10 ? "11라운드 전" : "시즌 종료 후")}
+      <div class="hint">${open ? `<b style="color:var(--good)">열림</b>${deadlineDay(s) ? ' · <b style="color:var(--accent)">마감일</b> — 구단들이 쉽게 응합니다' : ""}` : `<b style="color:var(--warn)">닫힘</b> · 다음 창구 ${s.round < 10 ? "11라운드 전" : "시즌 종료 후"}`}
       ${locked ? " · 경기 중에는 거래할 수 없습니다." : ""}</div>
       <div class="squad-tools"><label>포지션 <select id="trRole">${roles.map((r) => `<option ${r === this.transferRole ? "selected" : ""}>${r}</option>`).join("")}</select></label>
         <span class="chips">${([["ovr", "능력순"], ["value", "싼 순"], ["age", "어린 순"], ["pot", "잠재력순"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferSort === k ? "on" : ""}" data-sort="${k}">${l}</button>`).join("")}</span>
         <span class="chips">${([["all", "전체"], ["home", "국내"], ["abroad", "해외"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferScope === k ? "on" : ""}" data-scope="${k}">${l}</button>`).join("")}</span>
-      <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span>
+      ${tip("호가와 외국인 규정", `호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.<br>외국인은 보유 ${FOREIGN_QUOTA}명, 동시 선발 ${FOREIGN_ON_PITCH}명까지. 해외 구단 선수는 국내보다 ${Math.round((FOREIGN_PREMIUM - 1) * 100)}% 비싸고, 주전은 상위 리그로 갈 때만 응합니다. 대신 해외 구단이 우리 스타에게 큰돈을 들고 오기도 합니다.`)}
       ${scenarioBlock(s, "transfer") ? `<span class="hint" style="color:var(--warn)"><b>시나리오 제약</b> · ${scenarioBlock(s, "transfer")}. 판매와 재계약은 그대로 할 수 있습니다.</span>` : ""}
-      <span class="hint"><b>외국인 규정</b>: 보유 ${FOREIGN_QUOTA}명, 동시 선발 ${FOREIGN_ON_PITCH}명까지. 해외 구단 선수의 호가는 국내보다 ${Math.round((FOREIGN_PREMIUM - 1) * 100)}% 비싸고, 주전은 상위 리그로 갈 때만 잘 응합니다. 대신 해외 구단이 우리 스타 선수에게 큰돈을 들고 찾아오기도 합니다.</span></div></div>`);
+      </div></div>`);
     // ---- incoming offers
     const offers = openOffers(s);
     if (offers.length || open) {
@@ -2459,7 +2497,7 @@ export class Game {
     const myLoanIns = s.loans.filter((l) => l.to === me.id).length;
     const canLoanOut = can && me.squad.filter((p) => !p.onLoan && p.loanFrom === undefined).length - 1 >= MIN_SQUAD;
     hFree.push(`<div class="card"><h3>임대 <span>시즌 종료 시 복귀</span></h3>
-      <div class="hint"><b>임대 보내기</b>: 23세 이하이거나 비주전인 선수를 필요한 구단에 보냅니다. 연봉 50%를 상대가 부담하고 어린 선수는 조금 더 빨리 성장합니다. <b>임대 영입</b>: 다른 구단의 비주전을 이적료 없이 데려오되 연봉은 전액 부담합니다 (시즌당 2명).</div>
+      ${tip("자세히", `<b>임대 보내기</b>: 23세 이하이거나 비주전인 선수를 필요한 구단에 보냅니다. 연봉 50%를 상대가 부담하고 어린 선수는 조금 더 빨리 성장합니다. <b>임대 영입</b>: 다른 구단의 비주전을 이적료 없이 데려오되 연봉은 전액 부담합니다 (시즌당 2명).`)}
       ${onLoan.length ? `<div class="roster">${onLoan.map((p) => { const l = s.loans.find((x) => x.playerId === p.id); return fmtRow(p, l ? `→ ${clubOf(s, l.to).shortName}` : "", '<span class="hint">임대 중 · 시즌 후 복귀</span>'); }).join("")}</div>` : ""}
       <h3 style="margin-top:6px">보낼 수 있는 선수 <span>${outs.length}명</span></h3>
       <div class="roster">${outs.length ? outs.map((p) => { const d = loanDestination(s, p); return fmtRow(p, "", d ? `<button data-loanout="${p.id}" ${canLoanOut ? "" : "disabled"} ${btn} title="${d.name}이(가) 받습니다">임대 → ${d.shortName}</button>` : '<span class="hint">원하는 구단 없음</span>'); }).join("") : '<div class="hint">임대 보낼 만한 선수가 없습니다.</div>'}</div>
@@ -2591,7 +2629,7 @@ export class Game {
         <label>스카우팅 <select id="ytScouting">${tiers.map((k) => `<option value="${k}" ${k === y.scouting ? "selected" : ""}>${SCOUTING[k].label} · ${SCOUTING[k].intake}명 · 주 ${SCOUTING[k].cost}억</option>`).join("")}</select></label>
         <label>코칭 <select id="ytCoaching">${[1, 2, 3].map((l) => `<option value="${l}" ${l === y.coaching ? "selected" : ""}>${COACHING[l]!.label} · 주 ${COACHING[l]!.cost}억</option>`).join("")}</select></label>
       </div>
-      <div class="hint">유망주는 시즌 시작과 11라운드 전에 들어옵니다. 스카우팅 등급이 높을수록 인원이 많고 잠재력 상한이 높으며 <b>잠재력 범위</b>가 빨리 좁혀집니다. 코칭 등급은 성장 속도를 정합니다(×${(0.8 + 0.3 * y.coaching).toFixed(1)}). 비용은 연봉과 함께 매주 빠집니다.</div></div>`);
+      ${tip("자세히", `유망주는 시즌 시작과 11라운드 전에 들어옵니다. 스카우팅 등급이 높을수록 인원이 많고 잠재력 상한이 높으며 <b>잠재력 범위</b>가 빨리 좁혀집니다. 코칭 등급은 성장 속도를 정합니다(×${(0.8 + 0.3 * y.coaching).toFixed(1)}). 비용은 연봉과 함께 매주 빠집니다.`)}</div>`);
     const header = `<div class="row yt" style="color:var(--muted);font-size:11px"><span>포지션</span><span>이름</span><span style="text-align:right">능력</span><span style="text-align:right">잠재력</span><span></span></div>`;
     const row = (p: (typeof prospects)[number]) => {
       const ovr = prospectOverall(p);
