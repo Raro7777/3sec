@@ -6,7 +6,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-if [[ "${1:-}" != "--no-web" ]]; then (cd "$ROOT" && node web/build.mjs); fi
+if [[ "${1:-}" != "--no-web" ]]; then (cd "$ROOT" && node web/build.mjs --with-standee --no-hero); fi
 if [[ -z "${ANDROID_HOME:-}" && ! -f "$HERE/local.properties" ]]; then
   for d in /opt/android-sdk "$HOME/Android/Sdk" "$HOME/Library/Android/sdk" /usr/lib/android-sdk; do
     if [[ -d "$d/platforms" ]]; then export ANDROID_HOME="$d"; break; fi

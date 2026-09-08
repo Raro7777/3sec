@@ -1,7 +1,7 @@
 <title>블룸 리그 매니저</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=Barlow+Condensed:wght@500;600;700;800&family=Black+Han+Sans&display=swap">
 <style>
 :root{
   /* 밝고 캐주얼한 바탕 + 가챠 프리미엄 광택(2026-09 디자인 오버홀).
@@ -481,6 +481,82 @@ details[open] summary::after{content:"▴"}
   @keyframes fadein{from{opacity:0}to{opacity:1}}
   @keyframes lblin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 }
+
+/* ================= 게임 UI 키트 + 홈 허브 씬 (2026-09, 디자인 오버홀 2차) ================= */
+:root{ --display:"Black Han Sans","Gothic A1",sans-serif; }
+.disp{font-family:var(--display);font-weight:400;letter-spacing:0}
+
+/* 홈 허브: 배경 씬 위에 캐릭터와 떠 있는 프레임 HUD. 스크롤 목록이 아니라 한 장의 씬. */
+.hub{position:relative;margin:-14px -14px 12px;min-height:calc(100dvh - 160px);overflow:hidden;
+  background:#cfe0f2 center/cover no-repeat;isolation:isolate}
+.hub.noimg{background:radial-gradient(120% 80% at 50% 0%,#BFE0FF,#7FB4EE 60%,#5B93D8)}
+.hub::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(12,22,36,.42) 0%,rgba(12,22,36,0) 24% 52%,rgba(231,239,248,.55) 82%,var(--bg) 100%)}
+.hub-in{position:relative;z-index:2;display:flex;flex-direction:column;min-height:calc(100dvh - 160px);padding:14px}
+.hub-char{position:absolute;left:50%;bottom:0;transform:translateX(-50%);z-index:1;width:66%;max-width:340px;
+  filter:drop-shadow(0 14px 18px rgba(12,22,36,.4));pointer-events:none}
+.hub-char img{display:block;width:100%;height:auto;object-fit:contain;
+  -webkit-mask-image:linear-gradient(180deg,#000 86%,transparent 99%);mask-image:linear-gradient(180deg,#000 86%,transparent 99%)}
+@media (prefers-reduced-motion:no-preference){ .hub-char{animation:hubbob 5.5s ease-in-out infinite} @keyframes hubbob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-9px)}} }
+.hub-char.enter{animation:charin .7s cubic-bezier(.2,.8,.2,1.05) both}
+@keyframes charin{from{opacity:0;transform:translate(-50%,26px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* 떠 있는 유리 프레임 플레이트 */
+.plate{position:relative;background:rgba(255,255,255,.72);backdrop-filter:blur(10px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 8px 24px rgba(21,45,74,.18),inset 0 1px 0 rgba(255,255,255,.7);padding:12px 14px}
+.plate.dark{background:rgba(16,28,44,.52);border-color:rgba(255,255,255,.18);color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+
+/* 상단 구단 아이덴티티 배너 */
+.hub-id{display:flex;align-items:center;gap:11px}
+.hub-id .emb{width:44px;height:44px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.hub-id .eyebrow{font-family:"Barlow Condensed",sans-serif;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--court);font-weight:700}
+.hub-id h1{font-family:var(--display);font-size:27px;line-height:1;margin:1px 0 0;color:var(--ink);letter-spacing:0}
+
+/* 스탯 칩 3개(떠 있는 미니 플레이트) */
+.hub-stats{display:flex;gap:8px;margin-top:10px}
+.hub-stats .st1{flex:1;text-align:center;padding:8px 4px}
+.hub-stats .v{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:24px;line-height:1;color:var(--ink)}
+.hub-stats .k{font-size:10.5px;color:var(--ink2);margin-top:3px;font-weight:600}
+
+/* 하단 액션 도크: 큰 게임 버튼 + 이름표 */
+.hub-dock{margin-top:auto;position:relative;z-index:2}
+.namep{display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 12px 6px 8px;border-radius:999px}
+.namep .ava{width:34px;height:34px;border-width:2px}
+.namep b{font-family:var(--display);font-size:17px;color:#fff;letter-spacing:0}
+.namep .rar{font-size:11px}
+.gbtn-row{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.gbtn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  min-height:62px;border-radius:16px;font-family:var(--display);font-size:19px;letter-spacing:0;color:#fff;
+  border:none;overflow:hidden;box-shadow:0 6px 0 rgba(0,0,0,.16),0 10px 20px rgba(21,45,74,.22);
+  background:linear-gradient(180deg,var(--court-2),var(--court));transition:transform .08s,box-shadow .08s}
+.gbtn .s{font-family:"Gothic A1",sans-serif;font-size:10.5px;font-weight:700;opacity:.85;letter-spacing:0}
+.gbtn::before{content:"";position:absolute;left:0;right:0;top:0;height:46%;background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,0));pointer-events:none}
+.gbtn:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,.16),0 4px 10px rgba(21,45,74,.2)}
+.gbtn.play{background:linear-gradient(180deg,var(--hot-2),var(--hot));box-shadow:0 6px 0 rgba(120,60,0,.22),0 10px 22px rgba(241,145,60,.4)}
+.gbtn.ghost2{background:linear-gradient(180deg,#fff,#eef4fb);color:var(--court);box-shadow:0 6px 0 rgba(21,45,74,.1),0 8px 16px rgba(21,45,74,.14)}
+.gbtn.ghost2 .s{color:var(--ink3)}
+
+/* 홈 미션 티커(도크 위) */
+.hub-mission{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px 13px}
+.hub-mission .mi{font-size:20px;flex:none}
+.hub-mission .mt{flex:1;min-width:0}
+.hub-mission .mt b{font-size:13.5px;display:block}
+.hub-mission .mt .tiny{margin-top:2px}
+.hub-mission .mr{font-family:"Barlow Condensed",sans-serif;font-weight:800;color:var(--hot);font-size:13px;white-space:nowrap}
+.hub-gauge{height:5px;border-radius:3px;background:rgba(21,45,74,.12);overflow:hidden;margin-top:4px}
+.hub-gauge span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--court),var(--court-2))}
+
+/* 씬 아래 보조 카드(시설·기록·설정)는 접어 둔다 */
+.hub-more{margin-top:2px}
+.hub-more summary{list-style:none;cursor:pointer;text-align:center;color:var(--ink2);font-size:13px;font-weight:700;
+  padding:10px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px}
+.hub-more summary::-webkit-details-marker{display:none}
+.hub-more summary::after{content:"▾";color:var(--ink3)}
+.hub-more[open] summary::after{content:"▴"}
+
+/* 리본형 섹션 헤더(다른 화면 게임화) */
+.rib{display:inline-block;font-family:var(--display);font-size:22px;color:var(--ink);position:relative;padding-left:14px;margin:0 0 3px}
+.rib::before{content:"";position:absolute;left:0;top:12%;bottom:12%;width:6px;border-radius:3px;background:linear-gradient(180deg,var(--court-2),var(--court))}
 </style>
 
 <div id="app">
@@ -858,7 +934,7 @@ function artThumb(p, alt){ return artCrop(p, alt, 2.2, 0.15, 1); }
 /** 전신 일러스트 배너 — 선수 상세 화면 상단. 전신(hero)이 없으면 카드로 떨어진다(신인 풀은 카드가 곧 3/4 전신이다).
  *  그래도 없으면(플레이스홀더뿐) null 을 돌려주고 기존 레이아웃으로 떨어진다. */
 function heroBanner(p, name){
-  var src = artOf(p, 'hero') || artOf(p, 'card');
+  var src = artOf(p, 's') || artOf(p, 'hero') || artOf(p, 'card');
   if (!src) return null;
   return '<div style="position:relative;margin:-14px -14px 14px;overflow:hidden">'+
     '<img src="'+src+'" alt="'+String(name||'').replace(/"/g,'')+'" loading="lazy" decoding="async" '+
@@ -1182,50 +1258,61 @@ function renderIntro(){
   '</div></div>';
 }
 
+function sceneOf(name){ try { return (window.BLOOM_SCENE || {})[name] || null; } catch(e){ return null; } }
 function vHome(){
   var reps = E.representatives(G);
   var ovr = E.lineupOvr(G);
   var fillers = E.myRoster(G).filter(function(p){ return p.rarity===0; }).length;
   var hist = (G.history||[]).slice(-6).reverse();
   var best = reps.slice().sort(function(a,b){ return b.ovr-a.ovr; })[0];
-  var bg = best ? (artOf(best, 'hero') || artOf(best, 'card')) : null;      // 간판 선수 전신을 헤더 배경으로(art-pipeline 16.4). 신인은 카드가 3/4 전신
+  var chr = best ? (artOf(best, 's') || artOf(best, 'hero') || artOf(best, 'card')) : null;  // 허브 캐릭터 — 누끼 스탠디 우선
+  var scene = sceneOf('home');
   var dexN = 0, dexAll = 0;
   try { var allc = E.allCards(G), own = G.ownedCards || {}; dexAll = allc.length; dexN = allc.filter(function(c){ return own[c.id] !== undefined; }).length; } catch(e){}
+  // 홈 미션 티커
+  var mst = missionState(), mnext = mst.filter(function(s){ return !s.done; })[0];
+  var missionHtml = mnext
+    ? '<div class="plate hub-mission"><span class="mi">🎯</span><div class="mt"><b>'+esc(mnext.m.title)+'</b>'+
+        '<div class="hub-gauge"><span style="width:'+Math.round(Math.min(1,mnext.p/mnext.m.goal)*100)+'%"></span></div></div>'+
+        '<span class="mr">'+rewardText(mnext.m)+'</span></div>'
+    : '';
+  var dock = reps.length===0
+    ? '<button class="gbtn play" data-go="scout" style="width:100%">스카우트<span class="s">여섯 구단에서 원석을 데려오세요</span></button>'
+    : (best ? '<div class="namep plate dark"><span class="ava">'+portraitSvg(best,34)+'</span><b>'+esc(best.name)+'</b>'+
+         '<span class="pill rar rar-'+['N','R','SR','SSR'][best.rarity]+'">'+['N','R','SR','SSR'][best.rarity]+'</span></div>' : '')+
+      missionHtml+
+      '<div class="gbtn-row">'+
+        '<button class="gbtn ghost2" data-go="train">육성<span class="s">캠프에서 키우기</span></button>'+
+        '<button class="gbtn play" data-go="match">경기<span class="s">리그에 나서기</span></button>'+
+      '</div>';
   return h(
-   '<div class="hero">'+
-     (bg ? '<img class="hbg" src="'+bg+'" alt="" decoding="async">' : '')+
-     '<div class="hin">'+
-     '<div style="display:flex;align-items:center;gap:11px;margin-bottom:2px">'+
-       '<span class="emb" style="width:46px;height:46px">'+myEmblemSvg(46)+'</span>'+
-       '<div><div class="eyebrow">BLOOM LEAGUE · SEASON 1</div>'+
-     '<h1 style="margin:0">'+esc(G.clubName)+' '+prestigeBadge()+'</h1></div></div>'+
-     '<div class="muted">여섯 구단의 공개 스카우트 명단에서 원석을 데려와 키우고, 리그 정상에 도전합니다.</div>'+
-     '<div class="stat3">'+
-       '<div><div class="v num">'+ovr.toFixed(1)+'</div><div class="k">라인업 OVR</div></div>'+
-       '<div><div class="v num">'+reps.length+'</div><div class="k">로스터 (연습생 '+fillers+')</div></div>'+
-       '<div><div class="v num">'+G.trainingCount+'</div><div class="k">육성 완료</div></div>'+
-     '</div>'+
-     '<button class="tiny" data-go="album" style="display:block;margin-top:9px;padding:6px 0;text-decoration:underline;color:var(--ink2)">도감 '+dexN+' / '+dexAll+'</button>'+
+   '<div class="hub'+(scene?'':' noimg')+'"'+(scene?' style="background-image:url('+scene+')"':'')+'>'+
+     (chr ? '<div class="hub-char enter"><img src="'+chr+'" alt="" decoding="async"></div>' : '')+
+     '<div class="hub-in">'+
+       '<div class="plate">'+
+         '<div class="hub-id"><span class="emb">'+myEmblemSvg(44)+'</span>'+
+           '<div style="flex:1;min-width:0"><div class="eyebrow">BLOOM LEAGUE · SEASON '+(G.season||1)+'</div>'+
+           '<h1>'+esc(G.clubName)+'</h1></div>'+
+           prestigeBadge()+'</div>'+
+         '<div class="hub-stats">'+
+           '<div class="st1"><div class="v">'+ovr.toFixed(1)+'</div><div class="k">라인업 OVR</div></div>'+
+           '<div class="st1"><div class="v">'+reps.length+'</div><div class="k">로스터 · 연습생 '+fillers+'</div></div>'+
+           '<button class="st1" data-go="album" style="border:none;background:none"><div class="v">'+dexN+'</div><div class="k">도감 / '+dexAll+'</div></button>'+
+         '</div>'+
+       '</div>'+
+       '<div class="hub-dock">'+dock+'</div>'+
      '</div>'+
    '</div>'+
-   (reps.length===0
-     ? '<div class="card"><div class="spread"><div><b>먼저 선수를 스카우트하세요</b><div class="tiny" style="margin-top:3px">티켓 '+G.tickets+'장으로 시작합니다. 뽑은 신인을 12턴 캠프에서 키우면 로스터에 들어갑니다.</div></div></div>'+
-       '<button class="btn" data-go="scout" style="margin-top:12px">스카우트 하러 가기</button></div>'
-     : '<div class="card"><div class="spread"><div class="muted">간판 선수</div><div class="tiny">'+G.trainingCount+'회 육성</div></div>'+
-       pcard(best, true, best ? best.instanceId : null)+
-       '<div class="btn-row" style="margin-top:4px">'+
-         '<button class="btn ghost" data-go="train">육성하기</button>'+
-         '<button class="btn" data-go="match">경기하기</button>'+
-       '</div></div>')+
-   missionCard()+
-   facilityCard()+
-   '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
-   feedbackCard()+
-   (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
-      hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
-   '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
-     '<button data-act="sndtoggle" style="font-size:12px;padding:4px;text-decoration:underline">'+sndLabel()+'</button> '+
-     '<button data-act="reset" style="color:var(--bad);text-decoration:underline;font-size:12px;padding:4px">처음부터 다시</button></div></div>'
+   '<details class="hub-more"><summary>구단 운영 · 시설 · 기록</summary>'+
+     facilityCard()+
+     '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
+     feedbackCard()+
+     (hist.length ? '<div class="card"><div class="muted" style="margin-bottom:6px">기록</div><ul class="log">'+
+        hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
+     '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
+       '<button data-act="sndtoggle" style="font-size:12px;padding:4px;text-decoration:underline">'+sndLabel()+'</button> '+
+       '<button data-act="reset" style="color:var(--bad);text-decoration:underline;font-size:12px;padding:4px">처음부터 다시</button></div></div>'+
+   '</details>'
   );
 }
 
@@ -2284,7 +2371,7 @@ function mvpBlock(mvp){
     if (!p && mvp.teamId && mvp.teamId !== G.clubId) p = E.clubTeamState(G, mvp.teamId).roster.filter(function(x){ return x.id === mvp.playerId; })[0] || null;
     if (!p) p = E.myRoster(G).filter(function(x){ return x.id === mvp.playerId; })[0] || null;
   } catch(e){}
-  var src = p ? (artOf(p, 'hero') || artOf(p, 'card')) : null;
+  var src = p ? (artOf(p, 's') || artOf(p, 'hero') || artOf(p, 'card')) : null;
   return '<div class="card"><div class="spread"><div class="muted">시즌 MVP</div><div class="tiny">'+esc(mvp.teamName||'')+'</div></div>'+
     (src ? '<div class="mvpb"><img src="'+src+'" alt="" loading="lazy" decoding="async"><div class="cap">'+esc(mvp.playerName)+'<small>SEASON MVP · '+(mvp.value||0)+'득점</small></div></div>'
          : '<div class="pname" style="margin-top:4px">'+esc(mvp.playerName)+'</div>')+

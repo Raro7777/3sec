@@ -50,10 +50,25 @@ const court = fs.readFileSync(path.join(HERE, 'court-render.js'), 'utf8');
 //    한 장도 없으면 빈 객체가 들어가고 앱은 지금처럼 SVG 플레이스홀더를 그린다.
 //    스탠디·포즈 세트는 기본 제외(코트 그림은 리그, 16.9.2) — `--with-standee` 로 싣는다. 리그 파츠는 window.BLOOM_RIG.
 const withStandee = process.argv.includes('--with-standee');
-const { art, bytes: artBytes0, entries: artEntries, problems: artProblems } = collectArt({ standee: withStandee });
+const noHero = process.argv.includes('--no-hero');
+const { art, bytes: artBytes0, entries: artEntries, problems: artProblems } = collectArt({ standee: withStandee, hero: !noHero });
 const { rig, bytes: rigBytes } = collectRig();
 const artBytes = artBytes0 + rigBytes;
-const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';window.BLOOM_RIG=' + JSON.stringify(rig) + ';</scr' + 'ipt>';
+// 홈 허브 등 배경 씬 — art/04_export/scene/*.webp 를 data: URI 로 인라인(window.BLOOM_SCENE).
+const scene = {};
+let sceneBytes = 0;
+try {
+  const sceneDir = path.join(ROOT, 'art', '04_export', 'scene');
+  for (const f of fs.readdirSync(sceneDir)) {
+    const m = f.match(/^(.+)\.(webp|png|jpg|jpeg)$/i);
+    if (!m) continue;
+    const buf = fs.readFileSync(path.join(sceneDir, f));
+    const mime = m[2].toLowerCase() === 'png' ? 'image/png' : (/jpe?g/i.test(m[2]) ? 'image/jpeg' : 'image/webp');
+    scene[m[1]] = 'data:' + mime + ';base64,' + buf.toString('base64');
+    sceneBytes += buf.length;
+  }
+} catch {}
+const artScript = '<script>window.BLOOM_ART=' + JSON.stringify(art) + ';window.BLOOM_RIG=' + JSON.stringify(rig) + ';window.BLOOM_SCENE=' + JSON.stringify(scene) + ';</scr' + 'ipt>';
 
 // 4) 빌드 태그 — 피드백 본문에 붙는다(어느 리비전에서 난 일인지). git 이 없으면 날짜만.
 function buildTag() {

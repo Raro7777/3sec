@@ -164,11 +164,13 @@ export function collectRig() {
  */
 export function collectArt(opts = {}) {
   const withStandee = !!opts.standee;
+  const withHero = opts.hero !== false;   // 기본 true. --no-hero(빌드) 로 끄면 전신(hero)을 빼고 스탠디를 대신 쓴다(용량 절약 + 누끼 캐릭터)
   const art = {}, entries = [], problems = [];
   let bytes = 0;
   if (!fs.existsSync(EXPORT_DIR)) return { art, bytes, entries, problems };
 
   for (const pid of fs.readdirSync(EXPORT_DIR).sort()) {
+    if (pid === 'scene') continue;   // 배경 씬(홈 허브 등)은 build.mjs 가 window.BLOOM_SCENE 로 따로 싣는다
     const dir = path.join(EXPORT_DIR, pid);
     if (!fs.statSync(dir).isDirectory()) continue;
     const row = { pid, card: 0, hero: 0, stand: 0, dim: {} };
@@ -179,7 +181,10 @@ export function collectArt(opts = {}) {
       try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); }
       catch { problems.push(`${pid}: meta.json 을 읽을 수 없습니다`); }
     }
-    for (const kind of (withStandee ? ['card', 'hero', 'stand'] : ['card', 'hero'])) {
+    const kinds = ['card'];
+    if (withHero) kinds.push('hero');
+    if (withStandee) kinds.push('stand');
+    for (const kind of kinds) {
       const hit = pick(dir, pid, kind);
       if (!hit) continue;
       const { uri, bytes: n, dim } = dataUri(hit);

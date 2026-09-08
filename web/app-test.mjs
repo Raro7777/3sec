@@ -40,6 +40,8 @@ function check(name, ok, detail) {
   if (!ok) console.log(`  ✗ ${name}${detail ? ' — ' + detail : ''}`);
 }
 async function tap(sel, ms = 260) {
+  // 감독실 허브의 보조 컨트롤(시설·피드백·도움말·설정)은 <details class="hub-more"> 안에 접혀 있다 — 접힌 채면 먼저 편다.
+  await page.evaluate(() => { for (const d of document.querySelectorAll('details.hub-more')) d.open = true; }).catch(() => {});
   const el = await page.$(sel);
   if (!el) return false;
   if (await el.isDisabled().catch(() => false)) return false;
@@ -356,7 +358,7 @@ await tap('[data-go="feedback"]', 400);
   await tap('[data-act="fbcopy"]', 500);
   check('복사 결과를 알려 준다', (await count('.toast')) >= 1);
   await tap('[data-act="fbback"]', 400);
-  check('피드백에서 온 곳으로 돌아간다', (await viewText()).includes('다음 목표') || (await viewText()).includes('먼저 선수를'));
+  { const vt = await viewText(); check('피드백에서 온 곳으로 돌아간다', vt.includes('구단 운영') || vt.includes('라인업 OVR') || vt.includes('스카우트')); }
 }
 // 오류 기록 — 화면이 멈춘 이유를 피드백이 같이 실어야 한다
 {
