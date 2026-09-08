@@ -199,6 +199,19 @@ export class Broadcast {
 
   hasCard(): boolean { return !!this.cardEl; }
 
+  // ------------------------------------------------------------------ wipe
+
+  /** A colour band sweeping across the picture: what a broadcast puts between the live feed and a replay. */
+  wipe(color: string): Promise<void> {
+    if (reduced()) return Promise.resolve();
+    const w = el("div", "bcWipe");
+    w.style.setProperty("--c", color);
+    this.root.appendChild(w);
+    return new Promise((done) => {
+      window.setTimeout(() => { w.remove(); done(); }, 460);
+    });
+  }
+
   // ------------------------------------------------------------------ replay
 
   replay(on: boolean): void {

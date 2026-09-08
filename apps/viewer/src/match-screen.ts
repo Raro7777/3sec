@@ -200,6 +200,8 @@ export class MatchScreen {
   private bc: Broadcast | null = null;
   /** half-time has already been shown for this half */
   private htShown = false;
+  /** the goal a replay is about, so the scorer stays named while it runs */
+  private replayStrap: import("./broadcast").StrapSpec | null = null;
   /** 결정적 순간: the penalty-taker pick and the once-a-match last call share this overlay */
   private readonly callOverlay = document.getElementById("callOverlay") as HTMLDivElement;
   private readonly btnLastCall = document.getElementById("btnLastCall") as HTMLButtonElement;
@@ -709,11 +711,11 @@ export class MatchScreen {
         case "GOAL":
           this.goalStrap(e, false);
           if (late) {
-            this.burst("극장골!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")} · 추가시간 결승골`, "#ffd166", 3200, true);
+            this.burst("극장골!", this.bc ? "" : `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")} · 추가시간 결승골`, "#ffd166", 3200, true);
             this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
             setTimeout(() => this.sfx.roar(), 700);
           } else {
-            this.burst("골!!!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
+            this.burst("골!!!", this.bc ? "" : `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")}`, color, 2200, true);
             this.shake(now, 14); this.flashT0 = now; this.sfx.roar();
           }
           this.sfx.chant(scoringSide === 0 ? 1 : 0.45);
@@ -721,11 +723,11 @@ export class MatchScreen {
         case "OWN_GOAL":
           this.goalStrap(e, true);
           if (late) {
-            this.burst("극장골!", `${e.text} · 추가시간 결승골`, "#ffd166", 3200, true);
+            this.burst("극장골!", this.bc ? "" : `${e.text} · 추가시간 결승골`, "#ffd166", 3200, true);
             this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
             setTimeout(() => this.sfx.roar(), 700);
           } else {
-            this.burst("자책골…", e.text, "#ff6b6b", 2000, true);
+            this.burst("자책골…", this.bc ? "" : e.text, "#ff6b6b", 2000, true);
             this.shake(now, 8); this.sfx.boo();
           }
           this.sfx.chant(scoringSide === 0 ? 0.8 : 0.35);
@@ -793,11 +795,17 @@ export class MatchScreen {
   }
 
   private startReplay(clip: Clip, auto: boolean): void {
+    // a broadcast cuts to a replay behind a wipe, and names the scorer again while it runs
+    void this.bc?.wipe(this.match.teams[this.userTeam].color);
     this.replay = { clip, pos: 0, started: performance.now(), auto };
+    if (this.replayStrap) this.bc?.strap(this.replayStrap);
     this.paintPlay();
   }
 
   private endReplay(): void {
+    void this.bc?.wipe(this.match.teams[this.userTeam].color);
+    if (this.replayStrap) this.bc?.closeStrap();
+    this.replayStrap = null;
     this.replay = null;
     this.acc = 0;
     this.paintPlay();
@@ -910,15 +918,17 @@ export class MatchScreen {
     const s = this.match.state;
     const scoring = own && e.team !== null ? ((1 - e.team) as TeamId) : e.team;
     const t = scoring === null ? null : this.match.teams[scoring];
-    this.bc?.strap({
-      kind: "goal",
+    const spec = {
+      kind: "goal" as const,
       title: own ? "자책골" : "골",
       who: this.strapName(e),
       minute: this.strapMinute(),
       color: t?.color ?? "#ffd166",
       score: `${s.score[0]} - ${s.score[1]}`,
       note: t?.name,
-    });
+    };
+    this.replayStrap = spec;
+    this.bc?.strap(spec);
   }
 
   /** The half-time and full-time card, with the numbers that decided it. */
@@ -1586,29 +1596,37 @@ export class MatchScreen {
   private drawReplayHud(rp: Replay, v: View, now: number): void {
     const ctx = this.ctx;
     const blink = Math.floor(now / 500) % 2 === 0;
+    // The broadcast layer already carries the REPLAY mark and the scorer's lower third, so with it on the
+    // canvas draws neither: the same words in two places is the clutter the graphics were meant to remove.
+    const bare = !!this.bc;
     ctx.save();
-    ctx.font = `700 ${Math.max(13, v.scale * 1.6)}px 'Barlow Condensed','IBM Plex Sans KR',sans-serif`;
-    ctx.textAlign = "left"; ctx.textBaseline = "top";
     const pad = 10;
-    const label = "● REPLAY";
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(pad, pad, ctx.measureText(label).width + 16, Math.max(13, v.scale * 1.6) + 10);
-    ctx.fillStyle = blink ? "#ff4d4f" : "#ffffff";
-    ctx.fillText(label, pad + 8, pad + 5);
+    if (!bare) {
+      ctx.font = `700 ${Math.max(13, v.scale * 1.6)}px 'Barlow Condensed','IBM Plex Sans KR',sans-serif`;
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      const label = "● REPLAY";
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(pad, pad, ctx.measureText(label).width + 16, Math.max(13, v.scale * 1.6) + 10);
+      ctx.fillStyle = blink ? "#ff4d4f" : "#ffffff";
+      ctx.fillText(label, pad + 8, pad + 5);
+    }
     ctx.font = `${Math.max(11, v.scale * 1.1)}px 'IBM Plex Sans KR',sans-serif`;
-    ctx.textAlign = "right";
+    ctx.textAlign = bare ? "left" : "right";
+    ctx.textBaseline = "top";
     ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.fillText(`슬로 모션 ${REPLAY_RATE}x · 탭하여 건너뛰기`, v.w - pad, pad + 6);
-    // caption
-    const team = rp.clip.team === null ? "" : this.match.teams[rp.clip.team].shortName;
-    const cap = `${rp.clip.minute}' ${team} ${rp.clip.text}`;
-    ctx.font = `600 ${Math.max(12, v.scale * 1.3)}px 'IBM Plex Sans KR',sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    const w = ctx.measureText(cap).width + 24;
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(v.w / 2 - w / 2, v.h - pad - Math.max(12, v.scale * 1.3) - 12, w, Math.max(12, v.scale * 1.3) + 12);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(cap, v.w / 2, v.h - pad - 6);
+    const hint = bare ? "탭하여 건너뛰기" : `슬로 모션 ${REPLAY_RATE}x · 탭하여 건너뛰기`;
+    ctx.fillText(hint, bare ? pad : v.w - pad, bare ? v.h * 0.5 : pad + 6);
+    if (!bare) {
+      const team = rp.clip.team === null ? "" : this.match.teams[rp.clip.team].shortName;
+      const cap = `${rp.clip.minute}' ${team} ${rp.clip.text}`;
+      ctx.font = `600 ${Math.max(12, v.scale * 1.3)}px 'IBM Plex Sans KR',sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      const w = ctx.measureText(cap).width + 24;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(v.w / 2 - w / 2, v.h - pad - Math.max(12, v.scale * 1.3) - 12, w, Math.max(12, v.scale * 1.3) + 12);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(cap, v.w / 2, v.h - pad - 6);
+    }
     // letterbox bars for the broadcast feel
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     const bar = Math.min(28, v.h * 0.06);
@@ -1619,7 +1637,8 @@ export class MatchScreen {
       ctx.font = `600 ${fs}px 'IBM Plex Sans KR',sans-serif`;
       const label = this.gifBusy ? "GIF 만드는 중…" : "⬇ GIF 공유";
       const bw = ctx.measureText(label).width + 20, bh = fs + 12;
-      const bx = v.w - pad - bw, by = v.h - pad - bh - Math.max(12, v.scale * 1.3) - 16;
+      // the lower third owns the bottom of the picture while the broadcast graphics are up
+      const bx = v.w - pad - bw, by = v.h - pad - bh - (bare ? 74 : Math.max(12, v.scale * 1.3) + 16);
       ctx.fillStyle = this.gifBusy ? "rgba(60,60,60,0.85)" : "rgba(242,193,78,0.92)";
       ctx.beginPath(); ctx.roundRect?.(bx, by, bw, bh, bh / 2); if (!ctx.roundRect) ctx.rect(bx, by, bw, bh); ctx.fill();
       ctx.fillStyle = this.gifBusy ? "#ddd" : "#1a1400";

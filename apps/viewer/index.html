@@ -276,7 +276,9 @@
       #phase { color:var(--accent); font-size:13px; min-width:70px; }
       #stats { display:flex; gap:18px; padding:5px 14px; font-size:12px; color:var(--muted); background:var(--panel2); flex-wrap:wrap; font-variant-numeric:tabular-nums; }
       #stats b { color:var(--text); font-weight:600; margin-right:4px; }
-      #others { display:flex; gap:14px; padding:4px 14px; font-size:12px; color:var(--muted); background:var(--panel2); border-top:1px solid var(--line); flex-wrap:wrap; font-family:"IBM Plex Mono", monospace; }
+      #others { display:flex; gap:0; padding:0; font-size:12px; color:#c8d3dc; background:linear-gradient(90deg, #0a0f14, #10171e); border-top:2px solid var(--accent); flex-wrap:wrap; font-family:"IBM Plex Mono", monospace; align-items:stretch; }
+      #others > span { padding:5px 12px; border-right:1px solid rgba(255,255,255,.07); display:flex; align-items:center; gap:6px; }
+      #others > span b { color:#fff; font-weight:700; }
       /* 동시 중계: live position line, flashes when the position changes */
       #others .liveTable { flex-basis:100%; color:var(--accent); font-family:"IBM Plex Sans KR", sans-serif; }
       .immersive #others .liveTable { flex-basis:auto; }
@@ -358,6 +360,8 @@
       .bcBar { grid-column:1 / -1; display:flex; height:4px; border-radius:2px; overflow:hidden; background:rgba(255,255,255,.08); }
       .bcBar i, .bcBar u { display:block; height:100%; }
       .bcCardActs { display:flex; justify-content:flex-end; margin-top:12px; }
+      .bcWipe { position:absolute; z-index:6; inset:-10% -40%; background:linear-gradient(100deg, transparent 0 38%, var(--c) 38% 50%, rgba(255,255,255,.9) 50% 52%, var(--c) 52% 64%, transparent 64% 100%); animation:bcWipe .46s cubic-bezier(.4,0,.2,1) forwards; opacity:.92; }
+      @keyframes bcWipe { from { transform:translateX(-70%); } to { transform:translateX(70%); } }
       .bcReplay { position:absolute; right:12px; top:12px; display:flex; align-items:center; gap:6px; background:rgba(200,40,40,.9); color:#fff; font-size:11px; letter-spacing:.18em; padding:3px 9px; border-radius:3px; }
       .bcReplay i { width:7px; height:7px; border-radius:50%; background:#fff; animation:bcBlink 1s steps(2) infinite; }
       @keyframes bcBlink { 50% { opacity:.2; } }
