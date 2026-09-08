@@ -1211,7 +1211,9 @@ export class Match {
       // Foul probability: clumsy tacklers (low tackling) foul more; tackles from behind more.
       const facingDot = Math.cos(owner.facing - Math.atan2(p.pos.y - owner.pos.y, p.pos.x - owner.pos.x));
       const fromBehind = facingDot < -0.3;
-      const pFoul = (TUNING.foulBase + 0.1 * (1 - a01(attrs.tackling))) * (fromBehind ? 1.8 : 1) * (isGk ? 0.4 : 1);
+      // In his own box the defender thinks twice, and so does the referee (tuning.boxFoulFactor).
+      const inOwnBox = inPenaltyArea(b.pos, this.dirOf(1 - p.team as TeamId));
+      const pFoul = (TUNING.foulBase + 0.1 * (1 - a01(attrs.tackling))) * (fromBehind ? 1.8 : 1) * (isGk ? 0.4 : 1) * (inOwnBox ? TUNING.boxFoulFactor : 1);
 
       if (this.rng.chance(pFoul)) {
         this.foul(p, owner);

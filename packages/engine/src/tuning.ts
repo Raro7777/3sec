@@ -34,6 +34,12 @@ export interface Tuning {
   tackleRate: number;
   /** foul probability base per tackle attempt */
   foulBase: number;
+  /**
+   * How much of that a challenge inside the defending team's own penalty area carries: defenders there jockey
+   * rather than dive in, and referees swallow the whistle. Without it roughly one tackle in sixteen of a
+   * match's box challenges became a penalty (~1.5 a match, six times the real rate).
+   */
+  boxFoulFactor: number;
   /** yellow card base probability per foul */
   yellowBase: number;
   /** keeper diving reach base (m) */
@@ -81,6 +87,7 @@ export const TUNING: Tuning = {
   engageRadius: 3.5,
   tackleRate: 1.7,
   foulBase: 0.045,
+  boxFoulFactor: 0.2,
   yellowBase: 0.115,
   gkReach: 3.3,
   offsideWobble: 4,

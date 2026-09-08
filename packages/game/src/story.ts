@@ -389,7 +389,10 @@ export function storyWeek(s: GameState, rng: Rng): StoryEvent | null {
   // A moment that is only possible this week (a derby, a bid, a veteran's last weeks, a crisis) must not be
   // drowned out by the evergreen templates: when one is on, it is drawn URGENT_SHARE of the time.
   const urgent = fits.filter((t) => URGENT_TEMPLATES.has(t));
-  const pool = urgent.length && (urgent.length === fits.length || rng.next() < URGENT_SHARE) ? urgent : fits.filter((t) => !URGENT_TEMPLATES.has(t));
+  let pool = urgent.length && (urgent.length === fits.length || rng.next() < URGENT_SHARE) ? urgent : fits.filter((t) => !URGENT_TEMPLATES.has(t));
+  // Never the same template twice running: two sponsor offers in consecutive weeks read as a bug, not a story.
+  const last = (s.eventLog ?? [])[0]?.template;
+  if (last && pool.length > 1 && pool.includes(last)) pool = pool.filter((x) => x !== last);
   const t = pool[Math.floor(rng.next() * pool.length)]!;
   const d = draft(s, me, t, rng);
   if (!d) return null;

@@ -57,6 +57,7 @@ const BOUNDS: Record<keyof Tuning, [number, number]> = {
   engageRadius: [1.5, 6],
   tackleRate: [0.5, 3.0],
   foulBase: [0.01, 0.2],
+  boxFoulFactor: [0.05, 1],
   yellowBase: [0.03, 0.3],
   gkReach: [1.2, 2.8],
   offsideWobble: [0.5, 6],
