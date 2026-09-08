@@ -129,6 +129,8 @@ export const CHEMISTRY = {
   enabled: true,
   perGame: 2, maxGames: 20,
   clubBase: 12, newBase: 4,
+  bondBonus: 8,   // 인연(training-mode 6.4): 육성 중 인연 순간을 겪은 세터·공격수 짝의 케미 기본 보정(+). 리그 층에서만 작동한다
+
   // 세터 아키타입 × 공격수 아키타입 → 궁합 (commentary.js ARCHETYPES: fire 승부사 · ice 냉정파 · sun 분위기 메이커 · rock 노력파 · shy 수줍음 · show 스타 기질)
   pair: {
     fire: { fire: 2, ice: -4, sun: 3, rock: 2, shy: -3, show: 4 },
@@ -149,18 +151,30 @@ export function chemistryValue(setter, attacker, games, base) {
   const v = 50 + Math.min(CHEMISTRY.maxGames, CHEMISTRY.perGame * (games | 0)) + (base | 0) + pairBonus(setter, attacker);
   return v < 0 ? 0 : (v > 100 ? 100 : v);
 }
-/** 내 팀 케미 표(세터 전원 × 나머지). 함께 뛴 경기는 state.pairGames. 꺼져 있으면 null(엔진 기본 50). */
+/** 내 팀 케미 표(세터 전원 × 나머지). 함께 뛴 경기는 state.pairGames, 인연은 state.bonds. 꺼져 있으면 null(엔진 기본 50). */
 export function myChemistry(state, roster) {
   if (!CHEMISTRY.enabled) return null;
-  const map = new Map(), pg = state.pairGames || {};
+  const map = new Map(), pg = state.pairGames || {}, bonds = state.bonds || {};
   for (const sp of roster) {
     if (sp.pos !== POS.S) continue;
     for (const ap of roster) {
       if (ap === sp || ap.isLibero) continue;
-      map.set(sp.id + '|' + ap.id, chemistryValue(sp, ap, pg[sp.id + '|' + ap.id] | 0, 0));
+      const bonded = !!(bonds[sp.id] && bonds[sp.id][ap.id]);   // 인연 짝이면 케미 기본 보정(training-mode 6.4)
+      map.set(sp.id + '|' + ap.id, chemistryValue(sp, ap, pg[sp.id + '|' + ap.id] | 0, bonded ? CHEMISTRY.bondBonus : 0));
     }
   }
   return map;
+}
+/** 인연 기록(training-mode 6.4). 육성 세션에서 인연 순간이 났으면 그 선수와 상대를 서로 이어 둔다. RNG·판정 밖. */
+function recordBond(state, session, inst) {
+  if (!session || !session.log || !inst) return;
+  const rec = session.log.find(r => r && r.bond);
+  if (!rec || !rec.bond || !rec.bond.supporterId) return;
+  const a = inst.instanceId, b = rec.bond.supporterId;
+  if (!a || !b || a === b) return;
+  if (!state.bonds) state.bonds = {};
+  (state.bonds[a] || (state.bonds[a] = {}))[b] = 1;
+  (state.bonds[b] || (state.bonds[b] = {}))[a] = 1;
 }
 /** AI 구단 케미 표 — 원소속 슬롯 선수끼리는 clubBase, 생성 선수가 끼면 newBase. */
 export function clubChemistry(roster) {
@@ -195,11 +209,12 @@ export function lineupChemistry(state) {
   const setterId = ts.lineup.startingIds.find(id => { const p = ts.index.get(id); return p && p.pos === POS.S; });
   const out = {};
   if (!setterId || !CHEMISTRY.enabled) return { setterId: setterId || null, pairs: out };
-  const sp = ts.index.get(setterId), pg = state.pairGames || {};
+  const sp = ts.index.get(setterId), pg = state.pairGames || {}, bonds = state.bonds || {};
   for (const id of ts.lineup.startingIds.concat(ts.lineup.benchIds || [])) {
     const ap = ts.index.get(id); if (!ap || ap === sp || ap.isLibero) continue;
     const games = pg[setterId + '|' + id] | 0;
-    out[id] = { value: chemistryValue(sp, ap, games, 0), games, bonus: pairBonus(sp, ap) };
+    const bonded = !!(bonds[setterId] && bonds[setterId][id]);   // 인연 짝(training-mode 6.4)
+    out[id] = { value: chemistryValue(sp, ap, games, bonded ? CHEMISTRY.bondBonus : 0), games, bonus: pairBonus(sp, ap), bond: bonded };
   }
   return { setterId, pairs: out };
 }
@@ -654,6 +669,7 @@ export function createGame({ seed = 1, clubName, clubCity, unlimitedTickets = fa
     injuries: {},               // 경상 결장(match-sim 17절) — id → { until, season, days, part }
     subsAuto: true,             // 자동 교체 방침(match-sim 16절)
     pairGames: {},              // 세터|공격수 함께 뛴 경기 수 — 케미(match-sim 18절)
+    bonds: {},                  // 인연(training-mode 6.4): instanceId → { partnerInstanceId: 1 }. 케미 기본 보정에만 쓴다(리그 층)
   };
   state.fillers = createFillers(state);
   return state;
@@ -743,6 +759,7 @@ export function saveGame(state) {
     sa: state.subsAuto === false ? 0 : 1,   // 자동 교체 방침(match-sim 16절)
     ij: state.injuries || {},                // 경상 결장(17절)
     pg: state.pairGames || {},               // 케미 — 함께 뛴 경기 수(18절)
+    bd: state.bonds || {},                    // 인연(training-mode 6.4) — 케미 기본 보정
   };
 }
 
@@ -837,6 +854,7 @@ export function loadGame(json) {
   state.subsAuto = j.sa === 0 ? false : true;
   state.injuries = j.ij || {};
   state.pairGames = j.pg || {};
+  state.bonds = j.bd || {};
   state.fillers = createFillers(state);
   if (state.lineupStarters && !lineupValid(state)) { state.lineupStarters = null; state.lineupLibero = null; }
   return state;
@@ -923,6 +941,10 @@ export function scout(state, opts = {}) {
     const r = rng.nextDouble();
     rarity = r < ECONOMY.scoutR ? RARITY.R : (r < ECONOMY.scoutR + ECONOMY.scoutSR ? RARITY.SR : RARITY.SSR);
   }
+  // 10연 SR 이상 보장(B.2.1). 10연의 마지막 뽑기까지 SR+ 가 없으면 이 뽑기를 SR 로 올린다.
+  // 난수는 이미 소비했으므로 등급만 승격한다 — 카드 선택 스트림은 그대로다(결정성 유지). SR 천장(10)이 대개 먼저 걸어
+  // 실제로는 도달하기 어렵지만, 천장 상수와 무관하게 명시적으로 보장한다.
+  if (opts._guaranteeSR && rarity < RARITY.SR) { rarity = RARITY.SR; triggered = 'ten'; }
   if (rarity >= RARITY.SR) state.pitySR = 0;
   if (rarity === RARITY.SSR) state.pitySSR = 0;
 
@@ -961,6 +983,24 @@ export function scout(state, opts = {}) {
     gold: state.gold | 0,
     cost,
   };
+}
+
+/**
+ * 10연속 스카우트. league-and-economy.md B.2.1 — **SR 이상 1장 보장**.
+ * 단발 scout 를 10번 부르되, 9번째까지 SR+ 가 하나도 없으면 10번째를 확정 SR 로 올린다(_guaranteeSR).
+ * 천장(SR 10 · SSR 60)은 그대로 누적된다. season-check·parity 는 단발 scout 만 쓰므로 캘리브레이션에 닿지 않는다.
+ * @returns {Array} scout() 결과 10개. 보장으로 올라간 카드는 pity.triggered === 'ten'.
+ */
+export function scoutTen(state, opts = {}) {
+  const results = [];
+  let gotSR = false;
+  for (let i = 0; i < 10; i++) {
+    const guarantee = i === 9 && !gotSR;
+    const r = scout(state, Object.assign({}, opts, { _guaranteeSR: guarantee }));
+    if (r.rarity === 'SR' || r.rarity === 'SSR') gotSR = true;
+    results.push(r);
+  }
+  return results;
 }
 
 /** 조각 +1. 3개면 티켓 1로 변환. Game.cs:136 AddFragment */
@@ -1159,6 +1199,7 @@ export function graduate(session, decision = 0) {
   }
   state.trainingCount++;
   inst.runIndex = state.trainingCount;
+  recordBond(state, session, inst);   // 인연(training-mode 6.4) — 케미 기본 보정용, 판정 밖
   const rep = representativeOf(state, inst.cardId);
   const prevOvr = rep ? Math.round(rep.ovr * 10) / 10 : null;
   if (decision === 'best') decision = (rep === null || inst.ovr >= rep.ovr) ? 0 : 1;

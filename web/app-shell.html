@@ -1267,7 +1267,7 @@ function vScout(){
      poolLine()+'</p>'+
    (lastPulls ? pullResults(lastPulls) : (r ? scoutResult(r) : ''))+
    '<button class="btn" data-act="scout"'+(can?'':' disabled')+'>스카우트 · 티켓 1</button>'+
-   '<button class="btn ghost" data-act="scout10"'+(can10?'':' disabled')+'>10연속 스카우트 · 티켓 10</button>'+
+   '<button class="btn ghost" data-act="scout10"'+(can10?'':' disabled')+'>10연속 스카우트 · 티켓 10<span class="tiny" style="display:block;color:var(--ssr);font-weight:700;margin-top:2px">SR 이상 1장 확정</span></button>'+
    '<div class="tiny" style="margin:14px 0 7px">포지션을 지정해서 뽑기 — 티켓 1 + <b style="color:var(--hot)">골드 '+posGold+'</b>'+
      ' <span style="color:var(--ink3)">(보유 '+(G.gold|0)+')</span></div>'+
    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:7px">'+
@@ -1307,6 +1307,7 @@ function pullResults(list){
         tag: r.isDuplicate ? 'dup' : 'new', tagText: r.isDuplicate ? '중복' : 'NEW',
         sub: POSK[c.pos]+' · '+(club?club.name.split(' ')[0]:'')+' · OVR '+cardOvr(c).toFixed(0) })+'</button>';
     }).join('')+'</div>'+
+    (list.some(function(r){ return r.pity && r.pity.triggered==='ten'; }) ? '<div class="tiny" style="margin-top:9px;color:var(--ssr);font-weight:700">SR 이상 1장 확정 보장 발동</div>' : '')+
     '<div class="tiny" style="margin-top:9px">카드를 누르면 상세를 볼 수 있습니다. 중복 카드는 한계돌파 1단계가 됩니다.</div>'+
   '</div>';
 }
@@ -1932,7 +1933,7 @@ function condBadge(level){
 function chemBadge(ch){
   if (!ch) return '';
   var col = ch.value >= 62 ? 'var(--court)' : (ch.value < 50 ? 'var(--bad)' : 'var(--ink3)');
-  return '<span class="agb" style="color:'+col+'" title="함께 '+ch.games+'경기">케미 '+ch.value+'</span>';
+  return '<span class="agb" style="color:'+col+'" title="함께 '+ch.games+'경기'+(ch.bond?' · 인연 +'+E.CHEMISTRY.bondBonus:'')+'">'+(ch.bond?'💛 ':'')+'케미 '+ch.value+'</span>';
 }
 function vLineup(){
   var ts = E.myTeamState(G);
@@ -1955,7 +1956,7 @@ function vLineup(){
     (lib?'<div class="pcard"><span class="ava" style="border-color:'+(clubColor[lib.teamId]||'var(--n)')+'">'+portraitSvg(lib,40)+'</span>'+
       '<div style="flex:1"><div class="pname" style="font-size:14.5px">'+esc(lib.name)+'</div><div class="pmeta">리베로 (후위 전담)'+condBadge(lv[lib.id])+'</div></div>'+
       '<button class="povr num tap" data-slot="6" style="font-size:15px;min-height:44px;min-width:56px">L<small>바꾸기</small></button></div>':'')+
-    (chem.setterId ? '<div class="tiny" style="margin:4px 0 8px">케미 = 세터와 함께 뛴 경기(경기당 +2, 최대 +20) + 성격 궁합(±6). 토스 품질에 들어갑니다.</div>' : '')+
+    (chem.setterId ? '<div class="tiny" style="margin:4px 0 8px">케미 = 세터와 함께 뛴 경기(경기당 +2, 최대 +20) + 성격 궁합(±6) + <b style="color:var(--ssr)">💛 인연(+'+E.CHEMISTRY.bondBonus+')</b>. 토스 품질에 들어갑니다.</div>' : '')+
     (injured.length ? '<div class="card flat" style="border-color:var(--bad)"><div class="muted">경상 결장 '+injured.length+'명</div>'+
       injured.map(function(j){ return '<div class="tiny">'+esc(j.name)+' <span class="pill pos">'+POSK[j.pos]+'</span> '+esc(j.part)+' — '+j.gamesLeft+'경기 남음</div>'; }).join('')+'</div>' : '')+
     '<button class="btn ghost" data-act="autolineup">자동 편성 다시</button>'+
@@ -3036,8 +3037,7 @@ function doScout(pos){
 }
 function doScout10(){
   if (G.tickets < 10) { toast('티켓이 10장 필요합니다'); return; }
-  var out = [];
-  for (var i=0;i<10 && E.canScout(G);i++) out.push(E.scout(G, {}));
+  var out = E.scoutTen(G, {});   // SR 이상 1장 보장(B.2.1)
   lastPulls = out; lastScout = null;
   if (out.some(function(x){ return x.rarity === 'SSR'; })) { sfx('ssr'); haptic(80); } else sfx('ui');
   revealPending = true;

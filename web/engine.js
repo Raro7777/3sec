@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------- 공개 API
 export {
   createGame, loadGame, saveGame,
-  scout, trainingCard,
+  scout, scoutTen, trainingCard,
   startTraining, trainingOptions, applyTrainingChoice, graduate,
   recommendSupporters, supporterCandidates,
   autoLineup, setLineupSlot, lineupValid, lineupOvr, myRoster, myTeamState, myTeam,
