@@ -961,6 +961,17 @@ function save(){
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(E.saveGame(G))); } catch(e){}
 }
 function go(v){ if (v !== 'lineup') lineupPick = null; if (v !== 'matchLive') stopViewer(); if (v === 'feedback' && view !== 'feedback') fbBack = (view === 'matchLive') ? 'home' : view; view = v; window.scrollTo(0,0); render(); }
+// 안드로이드 뒤로가기(android/ WebView 셸이 부른다). 처리했으면 true — 아니면 셸이 "한 번 더 누르면 종료".
+//   바꾸는 중인 라인업 슬롯 → 취소, 캠프·경기 중 → 무시(화면 버튼으로 끝낸다), 하위 화면 → 그 탭, 탭 → 감독실.
+var BACK_ROOT = { lineup:'roster', album:'roster', player:'roster', matchResult:'match', playoff:'match', settle:'match', report:'match', help:'home', facility:'home' };
+window.bloomBack = function(){
+  if (lineupPick != null) { lineupPick = null; render(); return true; }
+  if (ses || view === 'matchLive') return true;
+  var to = view === 'feedback' ? (fbBack || 'home') : BACK_ROOT[view];
+  if (to) { go(to); return true; }
+  if (view !== 'home') { go('home'); return true; }
+  return false;
+};
 function toast(msg){
   var t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg;

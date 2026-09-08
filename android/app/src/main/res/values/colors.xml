@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- web/app-shell.html :root 의 bg 변수와 같은 색 -->
+    <color name="bg">#0A1017</color>
+</resources>

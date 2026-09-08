@@ -30,3 +30,11 @@ web/dist/
 art/02_gen/
 art/03_work/
 art/06_lora/
+
+# 안드로이드 WebView 셸 빌드 산출물 (android/build-apk.sh)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/.kotlin/

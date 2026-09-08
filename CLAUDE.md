@@ -19,6 +19,7 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 
 - `web/engine/` — 경기·육성·리그·경제·스킬·노화·신인 (순수 JS, DOM 비참조)
 - `web/app-shell.html` — 모바일 앱 셸(화면). `web/court-render.js` — 쿼터뷰 코트 렌더러
+- `android/` — 안드로이드 WebView 셸(APK). `web/dist/bloom.html` 을 자산으로 품기만 한다 — 게임 코드는 넣지 않는다. 뒤로가기는 앱 셸의 `window.bloomBack()` 이 받는다
 - `data/` — 6구단·42명 런칭 로스터. 신인 세대는 시드에서 런타임 생성한다
 - `tools/` — 파이썬 보조 시뮬레이터 + `art-prompts.mjs`(캐릭터별 프롬프트 생성). **권위는 `web/` 하네스에 있다**
 - `art/` — 아트 에셋. 런칭 42명 **카드·전신** + 신인 외형 풀 **72종**(`04_export/{pid|rkNN}/`, 빌드가 data: URI 로 인라인, 9.75MB).
@@ -29,6 +30,7 @@ Unity 2D 예정, 1인 개발. 기획 문서는 `docs/`, 시작점은 `docs/GDD.m
 
 ```bash
 node web/build.mjs                # web/dist/bloom.html
+android/build-apk.sh              # web/dist/bloom-<hash>.apk (HTML 빌드 포함; --no-web 로 생략). JDK 17+·Android SDK(ANDROID_HOME) 필요
 node web/app-test.mjs             # 화면 흐름 회귀 114건 (playwright 필요)
 node web/parity.mjs               # 경기·육성 지표 정합
 node web/season-check.mjs         # 시즌 1~3 난이도 목표 9건 (엔진 기본 경제)

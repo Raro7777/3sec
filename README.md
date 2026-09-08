@@ -7,6 +7,7 @@
 ```bash
 node web/build.mjs        # web/dist/bloom.html — 브라우저에서 열면 됩니다
 node web/app-test.mjs     # 화면 흐름 회귀 테스트 114건 (playwright 필요)
+android/build-apk.sh      # web/dist/bloom-<hash>.apk — 같은 HTML 을 안드로이드 WebView 로 감싼 설치 파일 (JDK 17+·Android SDK 필요, android/README.md)
 ```
 
 ## 지금 어디까지 되어 있나
@@ -59,6 +60,7 @@ node web/art-test.mjs             # 아트 슬롯인 회귀 20건 (playwright �
 ## 저장소 구조
 
 - `web/` — **기준 구현.** 엔진(`engine/`), 코트 렌더러, 앱 셸, 검증 하네스
+- `android/` — 안드로이드 WebView 셸. `web/dist/bloom.html` 을 자산으로 품는 APK 프로젝트(게임 코드 없음). [android/README.md](android/README.md)
 - `data/` — 6구단·42명 런칭 로스터
 - `docs/` — 기획·설계 문서
 - `art/` — 아트 에셋. 런칭 42명 카드·전신과 신인 외형 풀 72종이 `04_export/` 에 들어와 있다. [art/README.md](art/README.md)
