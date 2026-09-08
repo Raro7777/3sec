@@ -1136,7 +1136,7 @@ function save(){
 function go(v){ if (v !== 'lineup') lineupPick = null; if (v !== 'matchLive') stopViewer(); if (v === 'feedback' && view !== 'feedback') fbBack = (view === 'matchLive') ? 'home' : view; view = v; window.scrollTo(0,0); render(); }
 // 안드로이드 뒤로가기(android/ WebView 셸이 부른다). 처리했으면 true — 아니면 셸이 "한 번 더 누르면 종료".
 //   바꾸는 중인 라인업 슬롯 → 취소, 캠프·경기 중 → 무시(화면 버튼으로 끝낸다), 하위 화면 → 그 탭, 탭 → 감독실.
-var BACK_ROOT = { lineup:'roster', album:'roster', player:'roster', matchResult:'match', playoff:'match', settle:'match', report:'match', help:'home', facility:'home' };
+var BACK_ROOT = { lineup:'roster', album:'roster', player:'roster', matchResult:'match', playoff:'match', settle:'match', report:'match', help:'home', facility:'home', style:'home' };
 window.bloomBack = function(){
   if (lineupPick != null) { lineupPick = null; render(); return true; }
   if (ses || view === 'matchLive') return true;
@@ -1189,7 +1189,7 @@ function render(){
     trainGrad:vTrainGrad, roster:vRoster, lineup:vLineup, match:vMatch,
     matchLive:vMatchLive, matchResult:vMatchResult, help:vHelp, missions:vMissions,
     league:vLeague, playoff:vPlayoff, settle:vSettle, player:vPlayer,
-    facility:vFacility, report:vReport, album:vAlbum, feedback:vFeedback
+    facility:vFacility, report:vReport, album:vAlbum, feedback:vFeedback, style:vStyleGuide
   })[view] || vHome;
   el.innerHTML = fn();
   if (view === 'matchLive') mountCourt();
@@ -1385,9 +1385,92 @@ function vHome(){
         hist.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>' : '')+
      '<div class="card flat"><div class="tiny">진행 상황은 이 브라우저에 자동 저장됩니다. '+
        '<button data-act="sndtoggle" style="font-size:12px;padding:4px;text-decoration:underline">'+sndLabel()+'</button> '+
+       '<button data-go="style" style="font-size:12px;padding:4px;text-decoration:underline">디자인 시스템</button> '+
        '<button data-act="reset" style="color:var(--bad);text-decoration:underline;font-size:12px;padding:4px">처음부터 다시</button></div></div>'+
    '</details>'
   );
+}
+
+// 디자인 시스템 — 토큰·컴포넌트·연출을 앱 안에서 실물로 보는 화면. docs/design-system.md 의 살아있는 짝.
+// (설정 카드의 "디자인 시스템" 링크로 들어옴 · view='style')
+function vStyleGuide(){
+  function sw(label, v){
+    return '<div style="display:flex;align-items:center;gap:8px;flex:1 1 44%;min-width:132px">'+
+      '<span style="width:30px;height:30px;border-radius:8px;flex:none;box-shadow:var(--sh1);background:'+v+'"></span>'+
+      '<b style="font-size:13px;font-weight:600">'+label+'</b></div>';
+  }
+  function row(html){ return '<div style="display:flex;flex-wrap:wrap;gap:10px 8px">'+html+'</div>'; }
+  var POS = ['S','OH','OP','MB','L'];
+  return h('<h2>디자인 시스템</h2>'+
+   '<p class="sub">화면에서 쓰는 색·글씨·버튼·연출을 실물로 모아 둔 화면입니다. 기준 문서는 <b>docs/design-system.md</b>. 연출은 결과가 정해진 뒤 재생되는 표현이라 확률·판정을 건드리지 않습니다.</p>'+
+
+   '<h2 style="margin-top:18px">색 — UI</h2>'+
+   '<div class="card">'+row(
+     sw('bg','var(--bg)')+sw('panel','var(--panel)')+sw('panel2','var(--panel2)')+sw('line2','var(--line2)')+
+     sw('ink','var(--ink)')+sw('ink2','var(--ink2)')+sw('ink3','var(--ink3)')+
+     sw('court','var(--court)')+sw('court-2','var(--court-2)')+
+     sw('hot','var(--hot)')+sw('hot-2','var(--hot-2)')+
+     sw('good','var(--good)')+sw('bad','var(--bad)'))+'</div>'+
+
+   '<h2 style="margin-top:18px">색 — 등급</h2>'+
+   '<p class="sub">카드 프레임·소환·졸업 등급 리빌이 공유합니다.</p>'+
+   '<div class="card">'+row(
+     sw('N','var(--n)')+sw('R','var(--r)')+sw('SR','var(--sr)')+sw('SSR','var(--ssr)'))+'</div>'+
+
+   '<h2 style="margin-top:18px">타이포</h2>'+
+   '<div class="card">'+
+     '<div class="disp" style="font-size:32px;line-height:1.1">블룸 리그</div>'+
+     '<div class="tiny" style="margin:2px 0 12px">디스플레이 · Black Han Sans (--display)</div>'+
+     '<p style="font-size:16px;margin:0">본문은 16px 이상 — Gothic A1. iOS 확대를 막고 손으로 읽기 편한 크기입니다.</p>'+
+     '<div class="tiny" style="margin:2px 0 12px">본문 · Gothic A1</div>'+
+     '<span class="num" style="font-size:30px;font-weight:800">98.4</span> '+
+     '<span class="num" style="font-size:30px;font-weight:800;color:var(--court)">25</span>'+
+     '<div class="tiny" style="margin-top:2px">숫자 · Barlow Condensed (.num) — OVR·점수·스탯</div>'+
+   '</div>'+
+
+   '<h2 style="margin-top:18px">버튼</h2>'+
+   '<div class="card">'+
+     '<button class="btn">주 버튼</button>'+
+     '<button class="btn ghost" style="margin-top:9px">고스트 버튼</button>'+
+     '<div class="hub-dock" style="margin-top:12px">'+
+       '<button class="gbtn play">플레이<span class="s">허브 도크 · 주 액션</span></button>'+
+       '<button class="gbtn ghost2">보조<span class="s">허브 도크 · 보조</span></button>'+
+     '</div>'+
+     '<div class="tiny" style="margin-top:8px">모두 --gframe 9-슬라이스 프레임을 얹은 이미지형 버튼입니다.</div>'+
+   '</div>'+
+
+   '<h2 style="margin-top:18px">배지 · 게이지</h2>'+
+   '<div class="card">'+
+     '<div style="margin-bottom:10px">'+POS.map(function(p){ return '<span class="pill pos">'+p+'</span> '; }).join('')+'<span class="tiny">포지션</span></div>'+
+     '<div style="margin-bottom:10px">'+['N','R','SR','SSR'].map(function(r){ return '<span class="pill rar-'+r+'">'+r+'</span> '; }).join('')+'<span class="tiny">등급</span></div>'+
+     '<div style="margin-bottom:14px">'+['S','A','B','C','D'].map(function(g){ return '<span class="grade g-'+g+'">'+g+'</span> '; }).join('')+'<span class="tiny">졸업 등급</span></div>'+
+     '<div class="gauge"><span style="width:66%"></span></div>'+
+     '<div class="tiny" style="margin:3px 0 10px">게이지 (기본)</div>'+
+     '<div class="gauge hot"><span style="width:40%"></span></div>'+
+     '<div class="tiny" style="margin-top:3px">게이지 (핫 — 평가전 구간)</div>'+
+   '</div>'+
+
+   '<h2 style="margin-top:18px">연출 미리보기</h2>'+
+   '<p class="sub">눌러서 실제 연출을 확인합니다. 소환 예고 색은 실제 결과 등급과 일치합니다(가짜 아쉬움 금지).</p>'+
+   '<div class="card">'+
+     '<div class="tiny" style="margin-bottom:6px">소환(가챠)</div>'+
+     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+       '<button class="btn ghost" style="flex:1;min-width:96px" data-act="sgsummon" data-rar="R">R 소환</button>'+
+       '<button class="btn ghost" style="flex:1;min-width:96px" data-act="sgsummon" data-rar="SR">SR 소환</button>'+
+       '<button class="btn ghost" style="flex:1;min-width:96px" data-act="sgsummon" data-rar="SSR">SSR 소환</button>'+
+     '</div>'+
+     '<div class="tiny" style="margin-bottom:6px">졸업 등급 리빌</div>'+
+     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+       ['S','A','B','C','D'].map(function(g){ return '<button class="btn ghost" style="flex:1;min-width:60px" data-act="sggrade" data-grade="'+g+'">'+g+'</button>'; }).join('')+
+     '</div>'+
+     '<div class="tiny" style="margin-bottom:6px">평가전 순간</div>'+
+     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+       '<button class="btn ghost" style="flex:1;min-width:120px" data-act="sgeval" data-eval="MVP — 코트를 지배했다">MVP 배너</button>'+
+       '<button class="btn ghost" style="flex:1;min-width:120px" data-act="sgeval" data-eval="합격 — 좋은 평가">합격 배너</button>'+
+     '</div>'+
+   '</div>'+
+
+   '<button class="btn ghost" data-go="home" style="margin-top:16px">감독실로</button>');
 }
 
 // 감독실에 다음 미션 2건을 띄워 "지금 뭘 해야 하나"를 항상 보이게 한다.
@@ -3555,6 +3638,9 @@ document.addEventListener('click', function(e){
 
   if (d.act === 'scout') return doScout();
   if (d.act === 'scout10') return doScout10();
+  if (d.act === 'sgsummon') { runSummon(d.rar || 'R', function(){}); return; }      // 디자인 시스템 화면 — 연출 미리보기
+  if (d.act === 'sggrade') { runGradeReveal(d.grade || 'B', function(){}); return; }
+  if (d.act === 'sgeval') { evalFlash(d.eval || '합격 — 좋은 평가'); return; }
   if (d.scoutpos !== undefined) return doScout(POSK[+d.scoutpos]);
   if (d.trainthis) { trainPick = d.trainthis; supPick = null;
     if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); } return; }
