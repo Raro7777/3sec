@@ -76,8 +76,12 @@ export function condColor(cond: number): string {
 export function liveFormationSvg(o: LiveDiagramOptions): string {
   const up = o.orient === "up";
   // roomy enough that a disc plus its two-line label never touches the next line of the formation
-  const W = up ? 170 : 240, H = up ? 220 : 210;
+  const W = up ? 170 : 240, H = up ? 248 : 210;
   const slots = FORMATIONS[o.formation];
+  // A formation's own x range is narrower than the pitch (no one stands on either goal line), so stretch it
+  // across the board: the bands spread out and a name no longer sits on the disc of the line in front.
+  const xs = slots.map((s) => s.x);
+  const xMin = Math.min(...xs), xSpan = Math.max(...xs) - xMin || 1;
   const r = 8.5;
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   // pitch markings
@@ -87,7 +91,7 @@ export function liveFormationSvg(o: LiveDiagramOptions): string {
     : `<rect x="${pad}" y="${H / 2 - 34}" width="20" height="68" fill="none" stroke="#dfe9d9" stroke-width="0.9" opacity=".7"/><rect x="${W - pad - 20}" y="${H / 2 - 34}" width="20" height="68" fill="none" stroke="#dfe9d9" stroke-width="0.9" opacity=".7"/><line x1="${W / 2}" y1="${pad}" x2="${W / 2}" y2="${H - pad}" stroke="#dfe9d9" stroke-width="0.9" opacity=".7"/><circle cx="${W / 2}" cy="${H / 2}" r="14" fill="none" stroke="#dfe9d9" stroke-width="0.9" opacity=".7"/>`;
   const nodes = slots.map((s, i) => {
     // normalised slot → diagram coordinates (labels need ~16 units below each disc)
-    const along = (s.x + 1) / 2; // 0 own goal … 1 opponent goal
+    const along = 0.05 + ((s.x - xMin) / xSpan) * 0.9; // 0 own goal … 1 opponent goal
     const cx = up ? W / 2 + s.y * (W / 2 - 24) : 22 + along * (W - 44);
     const cy = up ? (H - 26) - along * (H - 44) : H / 2 + s.y * (H / 2 - 26);
     const n = o.nodes[i];

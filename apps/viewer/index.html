@@ -160,6 +160,23 @@
       .fmBtn svg { width:100%; height:auto; display:block; }
       .fmBtn.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; color:var(--accent); }
       .fmBtn:disabled { opacity:.5; cursor:default; }
+      /* 전술판: the board is the object on the selection tab, the tables underneath are the paperwork */
+      .tacCard { padding-bottom:10px; }
+      .tacBoard { margin:8px -4px 10px; border-radius:10px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06) inset; }
+      .tacBoard svg { display:block; width:100%; height:auto; }
+      .tacBoard [data-pid] { transition:opacity .12s ease; }
+      .tacBoard [data-pid]:hover { opacity:.82; }
+      .benchStrip { display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; align-items:stretch; scrollbar-width:thin; }
+      .stripLbl { font-size:11px; letter-spacing:.16em; color:var(--muted); margin:6px 0 4px; }
+      .pCard { flex:none; width:78px; display:grid; grid-template-rows:auto auto auto 4px; gap:2px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:6px 5px 5px; cursor:pointer; text-align:center; color:var(--text); font:inherit; }
+      .pCard .pcNum { justify-self:center; width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:12px; }
+      .pCard .pcName { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .pCard .pcMeta { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .pCard .pcCond { display:block; height:4px; border-radius:2px; background:rgba(255,255,255,.1); overflow:hidden; }
+      .pCard .pcCond i { display:block; height:100%; }
+      .pCard.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+      .pCard.out { opacity:.45; }
+      .pCard:disabled { cursor:default; }
       .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
       .row { display:grid; grid-template-columns: 30px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
       .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px 24px; }

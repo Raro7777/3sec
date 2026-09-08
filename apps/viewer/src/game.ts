@@ -52,7 +52,7 @@ import { celebrate } from "./celebrate";
 import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
 import { MatchScreen } from "./match-screen";
-import { formationSvg } from "./formation-svg";
+import { condColor, formationSvg, liveFormationSvg, type LiveNode } from "./formation-svg";
 import { getSimPool } from "./sim/pool";
 import { asMatch, cupJob, leagueJob } from "./sim/adapter";
 import { OfficeScene, officeLook, officeSpots, type OfficeAct } from "./office";
@@ -2088,18 +2088,39 @@ export class Game {
     const prob = selectionProblem(me);
     const locked = !!this.live;
     const hSel: string[] = [], hTac: string[] = [], hTrain: string[] = [];
-    hSel.push(`<div class="card"><h3>${me.name} 스쿼드 <span>${me.squad.length}명</span></h3>
+    // 전술판: the same board the manager panel shows during a match, so the game speaks one language about
+    // the eleven. The pitch is the object here; the tables underneath are the paperwork behind it.
+    const kit = kitForClub(me);
+    const disc = kit.primary, discText = kitTextColor(kit);
+    const node = (id: string, i: number): LiveNode | null => {
+      const p = me.squad.find((q) => q.id === id);
+      if (!p) return null;
+      return {
+        id: p.id, number: p.number, name: p.name, role: slots[i]?.role ?? p.role,
+        cond: p.condition, goals: p.stats.goals, yellow: p.seasonYellows % 5 === 4,
+        injured: p.injuryDays > 0 || p.ban > 0, selected: this.selA === p.id,
+      };
+    };
+    const cardOf = (p: SquadPlayer, tag: string) => {
+      const o = overall(p.attrs, p.role);
+      const out = !isAvailable(p);
+      return `<button class="pCard ${this.selA === p.id ? "sel" : ""} ${out ? "out" : ""}" data-id="${p.id}" ${locked ? "disabled" : ""}>
+        <span class="pcNum" style="background:${disc};color:${discText}">${p.number}</span>
+        <span class="pcName">${p.name}</span>
+        <span class="pcMeta">${tag} · ${o.toFixed(1)}</span>
+        <span class="pcCond"><i style="width:${Math.round(p.condition * 100)}%;background:${condColor(p.condition)}"></i></span>
+      </button>`;
+    };
+    hSel.push(`<div class="card tacCard"><h3>전술판 <span>${sel.formation} · ${me.squad.length}명</span></h3>
+      <div class="tacBoard">${liveFormationSvg({ formation: sel.formation, nodes: sel.starters.map(node), orient: "up", color: disc, textColor: discText })}</div>
       <div class="squad-tools">
-        <span>포메이션 <b style="color:var(--accent)">${sel.formation}</b></span>
         <button id="sqAuto" ${locked ? "disabled" : ""}>자동 선발</button>
-        <span class="hint">선수 두 명을 차례로 누르면 자리를 맞바꿉니다 (선발 ↔ 벤치 ↔ 예비).</span>
+        ${prob ? `<span style="color:var(--bad);font-size:12px">⚠ ${prob}</span>` : `<span style="color:var(--good);font-size:12px">선발 이상 없음</span>`}
       </div>
-      <div class="fmWrap">
-        <div class="fmBig">${formationSvg(sel.formation, me, sel.starters, 250, this.selA)}</div>
-        <div class="fmList">${(Object.keys(FORMATIONS) as FormationName[]).map((f) => `<button class="fmBtn ${f === sel.formation ? "on" : ""}" data-formation="${f}" ${locked ? "disabled" : ""} title="${f} 적용 (자동 선발)">${formationSvg(f, null, [], 56)}<div>${f}</div></button>`).join("")}
-          <div class="hint" style="flex-basis:100%">포메이션을 누르면 그 대형으로 자동 선발되고 역할이 다시 배정됩니다. 도식의 선수를 누른 뒤 아래 명단에서 다른 선수를 누르면 자리를 바꿉니다.</div></div>
-      </div>
-      ${prob ? `<div class="hint" style="color:var(--bad)">⚠ ${prob}</div>` : `<div class="hint" style="color:var(--good)">선발 명단 이상 없음</div>`}
+      <div class="stripLbl">벤치 ${sel.bench.length}/7</div>
+      <div class="benchStrip">${sel.bench.map((id) => cardOf(playerOf(me, id), "벤치")).join("") || '<span class="hint">비어 있음</span>'}</div>
+      <div class="fmList">${(Object.keys(FORMATIONS) as FormationName[]).map((f) => `<button class="fmBtn ${f === sel.formation ? "on" : ""}" data-formation="${f}" ${locked ? "disabled" : ""} title="${f} 적용 (자동 선발)">${formationSvg(f, null, [], 56)}<div>${f}</div></button>`).join("")}</div>
+      ${tip("자리 바꾸는 법", "전술판의 선수를 누른 뒤 벤치 카드나 아래 명단에서 다른 선수를 누르면 자리를 맞바꿉니다. 포메이션을 누르면 그 대형으로 자동 선발되고 역할이 다시 배정됩니다.")}
     </div>`);
     const rolesNow = normalizeTactics({ ...me.tactics, formation: sel.formation }).roles!;
     const row = (p: SquadPlayer, slotRole: string | null, slotIdx = -1) => {
@@ -2119,11 +2140,11 @@ export class Game {
         <span class="st">${status}</span>${INFO_BTN(`${me.id}:${p.id}`)}${roleSel}</div>`;
     };
     const header = `<div class="row wide" style="cursor:default;color:var(--muted);font-size:11px"><span>#</span><span>포지션</span><span>이름</span><span style="text-align:right">능력</span><span class="age">나이</span><span>컨디션</span><span class="st" style="color:var(--muted)">상태</span><span></span></div>`;
-    hSel.push(`<div class="grid2">`);
-    hSel.push(`<div class="card"><h3>선발 XI <span>${sel.formation}</span></h3>${header}<div class="roster">${sel.starters.map((id, i) => row(playerOf(me, id), slots[i]?.role ?? null, i)).join("")}</div></div>`);
     const reserves = me.squad.filter((p) => !sel.starters.includes(p.id) && !sel.bench.includes(p.id));
-    hSel.push(`<div class="card"><h3>벤치 <span>${sel.bench.length}/7</span></h3>${header}<div class="roster">${sel.bench.map((id) => row(playerOf(me, id), null)).join("")}</div>
-      <details ${this.selA && reserves.some((p) => p.id === this.selA) ? "open" : ""}><summary style="margin-top:8px;cursor:pointer;color:var(--muted);font-size:13px">예비 ${reserves.length}명 ${reserves.some((p) => p.injuryDays > 0 || p.ban > 0) ? `· <span style="color:var(--warn)">결장 ${reserves.filter((p) => p.injuryDays > 0 || p.ban > 0).length}</span>` : ""} (펼치기)</summary><div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></details></div>`);
+    hSel.push(`<div class="grid2">`);
+    hSel.push(`<div class="card"><h3>선발 XI <span>역할</span></h3>${header}<div class="roster">${sel.starters.map((id, i) => row(playerOf(me, id), slots[i]?.role ?? null, i)).join("")}</div></div>`);
+    // the bench itself lives on the board as cards; this card is the rest of the squad
+    hSel.push(`<div class="card"><h3>예비 <span>${reserves.length}명${reserves.some((p) => p.injuryDays > 0 || p.ban > 0) ? ` · 결장 ${reserves.filter((p) => p.injuryDays > 0 || p.ban > 0).length}` : ""}</span></h3>${header}<div class="roster">${reserves.map((p) => row(p, null)).join("")}</div></div>`);
     hSel.push(`</div>`);
     const tr = me.training;
     hTrain.push(`<div class="card"><h3>훈련 <span>매주 적용</span></h3>
@@ -2184,7 +2205,8 @@ export class Game {
         this.afterSquadChange();
       };
       this.el.squad.querySelectorAll<HTMLElement>(".row[data-id]").forEach((r) => r.addEventListener("click", () => pickForSwap(r.dataset.id!)));
-      this.el.squad.querySelectorAll<HTMLElement>(".fmBig [data-pid]").forEach((g) => g.addEventListener("click", () => pickForSwap(g.dataset.pid!)));
+      this.el.squad.querySelectorAll<HTMLElement>(".tacBoard [data-pid]").forEach((g) => g.addEventListener("click", () => pickForSwap(g.dataset.pid!)));
+      this.el.squad.querySelectorAll<HTMLElement>(".pCard[data-id]").forEach((c) => c.addEventListener("click", () => pickForSwap(c.dataset.id!)));
     }
     this.wireInfo(this.el.squad, "squad");
     this.wireStaff();
