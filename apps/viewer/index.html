@@ -654,11 +654,11 @@
         #log { height:100px; }
         .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px 24px; }
         .row.wide .age, .row.wide .st { display:none; }
-        /* phones: the price/offer controls drop to a second line so the name keeps the full width */
-        .row.tr { grid-template-columns: 22px 30px minmax(0,1fr) 36px 24px; row-gap:3px; }
-        .row.tr > span:nth-last-child(2) { order:9; grid-column:1 / -1; display:flex; justify-content:flex-end; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
-        .row.tr > span:nth-last-child(2) button { width:auto; min-width:96px; padding:4px 10px; }
-        .row.tr > span:nth-last-child(2) input { max-width:96px; }
+        /* phones: the price/offer control stays on the row, sized to its own text, and the name gives way */
+        .row.tr { grid-template-columns: 22px 28px minmax(0,1fr) 42px auto 22px; gap:5px; }
+        .row.tr > span:nth-last-child(2) { display:flex; justify-content:flex-end; align-items:center; gap:5px; font-size:12px; }
+        .row.tr > span:nth-last-child(2) button { width:auto; padding:3px 8px; font-size:12px; }
+        .row.tr > span:nth-last-child(2) input { max-width:76px; }
         .profile .pfName { font-size:22px; }
         .attrs { grid-template-columns:1fr; }
         .row.tr .age, .row.tr .val { display:none; }
