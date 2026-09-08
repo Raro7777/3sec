@@ -996,16 +996,31 @@ export class Game {
     const btn = 'style="padding:3px 8px;font-size:12px"';
     const h: string[] = [];
     const t = s.contractTalk;
-    if (t) h.push(`<div class="hint" style="margin-top:6px;color:var(--text)"><b style="color:var(--accent)">이사회 재계약 제안</b>: ${t.years}년 · 연봉 ${t.wage}억${t.countered ? ' · <span style="color:var(--warn)">역제안 거절됨 — 원안 유효</span>' : ""}
-      <div class="actions" style="margin-top:4px"><button class="primary" data-act="acceptContract" ${btn}>수락</button>${t.countered ? "" : `<button data-act="counterContract" ${btn}>역제안 (연봉 올리기)</button>`}<button class="danger" data-act="declineContract" ${btn}>거절하고 떠나기</button></div>
-      <span class="hint">거절하면 자유계약 감독이 되어 다른 구단의 제안을 받습니다. 답하지 않으면 다음 시즌 시작 시 제시안대로 체결됩니다.</span></div>`);
+    // 감독 계약서 · 감독직 제안서: the two documents that decide where you work, on the club's letterhead
+    const me2 = this.me;
+    if (t) h.push(`<div class="doc" style="--doc:${me2.color}">
+      <div class="docHead"><span class="docCrest">${emblemSvg(me2, 26)}</span><span class="docFrom"><b>${me2.name} 이사회</b><small>감독 재계약 제안</small></span>
+        <span class="docStamp">서명 대기</span></div>
+      <div class="docBody">
+        <div class="docTerms"><span><i>계약 기간</i><b>${t.years}년</b></span><span><i>연봉</i><b>${t.wage}억</b></span></div>
+        ${t.countered ? `<div class="docNote">역제안은 거절되었습니다. 원안이 그대로 유효합니다.</div>` : ""}
+        <div class="docFine">거절하면 자유계약 감독이 되어 다른 구단의 제안을 받습니다. 답하지 않으면 다음 시즌 시작 시 제시안대로 체결됩니다.</div>
+      </div>
+      <div class="docActs"><button class="primary" data-act="acceptContract" ${btn}>서명</button>${t.countered ? "" : `<button data-act="counterContract" ${btn}>역제안</button>`}<button class="danger" data-act="declineContract" ${btn}>거절하고 떠나기</button></div>
+    </div>`);
     const o = pendingJobOffer(s);
     if (o) {
       const club = clubOf(s, o.club);
       const left = Math.max(0, o.expires - s.round);
-      h.push(`<div class="hint" style="margin-top:6px;color:var(--text)"><b style="color:var(--accent)">📩 <span class="dot" style="background:${club.color}"></span>${club.name} 구단이 감독직을 제안했습니다</b>: ${o.years}년 · 연봉 ${o.wage}억 · ${left <= 0 ? "이번 주 만료" : `${left}라운드 내 답변`}
-        <div class="actions" style="margin-top:4px"><button class="primary" data-act="acceptJobOffer" ${btn}>수락 (즉시 이적)</button><button data-act="declineJobOffer" ${btn}>거절</button></div>
-        <span class="hint">수락하면 시즌 중에 ${club.name}으로 옮기고 평판은 그대로 가져갑니다. ${this.me.shortName}은(는) 새 감독을 선임합니다.</span></div>`);
+      h.push(`<div class="doc" style="--doc:${club.color}">
+        <div class="docHead"><span class="docCrest">${emblemSvg(club, 26)}</span><span class="docFrom"><b>${club.name}</b><small>감독직 제안서</small></span>
+          <span class="docStamp ${left <= 0 ? "hot" : ""}">${left <= 0 ? "이번 주 만료" : `${left}라운드 내`}</span></div>
+        <div class="docBody">
+          <div class="docTerms"><span><i>계약 기간</i><b>${o.years}년</b></span><span><i>연봉</i><b>${o.wage}억</b></span></div>
+          <div class="docFine">수락하면 시즌 중에 ${club.name}으로 옮기고 평판은 그대로 가져갑니다. ${me2.shortName}은(는) 새 감독을 선임합니다.</div>
+        </div>
+        <div class="docActs"><button class="primary" data-act="acceptJobOffer" ${btn}>수락 (즉시 이적)</button><button data-act="declineJobOffer" ${btn}>거절</button></div>
+      </div>`);
     }
     return h.join("");
   }
@@ -2596,10 +2611,17 @@ export class Game {
         const ratio = Math.round((o.fee / value) * 100);
         const weeks = Math.max(0, o.expiresRound - s.round);
         const canSell = can && me.squad.filter((q) => !q.onLoan && q.loanFrom === undefined).length > MIN_SQUAD;
-        hOff.push(`<div class="offer">
-          <div class="of-main"><b>${p.name}</b> <span class="role">${p.role} · ${overall(p.attrs, p.role).toFixed(1)} · ${p.age}세</span>
-            <div class="hint">${from.name} → <b style="color:${ratio >= 100 ? "var(--good)" : ratio >= 90 ? "var(--text)" : "var(--warn)"}">${o.fee}억</b> (가치 ${value}억의 ${ratio}%) · ${weeks <= 0 ? "이번 주 만료" : `${weeks}주 후 만료`}${o.status === "countered" ? ` · <span style="color:var(--warn)">역제안 ${o.counterFee}억 거절됨 — 원안 유효, 재역제안 시 철회</span>` : ""}</div></div>
-          <div class="of-acts">${INFO_BTN(`${me.id}:${p.id}`)}<button class="primary" data-accept="${o.id}" ${canSell ? "" : "disabled"} ${btn}>수락</button>${o.status === "open" ? `<button data-counter="${o.id}" ${canSell ? "" : "disabled"} ${btn}>역제안</button>` : ""}<button class="danger" data-reject="${o.id}" ${locked ? "disabled" : ""} ${btn}>거절</button></div>
+        // 이적 제안서: an offer for one of your players arrives as a letter on the bidding club's letterhead,
+        // not as a table row. The fee is the figure typed on the form; the stamp is how long it stands.
+        hOff.push(`<div class="doc" style="--doc:${from.color}">
+          <div class="docHead"><span class="docCrest">${emblemSvg(from, 26)}</span><span class="docFrom"><b>${from.name}</b><small>${foreignCountry(from.id) || "한국"} · 평판 ${from.reputation.toFixed(1)}</small></span>
+            <span class="docStamp ${weeks <= 0 ? "hot" : ""}">${weeks <= 0 ? "이번 주 만료" : `${weeks}주 유효`}</span></div>
+          <div class="docBody">
+            <div class="docSubject">이적 제안서 · <b>${p.name}</b> <span class="role">${p.role} · ${overall(p.attrs, p.role).toFixed(1)} · ${p.age}세</span></div>
+            <div class="docFee"><span class="docFeeK">제시액</span><b style="color:${ratio >= 100 ? "var(--good)" : ratio >= 90 ? "#1b2430" : "var(--bad)"}">${o.fee}억</b><span class="docFeeSub">평가액 ${value}억의 ${ratio}%</span></div>
+            ${o.status === "countered" ? `<div class="docNote">역제안 ${o.counterFee}억은 거절되었습니다. 원안 ${o.fee}억은 그대로 유효하며, 다시 역제안하면 철회됩니다.</div>` : ""}
+          </div>
+          <div class="docActs">${INFO_BTN(`${me.id}:${p.id}`)}<button class="primary" data-accept="${o.id}" ${canSell ? "" : "disabled"} ${btn}>수락</button>${o.status === "open" ? `<button data-counter="${o.id}" ${canSell ? "" : "disabled"} ${btn}>역제안</button>` : ""}<button class="danger" data-reject="${o.id}" ${locked ? "disabled" : ""} ${btn}>거절</button></div>
         </div>`);
       }
       hOff.push(`</div>`);

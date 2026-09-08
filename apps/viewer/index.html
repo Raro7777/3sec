@@ -260,6 +260,39 @@
       .offer .of-main .role { font-size:11px; color:var(--muted); }
       .offer .of-acts { display:flex; gap:4px; flex-wrap:wrap; }
       .offer .of-acts button { white-space:nowrap; }
+      /* 서류: an offer, a contract — paper on the desk, not a table row. The club's colour is the letterhead. */
+      .doc { position:relative; margin:10px 2px 14px; border-radius:3px; background:linear-gradient(180deg, #f7f4ec, #ece7db); color:#1b2430; box-shadow:0 10px 22px rgba(0,0,0,.42), 0 1px 0 rgba(255,255,255,.5) inset; border:1px solid rgba(0,0,0,.22); }
+      .doc::after { content:""; position:absolute; inset:0; pointer-events:none; border-radius:3px; background:linear-gradient(96deg, transparent 0 49%, rgba(0,0,0,.05) 49.4% 50%, rgba(255,255,255,.5) 50% 50.8%, transparent 51.4% 100%); }
+      .docHead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:2px solid var(--doc, #444); background:linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,0)); }
+      .docCrest { flex:none; display:flex; filter:drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+      .docFrom { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.25; }
+      .docFrom b { font-size:14px; color:#12181f; }
+      .docFrom small { font-size:10.5px; color:#5d6773; letter-spacing:.04em; }
+      .docStamp { flex:none; font-family:"IBM Plex Mono", monospace; font-size:10px; letter-spacing:.1em; padding:3px 7px; border:1.5px solid #6d7784; color:#6d7784; border-radius:3px; transform:rotate(-4deg); }
+      .docStamp.hot { border-color:#b03a3a; color:#b03a3a; }
+      .docBody { padding:9px 12px 4px; }
+      .docSubject { font-size:13px; color:#2a3542; }
+      .docSubject b { font-size:15px; color:#10161d; }
+      .docSubject .role { font-size:11px; color:#67717d; }
+      .docFee { display:flex; align-items:baseline; gap:8px; margin:8px 0 4px; padding:6px 8px; background:rgba(0,0,0,.045); border-left:3px solid var(--doc, #444); border-radius:2px; }
+      .docFee .docFeeK { font-size:10px; letter-spacing:.16em; color:#6d7784; }
+      .docFee b { font-family:"IBM Plex Mono", monospace; font-size:22px; font-variant-numeric:tabular-nums; }
+      .docFee .docFeeSub { font-size:11px; color:#67717d; margin-left:auto; }
+      .docTerms { display:flex; gap:10px; margin:8px 0 6px; }
+      .docTerms span { flex:1; display:flex; flex-direction:column; gap:2px; padding:6px 9px; background:rgba(0,0,0,.045); border-left:3px solid var(--doc, #444); border-radius:2px; }
+      .docTerms i { font-style:normal; font-size:10px; letter-spacing:.16em; color:#6d7784; }
+      .docTerms b { font-family:"IBM Plex Mono", monospace; font-size:19px; font-variant-numeric:tabular-nums; color:#10161d; }
+      .docFine { font-size:11px; color:#5d6773; line-height:1.5; margin:4px 0 2px; }
+      .docNote { font-size:11.5px; color:#8a5a1e; background:rgba(200,140,40,.12); border-radius:3px; padding:5px 7px; margin-bottom:4px; }
+      .docActs { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; align-items:center; padding:7px 10px 9px; border-top:1px dashed rgba(0,0,0,.18); }
+      /* the controls are ink on the paper, not the app's dark chrome */
+      .docActs button { white-space:nowrap; background:rgba(255,255,255,.6); border-color:rgba(0,0,0,.3); color:#1b2430; }
+      .docActs button:hover:not(:disabled) { background:#fff; border-color:#1b2430; }
+      .docActs button.primary { background:var(--accent); border-color:#a8842a; color:#1a1400; }
+      .docActs button.danger { color:#a33; border-color:rgba(160,50,50,.5); }
+      .docActs button:disabled { opacity:.4; }
+      .docActs .info { color:#5d6773; border-color:rgba(0,0,0,.25); margin-right:auto; }
+      .docActs .info:hover { color:#12181f; border-color:#12181f; }
       .row.yt .pot { font-family:"IBM Plex Mono", monospace; font-size:12px; text-align:right; color:var(--muted); }
       .row.yt .acts { display:flex; gap:4px; justify-content:flex-end; }
       .row.yt .acts button { padding:3px 8px; font-size:12px; white-space:nowrap; }
