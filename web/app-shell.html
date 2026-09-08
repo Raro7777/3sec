@@ -285,7 +285,10 @@ details[open] summary::after{content:"▴"}
 
 .rally{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:10px;min-height:92px}
 .rlabel{font-size:11.5px;color:var(--ink3);margin-bottom:7px;font-family:"Barlow Condensed",sans-serif;letter-spacing:.08em}
-.touches{display:flex;flex-wrap:wrap;gap:5px}
+/* 랠리 칩은 한 줄 필름스트립 — 접점이 많아도 아래로 늘어나지 않고 상자 안에서 가로로만 흐른다(최신 접점으로 자동 스크롤). */
+.touches{display:flex;flex-wrap:nowrap;gap:5px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.touches::-webkit-scrollbar{display:none}
+.tch{flex:none}
 .tch{display:flex;flex-direction:column;padding:5px 8px;border-radius:7px;background:var(--panel2);
   border:1px solid var(--line);min-width:0}
 .tch .tact{font-size:11px;font-weight:700;color:var(--ink2);font-family:"Barlow Condensed",sans-serif;letter-spacing:.03em}
@@ -2853,7 +2856,7 @@ function paintLive(ti){
     else if (tag) tag.remove();
   }
   el = document.getElementById('lvRally');
-  if (el) el.innerHTML = rallyStrip(r, shown, ended);
+  if (el) { el.innerHTML = rallyStrip(r, shown, ended); var _tc = el.querySelector('.touches'); if (_tc) _tc.scrollLeft = _tc.scrollWidth; }   // 최신 접점으로 필름스트립 자동 스크롤
   // 컷인(art-pipeline 16.2): 랠리를 끝낸 득점(에이스·강타·블로킹·블록 아웃)과 스킬 발동 순간에 그 선수의 상반신을 띄운다.
   var cut = document.getElementById('lvCut');
   if (cut) {
