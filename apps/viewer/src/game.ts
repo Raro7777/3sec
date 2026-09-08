@@ -3095,6 +3095,9 @@ export class Game {
       live: this.liveKind === "league" ? { state: s, fixture: mine } : undefined,
       clubs: [this.clubLook(home), this.clubLook(away)],
       ages: Object.fromEntries([...home.squad, ...away.squad].map((p) => [p.id, p.age])),
+      competition: this.liveKind === "cup" ? `${CUP_NAME} ${CUP_STAGE_LABEL[s.cup.stage] ?? ""}`.trim()
+        : this.liveKind === "cl" ? `${CL_SHORT} ${CL_STAGE_LABEL[s.continental?.stage ?? 0] ?? ""}`.trim()
+        : `${divisionName(userDivision(s))} ${s.round + 1}R`,
       finishOthers: async () => {
         // replay the other grounds on the worker pool from kick-off (deterministic: same seeds, same AI, same result)
         const items = this.live!.filter((x) => x !== user && x.match.state.phase !== "FULL_TIME");

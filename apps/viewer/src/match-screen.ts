@@ -9,6 +9,8 @@ import { drawKitDisc, kitTextColor, resolveKits, type Kit, type KitSource, type 
 import { LAST_CALLS, lastCallDue, TacticsRecorder, seasonRounds, table, type Fixture, type GameState, type TacticsReport } from "@3sec/game";
 import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, isNativeApp, shareFile } from "./share";
+import { Broadcast, type IntervalStat } from "./broadcast";
+import { emblemSvg } from "./emblem";
 
 /** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
 interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
@@ -57,6 +59,8 @@ export interface MatchExtra {
   clubs?: [ClubLook, ClubLook];
   /** player id → age, for the substitution picker */
   ages?: Record<string, number>;
+  /** what this match is: the league round, the cup tie, the continental tie (broadcast.ts) */
+  competition?: string;
   /**
    * Finish the other grounds off the main thread (the worker pool replays them from kick-off; the engine is
    * deterministic, so the scores the ticker showed so far still hold). Swaps each `others[].match` for the
@@ -192,6 +196,10 @@ export class MatchScreen {
   private readonly btnSkip = document.getElementById("btnSkip") as HTMLButtonElement;
   private readonly btnContinue = document.getElementById("btnContinue") as HTMLButtonElement;
   private readonly ftOverlay = document.getElementById("ftOverlay") as HTMLDivElement;
+  /** 중계 그래픽 (broadcast.ts): the bug, the line-ups, the lower thirds, the interval cards */
+  private bc: Broadcast | null = null;
+  /** half-time has already been shown for this half */
+  private htShown = false;
   /** 결정적 순간: the penalty-taker pick and the once-a-match last call share this overlay */
   private readonly callOverlay = document.getElementById("callOverlay") as HTMLDivElement;
   private readonly btnLastCall = document.getElementById("btnLastCall") as HTMLButtonElement;
@@ -338,6 +346,8 @@ export class MatchScreen {
     this.effSpeed = 1;
     this.loggedEvents = 0;
     this.fxEvents = 0;
+    this.htShown = false;
+    this.startBroadcast(extra);
     this.lastCallUsed = false;
     this.closeCall(false);
     this.btnLastCall.hidden = true;
@@ -451,6 +461,9 @@ export class MatchScreen {
 
   /** Called by the controller when leaving the match screen. */
   leave(): void {
+    this.bc?.dispose();
+    this.bc = null;
+    document.body.classList.remove("bcOn");
     this.closeCall(false);
     this.btnLastCall.hidden = true;
     this.sfx.stopAmbient();
@@ -694,6 +707,7 @@ export class MatchScreen {
       if (scoringSide !== null && !this.finished) { if (scoringSide === this.userTeam) this.haptics.goalFor(); else this.haptics.goalAgainst(); }
       switch (e.type) {
         case "GOAL":
+          this.goalStrap(e, false);
           if (late) {
             this.burst("극장골!", `${team?.shortName ?? ""} ${e.text.replace(/^골[:!]?\s*/, "")} · 추가시간 결승골`, "#ffd166", 3200, true);
             this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
@@ -705,6 +719,7 @@ export class MatchScreen {
           this.sfx.chant(scoringSide === 0 ? 1 : 0.45);
           break;
         case "OWN_GOAL":
+          this.goalStrap(e, true);
           if (late) {
             this.burst("극장골!", `${e.text} · 추가시간 결승골`, "#ffd166", 3200, true);
             this.shake(now, 22, 1400); this.flashT0 = now; this.sfx.roar();
@@ -716,33 +731,41 @@ export class MatchScreen {
           this.sfx.chant(scoringSide === 0 ? 0.8 : 0.35);
           break;
         case "OFFSIDE":
-          this.burst("🚩 오프사이드!", team ? `${team.shortName} 공격 무산` : "", "#ff9f43", 1500, false);
+          this.bc?.strap({ kind: "note", title: "오프사이드", who: team ? `${team.shortName} 공격 무산` : "오프사이드", minute: this.strapMinute(), color: "#ff9f43" });
           this.sfx.whistle(2, 0.16, 0.08);
           break;
         case "RED_CARD":
-          this.burst("🟥 퇴장!", e.text, "#ff4d4f", 2000, true);
+          this.bc?.strap({ kind: "card", title: "퇴장", who: this.strapName(e), minute: this.strapMinute(), color: "#ef4444", note: this.teamOf(e)?.name });
+
           this.shake(now, 6); this.sfx.whistle(1, 0.7); this.sfx.boo(); this.haptics.redCard();
           break;
         case "YELLOW_CARD":
-          this.burst("🟨 경고", e.text, "#ffd166", 1200, false);
+          this.bc?.strap({ kind: "card", title: "경고", who: this.strapName(e), minute: this.strapMinute(), color: "#f2c14e", note: this.teamOf(e)?.name });
           if (!fast) this.sfx.whistle(1, 0.25);
           this.haptics.yellowCard();
           break;
         case "PENALTY":
-          this.burst("페널티킥!", e.text, "#ffd166", 1800, true);
+          this.bc?.strap({ kind: "note", title: "페널티킥", who: team ? `${team.shortName}에게 페널티` : "페널티킥", minute: this.strapMinute(), color: "#f2c14e" });
           this.shake(now, 5); this.sfx.whistle(1, 0.6); this.haptics.penalty();
           // the manager names his kicker: only for a penalty of his own side, in a match he is watching
           if (e.team === this.userTeam && this.playing && !this.finished && !this.replay) this.offerPenaltyTaker();
           break;
         case "INJURY":
-          this.burst("🩹 부상", e.text, "#8ecae6", 1400, false);
+          this.bc?.strap({ kind: "note", title: "부상", who: this.strapName(e), minute: this.strapMinute(), color: "#8ecae6", note: "교체가 필요합니다" });
           break;
         case "SAVE": if (!fast) this.sfx.ooh(); break;
         case "SHOT": if (!fast && Math.random() < 0.5) this.sfx.ooh(); break;
         case "KICK_OFF": if (!fast || s.clock < 1) this.sfx.whistle(1, 0.5); break;
-        case "HALF_TIME": this.sfx.whistle(2, 0.45); break;
+        case "HALF_TIME":
+          this.sfx.whistle(2, 0.45);
+          this.showInterval("하프타임", "후반 시작 ▶");
+          break;
         case "FULL_TIME": this.sfx.whistle(3, 0.4); this.sfx.clap(); this.sfx.stopAmbient(); this.haptics.fullTime(); break;
-        case "SUBSTITUTION": if (!fast) this.sfx.clap(); break;
+        case "SUBSTITUTION":
+          // the colour bar already says whose change it is, so the club prefix comes off
+          this.bc?.strap({ kind: "sub", title: "교체", who: e.text.replace(/^교체[:：]?\s*/, "").replace(/^\([^)]*\)\s*:?\s*/, ""), minute: this.strapMinute(), color: this.teamOf(e)?.color ?? "#8ecae6", note: this.teamOf(e)?.name });
+          if (!fast) this.sfx.clap();
+          break;
         default: break;
       }
     }
@@ -843,6 +866,83 @@ export class MatchScreen {
     const hold = now - this.dangerAt;
     if (hold < DANGER_HOLD_MS) d = Math.max(d, 1 - 0.3 * (hold / DANGER_HOLD_MS));
     return Math.max(0, Math.min(1, d));
+  }
+
+  // ------------------------------------------------------------------ 중계 그래픽
+
+  /** Build the graphics for this match and open with the line-ups. */
+  private startBroadcast(extra: MatchExtra): void {
+    const stage = document.getElementById("stage");
+    if (!stage) return;
+    this.bc?.dispose();
+    this.bc = new Broadcast(stage);
+    document.body.classList.add("bcOn");
+    const looks = extra.clubs;
+    const side = (i: 0 | 1) => {
+      const t = this.match.teams[i];
+      const look = looks?.[i];
+      return { name: look?.name ?? t.name, shortName: t.shortName, color: t.color, crest: emblemSvg({ id: i, name: look?.name ?? t.name, shortName: t.shortName, color: t.color }, 17) };
+    };
+    const home = side(0), away = side(1);
+    const comp = extra.competition ?? "리그";
+    this.bc.reset(home, away, comp);
+    const xi = (i: 0 | 1): string[] => this.match.state.players.filter((p) => p.team === i && p.onPitch).slice(0, 11).map((p) => this.match.def(p.id).name);
+    const note = extra.crowd ? `${comp} · ${extra.crowd.attendance.toLocaleString("ko-KR")}명` : comp;
+    void this.bc.lineups(xi(0), xi(1), this.match.teams[0].tactics.formation, this.match.teams[1].tactics.formation, note);
+  }
+
+  private teamOf(e: MatchEvent): { name: string; shortName: string; color: string } | null {
+    return e.team === null ? null : this.match.teams[e.team];
+  }
+
+  private strapMinute(): string {
+    return `${Math.floor(this.match.matchSeconds() / 60) + 1}'`;
+  }
+
+  /** The player an event names, taken off the event's own text when it carries no id. */
+  private strapName(e: MatchEvent): string {
+    if (e.playerId) return this.match.def(e.playerId).name;
+    return e.text.replace(/^[^:：]*[:：]\s*/, "");
+  }
+
+  /** A goal, announced the way a broadcast announces it. */
+  private goalStrap(e: MatchEvent, own: boolean): void {
+    const s = this.match.state;
+    const scoring = own && e.team !== null ? ((1 - e.team) as TeamId) : e.team;
+    const t = scoring === null ? null : this.match.teams[scoring];
+    this.bc?.strap({
+      kind: "goal",
+      title: own ? "자책골" : "골",
+      who: this.strapName(e),
+      minute: this.strapMinute(),
+      color: t?.color ?? "#ffd166",
+      score: `${s.score[0]} - ${s.score[1]}`,
+      note: t?.name,
+    });
+  }
+
+  /** The half-time and full-time card, with the numbers that decided it. */
+  private showInterval(title: string, button: string | null): void {
+    if (!this.bc || this.htShown) return;
+    this.htShown = true;
+    const s = this.match.state;
+    const [a, b] = s.stats;
+    const tot = Math.max(1, a.possessionTicks + b.possessionTicks);
+    const stats: IntervalStat[] = [
+      { label: "점유율", home: `${Math.round((100 * a.possessionTicks) / tot)}%`, away: `${Math.round((100 * b.possessionTicks) / tot)}%`, share: a.possessionTicks / tot },
+      { label: "슈팅 (유효)", home: `${a.shots} (${a.shotsOnTarget})`, away: `${b.shots} (${b.shotsOnTarget})`, share: a.shots / Math.max(1, a.shots + b.shots) },
+      { label: "xG", home: a.xg.toFixed(2), away: b.xg.toFixed(2), share: a.xg / Math.max(0.01, a.xg + b.xg) },
+      { label: "패스 성공", home: `${a.passesCompleted}/${a.passes}`, away: `${b.passesCompleted}/${b.passes}` },
+      { label: "코너 · 파울", home: `${a.corners} · ${a.fouls}`, away: `${b.corners} · ${b.fouls}` },
+    ];
+    const wasPlaying = this.playing;
+    if (wasPlaying) this.setPlaying(false);
+    const done = this.finished;
+    this.bc.closeStrap();
+    this.bc.interval(title, `${s.score[0]} - ${s.score[1]}`, stats, button, () => {
+      if (done) { this.onFinish?.(); return; }
+      if (wasPlaying && !this.finished) this.setPlaying(true);
+    });
   }
 
   private fmtClock(): string {
@@ -1184,6 +1284,8 @@ export class MatchScreen {
       FULL_TIME: "경기 종료",
     };
     this.phaseEl.textContent = this.replay ? "리플레이" : phaseText[s.phase] ?? s.phase;
+    this.bc?.update([s.score[0]!, s.score[1]!], this.fmtClock(), this.replay ? "리플레이" : phaseText[s.phase] ?? s.phase, this.clockEl.classList.contains("danger"));
+    this.bc?.replay(!!this.replay);
     while (this.loggedEvents < s.events.length) this.appendLog(s.events[this.loggedEvents++]!);
     this.renderStats();
     this.panel.update();
@@ -1201,7 +1303,15 @@ export class MatchScreen {
       document.getElementById("ftScore")!.innerHTML = `<span style="color:${hc.color}">${hc.shortName}</span> ${s.score[0]} - ${s.score[1]} <span style="color:${ac.color}">${ac.shortName}</span>`;
       const season = !!this.extra.live || this.others.length > 0;
       document.getElementById("ftNote")!.textContent = !season ? (mine > 0 ? "승리! 결과를 확인하세요." : mine < 0 ? "패배… 결과를 확인하세요." : "무승부. 결과를 확인하세요.") : mine > 0 ? "승리! 라운드 결과와 순위를 확인하세요." : mine < 0 ? "패배… 결과 화면에서 다른 경기장 결과도 확인하세요." : "무승부. 결과 화면으로 이동합니다.";
-      this.ftOverlay.hidden = false;
+      // the broadcast card carries the result; the plain overlay is the fallback when it is not up
+      if (this.bc) {
+        this.htShown = false;
+        const note = document.getElementById("ftNote")!.textContent ?? "";
+        this.showInterval(mine > 0 ? "경기 종료 · 승리" : mine < 0 ? "경기 종료 · 패배" : "경기 종료 · 무승부", "결과로 →");
+        void note;
+      } else {
+        this.ftOverlay.hidden = false;
+      }
     } else if (!this.finished && s.phase === "FULL_TIME") {
       // The user's match is over but another ground is still playing: finish them quietly.
       this.btnSkip.textContent = document.body.classList.contains("immersive") ? "⏩" : "⏩ 다른 구장 종료";
