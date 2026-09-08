@@ -1283,9 +1283,9 @@ export class Game {
   private officeHtml(fx: Fixture | null): string {
     const s = this.state;
     const me = this.me;
-    const look = officeLook(s, managerRep(s), hallOfFame(s).titles.length + hallOfFame(s).cups.length);
+    const look = this.officeState(fx);
     const hasMatch = !!fx && !seasonOver(s) && !s.board.sacked;
-    const spots = officeSpots(hasMatch)
+    const spots = officeSpots(look.tier, hasMatch)
       .map((sp) => `<button class="spot${sp.hot ? " hot" : ""}" data-office="${sp.act}" title="${sp.label}" style="left:${(sp.x * 100).toFixed(2)}%;top:${(sp.y * 100).toFixed(2)}%;width:${(sp.w * 100).toFixed(2)}%;height:${(sp.h * 100).toFixed(2)}%"><b>${sp.label}</b></button>`)
       .join("");
     const wx = { clear: "맑음", cloud: "흐림", rain: "비", snow: "눈" }[look.weather];
@@ -1308,6 +1308,31 @@ export class Game {
     </div>`;
   }
 
+  /** Everything the room shows: the tier, the ground, and what each prop has to say. */
+  private officeState(fx: Fixture | null): ReturnType<typeof officeLook> {
+    const s = this.state;
+    const me = this.me;
+    const hof = hallOfFame(s);
+    const rows = table(s);
+    const opp = fx ? clubOf(s, fx.home === me.id ? fx.away : fx.home) : null;
+    const played = s.fixtures.filter((f) => f.score && (f.home === me.id || f.away === me.id));
+    const last = played[played.length - 1];
+    let lastResult: string | null = null;
+    if (last?.score) {
+      const mine = last.home === me.id ? last.score[0] : last.score[1];
+      const theirs = last.home === me.id ? last.score[1] : last.score[0];
+      const other = clubOf(s, last.home === me.id ? last.away : last.home);
+      lastResult = `${mine > theirs ? "승" : mine < theirs ? "패" : "무"} ${mine}-${theirs} vs ${other.shortName}`;
+    }
+    return officeLook(s, managerRep(s), hof.titles.length + hof.cups.length, {
+      opponent: opp && fx ? { short: opp.shortName, color: opp.color, home: fx.home === me.id } : null,
+      rounds: seasonRounds(s),
+      offers: openOffers(s).length,
+      leader: rows.length ? clubOf(s, rows[0]!.club).shortName : null,
+      lastResult,
+    });
+  }
+
   /** Paints the room and wires its objects; the loop is only alive while the home screen is on show. */
   private mountOffice(fx: Fixture | null): void {
     const canvas = document.getElementById("officeCanvas") as HTMLCanvasElement | null;
@@ -1316,8 +1341,7 @@ export class Game {
     this.office?.stop();
     this.office = new OfficeScene(canvas);
     window.addEventListener("resize", () => this.office?.resize());
-    const hof = hallOfFame(s);
-    this.office.set(officeLook(s, managerRep(s), hof.titles.length + hof.cups.length));
+    this.office.set(this.officeState(fx));
     if (this.current === "home") this.office.start();
     const hasMatch = !!fx && !seasonOver(s) && !s.board.sacked;
     for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#office .spot"))) {

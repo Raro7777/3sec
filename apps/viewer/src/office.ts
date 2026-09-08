@@ -1,85 +1,101 @@
 /**
- * 감독실: the home screen as a place instead of a page. A canvas paints the room and the window onto our
- * ground (time of day, weather, floodlights, the crowd), and DOM hotspots sit on the objects a manager
- * would actually touch: the board, the folder, the paper, the phone, the cabinet, the youth photo.
+ * 감독실: the home screen as a place. The room itself is a painting (public/art/office-N.webp, one per
+ * reputation tier); everything that has to be alive is drawn on top of it in canvas.
  *
- * Everything is drawn from the game state, so the room reports the season back: the walls and the desk
- * improve with the manager's reputation, the trophies on the shelf are the ones we won, the window shows
- * the ground as it stands now (an expansion makes the stands deeper), and the weather is the fixture's.
+ * The window in each painting is deliberately blown out to white, so at load time we read a mask out of it
+ * (the bright pixels inside the glass) and paint our own ground through that mask. The frame, the mullions
+ * and the mesh stay exactly as painted, while the view beyond them is the club's own stadium: sky by the
+ * hour, floodlights at night, the stands filled to the fans' mood, rain or snow on the glass.
  *
- * The scene is deliberately cheap: gradients, silhouettes and a few hundred particles at 30 fps, paused
- * whenever the room is off screen. No new art files.
+ * On top of that the props carry the state: the board takes the next fixture, the newspaper the league
+ * leader and our last result, the phone lights up while transfer offers wait, the photo counts the academy,
+ * the cabinet counts the seasons on record.
  */
 import type { GameState } from "@3sec/game";
 
 export type OfficeAct = "match" | "squad" | "table" | "transfers" | "youth" | "records";
+export type Tier = 0 | 1 | 2;
 
-export interface OfficeSpot {
-  act: OfficeAct;
-  label: string;
-  sub: string;
-  /** hit box in canvas-normalised coordinates (0..1) */
-  x: number; y: number; w: number; h: number;
-  hot?: boolean;
-}
+export interface Rect { x: number; y: number; w: number; h: number }
+export interface OfficeSpot extends Rect { act: OfficeAct; label: string; hot?: boolean }
 
 export interface OfficeLook {
-  /** 0 the concrete room, 1 the painted one, 2 the panelled one */
-  tier: 0 | 1 | 2;
+  tier: Tier;
   club: string;
   grass: string;
-  /** 0..1, how full the ground is */
   crowd: number;
   capacity: number;
   night: boolean;
   weather: "clear" | "cloud" | "rain" | "snow";
-  trophies: number;
-  /** the ground's name, printed on the window sill */
   ground: string;
+  opponent: { short: string; color: string; home: boolean } | null;
+  round: number;
+  rounds: number;
+  offers: number;
+  prospects: number;
+  seasons: number;
+  trophies: number;
+  leader: string | null;
+  lastResult: string | null;
 }
+
+/** Where each painting put its things, measured off the art. */
+interface Layout { glass: Rect; board: Rect; photo: Rect; cabinet: Rect; folder: Rect; paper: Rect; phone: Rect }
+export const LAYOUTS: Record<Tier, Layout> = {
+  0: {
+    glass: { x: 0.540, y: 0.112, w: 0.460, h: 0.458 },
+    board: { x: 0.100, y: 0.185, w: 0.285, h: 0.320 },
+    photo: { x: 0.262, y: 0.528, w: 0.100, h: 0.125 },
+    cabinet: { x: 0.005, y: 0.600, w: 0.132, h: 0.300 },
+    folder: { x: 0.262, y: 0.765, w: 0.275, h: 0.205 },
+    paper: { x: 0.505, y: 0.752, w: 0.292, h: 0.158 },
+    phone: { x: 0.866, y: 0.658, w: 0.130, h: 0.135 },
+  },
+  1: {
+    glass: { x: 0.537, y: 0.128, w: 0.310, h: 0.402 },
+    board: { x: 0.042, y: 0.062, w: 0.238, h: 0.382 },
+    photo: { x: 0.144, y: 0.468, w: 0.130, h: 0.210 },
+    cabinet: { x: 0.002, y: 0.382, w: 0.126, h: 0.560 },
+    folder: { x: 0.338, y: 0.738, w: 0.208, h: 0.128 },
+    paper: { x: 0.572, y: 0.728, w: 0.194, h: 0.138 },
+    phone: { x: 0.788, y: 0.672, w: 0.144, h: 0.128 },
+  },
+  2: {
+    glass: { x: 0.590, y: 0.128, w: 0.392, h: 0.437 },
+    board: { x: 0.131, y: 0.216, w: 0.186, h: 0.292 },
+    photo: { x: 0.358, y: 0.296, w: 0.124, h: 0.160 },
+    cabinet: { x: 0.002, y: 0.220, w: 0.126, h: 0.650 },
+    folder: { x: 0.308, y: 0.772, w: 0.208, h: 0.096 },
+    paper: { x: 0.468, y: 0.732, w: 0.168, h: 0.096 },
+    phone: { x: 0.506, y: 0.655, w: 0.100, h: 0.090 },
+  },
+};
+
+export const officeArt = (tier: Tier): string => `./art/office-${tier}.webp`;
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 
-/** Where everything sits, in 0..1 of the canvas. The painter and the hit boxes both read this. */
-export const L = {
-  window: { x: 0.30, y: 0.045, w: 0.66, h: 0.40 },
-  board: { x: 0.035, y: 0.055, w: 0.245, h: 0.215 },
-  photo: { x: 0.035, y: 0.30, w: 0.245, h: 0.145 },
-  cabinet: { x: 0.035, y: 0.475, w: 0.145, h: 0.135 },
-  shelf: { x: 0.33, y: 0.525, w: 0.34 },
-  deskTop: 0.615,
-  folder: { x: 0.055, y: 0.655, w: 0.255, h: 0.20 },
-  paper: { x: 0.345, y: 0.685, w: 0.29, h: 0.185 },
-  phone: { x: 0.675, y: 0.655, w: 0.215, h: 0.185 },
-  mug: { x: 0.915, y: 0.700, w: 0.05, h: 0.075 },
-} as const;
-
-/** A deterministic 0..1 from a few integers: the same round always has the same sky. */
 function hash01(...xs: number[]): number {
   let h = 2166136261;
   for (const x of xs) { h ^= Math.imul(x | 0, 0x9e3779b1); h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0; }
   return ((h ^ (h >>> 13)) >>> 0) / 4294967295;
 }
-
-/** Hex to rgb, tolerant of #abc and #aabbcc. */
-function rgb(hex: string): [number, number, number] {
+function rgbOf(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
   const s = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
   return [parseInt(s.slice(0, 2), 16) || 0, parseInt(s.slice(2, 4), 16) || 0, parseInt(s.slice(4, 6), 16) || 0];
 }
 const mix = (a: string, b: string, t: number): string => {
-  const [ar, ag, ab] = rgb(a), [br, bg, bb] = rgb(b);
+  const [ar, ag, ab] = rgbOf(a), [br, bg, bb] = rgbOf(b);
   const f = (x: number, y: number) => Math.round(x + (y - x) * clamp(t, 0, 1));
   return `rgb(${f(ar, br)},${f(ag, bg)},${f(ab, bb)})`;
 };
-const shade = (hex: string, t: number): string => (t < 0 ? mix(hex, "#000000", -t) : mix(hex, "#ffffff", t));
+const shade = (hex: string, t: number): string => (t < 0 ? mix(hex, "#0b0f13", -t) : mix(hex, "#fff6e2", t));
 
-/** The room, read off the state. */
-export function officeLook(s: GameState, rep: number, trophies: number): OfficeLook {
+export function officeLook(s: GameState, rep: number, trophies: number, extra: Partial<OfficeLook> = {}): OfficeLook {
   const me = s.clubs[s.userClub]!;
-  const round = s.round;
-  const w = hash01(s.seed, s.season, round, 7);
-  const winter = round >= 10 && round <= 15;
+  const w = hash01(s.seed, s.season, s.round, 7);
+  const winter = s.round >= 10 && s.round <= 15;
   const weather: OfficeLook["weather"] = w > 0.86 ? (winter ? "snow" : "rain") : w > 0.55 ? "cloud" : "clear";
   return {
     tier: rep >= 13 ? 2 : rep >= 9 ? 1 : 0,
@@ -87,48 +103,69 @@ export function officeLook(s: GameState, rep: number, trophies: number): OfficeL
     grass: "#2f7d3a",
     crowd: clamp((me.fans?.mood ?? 55) / 100 + 0.25, 0.2, 1),
     capacity: me.capacity ?? 20000,
-    night: hash01(s.seed, s.season, round, 11) > 0.45,
+    night: hash01(s.seed, s.season, s.round, 11) > 0.45,
     weather,
-    trophies: Math.min(6, trophies),
     ground: me.stadiumName || "홈 구장",
+    opponent: null,
+    round: s.round + 1,
+    rounds: 22,
+    offers: 0,
+    prospects: me.youth?.prospects.length ?? 0,
+    seasons: s.seasonHistory.length,
+    trophies,
+    leader: null,
+    lastResult: null,
+    ...extra,
   };
 }
 
-/** The objects on the desk and the walls, in canvas-normalised coordinates. */
-export function officeSpots(hasMatch: boolean): OfficeSpot[] {
+export function officeSpots(tier: Tier, hasMatch: boolean): OfficeSpot[] {
+  const l = LAYOUTS[tier];
   return [
-    { act: "match", label: hasMatch ? "다음 경기" : "일정", sub: "", ...L.board, hot: hasMatch },
-    { act: "youth", label: "유스", sub: "", ...L.photo },
-    { act: "records", label: "기록실", sub: "", ...L.cabinet },
-    { act: "squad", label: "스쿼드", sub: "", ...L.folder },
-    { act: "table", label: "순위", sub: "", ...L.paper },
-    { act: "transfers", label: "이적", sub: "", ...L.phone },
+    { act: "match", label: hasMatch ? "다음 경기" : "일정", ...l.board, hot: hasMatch },
+    { act: "youth", label: "유스", ...l.photo },
+    { act: "records", label: "기록실", ...l.cabinet },
+    { act: "squad", label: "스쿼드", ...l.folder },
+    { act: "table", label: "순위", ...l.paper },
+    { act: "transfers", label: "이적", ...l.phone },
   ];
 }
 
 interface Drop { x: number; y: number; v: number; len: number }
 
-/** Paints the room. One instance per canvas; `set` swaps the look, `start`/`stop` own the frame loop. */
 export class OfficeScene {
   private ctx: CanvasRenderingContext2D | null;
   private look: OfficeLook | null = null;
+  private art: HTMLImageElement | null = null;
+  private artTier: Tier | null = null;
+  /** the glass, cut out of the painting so our ground shows through it */
+  private mask: HTMLCanvasElement | null = null;
+  private maskKey = "";
+  private view: HTMLCanvasElement | null = null;
   private raf = 0;
   private last = 0;
   private t = 0;
   private drops: Drop[] = [];
-  private w = 0;
-  private h = 0;
-  private dpr = 1;
+  private w = 0; private h = 0; private dpr = 1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d");
   }
 
   set(look: OfficeLook): void {
+    const tierChanged = this.artTier !== look.tier;
     this.look = look;
     this.drops = [];
-    const n = look.weather === "rain" ? 150 : look.weather === "snow" ? 90 : 0;
-    for (let i = 0; i < n; i++) this.drops.push({ x: Math.random(), y: Math.random(), v: 0.35 + Math.random() * 0.5, len: 0.02 + Math.random() * 0.03 });
+    const n = look.weather === "rain" ? 120 : look.weather === "snow" ? 70 : 0;
+    for (let i = 0; i < n; i++) this.drops.push({ x: Math.random(), y: Math.random(), v: 0.35 + Math.random() * 0.5, len: 0.03 + Math.random() * 0.04 });
+    if (tierChanged) {
+      this.artTier = look.tier;
+      this.mask = null; this.maskKey = "";
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => { this.art = img; this.paint(); };
+      img.src = officeArt(look.tier);
+    }
     this.resize();
   }
 
@@ -139,6 +176,7 @@ export class OfficeScene {
     this.w = r.width; this.h = r.height;
     this.canvas.width = Math.round(r.width * this.dpr);
     this.canvas.height = Math.round(r.height * this.dpr);
+    this.maskKey = "";
     this.paint();
   }
 
@@ -147,19 +185,14 @@ export class OfficeScene {
     this.last = performance.now();
     const loop = (ts: number) => {
       const dt = Math.min(0.1, (ts - this.last) / 1000);
-      this.last = ts;
-      this.t += dt;
-      this.step(dt);
-      this.paint();
+      this.last = ts; this.t += dt;
+      this.step(dt); this.paint();
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
   }
 
-  stop(): void {
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
-  }
+  stop(): void { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   private step(dt: number): void {
     const fall = this.look?.weather === "snow" ? 0.12 : 0.9;
@@ -170,418 +203,296 @@ export class OfficeScene {
     }
   }
 
-  // ---------------------------------------------------------------- painting
+  // ---------------------------------------------------------------- paint
 
   private paint(): void {
     const ctx = this.ctx, look = this.look;
     if (!ctx || !look || !this.w) return;
-    const { w, h } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    this.paintWall(ctx, look, w, h);
-    this.paintWindow(ctx, look, w, h);
-    this.paintWallThings(ctx, look, w, h);
-    this.paintDesk(ctx, look, w, h);
-    this.paintLamp(ctx, look, w, h);
-    this.paintVignette(ctx, w, h);
+    ctx.clearRect(0, 0, this.w, this.h);
+    if (!this.art) {
+      ctx.fillStyle = "#0d1116";
+      ctx.fillRect(0, 0, this.w, this.h);
+      return;
+    }
+    // the painted room, covering the canvas
+    const iw = this.art.naturalWidth, ih = this.art.naturalHeight;
+    const r = Math.max(this.w / iw, this.h / ih);
+    const dw = iw * r, dh = ih * r, dx = (this.w - dw) / 2, dy = (this.h - dh) / 2;
+    ctx.drawImage(this.art, dx, dy, dw, dh);
+    // our ground, through the glass
+    this.paintView(ctx, look, { dx, dy, dw, dh });
+    // what the props say
+    this.paintProps(ctx, look, { dx, dy, dw, dh });
   }
 
-  /** The room behind everything: concrete, painted or panelled, tinted towards the club's colour. */
-  private paintWall(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
-    const base = look.tier === 2 ? "#2a1c12" : look.tier === 1 ? "#1a222a" : "#171b1f";
-    const top = mix(base, look.club, look.tier === 2 ? 0.06 : 0.12);
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, shade(top, -0.15));
-    g.addColorStop(1, shade(base, -0.45));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-    if (look.tier === 2) {
-      // wood panelling: vertical seams with a warm highlight
-      ctx.save();
-      ctx.globalAlpha = 0.25;
-      for (let x = 0; x < w; x += Math.max(26, w / 14)) {
-        ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x, 0, 1.5, h * 0.62);
-        ctx.fillStyle = "rgba(255,220,170,.10)"; ctx.fillRect(x + 1.5, 0, 1, h * 0.62);
+  /** Map a rect given in art coordinates to the canvas. */
+  private at(r: Rect, f: { dx: number; dy: number; dw: number; dh: number }): Rect {
+    return { x: f.dx + r.x * f.dw, y: f.dy + r.y * f.dh, w: r.w * f.dw, h: r.h * f.dh };
+  }
+
+  /**
+   * The stadium, drawn into an offscreen buffer and then cut to the shape of the painting's bright glass,
+   * so the frame, the mullions and the wire mesh in the art stay in front of it.
+   */
+  private paintView(ctx: CanvasRenderingContext2D, look: OfficeLook, f: { dx: number; dy: number; dw: number; dh: number }): void {
+    const g = this.at(LAYOUTS[look.tier].glass, f);
+    const W = Math.max(8, Math.round(g.w)), H = Math.max(8, Math.round(g.h));
+    const key = `${look.tier}|${W}x${H}`;
+    if (!this.mask || this.maskKey !== key) this.mask = this.buildMask(look.tier, W, H, f, g);
+    this.maskKey = key;
+    if (!this.mask) return;
+    if (!this.view || this.view.width !== W || this.view.height !== H) {
+      const c = document.createElement("canvas"); c.width = W; c.height = H; this.view = c;
+    }
+    const vc = this.view.getContext("2d");
+    if (!vc) return;
+    vc.setTransform(1, 0, 0, 1, 0, 0);
+    vc.clearRect(0, 0, W, H);
+    this.paintStadium(vc, look, W, H);
+    vc.globalCompositeOperation = "destination-in";
+    vc.drawImage(this.mask, 0, 0);
+    vc.globalCompositeOperation = "source-over";
+    ctx.save();
+    ctx.globalAlpha = 0.97;
+    ctx.drawImage(this.view, g.x, g.y, g.w, g.h);
+    ctx.restore();
+  }
+
+  /** Read the bright glass out of the painting: white pixels become opaque, everything else transparent. */
+  private buildMask(tier: Tier, W: number, H: number, f: { dx: number; dy: number; dw: number; dh: number }, g: Rect): HTMLCanvasElement | null {
+    if (!this.art) return null;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const cc = c.getContext("2d", { willReadFrequently: true });
+    if (!cc) return null;
+    const l = LAYOUTS[tier].glass;
+    cc.drawImage(this.art, l.x * this.art.naturalWidth, l.y * this.art.naturalHeight, l.w * this.art.naturalWidth, l.h * this.art.naturalHeight, 0, 0, W, H);
+    const img = cc.getImageData(0, 0, W, H);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = (d[i]! * 0.299 + d[i + 1]! * 0.587 + d[i + 2]! * 0.114) / 255;
+      // a soft edge between 0.72 and 0.90 keeps the mesh and the mullions from aliasing
+      const a = clamp((lum - 0.72) / 0.18, 0, 1);
+      d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+      d[i + 3] = Math.round(a * 255);
+    }
+    cc.putImageData(img, 0, 0);
+    void g;
+    return c;
+  }
+
+  /** The club's ground, painted to fill the glass. */
+  private paintStadium(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    if (look.night) { sky.addColorStop(0, "#060d19"); sky.addColorStop(0.6, "#102138"); sky.addColorStop(1, "#20395a"); }
+    else if (look.weather === "rain") { sky.addColorStop(0, "#37454f"); sky.addColorStop(1, "#6d7a84"); }
+    else if (look.weather === "snow") { sky.addColorStop(0, "#48565f"); sky.addColorStop(1, "#9aa4ac"); }
+    else if (look.weather === "cloud") { sky.addColorStop(0, "#4a6070"); sky.addColorStop(1, "#93a6b3"); }
+    else { sky.addColorStop(0, "#2a5c8c"); sky.addColorStop(0.55, "#7ba3c4"); sky.addColorStop(1, "#d3dfe6"); }
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+
+    if (look.night) {
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < 40; i++) {
+        if (hash01(i, 17) > 0.55) continue;
+        ctx.globalAlpha = 0.1 + hash01(i, 23) * 0.35;
+        ctx.fillRect(hash01(i, 3) * w, hash01(i, 9) * h * 0.4, 1.6, 1.6);
+      }
+      ctx.globalAlpha = 1;
+    } else if (look.weather !== "clear") {
+      ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.ellipse(hash01(i, 41) * w, h * (0.06 + hash01(i, 43) * 0.18), w * (0.12 + hash01(i, 47) * 0.14), h * 0.06, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
     }
-  }
 
-  /** The window: sky, floodlights, stands seen from above, the pitch in perspective, weather on the glass. */
-  private paintWindow(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
-    const x = w * L.window.x, y = h * L.window.y, ww = w * L.window.w, wh = h * L.window.h;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, ww, wh);
-    ctx.clip();
-
-    // sky
-    const sky = ctx.createLinearGradient(0, y, 0, y + wh);
-    if (look.night) { sky.addColorStop(0, "#070f1c"); sky.addColorStop(0.7, "#12233a"); sky.addColorStop(1, "#1b3350"); }
-    else if (look.weather === "rain") { sky.addColorStop(0, "#2c3945"); sky.addColorStop(1, "#5d6d79"); }
-    else if (look.weather === "snow") { sky.addColorStop(0, "#3b4a58"); sky.addColorStop(1, "#8b96a1"); }
-    else if (look.weather === "cloud") { sky.addColorStop(0, "#425a70"); sky.addColorStop(1, "#8ba0b0"); }
-    else { sky.addColorStop(0, "#1f4e7d"); sky.addColorStop(0.6, "#6f9bbd"); sky.addColorStop(1, "#c6d6e0"); }
-    ctx.fillStyle = sky;
-    ctx.fillRect(x, y, ww, wh);
-
-    if (look.night) {
-      // a few stars, thinned by cloud
-      ctx.fillStyle = "rgba(255,255,255,.5)";
-      for (let i = 0; i < 40; i++) {
-        const sxp = hash01(i, 3), syp = hash01(i, 9);
-        if (hash01(i, 17) > 0.6) continue;
-        ctx.globalAlpha = 0.15 + hash01(i, 23) * 0.4;
-        ctx.fillRect(x + sxp * ww, y + syp * wh * 0.45, 1.6, 1.6);
-      }
-      ctx.globalAlpha = 1;
-    } else if (look.weather === "clear") {
-      const cx = x + ww * 0.78, cy = y + wh * 0.24, r = Math.min(ww, wh) * 0.28;
-      const gl = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      gl.addColorStop(0, "rgba(255,232,180,.55)");
-      gl.addColorStop(1, "rgba(255,232,180,0)");
-      ctx.fillStyle = gl; ctx.fillRect(x, y, ww, wh);
-    }
-
-    // ---- the ground, seen from the office: a bowl in perspective
-    const horizon = y + wh * 0.42;
+    // a tall window shows more of the bowl, a letterbox one mostly sky and stand
+    const horizon = h * clamp(0.40 + (h / Math.max(1, w)) * 0.34, 0.44, 0.60);
     const deep = clamp(look.capacity / 45000, 0.4, 1);
-    const roofH = wh * 0.10 * deep;
-    // far stand: roof, then seats in club colour with a crowd of speckles
-    ctx.fillStyle = shade(look.club, -0.78);
-    ctx.fillRect(x, horizon - roofH, ww, roofH);
-    ctx.fillStyle = "rgba(255,255,255,.05)";
-    ctx.fillRect(x, horizon - roofH, ww, 2);
-    const seatsH = wh * 0.16;
-    const sg = ctx.createLinearGradient(0, horizon, 0, horizon + seatsH);
-    // by day the seats catch the light, at night they fall away and only the crowd shows
-    const seat = mix(look.club, "#3d4750", 0.5);
-    sg.addColorStop(0, shade(seat, look.night ? -0.45 : -0.10));
-    sg.addColorStop(1, shade(seat, look.night ? -0.25 : 0.14));
-    ctx.fillStyle = sg;
-    ctx.fillRect(x, horizon, ww, seatsH);
-    for (let i = 0; i < 9; i++) {
-      const ry = horizon + (i / 9) * seatsH;
-      for (let j = 0; j < 70; j++) {
-        const seed = hash01(i * 71 + j, i + 3);
-        if (seed > look.crowd) continue;
-        ctx.fillStyle = look.night
-          ? (seed > 0.82 ? "rgba(255,255,255,.32)" : `rgba(235,244,250,${0.07 + seed * 0.14})`)
-          : (seed > 0.82 ? "rgba(20,26,32,.55)" : `rgba(24,30,38,${0.18 + seed * 0.22})`);
-        ctx.fillRect(x + (j / 70) * ww + (i % 2) * 1.5, ry, 2, 1.8);
-      }
-    }
-    // floodlights stand behind the far roof
-    for (const px of [0.14, 0.86]) {
-      const fx = x + ww * px, fy = horizon - roofH - wh * 0.26;
-      ctx.strokeStyle = "rgba(8,12,16,.9)"; ctx.lineWidth = Math.max(1.5, ww * 0.007);
-      ctx.beginPath(); ctx.moveTo(fx, horizon - roofH); ctx.lineTo(fx, fy); ctx.stroke();
-      ctx.fillStyle = look.night ? "#fff6da" : "rgba(214,226,236,.75)";
-      ctx.fillRect(fx - ww * 0.032, fy - wh * 0.035, ww * 0.064, wh * 0.035);
+    const roofH = h * 0.055 * deep;
+    // floodlights first, so the stands cover their feet
+    for (const px of [0.16, 0.84]) {
+      const fx = w * px, fy = horizon - roofH - h * 0.30;
+      ctx.strokeStyle = "rgba(8,12,16,.85)"; ctx.lineWidth = Math.max(1.5, w * 0.008);
+      ctx.beginPath(); ctx.moveTo(fx, horizon); ctx.lineTo(fx, fy); ctx.stroke();
+      ctx.fillStyle = look.night ? "#fff6da" : "rgba(214,226,236,.8)";
+      ctx.fillRect(fx - w * 0.035, fy - h * 0.04, w * 0.07, h * 0.04);
       if (look.night) {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        const cone = ctx.createLinearGradient(fx, fy, fx, y + wh);
-        cone.addColorStop(0, "rgba(255,240,205,.16)");
-        cone.addColorStop(0.5, "rgba(255,240,205,.06)");
-        cone.addColorStop(1, "rgba(255,240,205,0)");
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        const cone = ctx.createLinearGradient(fx, fy, fx, h);
+        cone.addColorStop(0, "rgba(255,240,205,.20)"); cone.addColorStop(0.55, "rgba(255,240,205,.07)"); cone.addColorStop(1, "rgba(255,240,205,0)");
         ctx.fillStyle = cone;
-        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - ww * 0.55, y + wh); ctx.lineTo(fx + ww * 0.55, y + wh); ctx.closePath(); ctx.fill();
-        const bulb = ctx.createRadialGradient(fx, fy - wh * 0.02, 0, fx, fy - wh * 0.02, wh * 0.13);
-        bulb.addColorStop(0, "rgba(255,247,220,.55)"); bulb.addColorStop(1, "rgba(255,247,220,0)");
-        ctx.fillStyle = bulb; ctx.beginPath(); ctx.arc(fx, fy - wh * 0.02, wh * 0.13, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - w * 0.55, h); ctx.lineTo(fx + w * 0.55, h); ctx.closePath(); ctx.fill();
+        const bulb = ctx.createRadialGradient(fx, fy - h * 0.02, 0, fx, fy - h * 0.02, h * 0.14);
+        bulb.addColorStop(0, "rgba(255,247,220,.6)"); bulb.addColorStop(1, "rgba(255,247,220,0)");
+        ctx.fillStyle = bulb; ctx.beginPath(); ctx.arc(fx, fy - h * 0.02, h * 0.14, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
     }
-    // near stands: darker wedges at both edges, which gives the bowl its depth
+    // far stand
+    ctx.fillStyle = shade(look.club, -0.80); ctx.fillRect(0, horizon - roofH, w, roofH);
+    ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(0, horizon - roofH, w, 2);
+    const seatsH = h * 0.115;
+    const seat = mix(look.club, "#4a545e", 0.62);
+    const sg = ctx.createLinearGradient(0, horizon, 0, horizon + seatsH);
+    sg.addColorStop(0, shade(seat, look.night ? -0.35 : 0.02));
+    sg.addColorStop(1, shade(seat, look.night ? -0.12 : 0.24));
+    ctx.fillStyle = sg; ctx.fillRect(0, horizon, w, seatsH);
+    for (let i = 0; i < 7; i++) {
+      const ry = horizon + (i / 7) * seatsH;
+      for (let j = 0; j < 74; j++) {
+        const seed = hash01(i * 71 + j, i + 3);
+        if (seed > look.crowd) continue;
+        ctx.fillStyle = look.night
+          ? (seed > 0.82 ? "rgba(255,255,255,.34)" : `rgba(235,244,250,${0.07 + seed * 0.15})`)
+          : (seed > 0.82 ? "rgba(18,24,30,.5)" : `rgba(22,28,36,${0.16 + seed * 0.22})`);
+        ctx.fillRect((j / 74) * w + (i % 2) * 1.5, ry, 2, 1.8);
+      }
+    }
     const pitchTop = horizon + seatsH;
-    ctx.fillStyle = shade(look.club, -0.68);
-    ctx.beginPath(); ctx.moveTo(x, pitchTop); ctx.lineTo(x + ww * 0.10, pitchTop); ctx.lineTo(x, y + wh); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(x + ww, pitchTop); ctx.lineTo(x + ww * 0.90, pitchTop); ctx.lineTo(x + ww, y + wh); ctx.closePath(); ctx.fill();
-
-    // the pitch: a trapezoid, mown in bands that widen towards us
-    const pg = ctx.createLinearGradient(0, pitchTop, 0, y + wh);
-    pg.addColorStop(0, shade(look.grass, look.night ? -0.42 : -0.12));
-    pg.addColorStop(1, shade(look.grass, look.night ? -0.18 : 0.10));
+    // ad boards
+    ctx.fillStyle = shade(look.club, -0.30);
+    ctx.fillRect(w * 0.08, pitchTop - h * 0.016, w * 0.84, h * 0.016);
+    ctx.fillStyle = "rgba(255,255,255,.10)";
+    for (let i = 0; i < 9; i++) ctx.fillRect(w * (0.09 + i * 0.093), pitchTop - h * 0.013, w * 0.05, h * 0.006);
+    // near stands as wedges
+    ctx.fillStyle = shade(look.club, -0.72);
+    ctx.beginPath(); ctx.moveTo(0, pitchTop); ctx.lineTo(w * 0.08, pitchTop); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(w, pitchTop); ctx.lineTo(w * 0.92, pitchTop); ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
+    // the pitch
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(x + ww * 0.10, pitchTop);
-    ctx.lineTo(x + ww * 0.90, pitchTop);
-    ctx.lineTo(x + ww, y + wh);
-    ctx.lineTo(x, y + wh);
-    ctx.closePath();
-    ctx.clip();
-    ctx.fillStyle = pg;
-    ctx.fillRect(x, pitchTop, ww, y + wh - pitchTop);
+    ctx.moveTo(w * 0.08, pitchTop); ctx.lineTo(w * 0.92, pitchTop); ctx.lineTo(w, h); ctx.lineTo(0, h);
+    ctx.closePath(); ctx.clip();
+    const grass = mix(look.grass, "#4a5a52", 0.28);
+    const pg = ctx.createLinearGradient(0, pitchTop, 0, h);
+    pg.addColorStop(0, shade(grass, look.night ? -0.45 : -0.18));
+    pg.addColorStop(1, shade(grass, look.night ? -0.20 : 0.06));
+    ctx.fillStyle = pg; ctx.fillRect(0, pitchTop, w, h - pitchTop);
     ctx.globalAlpha = 0.08;
-    for (let i = 0; i < 7; i++) {
-      if (i % 2) continue;
-      ctx.fillStyle = "#ffffff";
+    for (let i = 0; i < 7; i += 2) {
       const t0 = i / 7, t1 = (i + 1) / 7;
+      ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.moveTo(x + ww * (0.10 + t0 * 0.80), pitchTop);
-      ctx.lineTo(x + ww * (0.10 + t1 * 0.80), pitchTop);
-      ctx.lineTo(x + ww * t1, y + wh);
-      ctx.lineTo(x + ww * t0, y + wh);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(w * (0.08 + t0 * 0.84), pitchTop); ctx.lineTo(w * (0.08 + t1 * 0.84), pitchTop);
+      ctx.lineTo(w * t1, h); ctx.lineTo(w * t0, h); ctx.closePath(); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    // far touchline and the top of the box
     ctx.strokeStyle = "rgba(255,255,255,.34)"; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(x + ww * 0.105, pitchTop + 2); ctx.lineTo(x + ww * 0.895, pitchTop + 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w * 0.085, pitchTop + 2); ctx.lineTo(w * 0.915, pitchTop + 2); ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(x + ww * 0.32, pitchTop + 2); ctx.lineTo(x + ww * 0.30, pitchTop + wh * 0.085);
-    ctx.lineTo(x + ww * 0.70, pitchTop + wh * 0.085); ctx.lineTo(x + ww * 0.68, pitchTop + 2);
+    ctx.moveTo(w * 0.32, pitchTop + 2); ctx.lineTo(w * 0.30, pitchTop + h * 0.10);
+    ctx.lineTo(w * 0.70, pitchTop + h * 0.10); ctx.lineTo(w * 0.68, pitchTop + 2);
     ctx.stroke();
-    ctx.save();
-    ctx.translate(x + ww * 0.5, y + wh * 0.95);
-    ctx.scale(1, 0.28);
-    ctx.beginPath(); ctx.arc(0, 0, ww * 0.13, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.translate(w * 0.5, h * 0.97); ctx.scale(1, 0.3);
+    ctx.beginPath(); ctx.arc(0, 0, w * 0.15, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     ctx.restore();
-    ctx.restore();
+
+    // the air between here and the far side: everything recedes a little
+    const haze = ctx.createLinearGradient(0, horizon - h * 0.14, 0, horizon + h * 0.10);
+    haze.addColorStop(0, look.night ? "rgba(20,34,54,.55)" : "rgba(190,206,218,.42)");
+    haze.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, horizon - h * 0.14, w, h * 0.24);
 
     // weather on the glass
     if (this.drops.length) {
-      ctx.save();
       if (look.weather === "rain") {
-        ctx.strokeStyle = "rgba(205,224,238,.4)"; ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(210,228,240,.45)"; ctx.lineWidth = 1.1;
         for (const d of this.drops) {
-          const dx = x + d.x * ww, dy = y + d.y * wh;
-          ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx - ww * 0.012, dy + wh * d.len); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(d.x * w, d.y * h); ctx.lineTo(d.x * w - w * 0.02, d.y * h + h * d.len); ctx.stroke();
         }
       } else {
-        ctx.fillStyle = "rgba(255,255,255,.7)";
-        for (const d of this.drops) ctx.fillRect(x + d.x * ww, y + d.y * wh, 2.2, 2.2);
+        ctx.fillStyle = "rgba(255,255,255,.8)";
+        for (const d of this.drops) ctx.fillRect(d.x * w, d.y * h, 2.4, 2.4);
       }
-      ctx.restore();
     }
-
-    // the glass itself: a diagonal sheen and the room's reflection
+    // the glass itself
     ctx.save();
-    ctx.globalAlpha = 0.09;
-    const refl = ctx.createLinearGradient(x, y, x + ww * 0.7, y + wh);
+    ctx.globalAlpha = 0.10;
+    const refl = ctx.createLinearGradient(0, 0, w * 0.7, h);
     refl.addColorStop(0, "#ffffff"); refl.addColorStop(0.5, "rgba(255,255,255,0)");
-    ctx.fillStyle = refl; ctx.fillRect(x, y, ww, wh);
-    ctx.restore();
-    ctx.restore();
-
-    // ---- frame: outer, transom and mullion, then the sill
-    const frameC = look.tier === 2 ? "#3f2a19" : "#10161c";
-    ctx.strokeStyle = frameC;
-    ctx.lineWidth = Math.max(5, w * 0.014);
-    ctx.strokeRect(x, y, ww, wh);
-    ctx.fillStyle = frameC;
-    ctx.fillRect(x, y + wh * 0.34, ww, Math.max(2.5, w * 0.005));
-    ctx.fillRect(x + ww * 0.5 - Math.max(1.5, w * 0.0025), y, Math.max(3, w * 0.005), wh);
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1;
-    ctx.strokeRect(x + 2, y + 2, ww - 4, wh - 4);
-    ctx.restore();
-    const sillH = h * 0.036;
-    const sillG = ctx.createLinearGradient(0, y + wh, 0, y + wh + sillH);
-    sillG.addColorStop(0, look.tier === 2 ? "#6a4728" : "#1d262e");
-    sillG.addColorStop(1, look.tier === 2 ? "#3a2716" : "#0f151b");
-    ctx.fillStyle = sillG;
-    ctx.fillRect(x - w * 0.014, y + wh, ww + w * 0.028, sillH);
-    ctx.save();
-    ctx.fillStyle = "rgba(215,228,238,.65)";
-    ctx.font = `600 ${Math.max(9, Math.round(h * 0.026))}px "Barlow Condensed", sans-serif`;
-    ctx.textAlign = "right"; ctx.textBaseline = "middle";
-    ctx.fillText(`${look.ground} · ${look.capacity.toLocaleString("ko-KR")}석`, x + ww - 8, y + wh + sillH / 2 + 1);
+    ctx.fillStyle = refl; ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
 
-  /** What hangs on the walls: the tactics board, the youth photo, the cabinet, the trophy shelf. */
-  private paintWallThings(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
-    // tactics board (left)
-    const bx = w * L.board.x, by = h * L.board.y, bw = w * L.board.w, bh = h * L.board.h;
-    ctx.fillStyle = "#0f1a14"; ctx.fillRect(bx, by, bw, bh);
-    ctx.strokeStyle = look.tier === 2 ? "#5a4227" : "#2a3640"; ctx.lineWidth = 3; ctx.strokeRect(bx, by, bw, bh);
-    ctx.save();
-    ctx.globalAlpha = 0.5; ctx.strokeStyle = "#cfe6d6"; ctx.lineWidth = 1;
-    ctx.strokeRect(bx + bw * 0.10, by + bh * 0.14, bw * 0.80, bh * 0.72);
-    ctx.beginPath(); ctx.moveTo(bx + bw * 0.5, by + bh * 0.14); ctx.lineTo(bx + bw * 0.5, by + bh * 0.86); ctx.stroke();
-    ctx.beginPath(); ctx.arc(bx + bw * 0.5, by + bh * 0.5, bh * 0.12, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = look.club;
-    for (const [mx, my] of [[0.26, 0.32], [0.26, 0.66], [0.40, 0.5], [0.62, 0.35], [0.62, 0.65], [0.74, 0.5]] as [number, number][]) {
-      ctx.beginPath(); ctx.arc(bx + bw * mx, by + bh * my, Math.max(2.5, bh * 0.05), 0, Math.PI * 2); ctx.fill();
-    }
-
-    // youth photo (right, top)
-    const px = w * L.photo.x, py = h * L.photo.y, pw = w * L.photo.w, ph = h * L.photo.h;
-    ctx.fillStyle = look.tier === 2 ? "#6b4c2a" : "#26313b"; ctx.fillRect(px - 3, py - 3, pw + 6, ph + 6);
-    const pg = ctx.createLinearGradient(0, py, 0, py + ph);
-    pg.addColorStop(0, shade(look.grass, 0.1)); pg.addColorStop(1, shade(look.grass, -0.4));
-    ctx.fillStyle = pg; ctx.fillRect(px, py, pw, ph);
-    ctx.fillStyle = "rgba(10,14,18,.75)";
-    for (let i = 0; i < 7; i++) ctx.fillRect(px + pw * (0.10 + i * 0.115), py + ph * 0.45, pw * 0.055, ph * 0.35);
-
-    // filing cabinet (right, below the photo)
-    const cx = w * L.cabinet.x, cy = h * L.cabinet.y, cw = w * L.cabinet.w, ch = h * L.cabinet.h;
-    const cg = ctx.createLinearGradient(cx, 0, cx + cw, 0);
-    cg.addColorStop(0, "#242c34"); cg.addColorStop(0.55, "#333e48"); cg.addColorStop(1, "#1c232a");
-    ctx.fillStyle = cg; ctx.fillRect(cx, cy, cw, ch);
-    ctx.fillStyle = "rgba(0,0,0,.35)";
-    for (let i = 0; i < 3; i++) ctx.fillRect(cx + cw * 0.12, cy + ch * (0.16 + i * 0.28), cw * 0.76, 2);
-    ctx.fillStyle = "#8c98a3";
-    for (let i = 0; i < 3; i++) ctx.fillRect(cx + cw * 0.40, cy + ch * (0.22 + i * 0.28), cw * 0.20, 3);
-
-    // trophy shelf, once the room has earned one
-    if (look.tier >= 1) {
-      const sx = w * L.shelf.x, sy = h * L.shelf.y, sw = w * L.shelf.w;
-      ctx.fillStyle = look.tier === 2 ? "#5a4227" : "#28323b";
-      ctx.fillRect(sx, sy, sw, Math.max(4, h * 0.012));
-      for (let i = 0; i < look.trophies; i++) {
-        const tx = sx + sw * (0.10 + i * 0.14), ty = sy;
-        ctx.fillStyle = "#e8c66a";
-        ctx.beginPath(); ctx.moveTo(tx - 5, ty - 14); ctx.lineTo(tx + 5, ty - 14); ctx.lineTo(tx + 2, ty - 3); ctx.lineTo(tx - 2, ty - 3); ctx.closePath(); ctx.fill();
-        ctx.fillRect(tx - 4, ty - 3, 8, 3);
-      }
-    }
-  }
-
-  /** The desk itself and what lies on it: blotter, folder, paper, phone, pen, mug. */
-  private paintDesk(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
-    const dy = h * L.deskTop;
-    const top = look.tier === 2 ? "#6d4a24" : look.tier === 1 ? "#3d322a" : "#31353b";
-    // the desk edge catches the lamp; the surface falls away into the dark
-    const g = ctx.createLinearGradient(0, dy, 0, h);
-    g.addColorStop(0, shade(top, 0.18));
-    g.addColorStop(0.06, top);
-    g.addColorStop(1, shade(top, -0.55));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, dy, w, h - dy);
-    ctx.fillStyle = "rgba(255,236,200,.20)";
-    ctx.fillRect(0, dy, w, 2);
-    if (look.tier === 2) {
-      ctx.save(); ctx.globalAlpha = 0.10; ctx.strokeStyle = "#2a1a0c"; ctx.lineWidth = 1;
-      for (let i = 0; i < 7; i++) {
-        const yy = dy + (h - dy) * (0.15 + i * 0.12);
-        ctx.beginPath(); ctx.moveTo(0, yy); ctx.bezierCurveTo(w * 0.3, yy - 3, w * 0.7, yy + 3, w, yy); ctx.stroke();
-      }
+  /** What the objects say, written on them. */
+  private paintProps(ctx: CanvasRenderingContext2D, look: OfficeLook, f: { dx: number; dy: number; dw: number; dh: number }): void {
+    const l = LAYOUTS[look.tier];
+    // the board: the next fixture, chalked on
+    const b = this.at(l.board, f);
+    if (look.opponent) {
+      const size = Math.max(11, b.h * 0.115);
+      ctx.save();
+      ctx.translate(b.x + b.w * 0.5, b.y + b.h * 0.34);
+      ctx.rotate(-0.012);
+      this.chalk(ctx, `R${look.round}  ${look.opponent.home ? "HOME" : "AWAY"}`, 0, 0, size * 0.72, "rgba(236,246,240,.62)");
+      this.chalk(ctx, `vs ${look.opponent.short}`, 0, size * 1.15, size, "rgba(246,252,248,.9)");
       ctx.restore();
     }
-    // blotter
+    // the photo: how many are in the academy
+    const p = this.at(l.photo, f);
+    if (look.prospects > 0) this.plate(ctx, `유스 ${look.prospects}`, p.x + p.w * 0.5, p.y + p.h * 1.06, Math.max(9, p.h * 0.16));
+    // the cabinet: seasons on record
+    const c = this.at(l.cabinet, f);
+    if (look.seasons > 0) this.plate(ctx, `${look.seasons}시즌 기록`, c.x + c.w * 0.5, c.y + c.h * 0.16, Math.max(9, c.w * 0.16));
+    // the newspaper: the headline
+    const n = this.at(l.paper, f);
     ctx.save();
-    const bl = ctx.createLinearGradient(0, dy + h * 0.03, 0, dy + h * 0.33);
-    bl.addColorStop(0, "rgba(24,18,14,.55)"); bl.addColorStop(1, "rgba(10,8,6,.35)");
-    ctx.fillStyle = bl;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(w * 0.03, dy + h * 0.03, w * 0.62, h * 0.30, 6); else ctx.rect(w * 0.03, dy + h * 0.03, w * 0.62, h * 0.30);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,225,180,.10)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.translate(n.x + n.w * 0.5, n.y + n.h * 0.30);
+    ctx.rotate(0.03);
+    const hs = Math.max(9, n.h * 0.20);
+    this.text(ctx, look.leader ? `${look.leader} 선두` : "리그 개막", 0, 0, hs, "rgba(28,28,26,.88)", "center");
+    if (look.lastResult) this.text(ctx, look.lastResult, 0, hs * 1.25, hs * 0.72, "rgba(40,40,36,.7)", "center");
     ctx.restore();
-
-    const shadow = (x: number, y: number, ww: number, hh: number) => {
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = "#000";
-      ctx.filter = "blur(4px)";
-      ctx.fillRect(x + 3, y + 5, ww, hh);
-      ctx.filter = "none"; ctx.restore();
-    };
-
-    // squad folder
-    const fx = w * L.folder.x, fy = h * L.folder.y, fw = w * L.folder.w, fh = h * L.folder.h;
-    ctx.save();
-    ctx.translate(fx + fw / 2, fy + fh / 2); ctx.rotate(-0.05); ctx.translate(-fw / 2, -fh / 2);
-    shadow(0, 0, fw, fh);
-    const fg = ctx.createLinearGradient(0, 0, fw, fh);
-    fg.addColorStop(0, shade(look.club, -0.10)); fg.addColorStop(1, shade(look.club, -0.38));
-    ctx.fillStyle = fg; ctx.fillRect(0, 0, fw, fh);
-    ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.fillRect(0, 0, fw, fh * 0.06);
-    // a label and a couple of sheets poking out
-    ctx.fillStyle = "#f2f5f7"; ctx.fillRect(fw * 0.08, fh * 0.14, fw * 0.5, fh * 0.16);
-    ctx.fillStyle = "rgba(255,255,255,.55)";
-    ctx.fillRect(fw * 0.62, -fh * 0.05, fw * 0.3, fh * 0.09);
-    ctx.fillStyle = "rgba(0,0,0,.25)";
-    for (let i = 0; i < 3; i++) ctx.fillRect(fw * 0.08, fh * (0.48 + i * 0.15), fw * (0.66 - i * 0.14), fh * 0.05);
-    ctx.restore();
-
-    // newspaper
-    const nx = w * L.paper.x, ny = h * L.paper.y, nw = w * L.paper.w, nh = h * L.paper.h;
-    ctx.save();
-    ctx.translate(nx + nw / 2, ny + nh / 2); ctx.rotate(0.045); ctx.translate(-nw / 2, -nh / 2);
-    shadow(0, 0, nw, nh);
-    ctx.fillStyle = "#ded8ca"; ctx.fillRect(0, 0, nw, nh);
-    ctx.fillStyle = "#c9c2b2"; ctx.fillRect(nw * 0.5, 0, 1.5, nh);
-    ctx.fillStyle = "#23231f"; ctx.fillRect(nw * 0.06, nh * 0.10, nw * 0.42, nh * 0.16);
-    ctx.fillStyle = "rgba(35,35,31,.45)";
-    for (let i = 0; i < 6; i++) ctx.fillRect(nw * 0.06, nh * (0.36 + i * 0.10), nw * (0.40 - (i % 2) * 0.08), nh * 0.045);
-    for (let i = 0; i < 6; i++) ctx.fillRect(nw * 0.54, nh * (0.20 + i * 0.10), nw * (0.40 - ((i + 1) % 2) * 0.08), nh * 0.045);
-    ctx.restore();
-
-    // telephone: base, handset and a coiled cord
-    const tx = w * L.phone.x, ty = h * L.phone.y, tw = w * L.phone.w, th = h * L.phone.h;
-    shadow(tx + tw * 0.06, ty + th * 0.40, tw * 0.88, th * 0.5);
-    ctx.fillStyle = "#1b2129"; ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(tx + tw * 0.06, ty + th * 0.42, tw * 0.88, th * 0.48, 5); else ctx.rect(tx + tw * 0.06, ty + th * 0.42, tw * 0.88, th * 0.48);
-    ctx.fill();
-    ctx.fillStyle = shade(look.club, -0.1);
-    ctx.fillRect(tx + tw * 0.20, ty + th * 0.62, tw * 0.60, th * 0.10);
-    ctx.fillStyle = "#0f141a"; ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(tx, ty + th * 0.12, tw, th * 0.30, 7); else ctx.rect(tx, ty + th * 0.12, tw, th * 0.30);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.10)"; ctx.fillRect(tx + tw * 0.08, ty + th * 0.15, tw * 0.84, 2);
-    ctx.strokeStyle = "rgba(15,20,26,.9)"; ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i = 0; i <= 16; i++) {
-      const cxp = tx + tw * (0.95 + Math.sin(i * 1.1) * 0.05), cyp = ty + th * (0.55 + i * 0.03);
-      if (i === 0) ctx.moveTo(cxp, cyp); else ctx.lineTo(cxp, cyp);
-    }
-    ctx.stroke();
-
-    // a pen resting on the blotter
-    ctx.save();
-    ctx.translate(w * 0.335, h * (L.deskTop + 0.045)); ctx.rotate(-0.5);
-    ctx.fillStyle = "#1b222a"; ctx.fillRect(0, 0, w * 0.075, 4);
-    ctx.fillStyle = "#c9a24a"; ctx.fillRect(w * 0.075, 0, w * 0.014, 4);
-    ctx.restore();
-
-    // mug with steam
-    const mx = w * L.mug.x, my = h * L.mug.y;
-    shadow(mx, my + h * L.mug.h * 0.7, w * L.mug.w, h * 0.02);
-    ctx.fillStyle = "#dce4ea"; ctx.fillRect(mx, my, w * L.mug.w, h * L.mug.h);
-    ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(mx + w * L.mug.w * 0.62, my, w * L.mug.w * 0.38, h * L.mug.h);
-    ctx.strokeStyle = "#dce4ea"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(mx + w * L.mug.w, my + h * L.mug.h * 0.4, h * 0.016, -1.2, 1.2); ctx.stroke();
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 3; i++) {
-      const ph = ((this.t * 0.35 + i / 3) % 1);
-      const sy = my - h * 0.006 - ph * h * 0.06;
-      const sx = mx + w * L.mug.w * 0.5 + Math.sin(this.t * 0.9 + i * 2.1) * w * 0.008;
-      const r = w * (0.012 + ph * 0.014);
-      const gg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-      gg.addColorStop(0, `rgba(255,255,255,${0.10 * (1 - ph)})`);
-      gg.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /** The desk lamp: the warm pool of light that makes the room a room. */
-  private paintLamp(ctx: CanvasRenderingContext2D, look: OfficeLook, w: number, h: number): void {
-    const lx = w * 0.055, ly = h * (L.deskTop - 0.02);
-    const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, w * 0.55);
-    g.addColorStop(0, "rgba(255,214,140,.30)");
-    g.addColorStop(0.45, "rgba(255,196,110,.10)");
-    g.addColorStop(1, "rgba(255,196,110,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-    if (look.tier >= 1) {
-      ctx.fillStyle = "#2a3037";
-      const ly0 = h * (L.deskTop - 0.02);
-      ctx.fillRect(lx - w * 0.012, ly0, w * 0.024, h * 0.02);
-      ctx.beginPath(); ctx.moveTo(lx - w * 0.05, ly0 - h * 0.055); ctx.lineTo(lx + w * 0.05, ly0 - h * 0.055); ctx.lineTo(lx + w * 0.028, ly0); ctx.lineTo(lx - w * 0.028, ly0); ctx.closePath(); ctx.fill();
+    // the phone: offers waiting, with a light that will not be ignored
+    const t = this.at(l.phone, f);
+    if (look.offers > 0) {
+      const pulse = 0.35 + 0.65 * Math.abs(Math.sin(this.t * 2.4));
+      const cx = t.x + t.w * 0.5, cy = t.y - t.h * 0.12;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, t.w * 0.5);
+      g.addColorStop(0, `rgba(255,90,80,${0.45 * pulse})`); g.addColorStop(1, "rgba(255,90,80,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, t.w * 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      this.plate(ctx, `제안 ${look.offers}`, cx, cy, Math.max(9, t.w * 0.16), `rgba(255,${120 + 70 * pulse},110,.95)`);
     }
   }
 
-  private paintVignette(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    const g = ctx.createRadialGradient(w / 2, h * 0.55, Math.min(w, h) * 0.25, w / 2, h * 0.55, Math.max(w, h) * 0.8);
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,.55)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+  private text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign): void {
+    ctx.save();
+    ctx.font = `700 ${Math.round(size)}px "Barlow Condensed", "IBM Plex Sans KR", sans-serif`;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle";
+    ctx.fillText(s, x, y);
+    ctx.restore();
+  }
+
+  /** Chalk on the board: a soft double pass, so it sits in the surface rather than on it. */
+  private chalk(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string): void {
+    ctx.save();
+    ctx.font = `700 ${Math.round(size)}px "Barlow Condensed", "IBM Plex Sans KR", sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.globalAlpha = 0.35; ctx.fillStyle = color; ctx.fillText(s, x + 0.8, y + 0.8);
+    ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.fillText(s, x, y);
+    ctx.restore();
+  }
+
+  /** A small dark plate with a label, for numbers that have to be read against a painting. */
+  private plate(ctx: CanvasRenderingContext2D, s: string, cx: number, cy: number, size: number, color = "rgba(226,236,242,.92)"): void {
+    ctx.save();
+    ctx.font = `700 ${Math.round(size)}px "Barlow Condensed", "IBM Plex Sans KR", sans-serif`;
+    const w = ctx.measureText(s).width + size * 0.9, h = size * 1.5;
+    ctx.fillStyle = "rgba(8,12,16,.62)";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2); else ctx.rect(cx - w / 2, cy - h / 2, w, h);
+    ctx.fill();
+    ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(s, cx, cy + 0.5);
+    ctx.restore();
   }
 }

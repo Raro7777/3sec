@@ -185,13 +185,18 @@
       .stars { color:var(--accent); letter-spacing:.05em; } .stars i { font-style:normal; color:#2c3d4b; }
       /* 감독실: the canvas room and the objects you tap on it */
       .office { border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#0d1116; }
-      .officeStage { position:relative; width:100%; aspect-ratio: 1 / 1; max-height:62vh; }
+      .officeStage { position:relative; width:100%; aspect-ratio: 4 / 3; max-height:62vh; }
       @media (min-width: 720px) { .officeStage { aspect-ratio: 16 / 10; } }
       .office canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
-      .office .spot { position:absolute; background:transparent; border:1px solid transparent; border-radius:8px; color:var(--text); padding:0; display:flex; align-items:flex-start; justify-content:flex-start; transition:border-color .12s, background .12s, transform .12s; }
-      .office .spot:hover, .office .spot:focus-visible { border-color:rgba(255,255,255,.45); background:rgba(255,255,255,.05); outline:none; transform:translateY(-1px); }
-      .office .spot b { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; background:rgba(8,12,16,.72); color:#dfe8ef; padding:1px 5px; border-radius:0 0 5px 0; line-height:1.55; }
-      .office .spot.hot b { background:var(--accent); color:#1b1400; box-shadow:0 0 16px rgba(242,193,78,.5); }
+      /* the objects are found by looking, not by reading: the label waits for a hover or a focus */
+      .office .spot { position:absolute; background:transparent; border:1.5px solid transparent; border-radius:9px; color:var(--text); padding:0; display:flex; align-items:flex-start; justify-content:flex-start; transition:border-color .15s, background .15s, box-shadow .15s; }
+      .office .spot:hover, .office .spot:focus-visible { border-color:rgba(255,244,214,.65); background:rgba(255,246,224,.07); outline:none; box-shadow:0 0 22px rgba(255,236,190,.22) inset; }
+      .office .spot b { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; background:rgba(8,12,16,.82); color:#f0f5f9; padding:1px 6px; border-radius:0 0 6px 0; line-height:1.6; opacity:0; transform:translateY(-3px); transition:opacity .15s, transform .15s; }
+      .office .spot:hover b, .office .spot:focus-visible b { opacity:1; transform:none; }
+      .office .spot.hot { border-color:rgba(242,193,78,.75); animation:spotPulse 2.2s ease-in-out infinite; }
+      .office .spot.hot b { opacity:1; transform:none; background:var(--accent); color:#1b1400; }
+      @keyframes spotPulse { 0%,100% { box-shadow:0 0 0 rgba(242,193,78,0); } 50% { box-shadow:0 0 26px rgba(242,193,78,.35); } }
+      @media (prefers-reduced-motion: reduce) { .office .spot.hot { animation:none; } }
       .officeHud { position:absolute; top:8px; right:10px; display:flex; flex-direction:column; align-items:flex-end; gap:2px; pointer-events:none; text-align:right; }
       .officeHud .cn { display:flex; align-items:center; gap:5px; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-weight:700; font-size:16px; letter-spacing:.02em; background:rgba(8,12,16,.6); padding:1px 8px; border-radius:999px; pointer-events:auto; cursor:pointer; }
       .officeHud .cn i { width:8px; height:8px; border-radius:50%; display:inline-block; }
