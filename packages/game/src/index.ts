@@ -4,7 +4,7 @@ export { buildFixtures, roundsPerSeason } from "./fixtures";
 export { CLUBS, buildClubs, buildSquad, randomName } from "./world";
 export { BENCH_SIZE, autoSelect, isAvailable, repairSelection, selectionProblem, swap } from "./selection";
 export {
-  DEFAULT_MANAGER_NAME, newGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
+  DEFAULT_MANAGER_NAME, newGame, newScenarioGame, clubOf, playerOf, seasonOver, currentFixtures, nextUserFixture, fixtureSeed,
   prepareRound, teamDef, createMatch, type GameMatchOptions, recordResult, simulateRound, advanceRound, startNextSeason, table, topScorers, titleClinched, BUDGET_CAP, yellowBan, homeAwayRecord, financeSummary, seasonRounds, leaguePrize,
   type RecordOptions, type HomeAwayRecord, type FinanceSummary,
 } from "./season";
@@ -104,4 +104,5 @@ export { askingPriceFor } from "./transfers";
 export { RED_ARREARS_WEEKS, ARREARS_MORALE, ARREARS_FLOOR, LOAN_WEEKS, LOAN_INTEREST, redWeeks, inArrears, financeStatus, takeEmergencyLoan, financeWeek, financeRollover, type FinanceStatus } from "./finance";
 export { RETURN_AFTER, RETURN_FEE_SHARE, noteDeparture, returnable, returningPlayer, returnFee, forgetAlumnus, alumniRollover, type Alumnus } from "./alumni";
 export { FEUD_AT, FEUD_MAX, feudWith, adjustFeud, rivalManager, recordManagerH2H, h2hTable, tauntLine, derbyQuote, rivalryRollover, type ManagerH2H } from "./rivalry";
+export { SCENARIOS, scenarioById, activeScenario, scenarioBlock, judgeScenario, clearedScenarios, cupRounds, type Scenario, type ScenarioState, type ScenarioOutcome, type ScenarioRules } from "./scenario";
 export { LAST_CALL_FROM, LAST_CALL_MINUTE, LAST_CALLS, lastCallById, lastCallDue, type LastCall, type LastCallId } from "./lastcall";

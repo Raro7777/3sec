@@ -22,7 +22,12 @@ export { simulateInThread } from "./protocol";
 export type SimMode = "workers" | "in-thread";
 export type SimProgress = (done: number, total: number, last: MatchResult) => void;
 
+/** How long one match may take in a worker before it is considered dead (a full match is ~50 ms). */
+export const DEFAULT_JOB_TIMEOUT_MS = 15000;
+
 export interface SimPoolOptions {
+  /** per-job watchdog in ms (default DEFAULT_JOB_TIMEOUT_MS) */
+  jobTimeoutMs?: number;
   /** Number of workers (default: min(hardwareConcurrency ?? 2, 4)). */
   size?: number;
   /** How long to wait for a worker's "ready" message before giving up on workers (default 4000 ms). */
@@ -192,8 +197,10 @@ export class SimPool {
     return new Promise((resolve, reject) => {
       const w = slot.worker;
       const cleanup = () => {
+        clearTimeout(timer);
         w.removeEventListener("message", onMessage);
         w.removeEventListener("error", onError);
+        w.removeEventListener("messageerror", onError as EventListener);
       };
       const onMessage = (e: MessageEvent<WorkerResponse>) => {
         const m = e.data;
@@ -206,8 +213,17 @@ export class SimPool {
         cleanup();
         reject(e.error ?? new Error(e.message || "worker error"));
       };
+      // A worker can die without an error event (the browser reclaims it, the tab is throttled, a message is
+      // lost). Without this watchdog the promise never settles and every later run queues behind it: the game
+      // freezes on the matchday with no way forward. On a timeout the worker is treated as crashed, so
+      // workerLoop retires it and the job is replayed by another worker or in-thread.
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new SimTimeout(job.id));
+      }, this.options.jobTimeoutMs ?? DEFAULT_JOB_TIMEOUT_MS);
       w.addEventListener("message", onMessage);
       w.addEventListener("error", onError);
+      w.addEventListener("messageerror", onError as EventListener);
       const msg: WorkerRequest = { kind: "run", job };
       w.postMessage(msg);
     });
@@ -217,6 +233,14 @@ export class SimPool {
     this.slots = this.slots.filter((s) => s !== slot);
     try { slot.worker.terminate(); } catch { /* ignore */ }
     if (!this.slots.length) this.modeValue = "in-thread";
+  }
+}
+
+/** A worker went quiet: no answer within the watchdog. Treated as a crash (retire, replay elsewhere). */
+export class SimTimeout extends Error {
+  constructor(readonly jobId: string) {
+    super(`match ${jobId} timed out in its worker`);
+    this.name = "SimTimeout";
   }
 }
 

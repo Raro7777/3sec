@@ -1,3 +1,4 @@
+import { failScenarioOnSack } from "./scenario";
 import { Rng } from "@3sec/engine";
 import type { Board, Club, GameState, SackRecord } from "./types";
 import { clubOf, seasonOver, seasonRounds, table } from "./season";
@@ -71,6 +72,7 @@ export type BoardEvent = "warning" | "sacked" | null;
 export const confidenceBand = (c: number): "good" | "ok" | "warn" | "bad" => (c >= TRUST_AT ? "good" : c >= 45 ? "ok" : c >= WARN_BELOW ? "warn" : "bad");
 
 function sack(s: GameState, reason: SackRecord["reason"]): void {
+  failScenarioOnSack(s);
   const rows = table(s);
   const idx = rows.findIndex((r) => r.club === s.userClub);
   s.board.sacked = { season: s.season, round: s.round, position: idx + 1, expected: userExpectation(s), pts: rows[idx]?.pts ?? 0, reason };

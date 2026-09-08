@@ -1,5 +1,6 @@
 import { difficultyOf } from "./difficulty";
 import { FOREIGN_PREMIUM, FOREIGN_QUOTA, foreignCount, isForeignPlayer } from "./foreign";
+import { scenarioBlock } from "./scenario";
 import { isForeignId } from "./continental";
 import { divisionOf } from "./divisions";
 import type { Club, GameState, ManagerTraits, MarketEntry, MarketKind, SquadPlayer, TransferOffer } from "./types";
@@ -300,6 +301,8 @@ export function makeBid(s: GameState, fromClubId: number, playerId: string, fee:
   const asking = askingPriceFor(s, from, p);
   if (asking === null) return err(`${from.name}은(는) 스쿼드가 얇아 팔지 않습니다`);
   if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return err(`외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`);
+  const blocked = scenarioBlock(s, "transfer", p);
+  if (blocked) return err(blocked);
   fee = Math.round(fee);
   if (!(fee > 0)) return err("제시액이 올바르지 않습니다");
   if (me.budget < fee) return err(`예산 부족 (필요 ${fee}억, 보유 ${me.budget}억)`);
@@ -337,6 +340,7 @@ export function buyPlayer(s: GameState, fromClubId: number, playerId: string): s
   if (!windowOpen(s)) return "이적 시장이 닫혀 있습니다";
   const price = askingPriceFor(s, from, p);
   if (price === null) return `${from.name}은(는) 스쿼드가 얇아 팔지 않습니다`;
+  { const blocked = scenarioBlock(s, "transfer", p); if (blocked) return blocked; }
   if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return `외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`;
   if (me.budget < price) return `예산 부족 (필요 ${price}억, 보유 ${me.budget}억)`;
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;
@@ -563,6 +567,7 @@ export function signFreeAgent(s: GameState, playerId: string): string | null {
   if (!p) return "선수를 찾을 수 없습니다";
   if (!windowOpen(s)) return "이적 시장이 닫혀 있습니다";
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;
+  { const blocked = scenarioBlock(s, "free", p); if (blocked) return blocked; }
   if (isForeignPlayer(p) && foreignCount(me) >= FOREIGN_QUOTA) return `외국인 보유 한도 ${FOREIGN_QUOTA}명 (현재 ${foreignCount(me)}명)`;
   const t = freeAgentTerms(p);
   if (me.budget < t.fee) return `계약금 부족 (필요 ${t.fee}억, 보유 ${me.budget}억)`;
@@ -643,6 +648,7 @@ export function loanIn(s: GameState, clubId: number, playerId: string): string |
   const from = clubOf(s, clubId);
   const p = from.squad.find((q) => q.id === playerId);
   if (!p) return "선수를 찾을 수 없습니다";
+  { const blocked = scenarioBlock(s, "loan", p); if (blocked) return blocked; }
   if (!windowOpen(s)) return "이적 시장이 닫혀 있습니다";
   if (!loanTargets(s).some((t) => t.player === p)) return `${from.name}은(는) ${p.name}을(를) 임대하지 않습니다`;
   if (me.squad.length >= MAX_SQUAD) return `스쿼드 상한 ${MAX_SQUAD}명`;

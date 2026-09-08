@@ -2,7 +2,8 @@ import { FORMATIONS, INSTRUCTION_IDS, INSTRUCTION_LABEL, ROLES, Rng, TACTIC_PRES
 
 type SliderKey = "mentality" | "defensiveLine" | "pressing" | "directness" | "width" | "tempo" | "counter" | "engageLine";
 import {
-  CLUBS, SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, nextUserFixture,
+  CLUBS, SAVE_KEY, advanceRound, autoSelect, clubOf, createMatch, currentFixtures, deserialize, isAvailable, newGame, newScenarioGame, nextUserFixture,
+  SCENARIOS, activeScenario, scenarioById, scenarioBlock, clearedScenarios, type Scenario,
   overall, playerOf, prepareRound, recordResult, seasonRounds, seasonOver, selectionProblem, serialize, slotFit, startNextSeason,
   swap, table, topScorers, type Club, type Fixture, type GameState, type SquadPlayer,
   MAX_SQUAD, MIN_SQUAD, bestOffer, playerValue, sellPlayer, transferTargets, windowOpen, deadlineDay, makeBid, openOffers, acceptOffer, rejectOffer, respondToCounter,
@@ -187,12 +188,16 @@ export class Game {
   private liveKind: "league" | "cup" | "cl" = "league";
   /** The last watched match's before/after readout of the manager's own changes (tactics-report.ts). */
   private lastTactics: TacticsReport | null = null;
+  /** a round simulation is in flight (simRounds is not re-entrant) */
+  private simming = false;
   /** the running 도전 모드 match (outside the season: never settled, never saved) */
   private challenge: { scen: ChallengeScenario; match: Match; side: TeamId } | null = null;
   private selA: string | null = null;
   private current: ScreenName = "home";
   private pickedClub: number | null = null;
   private pickedDifficulty: Difficulty = "normal";
+  /** 시나리오 모드: the scenario chosen on the onboarding screen (null = a free career) */
+  private pickedScenario: string | null = null;
   /** where the profile screen returns to */
   private profileFrom: ScreenName = "squad";
   /** active sub-tab per screen (persisted) */
@@ -279,6 +284,7 @@ export class Game {
   // ------------------------------------------------------------ onboarding
   private startOnboarding(): void {
     this.pickedClub = null;
+    this.pickedScenario = null;
     document.body.classList.add("onboarding");
     this.renderOnboarding();
     this.show("onboarding");
@@ -326,6 +332,16 @@ export class Game {
       <div class="hint">비워두면 "감독"으로 불립니다.</div>
       <div class="onb-diff-title">난이도 <small>시작 후에는 바꿀 수 없습니다</small></div>
       <div class="onb-diff">${DIFFICULTY_ORDER.map((d) => `<button type="button" class="diff-card${this.pickedDifficulty === d ? " sel" : ""}" data-diff="${d}"><b>${DIFFICULTIES[d].label}</b><small>${DIFFICULTIES[d].blurb}</small></button>`).join("")}</div></div>`);
+    // 시나리오 모드: a named run with its own club, its own opening state and one goal for the first season.
+    const cleared = new Set(this.state.scenariosCleared ?? []);
+    h.push(`<div class="card"><h3>시나리오 <span>${this.pickedScenario ? scenarioById(this.pickedScenario)!.name : `${SCENARIOS.length}개 · 선택 사항`}</span></h3>
+      <div class="hint">조건이 정해진 커리어입니다. 시나리오를 고르면 구단과 시작 상황이 함께 정해지고, 첫 시즌이 끝날 때 성공·실패가 판정됩니다. 그 뒤로는 평범한 커리어처럼 계속 이어집니다.</div>
+      <div class="scen-grid">${SCENARIOS.map((sc) => `<button type="button" class="scen-card${this.pickedScenario === sc.id ? " sel" : ""}" data-scen="${sc.id}">
+        <div class="sc-head"><b>${sc.name}</b><span class="stars" title="난이도 ${sc.stars}/3">${"★".repeat(sc.stars)}<i>${"★".repeat(3 - sc.stars)}</i></span>${cleared.has(sc.id) ? '<span class="sc-done">클리어</span>' : ""}</div>
+        <div class="sc-tag">${sc.tagline}</div>
+        <div class="sc-goal">목표 · ${sc.goal}</div>
+      </button>`).join("")}</div>
+      ${this.pickedScenario ? `<div class="hint" style="color:var(--accent);margin-top:6px">${scenarioById(this.pickedScenario)!.brief}</div>` : '<div class="hint" style="margin-top:6px">고르지 않으면 아래에서 팀을 직접 선택하는 자유 커리어로 시작합니다.</div>'}</div>`);
     // Both divisions are on offer: starting below is the harder career, with promotion to chase.
     // A roster pack on this device renames the slots it covers (settings → 로스터 팩).
     const pack = loadRosterPack();
@@ -348,7 +364,9 @@ export class Game {
       });
       h.push(`</div></div>`);
     }
-    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${this.pickedClub === null ? "disabled" : ""}>이 팀으로 시작 →</button><span class="hint" id="onbHint">${this.pickedClub === null ? "팀을 먼저 선택하세요." : `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
+    const scen = scenarioById(this.pickedScenario ?? undefined);
+    const ready = !!scen || this.pickedClub !== null;
+    h.push(`<div class="actions onb-actions"><button class="primary" id="onbStart" ${ready ? "" : "disabled"}>${scen ? `«${scen.name}» 시작 →` : "이 팀으로 시작 →"}</button><span class="hint" id="onbHint">${scen ? `구단은 시나리오가 정합니다 · 목표: ${scen.goal}` : this.pickedClub === null ? "팀을 먼저 선택하세요." : `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`}</span></div>`);
     this.el.onboarding.innerHTML = h.join("");
 
     const nameInput = document.getElementById("onbName") as HTMLInputElement;
@@ -356,9 +374,19 @@ export class Game {
     const hint = document.getElementById("onbHint")!;
     this.el.onboarding.querySelectorAll<HTMLButtonElement>(".club-card").forEach((b) => b.addEventListener("click", () => {
       this.pickedClub = Number(b.dataset.club);
+      this.pickedScenario = null;
       this.el.onboarding.querySelectorAll<HTMLElement>(".club-card").forEach((x) => x.classList.toggle("sel", x === b));
+      this.el.onboarding.querySelectorAll<HTMLElement>(".scen-card").forEach((x) => x.classList.remove("sel"));
       startBtn.disabled = false;
+      startBtn.textContent = "이 팀으로 시작 →";
       hint.textContent = `${WORLD_CLUBS[this.pickedClub]!.name} 감독으로 시작합니다.`;
+    }));
+    this.el.onboarding.querySelectorAll<HTMLButtonElement>(".scen-card").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.scen!;
+      this.pickedScenario = this.pickedScenario === id ? null : id;
+      this.pickedClub = null;
+      this.renderOnboarding();
+      (document.getElementById("onbName") as HTMLInputElement).value = nameInput.value;
     }));
     this.el.onboarding.querySelectorAll<HTMLButtonElement>(".diff-card").forEach((b) => b.addEventListener("click", () => {
       this.pickedDifficulty = b.dataset.diff as Difficulty;
@@ -366,13 +394,18 @@ export class Game {
     }));
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) startBtn.click(); });
     startBtn.addEventListener("click", () => {
+      if (this.pickedScenario) { this.finishOnboarding(null, nameInput.value); return; }
       if (this.pickedClub === null) return;
       this.finishOnboarding(this.pickedClub, nameInput.value);
     });
   }
 
-  private finishOnboarding(club: number, name: string): void {
-    this.state = newGame(Math.floor(Math.random() * 1e6) + 1, club, name.trim() || "감독", this.pickedDifficulty, loadRosterPack());
+  private finishOnboarding(club: number | null, name: string): void {
+    const seed = Math.floor(Math.random() * 1e6) + 1;
+    const manager = name.trim() || "감독";
+    this.state = this.pickedScenario
+      ? newScenarioGame(seed, this.pickedScenario, manager, this.pickedDifficulty, loadRosterPack())
+      : newGame(seed, club ?? 0, manager, this.pickedDifficulty, loadRosterPack());
     prepareRound(this.state);
     this.live = null;
     this.pickedClub = null;
@@ -406,6 +439,11 @@ export class Game {
       <li><b>직접성</b>: 짧게 가면 점유율이 오르고, 롱볼은 빠르게 위협하지만 패스가 자주 끊깁니다.</li>
       <li><b>폭</b>: 넓게 서면 크로스가 늘고, 좁히면 중앙을 두껍게 막습니다.</li>
       <li>스쿼드 탭의 값이 기본 전술이고, 경기 중 바꾼 값은 다음 경기로 이어집니다.</li></ul>`)}
+    ${sec("시나리오 모드", `<ul>
+      <li>새 게임 화면에서 <b>시나리오</b>를 고르면 구단과 시작 상황이 함께 정해집니다. 무일푼 승격, 잔류 청부사, 유스 아카데미, 토종 군단, 빚더미, 매각 지시, 우승 청부사 등이 있습니다.</li>
+      <li>시나리오는 <b>첫 시즌</b>만 판정합니다. 목표를 이루면 성공, 못 이루거나 경질되면 실패이고, 어느 쪽이든 커리어는 그대로 이어집니다.</li>
+      <li>일부 시나리오는 <b>제약</b>이 있습니다. 영입·임대·자유계약이 막히거나 외국인을 쓸 수 없습니다. 막힌 영입은 이적 화면에서 이유를 알려 줍니다.</li>
+      <li>성공한 시나리오는 <b>명예의 전당</b> 탭에 남습니다.</li></ul>`)}
     ${sec("결정적 순간", `<ul>
       <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
       <li><b>마지막 지시</b>: 75분부터 화면 오른쪽 아래에 📣 버튼이 뜹니다. 경기당 한 번, <b>총공격</b>(라인 올리고 전원 공격) / <b>잠그기</b>(내려앉아 지키기) / <b>시간 끌기</b>(느리게 안전하게) 중 하나로 남은 시간의 전술을 통째로 바꿉니다.</li>
@@ -764,6 +802,7 @@ export class Game {
     if (false && expiring.length && s.round >= 12 && !over) h.push(`<div class="hint" style="color:var(--warn)">이번 시즌 계약 만료 ${expiring.length}명 (${expiring.slice(0, 3).map((p) => p.name).join(", ")}${expiring.length > 3 ? " 외" : ""}) — 이적 탭에서 재계약하지 않으면 시즌 후 떠납니다.</div>`);
 
     h.push(this.boardHtml());
+    h.push(this.scenarioHtml());
     h.push(this.fansHtml());
     if (s.board.sacked) {
       h.push(`<div class="hint" style="color:var(--bad)"><b>경질되었습니다.</b> ${me.name} 이사회가 계약을 해지했습니다. 다른 구단의 제안을 받거나 새 게임을 시작하세요.</div><div class="actions"><button class="primary" data-act="sacked">거취 정하기 →</button></div>`);
@@ -1057,6 +1096,16 @@ export class Game {
         ${stat("역전승 / 대승", `${r.comebacks}회 / ${r.bigWins}회`)}
         ${stat("유스 승격", `${r.promotedYouth}명`)}
       </div></div>`);
+    // 시나리오 모드: what this save has cleared, and what is still on the shelf
+    const clearedIds = new Set(this.state.scenariosCleared ?? []);
+    const running = this.state.scenario;
+    h.push(`<div class="card review"><h3>시나리오 <span>${clearedIds.size} / ${SCENARIOS.length}</span></h3><div class="stats">${SCENARIOS.map((sc: Scenario) => {
+      const done = clearedIds.has(sc.id);
+      const now = running?.id === sc.id && running.outcome === "running";
+      const failed = running?.id === sc.id && running.outcome === "failed" && !done;
+      const color = done ? "var(--good)" : now ? "var(--accent)" : failed ? "var(--bad)" : "var(--muted)";
+      return `<div class="stat" style="align-items:center;text-align:center;opacity:${done || now ? 1 : 0.65}"><span style="font-size:22px;line-height:1.1">${done ? "🎯" : now ? "▶" : failed ? "✕" : "·"}</span><b style="color:${color}">${sc.name}</b><small>${done ? "성공" : now ? "진행 중" : failed ? "실패" : sc.goal}</small></div>`;
+    }).join("")}</div><div class="hint" style="margin-top:6px">새 게임을 시작할 때 시나리오를 고르면 조건이 정해진 커리어로 첫 시즌을 치릅니다.</div></div>`);
     h.push(`<div class="card review"><h3>업적 <span>${hof.earned.length} / ${hof.total} · 금 ${byTier("gold")} · 은 ${byTier("silver")} · 동 ${byTier("bronze")}</span></h3><div class="stats">${grid}</div></div>`);
     h.push(`<div class="grid2">`);
     h.push(`<div class="card"><h3>역대 시즌 <span>내 순위</span></h3>${hof.positions.length ? `<table class="std"><thead><tr><th>시즌</th><th class="l">구단</th><th>순위</th><th>승점</th><th class="l">득점왕</th></tr></thead><tbody>${[...hof.positions].reverse()
@@ -1083,6 +1132,26 @@ export class Game {
   }
 
   /** Compact fan strip for the home card: mood bar with its label and the last home crowd (fans.ts). */
+  /**
+   * 시나리오 모드 (scenario.ts): what the run is, what clears it, and how it is going. Empty for a free career.
+   * While the run is live the rules it binds are spelled out, so a refused signing is never a surprise.
+   */
+  private scenarioHtml(): string {
+    const s = this.state;
+    const st = s.scenario;
+    const sc = scenarioById(st?.id);
+    if (!st || !sc) return "";
+    const done = st.outcome !== "running";
+    const color = st.outcome === "cleared" ? "var(--good)" : st.outcome === "failed" ? "var(--bad)" : "var(--accent)";
+    const label = st.outcome === "cleared" ? "성공" : st.outcome === "failed" ? "실패" : `시즌 ${st.season} 진행 중`;
+    const r = sc.rules ?? {};
+    const rules = [r.noTransfersIn ? "이적 영입 불가" : "", r.noLoansIn ? "임대 영입 불가" : "", r.noFreeAgents ? "자유계약 불가" : "", r.noForeign ? "외국인 영입 불가" : ""].filter(Boolean);
+    return `<div class="card" style="border-left:3px solid ${color}"><h3>🎯 ${sc.name} <span style="color:${color}">${label}</span></h3>
+      <div class="hint"><b>목표</b> · ${sc.goal}</div>
+      ${done ? `<div class="hint" style="color:${color}">${st.note ?? ""} 이후 시즌은 평범한 커리어로 이어집니다.</div>`
+        : `<div class="hint">${sc.brief}</div>${rules.length ? `<div class="hint" style="color:var(--warn)">제약 · ${rules.join(" · ")}</div>` : ""}`}</div>`;
+  }
+
   private fansHtml(): string {
     const me = this.me;
     const f = me.fans;
@@ -2332,6 +2401,7 @@ export class Game {
         <span class="chips">${([["ovr", "능력순"], ["value", "싼 순"], ["age", "어린 순"], ["pot", "잠재력순"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferSort === k ? "on" : ""}" data-sort="${k}">${l}</button>`).join("")}</span>
         <span class="chips">${([["all", "전체"], ["home", "국내"], ["abroad", "해외"]] as [string, string][]).map(([k, l]) => `<button class="sortChip ${this.transferScope === k ? "on" : ""}" data-scope="${k}">${l}</button>`).join("")}</span>
       <span class="hint">호가는 상대 구단이 부르는 값입니다(핵심 선수일수록 비쌈, 24명 넘는 구단의 잉여 선수는 가치 그대로). 영입 버튼을 누르면 금액을 제시하고, 구단은 수락하거나 한 번 역제안합니다.</span>
+      ${scenarioBlock(s, "transfer") ? `<span class="hint" style="color:var(--warn)"><b>시나리오 제약</b> · ${scenarioBlock(s, "transfer")}. 판매와 재계약은 그대로 할 수 있습니다.</span>` : ""}
       <span class="hint"><b>외국인 규정</b>: 보유 ${FOREIGN_QUOTA}명, 동시 선발 ${FOREIGN_ON_PITCH}명까지. 해외 구단 선수의 호가는 국내보다 ${Math.round((FOREIGN_PREMIUM - 1) * 100)}% 비싸고, 주전은 상위 리그로 갈 때만 잘 응합니다. 대신 해외 구단이 우리 스타 선수에게 큰돈을 들고 찾아오기도 합니다.</span></div></div>`);
     // ---- incoming offers
     const offers = openOffers(s);
@@ -2359,7 +2429,9 @@ export class Game {
         if (t.price === null) return fmtRow(t.player, t.club.shortName, '<span class="hint">비매</span>', t.club.id);
         if (t.player.refusedSeason === s.season) return fmtRow(t.player, t.club.shortName, '<span class="hint" style="color:var(--warn)">이적 거부</span>', t.club.id);
         const pb = this.pendingBid && this.pendingBid.playerId === t.player.id ? this.pendingBid : null;
-        const ok = can && me.squad.length < MAX_SQUAD && me.budget >= Math.min(t.price, pb?.counter ?? t.price) * 0.5;
+        const blocked = scenarioBlock(s, "transfer", t.player);
+        const ok = !blocked && can && me.squad.length < MAX_SQUAD && me.budget >= Math.min(t.price, pb?.counter ?? t.price) * 0.5;
+        if (blocked) return fmtRow(t.player, t.club.shortName, `<span class="hint" style="color:var(--warn)">시나리오 제약</span>`, t.club.id);
         return fmtRow(t.player, t.club.shortName, pb
           ? `<button class="primary" data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="역제안 ${pb.counter}억 — 마지막 제시">재입찰 ${pb.counter}억</button>`
           : `<button data-bid="${t.club.id}:${t.player.id}" ${ok ? "" : "disabled"} ${btn} title="${t.abroad ? `해외 이적 프리미엄 포함 (가치 ${t.value}억)` : `가치 ${t.value}억`}">호가 ${t.price}억</button>`, t.club.id);
@@ -2661,7 +2733,11 @@ export class Game {
     this.wireClubTaps(this.el.results);
     this.wireStory(this.el.results);
     document.getElementById("btnNextRound")!.addEventListener("click", () => {
+      // each competition closes its own matchday: a cup or continental day never advances the league round,
+      // and advanceRound would refuse anyway (the round's league fixtures are still unplayed), leaving the
+      // pending day set and the game with no way forward
       if (kind === "cup") advanceCupDay(this.state);
+      else if (kind === "cl") advanceClDay(this.state);
       else advanceRound(this.state);
       prepareRound(this.state);
       this.save();
@@ -2773,6 +2849,12 @@ export class Game {
     h.push(`</div>`);
     h.push(`<div class="grid2">${this.achievementsReviewHtml()}${this.careerReviewHtml()}</div>`);
     h.push(this.cupHtml());
+    const scSt = s.scenario, scDef = scenarioById(scSt?.id);
+    if (scSt && scDef && scSt.season === s.season) {
+      const ok = scSt.outcome === "cleared";
+      h.unshift(`<div class="card" style="border-color:${ok ? "var(--good)" : "var(--bad)"}"><h3>🎯 시나리오 «${scDef.name}» <span style="color:${ok ? "var(--good)" : "var(--bad)"}">${ok ? "성공" : scSt.outcome === "failed" ? "실패" : "진행 중"}</span></h3>
+        <div class="hint"><b>목표</b> · ${scDef.goal}</div><div class="hint">${scSt.note ?? ""}</div></div>`);
+    }
     this.el.review.innerHTML = h.join("");
     this.el.review.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) => b.addEventListener("click", () => {
       if (b.dataset.act === "home") this.show("home");
@@ -2874,6 +2956,19 @@ export class Game {
   private async simRounds(n: number): Promise<void> {
     const s = this.state;
     if (this.challenge) return;
+    // One run at a time: a second tap while the pool is working would overwrite `this.live` mid-flight and
+    // the matches of the first run would never be written back (a continental day lost its results this way).
+    if (this.simming) return;
+    this.simming = true;
+    try {
+      await this.simLoop(n);
+    } finally {
+      this.simming = false;
+    }
+  }
+
+  private async simLoop(n: number): Promise<void> {
+    const s = this.state;
     for (let k = 0; k < n; k++) {
       if (seasonOver(s)) break;
       prepareRound(s);

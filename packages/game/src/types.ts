@@ -596,6 +596,10 @@ export interface GameState {
   managerH2H?: Record<string, import("./rivalry").ManagerH2H>;
   /** feud level per opposing manager id (rivalry.ts) */
   feud?: Record<string, number>;
+  /** the running 시나리오 (scenario.ts): its rules bind, and its first season is judged */
+  scenario?: import("./scenario").ScenarioState;
+  /** ids of scenarios cleared on this save (the hall of fame) */
+  scenariosCleared?: string[];
   /** career counters behind the achievements (achievements.ts) */
   records?: Records;
   /** unlocked achievements, oldest first (achievements.ts) */

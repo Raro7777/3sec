@@ -24,6 +24,7 @@ import { pressConference, skipInterview } from "./press";
 import { financeRollover, financeWeek } from "./finance";
 import { alumniRollover } from "./alumni";
 import { derbyQuote, recordManagerH2H, rivalryRollover } from "./rivalry";
+import { judgeScenario, scenarioById } from "./scenario";
 import { storyMatch, storyRollover, storyWeek } from "./story";
 import { applyExpansion } from "./stadium";
 import { achievementsAfterMatch, achievementsSeasonEnd, achievementsWeek, migrateAchievements } from "./achievements";
@@ -36,6 +37,26 @@ export interface RecordOptions {
 }
 
 export const DEFAULT_MANAGER_NAME = "감독";
+
+/**
+ * A career started under a 시나리오 (scenario.ts): the scenario picks the club, bends the opening state and
+ * binds its rules for the season, which `judgeScenario` marks cleared or failed at the rollover.
+ */
+export function newScenarioGame(seed: number, scenarioId: string, managerName: string = DEFAULT_MANAGER_NAME, difficulty: Difficulty = "normal", roster: RosterPack | null = null): GameState {
+  const sc = scenarioById(scenarioId);
+  if (!sc) throw new Error(`unknown scenario: ${scenarioId}`);
+  // the club is chosen from a built world, so the scenario can ask for "the poorest side in the second division"
+  const probe = newGame(seed, 0, managerName, difficulty, roster);
+  const club = sc.pick(probe);
+  const s = newGame(seed, club, managerName, difficulty, roster);
+  s.scenario = { id: sc.id, season: s.season, outcome: "running" };
+  sc.setup?.(s);
+  const me = s.clubs[s.userClub]!;
+  me.selection = repairSelection(me);
+  me.seasonStartBudget = me.budget;
+  s.news.unshift(`시나리오 «${sc.name}» 시작. 목표: ${sc.goal}.`);
+  return s;
+}
 
 export function newGame(seed: number, userClub = 0, managerName: string = DEFAULT_MANAGER_NAME, difficulty: Difficulty = "normal", roster: RosterPack | null = null): GameState {
   const clubs = buildClubs(seed);
@@ -320,6 +341,8 @@ export function startNextSeason(s: GameState): void {
   const award = managerRollover(s, new Rng(s.seed * 43 + s.season * 719 + 999));
   if (award) record.managerOfYear = award;
   s.seasonHistory.push(record);
+  // 시나리오 모드: the run is judged on its own season, before promotion and relegation move anyone
+  judgeScenario(s, record);
   // The user's board judges the season; every player's season goes on the CV before the counters reset.
   boardRollover(s);
   appendCareer(s);
