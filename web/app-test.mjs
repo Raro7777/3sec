@@ -66,6 +66,7 @@ page.on('console', m => { if (m.type() === 'error' && !/net::ERR/.test(m.text())
 // 시각 시드로는 같은 검사가 판마다 흔들린다. 스크립트가 읽기 전에 넣어야 하므로 initScript 로.
 await page.addInitScript(() => { window.BLOOM_SEED = 20260907; });
 await page.goto('file://' + APP);
+await page.evaluate(() => { try { localStorage.setItem('bloom-fx-off', '1'); } catch (e) {} });   // 소환 연출은 화면 흐름 회귀에서 건너뛴다(순수 연출, 별도 스크린샷으로 검증)
 await page.waitForTimeout(700);
 
 // --- 0. 첫 안내 · 코치 (테스터 피드백 "게임을 어떻게 하는지 모르겠다")

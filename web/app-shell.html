@@ -493,6 +493,41 @@ details[open] summary::after{content:"▴"}
 .gframe,.gbtn{border-style:solid;border-width:0;border-image:var(--gframe) 26 fill;border-image-width:11px;border-image-repeat:stretch}
 .gbtn::before{display:none}
 
+/* ===== 가챠 소환 연출 — 암전→충전→등급색 예고→폭발(등급 색은 실제 결과와 일치, B.2.3). ===== */
+.summon{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:radial-gradient(circle at 50% 44%,#173257 0%,#060912 72%);--sc:#8fbaf0}
+.summon.rk-SR{--sc:#b98cf0} .summon.rk-SSR{--sc:#ffcf52}
+.sm-rays{position:absolute;width:170vmax;height:170vmax;border-radius:50%;opacity:0;transition:opacity .5s;
+  background:repeating-conic-gradient(from 0deg,transparent 0 5deg,var(--sc) 5deg 6.2deg,transparent 6.2deg 12deg);
+  mix-blend-mode:screen;animation:smspin 16s linear infinite}
+.summon.charge .sm-rays{opacity:.14}
+.summon.tell .sm-rays{opacity:.45;animation-duration:6s}
+.summon.rk-SSR.tell .sm-rays{opacity:.8;animation-duration:2.4s}
+.sm-ring{position:absolute;width:160px;height:160px;border-radius:50%;border:3px solid var(--sc);
+  box-shadow:0 0 34px var(--sc);opacity:0;transform:scale(.4);transition:.5s}
+.summon.charge .sm-ring{opacity:.55;transform:scale(1);animation:smpulse 1.05s ease-in-out infinite}
+.summon.tell .sm-ring{opacity:.9;transform:scale(1.08)}
+.sm-orb{position:absolute;width:100px;height:100px;border-radius:50%;
+  background:radial-gradient(circle at 38% 34%,#fff 0%,var(--sc) 58%,rgba(0,0,0,.45) 100%);
+  box-shadow:0 0 44px var(--sc),0 0 100px var(--sc);opacity:0;transform:scale(.2);transition:.4s cubic-bezier(.2,.8,.3,1.2)}
+.summon.charge .sm-orb{opacity:1;transform:scale(1);animation:smbob 1.2s ease-in-out infinite}
+.summon.tell .sm-orb{transform:scale(1.18)}
+.sm-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.summon.burst .sm-flash{animation:smflash .55s ease-out forwards}
+.sm-wave{position:absolute;width:70px;height:70px;border-radius:50%;border:5px solid #fff;opacity:0}
+.summon.burst .sm-wave{animation:smwave .6s ease-out forwards}
+.sm-hint{position:absolute;top:23%;font-family:var(--display);font-size:24px;color:#eaf2ff;letter-spacing:.06em;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+.summon.tell .sm-hint{color:var(--sc);text-shadow:0 0 20px var(--sc)}
+.sm-skip{position:absolute;bottom:7%;font-size:12.5px;color:rgba(255,255,255,.5)}
+.summon.rk-SSR.tell{animation:smshake .11s linear infinite}
+@keyframes smspin{to{transform:rotate(360deg)}}
+@keyframes smpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.13)}}
+@keyframes smbob{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.05) translateY(-6px)}}
+@keyframes smflash{0%{opacity:0}16%{opacity:.95}100%{opacity:0}}
+@keyframes smwave{0%{opacity:.85;transform:scale(.4)}100%{opacity:0;transform:scale(9)}}
+@keyframes smshake{0%,100%{transform:translate(0,0)}25%{transform:translate(-3px,2px)}75%{transform:translate(3px,-2px)}}
+@media (prefers-reduced-motion:reduce){ .summon .sm-rays,.summon .sm-orb,.summon .sm-ring{animation:none!important} }
+
 /* 홈 허브: 배경 씬 위에 캐릭터와 떠 있는 프레임 HUD. 스크롤 목록이 아니라 한 장의 씬. */
 .hub{position:relative;margin:-14px -14px 12px;min-height:calc(100dvh - 160px);overflow:hidden;
   background:#cfe0f2 center/cover no-repeat;isolation:isolate}
@@ -3143,24 +3178,62 @@ function careerBlocks(m){
 }
 
 // ---------------------------------------------------------------- actions
+// 가챠 소환 연출 — 결과는 이미 정해진 뒤(등급을 안다) 재생한다. 등급 색 예고는 실제 결과와 일치(가짜 아쉬움 금지, B.2.3).
+var RANK = { N:0, R:1, SR:2, SSR:3 };
+function runSummon(rar, onDone){
+  try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(e){}
+  try { ensureAudio(); } catch(e){}
+  var ov = document.createElement('div');
+  ov.className = 'summon rk-' + rar + ' charge';
+  ov.innerHTML = '<div class="sm-rays"></div><div class="sm-ring"></div><div class="sm-orb"></div>'+
+    '<div class="sm-hint">스카우트 중…</div><div class="sm-flash"></div><div class="sm-wave"></div><div class="sm-skip">탭하면 건너뛰기</div>';
+  document.body.appendChild(ov);
+  var reduced = false; try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  var tellAt = reduced?120:750, burstAt = reduced?300:(rar==='SSR'?2000:(rar==='SR'?1350:1050)), endAt = burstAt + (reduced?200:430);
+  var timers = [], done = false;
+  function clr(){ timers.forEach(clearTimeout); timers = []; }
+  function finish(){ if (done) return; done = true; clr(); if (ov.parentNode) ov.parentNode.removeChild(ov); onDone && onDone(); }
+  if (snd && snd.on) { try { tone('sine', 180, 440, 0.7, 0.05); } catch(e){} }
+  timers.push(setTimeout(function(){
+    ov.classList.remove('charge'); ov.classList.add('tell');
+    var h = ov.querySelector('.sm-hint'); if (h) h.textContent = rar==='SSR'?'!!!':(rar==='SR'?'!!':'!');
+    if (snd && snd.on) { try { tone('sine', 440, 940, 0.55, 0.06); if (rar!=='R') burst(1600, 0.8, 0.4, 0.08, 0.05); } catch(e){} }
+    if (rar==='SSR') haptic([0,35,35,35]);
+  }, tellAt));
+  timers.push(setTimeout(function(){
+    ov.classList.remove('tell'); ov.classList.add('burst');
+    if (snd && snd.on) { try { if (rar==='SSR') sfx('ssr'); else { burst(2200, 0.7, 0.3, 0.12); tone('sine', 700, 1250, 0.3, 0.1); } } catch(e){} }
+    haptic(rar==='SSR'?[0,90,50,90]:(rar==='SR'?60:25));
+  }, burstAt));
+  timers.push(setTimeout(finish, endAt));
+  ov.addEventListener('click', function(){
+    if (done) return;
+    ov.classList.remove('charge','tell'); ov.classList.add('burst');
+    clr(); timers.push(setTimeout(finish, 170));
+  });
+}
 function doScout(pos){
   if (!E.canScout(G)) { toast('티켓이 없습니다'); return; }
   lastPulls = null;
   lastScout = E.scout(G, pos===undefined?{}:{ position: pos });
-  revealPending = true;
-  save(); checkMissions(); view='scout'; render();
-  window.scrollTo({ top:0, behavior:'smooth' });
-  preloadArt([lastScout.card], 1500, function(){ revealPending = false; if (view === 'scout') render(); if (lastScout && lastScout.rarity === 'SSR') { sfx('ssr'); haptic(80); } else sfx('ui'); });
+  save(); checkMissions();
+  runSummon(lastScout.rarity, function(){
+    revealPending = true; view='scout'; render();
+    window.scrollTo({ top:0 });
+    preloadArt([lastScout.card], 1500, function(){ revealPending = false; if (view === 'scout') render(); });
+  });
 }
 function doScout10(){
   if (G.tickets < 10) { toast('티켓이 10장 필요합니다'); return; }
   var out = E.scoutTen(G, {});   // SR 이상 1장 보장(B.2.1)
   lastPulls = out; lastScout = null;
-  if (out.some(function(x){ return x.rarity === 'SSR'; })) { sfx('ssr'); haptic(80); } else sfx('ui');
-  revealPending = true;
-  save(); checkMissions(); view='scout'; render();
-  window.scrollTo({ top:0, behavior:'smooth' });
-  preloadArt(out.map(function(r){ return r.card; }), 2500, function(){ revealPending = false; if (view === 'scout') render(); });
+  var best = out.reduce(function(m, x){ return RANK[x.rarity] > RANK[m] ? x.rarity : m; }, 'R');
+  save(); checkMissions();
+  runSummon(best, function(){
+    revealPending = true; view='scout'; render();
+    window.scrollTo({ top:0 });
+    preloadArt(out.map(function(r){ return r.card; }), 2500, function(){ revealPending = false; if (view === 'scout') render(); });
+  });
 }
 
 function applyChoice(id){
