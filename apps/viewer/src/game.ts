@@ -38,6 +38,7 @@ import {
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
 import { emblemSvg } from "./emblem";
+import { cabinetHtml, type Trophy } from "./cabinet";
 import { portraitSvg } from "./portrait";
 import { managerArt, userArt } from "./manager-art";
 import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, type Difficulty, parseRoster, rosterTemplate, buildClubs, type RosterPack } from "@3sec/game";
@@ -1136,10 +1137,14 @@ export class Game {
     const hof = hallOfFame(s);
     const earnedAt = new Map((s.achievements ?? []).map((a) => [a.id, a]));
     const num = (x: number) => x.toLocaleString("ko-KR");
-    const trophy = (icon: string, seasons: number[], label: string) => seasons.length
-      ? seasons.map((x) => `<div class="stat" style="align-items:center;text-align:center"><span style="font-size:28px;line-height:1.1">${icon}</span><b>${label}</b><small>시즌 ${x}</small></div>`).join("")
-      : "";
-    const cabinet = trophy("🏆", hof.titles, "리그 우승") + trophy("🏆", hof.cups, CUP_NAME + " 우승") + trophy("🎖", hof.managerAwards, "올해의 감독");
+    // the honours as an actual cabinet: lit shelves, engraved plaques, and the empty shelf that is the point
+    // of a first season
+    const doubles = new Set(hof.doubles);
+    const trophies: Trophy[] = [
+      ...hof.titles.map((season) => ({ kind: "league" as const, label: "리그 우승", season, ribbon: doubles.has(season) ? "더블" : undefined })),
+      ...hof.cups.map((season) => ({ kind: "cup" as const, label: `${CUP_NAME} 우승`, season })),
+      ...hof.managerAwards.map((season) => ({ kind: "manager" as const, label: "올해의 감독", season })),
+    ];
     const stat = (label: string, value: string) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
     const bw = hof.biggestWin;
     const r = hof.records;
@@ -1151,8 +1156,8 @@ export class Game {
     const byTier = (t: AchievementTier) => `${ACHIEVEMENTS.filter((a) => a.tier === t && earnedAt.has(a.id)).length}/${ACHIEVEMENTS.filter((a) => a.tier === t).length}`;
     const h: string[] = [];
     h.push(`<div class="card review"><h3>트로피 진열장 <span>${s.managerName} 감독 · ${hof.positions.length}시즌</span></h3>
-      ${cabinet ? `<div class="stats">${cabinet}</div>` : '<div class="hint">아직 트로피가 없습니다. 리그나 컵을 우승하면 여기에 진열됩니다.</div>'}
-      ${hof.doubles.length ? `<div class="hint" style="margin-top:6px;color:var(--accent)">더블 달성: ${hof.doubles.map((x) => `시즌 ${x}`).join(", ")}</div>` : ""}
+      ${cabinetHtml(trophies)}
+      ${trophies.length ? "" : '<div class="hint">리그나 컵을 우승하면 여기에 놓입니다.</div>'}
       <div class="stats" style="margin-top:8px">
         ${stat("최고 순위", hof.bestPosition ? `${hof.bestPosition}위` : "—")}
         ${stat("통산 승리", `${r.wins}승`)}
@@ -2363,7 +2368,14 @@ export class Game {
     const full = rows.length;
     const promoTo = division > 1 ? SWAP : 0;
     const relegFrom = division < DIVISIONS ? full - SWAP : full;
-    return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th>${compact ? "" : '<th class="l mgrcol">감독</th>'}<th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th></tr></thead><tbody>${rows
+    // 최근 5경기: every real table carries the run a club is on, and it is the one thing the numbers hide —
+    // two clubs on the same points are not in the same place if one has lost four straight.
+    const formPips = (club: number): string => {
+      const f = this.form(club);
+      if (f === "—") return `<span class="pips"></span>`;
+      return `<span class="pips">${[...f].slice(-5).map((ch) => `<i class="${ch === "승" ? "w" : ch === "패" ? "l" : "d"}" title="${ch}"></i>`).join("")}</span>`;
+    };
+    return `<table class="std"><thead><tr><th>#</th><th class="l">클럽</th>${compact ? "" : '<th class="l mgrcol">감독</th>'}<th>경기</th>${compact ? "" : "<th>승</th><th>무</th><th>패</th><th>득</th><th>실</th>"}<th>득실</th><th>승점</th>${compact ? "" : '<th class="l formcol">최근</th>'}</tr></thead><tbody>${rows
       .map((r) => {
         const c = clubOf(s, r.club);
         const pos = posOf.get(r.club)!;
@@ -2373,7 +2385,7 @@ export class Game {
         const zone = compact ? "" : pos <= promoTo ? " promo" : pos > relegFrom ? " releg" : "";
         const line = !compact && (pos === promoTo + 1 || pos === relegFrom + 1) ? " zoneline" : "";
         const title = zone === " promo" ? " title=\"승격권\"" : zone === " releg" ? " title=\"강등권\"" : "";
-        return `<tr class="${r.club === s.userClub ? "me" : ""}${zone}${line}" data-club="${c.id}" style="cursor:pointer"${title}><td>${pos}</td><td class="l"><span class="embWrap">${emblemSvg(c, 18)}</span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`;
+        return `<tr class="${r.club === s.userClub ? "me" : ""}${zone}${line}" data-club="${c.id}" style="cursor:pointer"${title}><td>${pos}</td><td class="l"><span class="embWrap">${emblemSvg(c, 18)}</span>${c.name}</td>${compact ? "" : `<td class="l mgrcol" title="${mgrTitle}">${mgr}</td>`}<td>${r.played}</td>${compact ? "" : `<td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td><td>${r.gf}</td><td>${r.ga}</td>`}<td>${r.gf - r.ga > 0 ? "+" : ""}${r.gf - r.ga}</td><td><b>${r.pts}</b></td>${compact ? "" : `<td class="l formcol">${formPips(r.club)}</td>`}</tr>`;
       })
       .join("")}</tbody></table>`;
   }
