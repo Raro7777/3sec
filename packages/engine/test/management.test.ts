@@ -183,3 +183,49 @@ describe("AI manager", () => {
     expect(m.state.events.some((e) => e.type === "TACTICS" && e.team === 1)).toBe(true);
   });
 });
+
+describe("adjustAttrs (the half-time talk reaching the pitch)", () => {
+  it("adds to the values the match is using and takes effect immediately", () => {
+    const m = mk();
+    const id = m.teams[0].players[3]!.id;
+    const was = m.def(id).attrs.composure;
+    expect(m.adjustAttrs(id, { composure: 0.4 })).toBe(true);
+    expect(m.def(id).attrs.composure).toBeCloseTo(was + 0.4, 5);
+    // twice over, it keeps adding rather than replacing
+    m.adjustAttrs(id, { composure: -0.9 });
+    expect(m.def(id).attrs.composure).toBeCloseTo(was - 0.5, 5);
+  });
+
+  it("keeps what was baked in at kick-off, including the home edge", () => {
+    const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 13, seed: 11 });
+    const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 12, seed: 22 });
+    const m = new Match(home, away, { seed: 3, aiManaged: [], homeEdge: 0.3 });
+    const id = home.players[2]!.id;
+    const raw = home.players[2]!.attrs.passing;
+    const withEdge = m.def(id).attrs.passing;
+    expect(withEdge).toBeCloseTo(raw + 0.3, 5);
+    // an empty move leaves the value exactly where it was: no rounding, no drift
+    m.adjustAttrs(id, {});
+    expect(m.def(id).attrs.passing).toBe(withEdge);
+    m.adjustAttrs(id, { passing: 0.2 });
+    expect(m.def(id).attrs.passing).toBeCloseTo(withEdge + 0.2, 5);
+  });
+
+  it("clamps to the 1..20 range and refuses an unknown id", () => {
+    const m = mk();
+    const id = m.teams[1].players[1]!.id;
+    m.adjustAttrs(id, { pace: 99 });
+    expect(m.def(id).attrs.pace).toBe(20);
+    m.adjustAttrs(id, { pace: -99 });
+    expect(m.def(id).attrs.pace).toBe(1);
+    expect(m.adjustAttrs("nobody", { pace: 1 })).toBe(false);
+  });
+
+  it("the second half is played with the new values", () => {
+    const a = mk(5), b = mk(5);
+    for (const id of b.teams[0].players.map((p) => p.id)) b.adjustAttrs(id, { finishing: 4, technique: 4, passing: 4 });
+    for (const m of [a, b]) { let n = 0; while (m.state.phase !== "FULL_TIME" && n++ < 20 * 60 * 120) m.step(); }
+    // a materially better home side is not the same match any more
+    expect(b.state.stats[0].xg).not.toBe(a.state.stats[0].xg);
+  });
+});

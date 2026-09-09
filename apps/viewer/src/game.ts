@@ -33,7 +33,7 @@ import {
 } from "@3sec/game";
 import {
   clubLore, derbyFor, answerInterview, resolveEvent, pendingEvents, setCaptain, moraleOf, moraleLabel, moraleBand, personalityTags, captainOf, type InterviewOption,
-  talkOptions, talkGiven, giveTalk, feudWith, type TalkTone, type TalkContext,
+  talkOptions, talkGiven, giveTalk, talkAttrDelta, feudWith, type TalkTone, type TalkContext,
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
@@ -489,7 +489,9 @@ export class Game {
     ${sec("팀 토크", `<ul>
       <li>경기 시작을 누르면 라커룸에서 <b>한 번</b> 말할 수 있습니다. <b>격려·침착·요구·질책</b> 중 하나를 고르면 선발 열한 명의 사기가 각자의 성격대로 움직이고, 그 사기가 경기의 능력치가 됩니다.</li>
       <li>상황을 읽어야 합니다. 부진하거나 전력이 열세면 <b>격려</b>, 더비처럼 흥분하기 쉬운 날은 <b>침착</b>, 전력이 우세하고 흐름이 좋으면 <b>요구</b>가 잘 먹힙니다. <b>질책</b>은 연패 중일 때만 통하고, 다혈질 선수는 등을 돌립니다.</li>
-      <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li></ul>`)}
+      <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li>
+      <li><b>하프타임</b>에도 한 번 더 말할 수 있습니다. 하프타임 카드의 <b>라커룸 →</b>을 누르세요. 이때는 최근 성적이 아니라 <b>점수</b>가 방을 정합니다: 앞서면 <b>침착</b>이 지켜 주고, 동점이면 <b>요구</b>가 경기를 가져오고, 크게 뒤지면 <b>질책</b>이 통합니다. 이기고 있을 때의 질책은 경기를 던지는 짓입니다.</li>
+      <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 그 자리에서 능력치가 움직이고(사기 이동의 3배로 계산), 시즌에 남는 사기는 표시된 값 그대로입니다.</li></ul>`)}
     ${sec("결정적 순간", `<ul>
       <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
       <li><b>마지막 지시</b>: 75분부터 화면 오른쪽 아래에 📣 버튼이 뜹니다. 경기당 한 번, <b>총공격</b>(라인 올리고 전원 공격) / <b>잠그기</b>(내려앉아 지키기) / <b>시간 끌기</b>(느리게 안전하게) 중 하나로 남은 시간의 전술을 통째로 바꿉니다.</li>
@@ -3143,21 +3145,38 @@ export class Game {
       derby: !!(fx && derbyFor(s, fx)) || (opp.manager ? feudWith(s, opp.manager.id) >= FEUD_AT : false),
       form: this.form(me.id).split("").reverse().map((ch) => (ch === "승" ? "W" : ch === "패" ? "L" : "D")).join(""),
     };
-    const opts = talkOptions(ctx);
     const room = Math.round(me.lockerRoom ?? 60);
+    const sub = `<div class="hint">${home ? "홈" : "원정"} · ${opp.name} 전${ctx.derby ? " · 더비" : ""}</div>
+      <div class="hint">최근 ${this.form(me.id) || "—"} · 전력 ${ctx.favourite ? "우세" : "열세"} · 라커룸 ${moraleLabel(room)} ${room}</div>`;
+    this.talkSheet(ctx, key, sub, "경기장으로 ▶", () => this.startMatch(), () => this.startMatch());
+  }
+
+  /**
+   * The dressing room itself: the four tones, then what the eleven made of the one you picked. Shared by the
+   * talk before kick-off and the one at the interval; `onGo` is what happens when the manager walks out and
+   * `onSkip` when he says nothing. `after` sees the reactions (half time pushes them into the running match).
+   */
+  private talkSheet(
+    ctx: TalkContext, key: string, sub: string, go: string,
+    onGo: () => void, onSkip: () => void,
+    after?: (r: ReturnType<typeof giveTalk>, before: Map<string, number>) => void,
+  ): void {
+    const s = this.state, me = this.me;
+    const opts = talkOptions(ctx);
     const head = `<div class="pcHead"><div class="pcNum" style="font-size:22px;line-height:0">${emblemSvg(me, 34)}</div>
-      <div class="pcMain"><div class="pcName">라커룸</div><div class="hint">${home ? "홈" : "원정"} · ${opp.name} 전${ctx.derby ? " · 더비" : ""}</div>
-        <div class="hint">최근 ${this.form(me.id) || "—"} · 전력 ${ctx.favourite ? "우세" : "열세"} · 라커룸 ${moraleLabel(room)} ${room}</div></div></div>`;
+      <div class="pcMain"><div class="pcName">라커룸</div>${sub}</div></div>`;
     this.openSheet(`<div class="pc talk"><h3 style="margin:0">팀 토크 <span style="color:var(--muted);font-weight:400;font-size:12px">한 번만 말할 수 있습니다</span></h3>
       ${head}
       <div class="talkOpts">${opts.map((o) => `<button class="talkOpt" data-tone="${o.tone}"><b>${o.label}</b><span>${o.line}</span></button>`).join("")}</div>
       <div class="actions" style="justify-content:flex-end"><button data-talk-skip>말없이 나간다</button></div></div>`);
     const sheet = document.getElementById("sheet")!;
-    sheet.querySelector<HTMLButtonElement>("[data-talk-skip]")?.addEventListener("click", () => { this.closeSheet(); this.startMatch(); });
+    sheet.querySelector<HTMLButtonElement>("[data-talk-skip]")?.addEventListener("click", () => { this.closeSheet(); onSkip(); });
     sheet.querySelectorAll<HTMLButtonElement>("button[data-tone]").forEach((b) => b.addEventListener("click", () => {
       const roomBefore = Math.round(me.lockerRoom ?? 60);
+      const before = new Map(me.squad.map((p) => [p.id, moraleOf(p)]));
       const r = giveTalk(s, me, b.dataset.tone as TalkTone, ctx, key);
       const roomAfter = Math.round(me.lockerRoom ?? 60);
+      after?.(r, before);
       this.save();
       const line = opts.find((o) => o.tone === r.tone)!;
       const row = (x: { id: string; name: string; delta: number }) => {
@@ -3170,10 +3189,37 @@ export class Game {
         <div class="talkSaid">“${line.line}”</div>
         <div class="hint" style="margin:6px 0">${r.note} · 라커룸 ${roomBefore} → <b style="color:${roomAfter > roomBefore ? "var(--good)" : roomAfter < roomBefore ? "var(--bad)" : "var(--text)"}">${roomAfter}</b></div>
         <div class="talkRes">${r.reactions.map(row).join("")}</div>
-        <div class="actions" style="justify-content:flex-end"><button class="primary" data-talk-go>경기장으로 ▶</button></div></div>`);
+        <div class="actions" style="justify-content:flex-end"><button class="primary" data-talk-go>${go}</button></div></div>`);
       document.getElementById("sheet")!.querySelector<HTMLButtonElement>("[data-talk-go]")
-        ?.addEventListener("click", () => { this.closeSheet(); this.startMatch(); });
+        ?.addEventListener("click", () => { this.closeSheet(); onGo(); });
     }));
+  }
+
+  /**
+   * 하프타임 토크: the same dressing room in the interval, read against the score instead of the form. What
+   * it moves reaches the pitch as well as the season — `talkAttrDelta` turns each reaction into the
+   * attribute change the running match takes on (match-screen pushes it into the engine).
+   */
+  private halfTimeTalk(side: TeamId, opp: Club, derby: boolean): Promise<Record<string, Partial<Attributes>> | null> {
+    const s = this.state, me = this.me;
+    const m = this.live?.find((x) => x.fixture.home === s.userClub || x.fixture.away === s.userClub)?.match;
+    if (!m) return Promise.resolve(null);
+    const lead = m.state.score[side] - m.state.score[1 - side]!;
+    const key = `${s.season}:${s.round}:${this.liveKindNext()}:ht`;
+    const ctx: TalkContext = { home: side === 0, opponent: opp.shortName, favourite: me.reputation >= opp.reputation, derby, form: "", lead };
+    const room = Math.round(me.lockerRoom ?? 60);
+    const sub = `<div class="hint">하프타임 · ${opp.shortName} 전${derby ? " · 더비" : ""}</div>
+      <div class="hint">${lead > 0 ? `${lead}점 리드` : lead < 0 ? `${-lead}점 뒤짐` : "동점"} · 라커룸 ${moraleLabel(room)} ${room}</div>`;
+    return new Promise((done) => {
+      let moves: Record<string, Partial<Attributes>> | null = null;
+      this.talkSheet(ctx, key, sub, "후반전 ▶", () => done(moves), () => done(null), (r, before) => {
+        moves = {};
+        for (const x of r.reactions) {
+          const p = me.squad.find((q) => q.id === x.id);
+          if (p) moves[x.id] = talkAttrDelta(p, before.get(x.id) ?? moraleOf(p));
+        }
+      });
+    });
   }
 
   /** Which competition the next user match belongs to (the talk key needs it: cup and league share a round). */
@@ -3210,6 +3256,7 @@ export class Game {
       competition: this.liveKind === "cup" ? `${CUP_NAME} ${CUP_STAGE_LABEL[s.cup.stage] ?? ""}`.trim()
         : this.liveKind === "cl" ? `${CL_SHORT} ${CL_STAGE_LABEL[s.continental?.stage ?? 0] ?? ""}`.trim()
         : `${divisionName(userDivision(s))} ${s.round + 1}R`,
+      halfTimeTalk: () => this.halfTimeTalk(side, side === 0 ? away : home, derby),
       finishOthers: async () => {
         // replay the other grounds on the worker pool from kick-off (deterministic: same seeds, same AI, same result)
         const items = this.live!.filter((x) => x !== user && x.match.state.phase !== "FULL_TIME");

@@ -295,6 +295,27 @@ export class Match {
     return this.defs.get(id)!;
   }
 
+  /**
+   * Move a player's attributes for the rest of the match — what a half-time talk does to a dressing room.
+   * The deltas are added to the values the match is actually using, so whatever was baked in at kick-off
+   * (the home crowd's edge, the morale the player walked out with) is kept rather than overwritten.
+   * Every read goes through `def`, so the change takes effect on the next tick. Returns false for an
+   * unknown id.
+   */
+  adjustAttrs(id: string, deltas: Partial<Attributes>): boolean {
+    const d = this.defs.get(id);
+    if (!d) return false;
+    const attrs = { ...d.attrs };
+    for (const [k, v] of Object.entries(deltas) as [keyof Attributes, number][]) {
+      if (!v) continue;
+      // No rounding: the value already carries the home edge at its own precision, and rounding the sum
+      // would move a player who was handed a delta of zero.
+      attrs[k] = Math.max(1, Math.min(20, attrs[k] + v));
+    }
+    this.defs.set(id, { ...d, attrs });
+    return true;
+  }
+
   player(id: string): PlayerState {
     return this.byId.get(id)!;
   }

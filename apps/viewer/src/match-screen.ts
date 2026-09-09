@@ -1,4 +1,4 @@
-import { DT, PITCH, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
+import { DT, PITCH, type Attributes, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
 import { applyCamera, drawPitch, type Camera, type View, project, unproject, screenAngle } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
@@ -67,6 +67,12 @@ export interface MatchExtra {
    * finished result. Without it "결과로" steps every match in-thread, which is six matches' worth of engine work.
    */
   finishOthers?: () => Promise<void>;
+  /**
+   * 하프타임 토크: open the dressing room from the half-time card. The callback returns the eleven's
+   * attribute moves (the game layer runs the talk and knows the morale), which are pushed into the running
+   * match — the second half is played with them.
+   */
+  halfTimeTalk?: () => Promise<Record<string, Partial<Attributes>> | null>;
 }
 
 /** What the viewer needs of a club beyond the engine's team def. */
@@ -200,6 +206,8 @@ export class MatchScreen {
   private bc: Broadcast | null = null;
   /** half-time has already been shown for this half */
   private htShown = false;
+  /** the dressing room has been used this match (one talk at the interval, like the one before kick-off) */
+  private htTalked = false;
   /** the goal a replay is about, so the scorer stays named while it runs */
   private replayStrap: import("./broadcast").StrapSpec | null = null;
   /** 결정적 순간: the penalty-taker pick and the once-a-match last call share this overlay */
@@ -349,6 +357,7 @@ export class MatchScreen {
     this.loggedEvents = 0;
     this.fxEvents = 0;
     this.htShown = false;
+    this.htTalked = false;
     this.startBroadcast(extra);
     this.lastCallUsed = false;
     this.closeCall(false);
@@ -949,10 +958,26 @@ export class MatchScreen {
     if (wasPlaying) this.setPlaying(false);
     const done = this.finished;
     this.bc.closeStrap();
+    const talk = !done && this.extra.halfTimeTalk && !this.htTalked
+      ? {
+          label: "라커룸 →",
+          onPick: () => {
+            void this.extra.halfTimeTalk!().then((moves) => {
+              // said nothing: the card is still there, and so is the dressing room
+              if (!moves) return;
+              this.htTalked = true;
+              for (const [id, deltas] of Object.entries(moves)) this.match.adjustAttrs(id, deltas);
+              // the talk's own button walks the manager out, so the card behind it goes
+              this.bc?.closeCard();
+              if (!this.finished) this.setPlaying(true);
+            });
+          },
+        }
+      : undefined;
     this.bc.interval(title, `${s.score[0]} - ${s.score[1]}`, stats, button, () => {
       if (done) { this.onFinish?.(); return; }
       if (wasPlaying && !this.finished) this.setPlaying(true);
-    });
+    }, talk);
   }
 
   private fmtClock(): string {

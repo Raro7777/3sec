@@ -164,7 +164,7 @@ export class Broadcast {
   // ------------------------------------------------------------------ interval cards
 
   /** Half-time or full-time, with the numbers. `onClose` fires when the viewer dismisses it. */
-  interval(title: string, score: string, stats: IntervalStat[], button: string | null, onClose?: () => void): void {
+  interval(title: string, score: string, stats: IntervalStat[], button: string | null, onClose?: () => void, aside?: { label: string; onPick: () => void }): void {
     this.cardEl?.remove();
     const h = this.home!, a = this.away!;
     const card = el("div", "bcCard");
@@ -180,13 +180,14 @@ export class Broadcast {
           <span class="l">${st.home}</span><span class="k">${st.label}</span><span class="r">${st.away}</span>
           ${st.share === undefined ? "" : `<div class="bcBar"><i style="width:${Math.round(st.share * 100)}%;background:${h.color}"></i><u style="width:${Math.round((1 - st.share) * 100)}%;background:${a.color}"></u></div>`}
         </div>`).join("")}</div>
-      ${button ? `<div class="bcCardActs"><button class="primary" data-bc="close">${button}</button></div>` : ""}`;
+      ${button || aside ? `<div class="bcCardActs">${aside ? `<button data-bc="aside">${aside.label}</button>` : ""}${button ? `<button class="primary" data-bc="close">${button}</button>` : ""}</div>` : ""}`;
     this.root.appendChild(card);
     this.cardEl = card;
     card.querySelector<HTMLButtonElement>('[data-bc="close"]')?.addEventListener("click", () => {
       this.closeCard();
       onClose?.();
     });
+    card.querySelector<HTMLButtonElement>('[data-bc="aside"]')?.addEventListener("click", () => aside!.onPick());
   }
 
   closeCard(): void {

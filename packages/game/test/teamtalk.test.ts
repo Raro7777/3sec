@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  newGame, clubOf, giveTalk, talkOptions, talkGiven, toneFit, reactionOf, moraleOf, TALK_MAX,
+  newGame, clubOf, giveTalk, talkOptions, talkGiven, toneFit, reactionOf, talkAttrDelta, moraleOf, TALK_MAX,
   type TalkContext, type TalkTone,
 } from "../src/index";
 
@@ -69,6 +69,50 @@ describe("팀 토크", () => {
     if (hot.length && cool.length) {
       const avg = (xs: typeof rows) => xs.reduce((a, x) => a + x.d, 0) / xs.length;
       expect(avg(hot)).toBeLessThan(avg(cool));
+    }
+  });
+
+  it("at half time the score sets the room, not the form", () => {
+    const ahead = ctx({ lead: 1 }), level = ctx({ lead: 0 }), behind = ctx({ lead: -3 });
+    // calm holds a lead, a demand takes a level game, a rebuke is for a beating
+    expect(toneFit("calm", ahead)).toBeGreaterThan(toneFit("demand", ahead));
+    expect(toneFit("demand", level)).toBeGreaterThan(toneFit("calm", level));
+    expect(toneFit("rebuke", behind)).toBeGreaterThan(toneFit("rebuke", level));
+    // a rebuke while winning throws it away
+    expect(toneFit("rebuke", ahead)).toBeLessThan(0);
+    // the form no longer decides anything once the score does
+    expect(toneFit("calm", ctx({ lead: 1, form: "LLLLL" }))).toBe(toneFit("calm", ctx({ lead: 1, form: "WWWWW" })));
+  });
+
+  it("half time speaks to the score, and the lines differ from the tunnel's", () => {
+    const pre = talkOptions(ctx());
+    const ahead = talkOptions(ctx({ lead: 2 }));
+    const behind = talkOptions(ctx({ lead: -2 }));
+    for (let i = 0; i < 4; i++) {
+      expect(ahead[i]!.line).not.toBe(pre[i]!.line);
+      expect(ahead[i]!.line).not.toBe(behind[i]!.line);
+    }
+  });
+
+  it("a half-time talk reaches the pitch: the attribute move is the morale move, stretched", () => {
+    const s = newGame(13);
+    const me = clubOf(s, s.userClub)!;
+    const before = new Map(me.squad.map((p) => [p.id, moraleOf(p)]));
+    const r = giveTalk(s, me, "demand", ctx({ lead: 0 }), "r1:ht");
+    const lifted = r.reactions.find((x) => x.delta > 1);
+    expect(lifted).toBeDefined();
+    const p = me.squad.find((q) => q.id === lifted!.id)!;
+    const d = talkAttrDelta(p, before.get(p.id)!);
+    // it moves the attributes morale moves, and by more than the lasting morale alone would
+    expect(Object.keys(d).length).toBeGreaterThan(0);
+    expect(d.composure ?? 0).toBeGreaterThan(0);
+    const lasting = talkAttrDelta(p, before.get(p.id)!, 1);
+    expect(d.composure!).toBeGreaterThan(lasting.composure ?? 0);
+    // a player who took it badly loses attributes instead
+    const hurt = r.reactions.find((x) => x.delta < -1);
+    if (hurt) {
+      const q = me.squad.find((y) => y.id === hurt.id)!;
+      expect(talkAttrDelta(q, before.get(q.id)!).composure ?? 0).toBeLessThan(0);
     }
   });
 

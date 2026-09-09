@@ -79,7 +79,7 @@ export {
   leadership, pickCaptain, captainOf, ensureCaptain, setCaptain, lockerRoom, moraleTrainingFactor, matchAttrs, moraleOfferRefused, moraleWeek, moraleRollover, migrateMorale,
 } from "./morale";
 export {
-  TALK_MAX, TALK_NEUTRAL, TALK_SCALE, toneFit, reactionOf, talkOptions, talkGiven, giveTalk,
+  TALK_MAX, TALK_NEUTRAL, TALK_SCALE, toneFit, halfTimeFit, talkAttrDelta, HALF_TIME_MATCH_SCALE, reactionOf, talkOptions, talkGiven, giveTalk,
   type TalkTone, type TalkContext, type TalkOption, type TalkReaction, type TalkResult,
 } from "./teamtalk";
 export { interviewContext, pressConference, answerInterview, skipInterview, type InterviewContext } from "./press";

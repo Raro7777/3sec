@@ -10,8 +10,9 @@
  * Hooks: `talkOptions` and `giveTalk` from the viewer's pre-match sheet, before `createMatch` strips the
  * squad; `talkGiven` keeps it to one talk per fixture.
  */
+import type { Attributes } from "@3sec/engine";
 import type { Club, GameState, SquadPlayer } from "./types";
-import { adjustMorale, moraleOf, personalityOf, leadership, captainOf, lockerRoom } from "./morale";
+import { adjustMorale, matchAttrs, moraleOf, personalityOf, leadership, captainOf, lockerRoom } from "./morale";
 
 export type TalkTone = "praise" | "calm" | "demand" | "rebuke";
 
@@ -26,6 +27,11 @@ export interface TalkContext {
   derby: boolean;
   /** results of the last five, newest first: "W" | "D" | "L" */
   form: string;
+  /**
+   * Half time instead of the tunnel: the goal difference so far from the user's side. Absent before
+   * kick-off. At half time the score is the room's mood and the form no longer matters.
+   */
+  lead?: number;
 }
 
 export interface TalkOption {
@@ -76,6 +82,7 @@ const formScore = (form: string): number => {
  * ambitious; calm is the tone that is never wrong and never much.
  */
 export function toneFit(tone: TalkTone, ctx: TalkContext): number {
+  if (ctx.lead !== undefined) return halfTimeFit(tone, ctx.lead, ctx);
   const f = formScore(ctx.form);
   switch (tone) {
     case "praise": return 2.4 - (ctx.favourite ? 1.4 : 0) + (f <= -1 ? 1.6 : 0) + (ctx.home ? 0.3 : 0.6);
@@ -118,8 +125,65 @@ export function reactionOf(p: SquadPlayer, tone: TalkTone, ctx: TalkContext, roo
   return round1(clamp(d, -TALK_MAX, TALK_MAX));
 }
 
+/**
+ * At half time the score has already said most of it. Ahead, the room needs holding together — calm sees
+ * it out, a demand kills it off, a rebuke throws it away. Level, someone has to raise it. Behind, the
+ * gentle tones stop working and the honest ones start: a heavy deficit is the one place a rebuke is the
+ * right call.
+ */
+export function halfTimeFit(tone: TalkTone, lead: number, ctx: TalkContext): number {
+  const derby = ctx.derby ? 0.4 : 0;
+  switch (tone) {
+    case "praise": return lead > 0 ? 2.6 : lead === 0 ? 2.2 : lead === -1 ? 2.4 : 1.2;
+    case "calm": return (lead > 0 ? 3.4 : lead === 0 ? 2.2 : 1.4) + derby;
+    case "demand": return lead > 0 ? 2.8 : lead === 0 ? 3.4 : 3.0;
+    case "rebuke": return lead > 0 ? -1.0 : lead === 0 ? 0.8 : lead === -1 ? 2.2 : 3.4;
+  }
+}
+
+/** Half time, with the score already said. */
+function halfTimeOptions(ctx: TalkContext): TalkOption[] {
+  const lead = ctx.lead ?? 0;
+  const opp = ctx.opponent;
+  return [
+    {
+      tone: "praise", label: "격려",
+      line: lead > 0
+        ? "전반 45분, 딱 내가 원하던 경기였다. 이대로만 해라."
+        : lead === 0
+          ? "밀리지 않았다. 한 방이면 넘어간다. 계속 두드려라."
+          : "내용은 우리가 낫다. 운이 안 따랐을 뿐이다. 고개 들어라.",
+    },
+    {
+      tone: "calm", label: "침착",
+      line: lead > 0
+        ? "한 골 앞선 게 아니라 45분이 남은 거다. 서두르면 우리가 준다. 하던 대로."
+        : lead === 0
+          ? "조급해지지 마라. 먼저 실수하는 쪽이 진다. 우리 리듬으로 끌고 간다."
+          : `${opp}가 지치기 시작한다. 급하게 던지지 말고 한 번에 하나씩 되찾아라.`,
+    },
+    {
+      tone: "demand", label: "요구",
+      line: lead > 0
+        ? "한 골로는 부족하다. 지금 끝내라. 두 번째 골이 오늘 경기를 닫는다."
+        : lead === 0
+          ? "45분 더 이렇게 할 셈인가. 누군가는 이 경기를 가져와야 한다. 나서라."
+          : "남은 45분이 전부다. 지금부터 전부 쏟아붓지 않으면 끝이다.",
+    },
+    {
+      tone: "rebuke", label: "질책",
+      line: lead > 0
+        ? "이기고 있다고 다 된 줄 아나. 후반에 이러면 뒤집힌다."
+        : lead <= -2
+          ? "이건 우리 팀이 아니다. 45분 동안 싸운 사람이 몇이나 되나. 다시 시작해라."
+          : "전반 45분, 나는 아무것도 못 봤다. 이대로 끝낼 거면 지금 말해라.",
+    },
+  ];
+}
+
 /** The four things the manager can say, written for this room. */
 export function talkOptions(ctx: TalkContext): TalkOption[] {
+  if (ctx.lead !== undefined) return halfTimeOptions(ctx);
   const f = formScore(ctx.form);
   const where = ctx.home ? "우리 홈에서" : `${ctx.opponent} 원정에서`;
   return [
@@ -158,6 +222,31 @@ function roomNote(tone: TalkTone, lift: number, worst: TalkReaction | undefined,
   if (lift > -0.5) return "라커룸은 조용합니다. 크게 달라진 건 없습니다.";
   if (worst) return `${worst.name}의 표정이 굳었습니다. ${tone === "rebuke" ? "질책이 과했습니다." : "말이 먹히지 않았습니다."}`;
   return "라커룸이 무겁습니다.";
+}
+
+/**
+ * Words in the interval carry further than the morale they leave behind: a dressing room that has just been
+ * lifted plays the second half differently even though, by next week, only the smaller lasting move remains.
+ * So the attribute change is worked out as if the morale had moved this much further.
+ */
+export const HALF_TIME_MATCH_SCALE = 3;
+
+/**
+ * What the talk did to a player's match attributes: the difference `matchAttrs` makes between the morale he
+ * walked in with and the morale the talk left him with, stretched by `scale`. The engine adds these to the
+ * values it is already using (Match.adjustAttrs), so the talk reaches the pitch without discarding the home
+ * edge or anything else baked in at kick-off. `before` is the morale from before the talk.
+ */
+export function talkAttrDelta(p: SquadPlayer, before: number, scale = HALF_TIME_MATCH_SCALE): Partial<Attributes> {
+  const moved = (moraleOf(p) - before) * scale;
+  const was = matchAttrs({ ...p, morale: before } as SquadPlayer);
+  const now = matchAttrs({ ...p, morale: clamp(before + moved, 0, 100) } as SquadPlayer);
+  const out: Partial<Attributes> = {};
+  for (const k of Object.keys(now) as (keyof Attributes)[]) {
+    const d = round1(now[k] - was[k]);
+    if (d) out[k] = d;
+  }
+  return out;
 }
 
 /** Whether a talk has already been given for this fixture (one per match). */
