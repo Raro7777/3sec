@@ -631,6 +631,39 @@ details[open] summary::after{content:"▴"}
 /* 리본형 섹션 헤더(다른 화면 게임화) */
 .rib{display:inline-block;font-family:var(--display);font-size:22px;color:var(--ink);position:relative;padding-left:14px;margin:0 0 3px}
 .rib::before{content:"";position:absolute;left:0;top:12%;bottom:12%;width:6px;border-radius:3px;background:linear-gradient(180deg,var(--court-2),var(--court))}
+
+/* ===== 화면 전환 — 화면을 넘길 때 방(룸)을 이동하는 느낌. 앞으로 가면 오른쪽에서, 뒤로 가면 왼쪽에서 밀려든다. ===== */
+@media (prefers-reduced-motion:no-preference){
+  #view.v-fwd{animation:vfwd .26s cubic-bezier(.2,.7,.2,1) both}
+  #view.v-back{animation:vback .26s cubic-bezier(.2,.7,.2,1) both}
+  #view.v-fade{animation:vfade .2s ease-out both}
+  @keyframes vfwd{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+  @keyframes vback{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:none}}
+  @keyframes vfade{from{opacity:0}to{opacity:1}}
+}
+
+/* ===== 자원 HUD 연출 — 티켓·골드·조각이 바뀌면 알약이 팝하고 숫자가 색으로 번쩍(획득 초록·소비 주황). ===== */
+@media (prefers-reduced-motion:no-preference){
+  .res span.res-pop{animation:respop .5s cubic-bezier(.2,.8,.3,1.35)}
+  @keyframes respop{0%{transform:scale(1)}32%{transform:scale(1.24)}100%{transform:scale(1)}}
+  .res span.res-up b{animation:resflash .6s ease-out} .res span.res-dn b{animation:resflashdn .6s ease-out}
+  @keyframes resflash{0%,100%{color:var(--ink)}30%{color:var(--good)}}
+  @keyframes resflashdn{0%,100%{color:var(--ink)}30%{color:var(--hot)}}
+}
+
+/* ===== 씬 룸 — 스카우트·육성 탭도 홈 허브처럼 배경 씬 위의 한 장면. 제목·설명은 홈 HUD 처럼 떠 있는 유리 플레이트에 담아 항상 읽히게. ===== */
+.room{position:relative;margin:-14px -14px 12px;overflow:hidden;isolation:isolate;
+  background:#d9e6f4 center 33%/cover no-repeat;min-height:272px;display:flex;align-items:flex-end}
+.room.scout{background-image:radial-gradient(120% 90% at 50% 0%,#F3ECFF,#E3D8F6 70%)}
+.room.train{background-image:radial-gradient(120% 90% at 50% 0%,#FFF0DE,#FCE2C4 70%);background-position:center 46%}
+.room::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(231,239,248,0) 42%,rgba(231,239,248,.42) 80%,var(--bg) 100%)}
+.room .rin{position:relative;z-index:2;width:100%;padding:12px}
+.room .rplate{background:rgba(255,255,255,.72);backdrop-filter:blur(9px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 6px 18px rgba(21,45,74,.16),inset 0 1px 0 rgba(255,255,255,.7);padding:10px 13px}
+.room .rib{margin:0}
+.room .rsub{margin:4px 0 0;font-size:12.5px;line-height:1.5;color:var(--ink2)}
+.room .rbadge{position:absolute;right:12px;top:12px;z-index:2}
 </style>
 
 <div id="app">
@@ -1172,12 +1205,24 @@ function renderNav(){
            '><span class="ic">'+t.ic+'</span>'+t.label+'</button>';
   }).join('');
 }
+var _res = { t:null, g:null, f:null };
+/** 자원 알약 하나를 갱신하고, 값이 바뀌었으면 팝+색 번쩍(게임 손맛). 연출만 — 수치는 엔진이 이미 정한 값. */
+function bumpRes(id, num, prev, text){
+  var el = document.getElementById(id); if (!el) return;
+  el.textContent = (text !== undefined ? text : num);
+  if (prev == null || prev === num) return;
+  var pill = el.parentNode; if (!pill) return;
+  var up = num > prev;
+  pill.classList.remove('res-pop','res-up','res-dn'); void pill.offsetWidth;
+  pill.classList.add('res-pop', up ? 'res-up' : 'res-dn');
+}
 function renderTop(){
   document.getElementById('clubName').textContent = G.clubName;
-  document.getElementById('rTickets').textContent = G.tickets;
-  document.getElementById('rFrag').textContent = G.fragments + '/' + E.ECONOMY.fragmentsPerTicket;   // 12조각 = 티켓 1 (B.1) — 전에는 /3 으로 굳어 있었다
-  var gEl = document.getElementById('rGold');
-  if (gEl) gEl.textContent = (G.gold | 0) >= 10000 ? Math.round((G.gold|0)/1000) + 'k' : (G.gold | 0);
+  bumpRes('rTickets', G.tickets, _res.t);
+  bumpRes('rFrag', G.fragments, _res.f, G.fragments + '/' + E.ECONOMY.fragmentsPerTicket);   // 12조각 = 티켓 1 (B.1)
+  var gVal = G.gold | 0;
+  bumpRes('rGold', gVal, _res.g, gVal >= 10000 ? Math.round(gVal/1000) + 'k' : gVal);
+  _res = { t:G.tickets, g:gVal, f:G.fragments };
 }
 
 // ---------------------------------------------------------------- views
@@ -1192,9 +1237,29 @@ function render(){
     facility:vFacility, report:vReport, album:vAlbum, feedback:vFeedback, style:vStyleGuide
   })[view] || vHome;
   el.innerHTML = fn();
+  applyViewTransition(el);
   if (view === 'matchLive') mountCourt();
   renderCoach();
   renderIntro();
+}
+// 화면 전환 방향 — 탭은 깊이 0, 하위 화면은 1. 깊어지면 앞으로(오른쪽서), 얕아지면 뒤로(왼쪽서), 같은 탭끼리는 탭 순서로.
+var TAB_ORDER = { home:0, scout:1, train:2, roster:3, match:4 };
+function viewDepth(v){ return (v in TAB_ORDER) ? 0 : 1; }
+var _prevView = null;
+function applyViewTransition(el){
+  if (_prevView === view) return;              // 같은 화면 내부 갱신은 다시 밀지 않는다
+  var dir = null;
+  if (_prevView != null){
+    var od = viewDepth(_prevView), nd = viewDepth(view);
+    if (nd > od) dir = 'fwd';
+    else if (nd < od) dir = 'back';
+    else if ((view in TAB_ORDER) && (_prevView in TAB_ORDER)) dir = TAB_ORDER[view] >= TAB_ORDER[_prevView] ? 'fwd' : 'back';
+    else dir = 'fade';
+  }
+  _prevView = view;
+  if (!dir) return;
+  el.classList.remove('v-fwd','v-back','v-fade'); void el.offsetWidth;
+  el.classList.add('v-' + dir);
 }
 
 // ---------------------------------------------------------------- 코치 가이드
@@ -1333,6 +1398,15 @@ function renderIntro(){
 }
 
 function sceneOf(name){ try { return (window.BLOOM_SCENE || {})[name] || null; } catch(e){ return null; } }
+// 씬 룸 헤더 — 홈 허브처럼 배경 씬(있으면 인라인, 없으면 화면별 CSS 그라데이션) 위에 제목을 얹는다. sub 는 HTML 허용, badge 는 우상단.
+function roomHead(kind, title, sub, badge){
+  var scene = sceneOf(kind);
+  var bg = scene ? ' style="background-image:url(\'' + scene + '\')"' : '';
+  return '<div class="room ' + kind + '"' + bg + '>' +
+    (badge ? '<div class="rbadge">' + badge + '</div>' : '') +
+    '<div class="rin"><div class="rplate"><div class="rib">' + esc(title) + '</div>' +
+    (sub ? '<p class="rsub">' + sub + '</p>' : '') + '</div></div></div>';
+}
 function vHome(){
   var reps = E.representatives(G);
   var ovr = E.lineupOvr(G);
@@ -1527,11 +1601,10 @@ function vScout(){
   var can10 = G.tickets >= 10;
   var posGold = (E.ECONOMY && E.ECONOMY.positionScoutGold) || 1200;
   var canPos = can && (G.gold | 0) >= posGold;
+  var scoutSub = '티켓 1장으로 여섯 구단의 명단에서 신인 한 명을 데려옵니다. R 80% · SR 17% · SSR 3%. '+
+     (G.pitySR!==undefined?'SR 보장까지 '+Math.max(0,10-G.pitySR)+'회, SSR 보장까지 '+Math.max(0,60-G.pitySSR)+'회.':'')+poolLine();
   return h(
-   '<h2>스카우트</h2>'+
-   '<p class="sub">티켓 1장으로 여섯 구단의 명단에서 신인 한 명을 데려옵니다. '+
-     'R 80% · SR 17% · SSR 3%. '+(G.pitySR!==undefined?'SR 보장까지 '+Math.max(0,10-G.pitySR)+'회, SSR 보장까지 '+Math.max(0,60-G.pitySSR)+'회.':'')+
-     poolLine()+'</p>'+
+   roomHead('scout', '스카우트', scoutSub)+
    (lastPulls ? pullResults(lastPulls) : (r ? scoutResult(r) : ''))+
    '<button class="btn" data-act="scout"'+(can?'':' disabled')+'>스카우트 · 티켓 1</button>'+
    '<button class="btn ghost" data-act="scout10"'+(can10?'':' disabled')+'>10연속 스카우트 · 티켓 10<span class="tiny" style="display:block;color:var(--ssr);font-weight:700;margin-top:2px">SR 이상 1장 확정</span></button>'+
@@ -1754,7 +1827,7 @@ function vTrain(){
   if (!ownedAll.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   if (!owned.length) return '<h2>육성</h2><div class="empty">보유한 카드가 모두 은퇴했습니다.<br>스카우트로 새 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   var trainedN = owned.filter(function(cid){ return !!E.representativeOf(G, cid); }).length;
-  return h('<h2>육성</h2><p class="sub">12턴 프리시즌 캠프. 훈련으로 능력치를 올리고, 피로를 관리하며, 평가전 3번을 거쳐 졸업시킵니다. 한 번에 5~10분.</p>'+
+  return h(roomHead('train', '육성', '12턴 프리시즌 캠프. 훈련으로 능력치를 올리고, 피로를 관리하며, 평가전 3번을 거쳐 졸업시킵니다. 한 번에 5~10분.')+
     (trainedN ? '<div class="card flat"><div class="tiny"><b style="color:var(--ink2)">재육성</b>은 캠프를 처음부터 다시 도는 것입니다(초기화가 아닙니다). 졸업한 선수는 로스터에 그대로 있고, 새 결과가 더 좋을 때만 교체됩니다. 한계돌파가 있으면 천장이 높아져 더 좋게 나올 수 있습니다.</div></div>' : '')+
     (retiredN ? '<div class="card flat"><div class="tiny">은퇴한 카드 '+retiredN+'장은 목록에서 제외됩니다. 재육성해도 나이는 되돌아가지 않습니다.</div></div>' : '')+
     owned.map(function(cid){
