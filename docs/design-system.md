@@ -13,7 +13,7 @@
 | **디자인 토큰**(색·그림자·라운드·타이포) | `web/app-shell.html` 최상단 `:root` "디자인 시스템 토큰" 블록 | 한 곳에 모음 |
 | **UI 키트 스프라이트**(버튼 프레임 `--gframe`) | `app-shell.html` `:root` "UI 키트 스프라이트" 주석 아래 | 인라인 SVG data URI(9-슬라이스) |
 | **컴포넌트 CSS**(버튼·카드·허브·소환·랠리 등) | `app-shell.html` `<style>` | 아래 컴포넌트 표 |
-| **배경 씬**(홈 허브·스카우트 로비·육성 훈련장) | `art/04_export/scene/{home,scout,train}.webp` → `web/build.mjs` 가 `window.BLOOM_SCENE` 로 인라인 | `sceneOf(name)`·`roomHead(kind,…)` 로 읽음. 밝은 애니풍 체육관 톤 통일 |
+| **배경 씬**(허브·스카우트 로비·훈련장·라커룸·경기장) | `art/04_export/scene/{home,scout,train,roster,match}.webp` → `web/build.mjs` 가 `window.BLOOM_SCENE` 로 인라인 | `sceneOf(name)`·`roomHead(kind,…)` 로 읽음. 5개 주요 탭 전부 룸. 밝은 애니풍 체육관 톤 통일 |
 | **캐릭터 아트**(카드·전신·스탠디·표정·리그 파츠) | `art/04_export/{pid|rkNN}/` → `window.BLOOM_ART`·`window.BLOOM_RIG` | art-pipeline.md |
 | **폰트** | `app-shell.html` `<head>`의 Google Fonts `<link>` | 아래 타이포 |
 | **연출 QA 훅** | `window.__fx = { grade, summon, eval }` | 순수 연출, 판정 무관. 회귀는 `localStorage['bloom-fx-off']` 로 건너뜀 |
@@ -64,7 +64,7 @@
 | 버튼(주/고스트) | `.btn` (`.ghost`) | 그라데이션+`--gframe` 9-슬라이스 프레임. 고스트는 흰 카드형 |
 | 큰 게임 버튼 | `.gbtn` (`.play`·`.ghost2`) | 디스플레이 폰트+프레임+하단 입술 그림자. 허브 도크 |
 | 허브 씬 | `.hub`·`.hub-char`·`.hub-in`·`.hub-dock`·`.hub-stats`·`.namep`·`.hub-mission` | 배경 씬+누끼 캐릭터(대기 애니)+떠있는 HUD |
-| 씬 룸(탭 헤더) | `.room`(`.scout`·`.train`)·`.rin`·`.rplate`·`.rib` | `roomHead(kind,title,sub,badge)`. 배경 씬 배너 위에 홈 HUD 같은 유리 플레이트 제목. 씬 없으면 화면별 CSS 그라데이션 |
+| 씬 룸(탭 헤더) | `.room`(`.scout`·`.train`·`.roster`·`.match`)·`.rin`·`.rplate`·`.rib` | `roomHead(kind,title,sub,badge)`. 배경 씬 배너 위에 홈 HUD 같은 유리 플레이트 제목. 씬 없으면 화면별 CSS 그라데이션. 시즌 중 리그 헤더(`leagueHeader`)는 경기장 씬 룸 안에 순위 스탯을 얹음 |
 | 자원 HUD 연출 | `.res span.res-pop`(`.res-up`·`.res-dn`) | 티켓·골드·조각이 바뀌면 알약 팝 + 숫자 색 번쩍(획득 초록·소비 주황). `bumpRes()` 가 이전값 대비 감지 |
 | 화면 전환 | `#view.v-fwd`·`.v-back`·`.v-fade` | 탭/하위화면 깊이로 방향 판정(`applyViewTransition`). 앞으로=오른쪽서, 뒤로=왼쪽서 |
 | 소환 연출(가챠) | `.summon` + `.charge`/`.tell`/`.burst`, `.rk-SR`/`.rk-SSR` | 암전→충전→등급색 예고→폭발. 등급 색은 실제 결과와 일치(B.2.3, 가짜 아쉬움 금지) |

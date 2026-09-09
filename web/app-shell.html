@@ -656,6 +656,8 @@ details[open] summary::after{content:"▴"}
   background:#d9e6f4 center 33%/cover no-repeat;min-height:272px;display:flex;align-items:flex-end}
 .room.scout{background-image:radial-gradient(120% 90% at 50% 0%,#F3ECFF,#E3D8F6 70%)}
 .room.train{background-image:radial-gradient(120% 90% at 50% 0%,#FFF0DE,#FCE2C4 70%);background-position:center 46%}
+.room.roster{background-image:radial-gradient(120% 90% at 50% 0%,#EAF3FF,#D3E4F6 70%)}
+.room.match{background-image:radial-gradient(120% 90% at 50% 0%,#FFF6DD,#FBE6BE 70%)}
 .room::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(180deg,rgba(231,239,248,0) 42%,rgba(231,239,248,.42) 80%,var(--bg) 100%)}
 .room .rin{position:relative;z-index:2;width:100%;padding:12px}
@@ -2134,7 +2136,7 @@ function vRoster(){
   var reps = E.representatives(G).slice().sort(function(a,b){ return b.ovr-a.ovr; });
   var fillers = E.myRoster(G).filter(function(p){ return p.rarity===0; });
   if (!reps.length && !fillers.length) return '<h2>로스터</h2><div class="empty">아직 선수가 없습니다.</div>';
-  return h('<h2>로스터</h2><p class="sub">졸업한 선수가 대표로 등록됩니다. 부족한 자리는 연습생이 채웁니다.</p>'+
+  return h(roomHead('roster', '로스터', '졸업한 선수가 대표로 등록됩니다. 부족한 자리는 연습생이 채웁니다.')+
     squadGauge()+
     '<button class="btn ghost" data-go="album" style="margin-bottom:12px">도감 · 리그의 모든 선수 카드</button>'+
     reps.map(function(i){ return pcard(i, false, i.instanceId); }).join('')+
@@ -2343,7 +2345,7 @@ function benchBlock(){
 function vLeague(){
   var sv = G.league ? E.seasonView(G) : null;
   if (!sv) {
-    return h('<h2>리그</h2><p class="sub">블룸 리그는 7팀이 14매치데이 동안 맞붙습니다. 매치데이마다 육성을 한 번 하고 경기를 치르며, 상위 4팀이 포스트시즌에 갑니다.</p>'+
+    return h(roomHead('match', '리그', '블룸 리그는 7팀이 14매치데이 동안 맞붙습니다. 매치데이마다 육성을 한 번 하고 경기를 치르며, 상위 4팀이 포스트시즌에 갑니다.')+
       '<div class="card"><div class="legend">'+
         '<b>정규 시즌</b><span>팀당 12경기. 3-0·3-1 승리는 승점 3, 3-2 승리는 2, 2-3 패배는 1점.</span>'+
         '<b>포스트시즌</b><span>4위와 3위가 단판, 승자가 2위와 3전2선승, 그 승자가 1위와 5전3선승. 정규 1위는 1승을 안고 시작합니다.</span>'+
@@ -2368,17 +2370,20 @@ function vLeague(){
   return h(head + vMatchdayNow(sv));
 }
 
+// 시즌 중 리그 헤더 — 경기장 씬 룸 위에 SEASON 배너 + 현재 순위/승패/승점(홈 허브 스탯 스타일).
 function leagueHeader(sv){
   var me = sv.standings.filter(function(r){ return r.isMe; })[0];
-  return '<div class="card" style="background:linear-gradient(160deg,var(--court-bg),var(--panel));border-color:var(--line2)">'+
-     '<div class="spread"><div class="eyebrow" style="font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.14em;color:var(--court);font-size:12px">SEASON '+sv.season+'</div>'+
+  var scene = sceneOf('match');
+  var bg = scene ? ' style="background-image:url(\'' + scene + '\')"' : '';
+  return '<div class="room match"' + bg + '><div class="rin"><div class="rplate">'+
+     '<div class="spread"><div style="font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.14em;color:var(--court);font-size:12px;font-weight:700">SEASON '+sv.season+'</div>'+
        '<div class="tiny">매치데이 '+sv.matchday+' / '+sv.totalMatchdays+' · 상대 성장 '+Math.round(sv.growth*100)+'%</div></div>'+
-     '<div class="stat3" style="margin-top:10px">'+
-       '<div><div class="v num">'+(me?me.rank:'-')+'위</div><div class="k">현재 순위</div></div>'+
-       '<div><div class="v num">'+(me?me.wins+'-'+me.losses:'0-0')+'</div><div class="k">승패</div></div>'+
-       '<div><div class="v num">'+(me?me.points:0)+'</div><div class="k">승점</div></div>'+
+     '<div class="hub-stats" style="margin-top:8px">'+
+       '<div class="st1"><div class="v num">'+(me?me.rank:'-')+'위</div><div class="k">현재 순위</div></div>'+
+       '<div class="st1"><div class="v num">'+(me?me.wins+'-'+me.losses:'0-0')+'</div><div class="k">승패</div></div>'+
+       '<div class="st1"><div class="v num">'+(me?me.points:0)+'</div><div class="k">승점</div></div>'+
      '</div>'+
-   '</div>';
+   '</div></div></div>';
 }
 
 // ---------- 리그: 이번 매치데이
@@ -2691,7 +2696,7 @@ function vMatch(){
   if (G.league) return vLeague();
   var list = E.clubList(G);
   var mine = E.lineupOvr(G);
-  return h('<h2>경기</h2><p class="sub">상대를 고르면 5세트 3선승 경기를 시뮬레이션합니다. 우리 라인업 OVR <b class="num">'+mine.toFixed(1)+'</b>. 승리하면 티켓 1장, 패배해도 조각 1개.</p>'+
+  return h(roomHead('match', '경기', '상대를 고르면 5세트 3선승 경기를 시뮬레이션합니다. 우리 라인업 OVR <b class="num">'+mine.toFixed(1)+'</b>. 승리하면 티켓 1장, 패배해도 조각 1개.')+
     '<div class="card"><b>리그를 시작할 수 있습니다</b><div class="tiny" style="margin-top:4px">14매치데이 정규 시즌과 포스트시즌이 열립니다.</div>'+
     '<button class="btn" style="margin-top:11px" data-act="startseason">시즌 시작</button></div>'+
     list.map(function(c){
