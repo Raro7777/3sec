@@ -66,7 +66,8 @@
 | 허브 씬 | `.hub`·`.hub-char`·`.hub-in`·`.hub-dock`·`.hub-stats`·`.namep`·`.hub-mission` | 배경 씬+누끼 캐릭터(대기 애니)+떠있는 HUD |
 | 씬 룸(탭 헤더) | `.room`(`.scout`·`.train`·`.roster`·`.match`)·`.rin`·`.rplate`·`.rib` | `roomHead(kind,title,sub,badge)`. 배경 씬 배너 위에 홈 HUD 같은 유리 플레이트 제목. 씬 없으면 화면별 CSS 그라데이션. 시즌 중 리그 헤더(`leagueHeader`)는 경기장 씬 룸 안에 순위 스탯을 얹음 |
 | 자원 HUD 연출 | `.res span.res-pop`(`.res-up`·`.res-dn`) | 티켓·골드·조각이 바뀌면 알약 팝 + 숫자 색 번쩍(획득 초록·소비 주황). `bumpRes()` 가 이전값 대비 감지 |
-| 화면 전환 | `#view.v-fwd`·`.v-back`·`.v-fade` | 탭/하위화면 깊이로 방향 판정(`applyViewTransition`). 앞으로=오른쪽서, 뒤로=왼쪽서 |
+| 화면 전환 | `#view.v-fwd`·`.v-back`·`.v-fade` | 탭/하위화면 깊이로 방향 판정(`applyViewTransition`). 앞으로=오른쪽서, 뒤로=왼쪽서. 전환마다 `sfx('ui')` 톡 + 가벼운 햅틱(설정 존중) |
+| 데일리 인사·출석 | `.daily`·`.daily-card`·`.daily-char`·`.daily-week` | 접속 시 하루 한 번 대표 선수가 인사 + 출석 보상(골드). `maybeDaily()`/`showDaily()`/`claimDaily()`. 경제 근거는 league-and-economy.md 출석 보상 |
 | 소환 연출(가챠) | `.summon` + `.charge`/`.tell`/`.burst`, `.rk-SR`/`.rk-SSR` | 암전→충전→등급색 예고→폭발. 등급 색은 실제 결과와 일치(B.2.3, 가짜 아쉬움 금지) |
 | 졸업 등급 리빌 | `.summon.show-grade`+`.sm-grade` | `runGradeReveal(grade)`. S 금·A 보라·B 파랑·C/D 회색 |
 | 평가전 순간 | `.evalflash` (`.mvp`) | `evalFlash(text)`. 화면 중앙 배너+사운드·햅틱 |

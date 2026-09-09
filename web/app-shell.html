@@ -666,6 +666,32 @@ details[open] summary::after{content:"▴"}
 .room .rib{margin:0}
 .room .rsub{margin:4px 0 0;font-size:12.5px;line-height:1.5;color:var(--ink2)}
 .room .rbadge{position:absolute;right:12px;top:12px;z-index:2}
+
+/* ===== 데일리 인사·출석 — 접속하면 대표 선수가 한마디 + 출석 보상. 하루 한 번. ===== */
+.daily{position:fixed;inset:0;z-index:65;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:rgba(12,22,36,.5);backdrop-filter:blur(3px)}
+.daily-card{position:relative;width:100%;max-width:340px;background:var(--panel);border-radius:20px;
+  box-shadow:0 18px 50px rgba(12,22,36,.45);padding:16px 16px 18px;text-align:center;overflow:hidden}
+.daily-card::before{content:"";position:absolute;left:0;right:0;top:0;height:118px;
+  background:linear-gradient(180deg,var(--court-bg),transparent);pointer-events:none}
+.daily-char{position:relative;width:128px;height:128px;margin:2px auto 8px;border-radius:50%;overflow:hidden;
+  background:var(--panel2);box-shadow:0 6px 18px rgba(21,45,74,.18);border:3px solid #fff}
+.daily-char img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 12%}
+.daily-say{position:relative;font-size:15px;font-weight:700;color:var(--ink);line-height:1.5;margin:2px 6px 12px}
+.daily-h{font-family:var(--display);font-size:20px;color:var(--ink)}
+.daily-h b{color:var(--court)}
+.daily-week{display:flex;justify-content:center;gap:5px;margin:11px 0 12px}
+.daily-week i{flex:1;max-width:40px;height:38px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:700;color:var(--ink3)}
+.daily-week i .g{font-size:10px;color:var(--ink3)}
+.daily-week i.done{background:var(--court-bg);border-color:var(--court);color:var(--court)}
+.daily-week i.done .g{color:var(--court)}
+.daily-week i.today{background:var(--hot-bg);border-color:var(--hot);color:var(--hot);transform:scale(1.1);box-shadow:0 4px 10px rgba(241,145,60,.28)}
+.daily-week i.today .g{color:var(--hot)}
+.daily-reward{font-size:13.5px;color:var(--ink2);margin-bottom:13px}
+.daily-reward b{color:var(--hot);font-family:"Barlow Condensed",sans-serif;font-size:18px;font-weight:800}
+@media (prefers-reduced-motion:no-preference){ .daily-card{animation:dailyin .3s cubic-bezier(.2,.8,.2,1.05) both} @keyframes dailyin{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}} }
 </style>
 
 <div id="app">
@@ -1155,6 +1181,7 @@ function boot(){
   if (raw) { try { G = E.loadGame(JSON.parse(raw)); } catch(e){ G = null; } }
   if (!G) { G = newGame(); }
   render();
+  try { maybeDaily(); } catch(e){}   // 접속 인사·출석 — 하루 한 번(대표 선수가 있을 때)
 }
 function newGame(){
   // 시드는 시각에서 뽑는다. 검사(app-test)는 스크립트보다 먼저 window.BLOOM_SEED 를 넣어 같은 판을 재현한다 —
@@ -1262,6 +1289,9 @@ function applyViewTransition(el){
   if (!dir) return;
   el.classList.remove('v-fwd','v-back','v-fade'); void el.offsetWidth;
   el.classList.add('v-' + dir);
+  // 방을 넘기는 짧은 손맛 — 톡 소리 + 아주 가벼운 진동(설정 존중, 순수 연출).
+  try { if (snd && snd.on) sfx('ui'); } catch(e){}
+  try { haptic(8); } catch(e){}
 }
 
 // ---------------------------------------------------------------- 코치 가이드
@@ -1409,6 +1439,70 @@ function roomHead(kind, title, sub, badge){
     '<div class="rin"><div class="rplate"><div class="rib">' + esc(title) + '</div>' +
     (sub ? '<p class="rsub">' + sub + '</p>' : '') + '</div></div></div>';
 }
+// ---------- 데일리 인사·출석 (접속 손맛·리텐션)
+// 보상은 소프트 재화 골드만 — 하드 재화(티켓·조각)는 시즌 난이도 캘리브레이션(season-check --app)을 지키려 제외.
+// 자세한 근거는 docs/league-and-economy.md. 검사 하네스(window.BLOOM_SEED)에선 뜨지 않는다.
+var DAILY_KEY = 'bloom-daily-v1';
+var DAILY_GOLD = [40, 50, 60, 70, 90, 120, 200];   // 7일 주기(7일차 보너스). 주당 630골드 — 비전력(B.6.1), 포지션 스카우트 1회(1200)보다 작다.
+var DAILY_HI = [
+  '감독님, 오늘도 잘 부탁드려요!',
+  '좋은 아침이에요. 몸 다 풀어놨어요!',
+  '어서 오세요. 코트가 기다리고 있어요.',
+  '컨디션 최고예요 — 언제든 시작해요!',
+  '감독님이 오시니 팀에 힘이 나요.',
+  '오늘은 어떤 훈련부터 해볼까요?',
+  '한 걸음씩, 같이 올라가요!'
+];
+function dayStr(ms){ var d = ms ? new Date(ms) : new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function loadDaily(){ try { return JSON.parse(localStorage.getItem(DAILY_KEY)||'null') || { last:'', streak:0 }; } catch(e){ return { last:'', streak:0 }; } }
+function dailyPending(){ return loadDaily().last !== dayStr(); }
+function nextStreak(){ var d = loadDaily(); return (d.last === dayStr(Date.now()-86400000)) ? (d.streak|0)+1 : 1; }
+function maybeDaily(){
+  if (window.BLOOM_SEED) return;                    // 검사 하네스에선 생략
+  if (coach && coach.on && !coach.intro) return;    // 튜토리얼 중엔 생략
+  if (ses) return;                                   // 캠프 중엔 생략
+  try { if (!E.representatives(G).length) return; } catch(e){ return; }   // 아직 정식 선수 없으면 생략
+  if (!dailyPending()) return;
+  showDaily();
+}
+function showDaily(){
+  if (document.getElementById('daily')) return;
+  var best = E.representatives(G).slice().sort(function(a,b){ return b.ovr-a.ovr; })[0];
+  if (!best) return;
+  var chr = artOf(best,'card') || artOf(best,'s') || artOf(best,'hero');
+  var streak = nextStreak(), idx = (streak-1) % 7;
+  var hi = DAILY_HI[(streak-1) % DAILY_HI.length];
+  var week = '';
+  for (var i=0;i<7;i++){
+    var cls = i < idx ? 'done' : (i === idx ? 'today' : '');
+    week += '<i class="'+cls+'"><span>'+(i+1)+'일</span><span class="g">'+DAILY_GOLD[i]+'</span></i>';
+  }
+  var el = document.createElement('div');
+  el.className = 'daily'; el.id = 'daily';
+  el.innerHTML = '<div class="daily-card">'+
+    (chr ? '<div class="daily-char"><img src="'+chr+'" alt="" decoding="async"></div>' : '')+
+    '<div class="daily-say">"'+esc(hi)+'"</div>'+
+    '<div class="daily-h">출석 <b>'+streak+'</b>일차</div>'+
+    '<div class="daily-week">'+week+'</div>'+
+    '<div class="daily-reward">오늘 보상 <b>골드 '+DAILY_GOLD[idx]+'</b></div>'+
+    '<button class="btn" data-act="dailyclaim">받기</button>'+
+  '</div>';
+  el.addEventListener('click', function(e){ if (e.target === el) claimDaily(); });   // 배경 탭도 받기(멈추지 않게)
+  document.body.appendChild(el);
+}
+function claimDaily(){
+  var d = loadDaily();
+  var n = document.getElementById('daily'); if (n) n.remove();
+  if (d.last === dayStr()) return;                   // 오늘 이미 받음(중복 방지)
+  var streak = nextStreak(), reward = DAILY_GOLD[(streak-1) % 7];
+  G.gold = (G.gold|0) + reward; save();
+  try { localStorage.setItem(DAILY_KEY, JSON.stringify({ last: dayStr(), streak: streak })); } catch(e){}
+  try { ensureAudio(); if (snd && snd.on) sfx('cheer'); } catch(e){}
+  haptic([0,30,30,30]);
+  toast('출석 '+streak+'일차 — 골드 '+reward+' 받았어요');
+  renderTop();                                        // 자원 팝
+}
+
 function vHome(){
   var reps = E.representatives(G);
   var ovr = E.lineupOvr(G);
@@ -3714,6 +3808,7 @@ document.addEventListener('click', function(e){
   if (d.dexown) { dexOwned = !dexOwned; render(); return; }
   if (d.act === 'dexback') { var back = dexBack; dexFocus = null; go(back === 'scout' ? 'scout' : 'album'); return; }
 
+  if (d.act === 'dailyclaim') return claimDaily();
   if (d.act === 'scout') return doScout();
   if (d.act === 'scout10') return doScout10();
   if (d.act === 'sgsummon') { runSummon(d.rar || 'R', function(){}); return; }      // 디자인 시스템 화면 — 연출 미리보기
