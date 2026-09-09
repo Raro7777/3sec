@@ -692,6 +692,36 @@ details[open] summary::after{content:"▴"}
 .daily-reward{font-size:13.5px;color:var(--ink2);margin-bottom:13px}
 .daily-reward b{color:var(--hot);font-family:"Barlow Condensed",sans-serif;font-size:18px;font-weight:800}
 @media (prefers-reduced-motion:no-preference){ .daily-card{animation:dailyin .3s cubic-bezier(.2,.8,.2,1.05) both} @keyframes dailyin{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}} }
+.daily-streak{font-size:12.5px;font-weight:700;color:var(--court);margin:-4px 0 8px}
+.daily-streak.reset{color:var(--hot)}
+.daily-preview{font-size:11.5px;color:var(--ink3);margin-top:9px}
+.daily-bonus{display:inline-block;font-family:var(--display);font-size:14px;color:#fff;background:linear-gradient(180deg,var(--hot-2),var(--hot));
+  padding:3px 13px;border-radius:999px;margin:0 auto 8px;box-shadow:0 4px 10px rgba(241,145,60,.35)}
+
+/* ===== 축포 — 경기 승리·7일 개근 등 큰 순간에 잠깐 뿌린다(연출만, fx-off/reduce 면 생략) ===== */
+.cfti{position:fixed;inset:0;z-index:66;pointer-events:none;overflow:hidden}
+.cfti i{position:absolute;top:-14px;width:9px;height:14px;border-radius:2px;opacity:.96;animation:cfall linear forwards}
+@keyframes cfall{to{transform:translateY(112vh) rotate(720deg);opacity:.85}}
+
+/* ===== 경기 결과 히어로 배너 — 승/패를 크게. 세트 차로 문구가 달라진다. ===== */
+.rhero{position:relative;overflow:hidden;border-radius:18px;margin-bottom:12px;padding:20px 16px 16px;text-align:center;color:#fff;box-shadow:var(--sh2)}
+.rhero.win{background:linear-gradient(150deg,var(--court) 0%,var(--court-2) 55%,#7CC0FF 100%)}
+.rhero.loss{background:linear-gradient(150deg,#59697A 0%,#7C8B9A 62%,#9AA8B6 100%)}
+.rhero::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 82% at 50% -12%,rgba(255,255,255,.34),transparent 62%)}
+.rhero .rv{position:relative;font-family:var(--display);font-size:40px;line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.3)}
+.rhero .rsc{position:relative;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:30px;margin-top:6px;letter-spacing:.05em}
+.rhero .rsc small{font-family:"Gothic A1",sans-serif;font-weight:700;font-size:12.5px;opacity:.9;letter-spacing:0;margin-left:6px}
+.rhero .rmvp{position:relative;display:inline-flex;align-items:center;gap:8px;margin-top:13px;padding:5px 14px 5px 6px;border-radius:999px;
+  background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.45);font-size:13px;font-weight:800}
+.rhero .rmvp .ava{width:30px;height:30px;border-width:2px;border-color:#fff;flex:none}
+.rhero .rmvp .mstar{font-size:12px}
+.rhero .rmvp .mpt{font-family:"Barlow Condensed",sans-serif;font-weight:800;opacity:.95}
+@media (prefers-reduced-motion:no-preference){
+  .rhero{animation:rheroin .45s cubic-bezier(.2,.8,.25,1.15) both}
+  .rhero .rv{animation:rvslam .5s cubic-bezier(.3,.7,.2,1.35) both}
+  @keyframes rheroin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  @keyframes rvslam{0%{opacity:0;transform:scale(1.7)}58%{opacity:1;transform:scale(.93)}100%{transform:scale(1)}}
+}
 </style>
 
 <div id="app">
@@ -1470,22 +1500,32 @@ function showDaily(){
   var best = E.representatives(G).slice().sort(function(a,b){ return b.ovr-a.ovr; })[0];
   if (!best) return;
   var chr = artOf(best,'card') || artOf(best,'s') || artOf(best,'hero');
+  var d = loadDaily();
   var streak = nextStreak(), idx = (streak-1) % 7;
+  var reset = d.last && d.last !== dayStr(Date.now()-86400000) && d.last !== dayStr();   // 어제도 오늘도 아님 → 연속 끊김
   var hi = DAILY_HI[(streak-1) % DAILY_HI.length];
   var week = '';
   for (var i=0;i<7;i++){
     var cls = i < idx ? 'done' : (i === idx ? 'today' : '');
     week += '<i class="'+cls+'"><span>'+(i+1)+'일</span><span class="g">'+DAILY_GOLD[i]+'</span></i>';
   }
+  var streakLine = reset ? '<div class="daily-streak reset">지난 연속 출석이 끊겼어요 — 오늘부터 다시!</div>'
+    : (streak>1 ? '<div class="daily-streak">🔥 '+streak+'일 연속 출석 중!</div>' : '');
+  var bonus = (idx===6) ? '<div class="daily-bonus">7일 개근 보너스 🎉</div>' : '';
+  var tmr = streak % 7;   // 내일 차수 인덱스
+  var preview = '<div class="daily-preview">내일 오면 골드 '+DAILY_GOLD[tmr]+(tmr===6?' — 7일 개근 보너스!':'')+'</div>';
   var el = document.createElement('div');
   el.className = 'daily'; el.id = 'daily';
   el.innerHTML = '<div class="daily-card">'+
     (chr ? '<div class="daily-char"><img src="'+chr+'" alt="" decoding="async"></div>' : '')+
+    bonus+
     '<div class="daily-say">"'+esc(hi)+'"</div>'+
     '<div class="daily-h">출석 <b>'+streak+'</b>일차</div>'+
+    streakLine+
     '<div class="daily-week">'+week+'</div>'+
     '<div class="daily-reward">오늘 보상 <b>골드 '+DAILY_GOLD[idx]+'</b></div>'+
     '<button class="btn" data-act="dailyclaim">받기</button>'+
+    preview+
   '</div>';
   el.addEventListener('click', function(e){ if (e.target === el) claimDaily(); });   // 배경 탭도 받기(멈추지 않게)
   document.body.appendChild(el);
@@ -1494,12 +1534,13 @@ function claimDaily(){
   var d = loadDaily();
   var n = document.getElementById('daily'); if (n) n.remove();
   if (d.last === dayStr()) return;                   // 오늘 이미 받음(중복 방지)
-  var streak = nextStreak(), reward = DAILY_GOLD[(streak-1) % 7];
+  var streak = nextStreak(), idx = (streak-1) % 7, reward = DAILY_GOLD[idx], bonus = (idx===6);
   G.gold = (G.gold|0) + reward; save();
   try { localStorage.setItem(DAILY_KEY, JSON.stringify({ last: dayStr(), streak: streak })); } catch(e){}
-  try { ensureAudio(); if (snd && snd.on) sfx('cheer'); } catch(e){}
-  haptic([0,30,30,30]);
-  toast('출석 '+streak+'일차 — 골드 '+reward+' 받았어요');
+  try { ensureAudio(); } catch(e){}
+  if (bonus) { confetti(); if (snd && snd.on) sfx('ssr'); haptic([0,60,40,60,40,90]); }
+  else { if (snd && snd.on) sfx('cheer'); haptic([0,30,30,30]); }
+  toast((bonus ? '7일 개근! ' : '출석 '+streak+'일차 — ')+'골드 '+reward+' 받았어요');
   renderTop();                                        // 자원 팝
 }
 
@@ -3071,10 +3112,27 @@ function nextRally(){
   if (mv.ri >= mv.rallies.length) { setTimeout(finishViewer, 700 / sp); return; }
   setTimeout(function(){ if (mv && cr) { loadRally(); if (mv.playing) cr.play(); } }, 620 / sp);
 }
+// 축포 — 승리·개근 같은 큰 순간에 잠깐. 연출만(fx-off·reduce 면 생략).
+function confetti(){
+  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
+  var reduced = false; try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  if (reduced) return;
+  var cols = ['#2E86E6','#57A6F5','#F1913C','#FFB05E','#1FB884','#E0A81E','#E15748'];
+  var ov = document.createElement('div'); ov.className = 'cfti'; var html = '';
+  for (var i=0;i<26;i++){
+    var l = (Math.random()*100).toFixed(1), dur = (0.9+Math.random()*0.8).toFixed(2), delay = (Math.random()*0.3).toFixed(2), rot = (Math.random()*360)|0;
+    html += '<i style="left:'+l+'%;background:'+cols[i%cols.length]+';animation-duration:'+dur+'s;animation-delay:'+delay+'s;transform:rotate('+rot+'deg)"></i>';
+  }
+  ov.innerHTML = html; document.body.appendChild(ov);
+  setTimeout(function(){ if (ov.parentNode) ov.parentNode.removeChild(ov); }, 1900);
+}
 function finishViewer(){
   stopViewer();
   if (mv) mv.done = true;
-  sfx('matchend'); haptic(lastMatch && lastMatch.won ? [60, 80, 60, 80, 120] : [30]);
+  var won = lastMatch && lastMatch.won;
+  sfx('matchend'); haptic(won ? [60, 80, 60, 80, 120] : [30]);
+  if (won) { confetti(); if (snd && snd.on) setTimeout(function(){ sfx('cheer'); }, 200); }
+  else if (snd && snd.on) setTimeout(function(){ sfx('aww'); }, 200);
   if (!skipUnlocked) { skipUnlocked = true; try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){} }
   view = 'matchResult'; render(); window.scrollTo(0,0);
 }
@@ -3356,7 +3414,22 @@ function vMatchResult(){
   var m = lastMatch;
   if (!m) return '<div class="empty">…</div>';
   var lines = E.renderCommentary(m.events, m.ctx);
+  // 결과 히어로 — 세트 차로 문구가 달라진다(완승/승리/짜릿한 승리 · 석패/패배) + 이 경기 최고 선수.
+  var mySets = mySide===0 ? m.sets.home : m.sets.away;
+  var opSets = mySide===0 ? m.sets.away : m.sets.home;
+  var verdict = m.won ? (opSets===0 ? '완승!' : (mySets-opSets>=2 ? '승리!' : '짜릿한 승리!'))
+                      : (mySets===2 ? '석패' : '패배');
+  var mvp = (m.box.mine || m.box.home || [])[0];
+  var mvpP = mvp ? m.ctx.players[mvp.playerId] : null;
+  var rhero = '<div class="rhero '+(m.won?'win':'loss')+'">'+
+    '<div class="rv">'+verdict+'</div>'+
+    '<div class="rsc">'+mySets+' : '+opSets+'</div>'+
+    (mvp ? '<div class="rmvp"><span class="mstar">⭐</span>'+
+       (mvpP ? '<span class="ava">'+portraitSvg(mvpP,30)+'</span>' : '')+
+       '<span>'+(m.won?'MVP':'최다 득점')+' '+esc(mvp.name)+'</span><span class="mpt">'+mvp.points+'점</span></div>' : '')+
+  '</div>';
   return h(
+   rhero+
    '<div class="score">'+
      '<div class="teams">'+
        '<div class="tn">'+esc(m.ctx.homeName)+'</div>'+
@@ -3364,8 +3437,7 @@ function vMatchResult(){
        '<div class="tn">'+esc(m.ctx.awayName)+'</div>'+
      '</div>'+
      '<div class="setline">'+m.setScores.map(function(s){ return s.home+'-'+s.away; }).join(' · ')+'</div>'+
-     '<div class="verdict '+(m.won?'w':'l')+'">'+(m.won?'승리':'패배')+'</div>'+
-     '<div class="tiny" style="margin-top:4px">'+esc(m.reward)+'</div>'+
+     '<div class="tiny" style="margin-top:6px">'+esc(m.reward)+'</div>'+
    '</div>'+
    careerBlocks(m)+
    flowLine(m)+
