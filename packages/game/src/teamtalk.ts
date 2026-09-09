@@ -32,6 +32,8 @@ export interface TalkContext {
    * kick-off. At half time the score is the room's mood and the form no longer matters.
    */
   lead?: number;
+  /** the match is over: the same score, but nothing left to play for with it */
+  final?: boolean;
 }
 
 export interface TalkOption {
@@ -82,7 +84,7 @@ const formScore = (form: string): number => {
  * ambitious; calm is the tone that is never wrong and never much.
  */
 export function toneFit(tone: TalkTone, ctx: TalkContext): number {
-  if (ctx.lead !== undefined) return halfTimeFit(tone, ctx.lead, ctx);
+  if (ctx.lead !== undefined) return ctx.final ? fullTimeFit(tone, ctx.lead, ctx) : halfTimeFit(tone, ctx.lead, ctx);
   const f = formScore(ctx.form);
   switch (tone) {
     case "praise": return 2.4 - (ctx.favourite ? 1.4 : 0) + (f <= -1 ? 1.6 : 0) + (ctx.home ? 0.3 : 0.6);
@@ -126,6 +128,21 @@ export function reactionOf(p: SquadPlayer, tone: TalkTone, ctx: TalkContext, roo
 }
 
 /**
+ * After the whistle nothing can be rescued, so the talk is about what the players carry into the week. A win
+ * is praised, and a rebuke after one costs the room for nothing. A draw depends on who dropped points: the
+ * stronger side let two go, the weaker side won one. A beating is the one result that answers to a rebuke.
+ */
+export function fullTimeFit(tone: TalkTone, lead: number, ctx: TalkContext): number {
+  const won = lead > 0, drew = lead === 0, heavy = lead <= -2;
+  switch (tone) {
+    case "praise": return won ? (lead >= 3 ? 3.6 : 3.2) : drew ? (ctx.favourite ? 1.4 : 2.8) : heavy ? 0.8 : 2.2;
+    case "calm": return 2.3;
+    case "demand": return won ? (lead >= 3 ? 2.0 : 2.7) : drew ? (ctx.favourite ? 3.3 : 1.8) : 2.5;
+    case "rebuke": return won ? -1.6 : drew ? (ctx.favourite ? 2.1 : -0.6) : heavy ? 3.6 : 1.2;
+  }
+}
+
+/**
  * At half time the score has already said most of it. Ahead, the room needs holding together — calm sees
  * it out, a demand kills it off, a rebuke throws it away. Level, someone has to raise it. Behind, the
  * gentle tones stop working and the honest ones start: a heavy deficit is the one place a rebuke is the
@@ -139,6 +156,50 @@ export function halfTimeFit(tone: TalkTone, lead: number, ctx: TalkContext): num
     case "demand": return lead > 0 ? 2.8 : lead === 0 ? 3.4 : 3.0;
     case "rebuke": return lead > 0 ? -1.0 : lead === 0 ? 0.8 : lead === -1 ? 2.2 : 3.4;
   }
+}
+
+/** After the whistle: nothing to rescue, only what they carry into the week. */
+function fullTimeOptions(ctx: TalkContext): TalkOption[] {
+  const lead = ctx.lead ?? 0;
+  const opp = ctx.opponent;
+  return [
+    {
+      tone: "praise", label: "격려",
+      line: lead >= 3
+        ? "오늘 같은 경기를 하려고 훈련한 거다. 전부 잘했다. 즐겨라."
+        : lead > 0
+          ? "이겼다. 힘든 경기였고, 너희가 끝까지 버텼다. 잘했다."
+          : lead === 0
+            ? `${opp} 상대로 승점 하나는 가져왔다. 고개 숙일 경기 아니다.`
+            : "졌지만 싸웠다. 이런 경기를 계속하면 결과는 따라온다.",
+    },
+    {
+      tone: "calm", label: "침착",
+      line: lead > 0
+        ? "한 경기다. 다음 주에 또 있다. 회복하고 다시 준비해라."
+        : lead === 0
+          ? "한 경기에 일희일비하지 마라. 시즌은 길다."
+          : "이 경기는 여기서 끝이다. 오래 붙잡고 있지 마라. 월요일에 보자.",
+    },
+    {
+      tone: "demand", label: "요구",
+      line: lead > 0
+        ? "이겼다고 다 된 게 아니다. 이 수준을 다음 주에도 보여줘라."
+        : lead === 0
+          ? "이건 우리가 잡았어야 하는 경기다. 다음엔 승점 하나로 만족하지 마라."
+          : "이 결과를 기억해라. 다음 경기에서 갚아라. 나는 그걸 볼 거다.",
+    },
+    {
+      tone: "rebuke", label: "질책",
+      line: lead > 0
+        ? "이기긴 했다. 하지만 내가 본 경기는 마음에 들지 않았다."
+        : lead === 0
+          ? "이런 상대에게 승점 하나. 우리가 어떤 팀인지 다시 생각해봐라."
+          : lead <= -2
+            ? "오늘 한 짓은 프로가 아니었다. 이 경기는 한 명씩 다시 보겠다."
+            : "질 수는 있다. 이렇게 지는 건 안 된다.",
+    },
+  ];
 }
 
 /** Half time, with the score already said. */
@@ -183,7 +244,7 @@ function halfTimeOptions(ctx: TalkContext): TalkOption[] {
 
 /** The four things the manager can say, written for this room. */
 export function talkOptions(ctx: TalkContext): TalkOption[] {
-  if (ctx.lead !== undefined) return halfTimeOptions(ctx);
+  if (ctx.lead !== undefined) return ctx.final ? fullTimeOptions(ctx) : halfTimeOptions(ctx);
   const f = formScore(ctx.form);
   const where = ctx.home ? "우리 홈에서" : `${ctx.opponent} 원정에서`;
   return [

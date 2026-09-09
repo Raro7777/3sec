@@ -492,7 +492,8 @@ export class Game {
       <li>상황을 읽어야 합니다. 부진하거나 전력이 열세면 <b>격려</b>, 더비처럼 흥분하기 쉬운 날은 <b>침착</b>, 전력이 우세하고 흐름이 좋으면 <b>요구</b>가 잘 먹힙니다. <b>질책</b>은 연패 중일 때만 통하고, 다혈질 선수는 등을 돌립니다.</li>
       <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li>
       <li><b>하프타임</b>에도 한 번 더 말할 수 있습니다. 하프타임 카드의 <b>라커룸 →</b>을 누르세요. 이때는 최근 성적이 아니라 <b>점수</b>가 방을 정합니다: 앞서면 <b>침착</b>이 지켜 주고, 동점이면 <b>요구</b>가 경기를 가져오고, 크게 뒤지면 <b>질책</b>이 통합니다. 이기고 있을 때의 질책은 경기를 던지는 짓입니다.</li>
-      <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 그 자리에서 능력치가 움직이고(사기 이동의 3배로 계산), 시즌에 남는 사기는 표시된 값 그대로입니다.</li></ul>`)}
+      <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 그 자리에서 능력치가 움직이고(사기 이동의 3배로 계산), 시즌에 남는 사기는 표시된 값 그대로입니다.</li>
+      <li>경기가 끝나면 결과 화면 맨 위에 <b>경기 후 라커룸</b>이 열립니다. 인터뷰보다 먼저, 선수들에게 하는 말입니다. 이미 끝난 경기라 능력치는 움직이지 않고 <b>사기만 다음 주로 넘어갑니다</b>. 이겼으면 <b>격려</b>, 이길 경기를 비겼으면 <b>요구</b>, 크게 졌으면 <b>질책</b>이 통합니다. 이긴 뒤의 질책은 얻는 것 없이 라커룸만 잃습니다.</li></ul>`)}
     ${sec("결정적 순간", `<ul>
       <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
       <li><b>마지막 지시</b>: 75분부터 화면 오른쪽 아래에 📣 버튼이 뜹니다. 경기당 한 번, <b>총공격</b>(라인 올리고 전원 공격) / <b>잠그기</b>(내려앉아 지키기) / <b>시간 끌기</b>(느리게 안전하게) 중 하나로 남은 시간의 전술을 통째로 바꿉니다.</li>
@@ -2893,6 +2894,55 @@ export class Game {
       <div class="hint" style="margin-top:8px">슈팅·태클은 10분당 횟수입니다. 바꾼 <b>뒤에</b> 벌어진 일이지 바꿨기 <b>때문에</b> 벌어진 일은 아닙니다 — 상대도 함께 조정하고, 스코어 자체가 양 팀을 움직입니다.${skipped}</div></div>`;
   }
 
+  /** The user's own fixture for a results screen, whichever competition it belongs to. */
+  private myFixture(kind: "league" | "cup" | "cl", round: number, cupStage: number): { home: number; away: number; score: [number, number] } | undefined {
+    const s = this.state, me = this.me.id;
+    const fx = kind === "cup"
+      ? s.cup.ties.find((t) => t.stage === cupStage && (t.home === me || t.away === me) && t.score)
+      : kind === "cl" ? s.continental?.ties.find((t) => t.stage === cupStage && (t.home === me || t.away === me) && t.score)
+      : s.fixtures.find((f) => f.round === round && (f.home === me || f.away === me) && f.score);
+    return fx?.score ? { home: fx.home, away: fx.away, score: fx.score } : undefined;
+  }
+
+  /**
+   * 경기 후 라커룸: the players before the press. The card is the invitation; the talk itself is the same
+   * dressing room, read against the result. It leaves morale only — after the whistle there is nothing left
+   * to play for with it, and what the room carries into the week is the whole point.
+   */
+  private dressingRoomHtml(kind: "league" | "cup" | "cl", round: number, cupStage: number): string {
+    const s = this.state;
+    const fx = this.myFixture(kind, round, cupStage);
+    if (!fx) return "";
+    const key = `${s.season}:${round}:${kind}:${cupStage}:ft`;
+    if (talkGiven(s, key)) return "";
+    const lead = fx.home === this.me.id ? fx.score[0] - fx.score[1] : fx.score[1] - fx.score[0];
+    const word = lead > 0 ? "이겼습니다" : lead < 0 ? "졌습니다" : "비겼습니다";
+    return `<div class="card mine"><h3>라커룸 <span>선수들이 기다립니다</span></h3>
+      <div class="hint">${word}. 경기 후 한마디는 다음 주까지 남습니다.</div>
+      <div class="actions" style="margin-top:6px"><button class="primary" id="btnFtTalk">라커룸으로 →</button></div></div>`;
+  }
+
+  /** Open the post-match dressing room from the results screen. */
+  private openFullTimeTalk(kind: "league" | "cup" | "cl", round: number, cupStage: number): void {
+    const s = this.state, me = this.me;
+    const fx = this.myFixture(kind, round, cupStage);
+    if (!fx) return;
+    const home = fx.home === me.id;
+    const opp = clubOf(s, home ? fx.away : fx.home);
+    const lead = home ? fx.score[0] - fx.score[1] : fx.score[1] - fx.score[0];
+    const key = `${s.season}:${round}:${kind}:${cupStage}:ft`;
+    const ctx: TalkContext = {
+      home, opponent: opp.shortName, favourite: me.reputation >= opp.reputation,
+      derby: opp.manager ? feudWith(s, opp.manager.id) >= FEUD_AT : false,
+      form: "", lead, final: true,
+    };
+    const room = Math.round(me.lockerRoom ?? 60);
+    const sub = `<div class="hint">경기 후 · ${opp.shortName} ${fx.score[0]} - ${fx.score[1]}</div>
+      <div class="hint">${lead > 0 ? "승리" : lead < 0 ? "패배" : "무승부"} · 전력 ${ctx.favourite ? "우세" : "열세"} · 라커룸 ${moraleLabel(room)} ${room}</div>`;
+    const done = () => { this.renderResults(round, kind, cupStage); this.show("results"); };
+    this.talkSheet(ctx, key, sub, "나가기", done, done);
+  }
+
   private myMatchSummaryHtml(kind: "league" | "cup" | "cl", round: number, cupStage: number): string {
     const s = this.state;
     const me = this.me;
@@ -2949,11 +2999,12 @@ export class Game {
       body = fx.map((f) => line(clubOf(s, f.home), clubOf(s, f.away), f.score, f.scorers, "", f.motm, f.attendance)).join("");
       btn = round + 1 >= seasonRounds(s) ? "시즌 결산 보기 →" : "다음 라운드로 →";
     }
-    this.el.results.innerHTML = `${this.interviewHtml()}${this.myMatchSummaryHtml(kind, round, cupStage)}<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
+    this.el.results.innerHTML = `${this.dressingRoomHtml(kind, round, cupStage)}${this.interviewHtml()}${this.myMatchSummaryHtml(kind, round, cupStage)}<div class="card"><h3>${title}</h3>${body}<div class="actions" style="margin-top:8px"><button class="primary" id="btnNextRound">${btn}</button></div></div>
       <div class="card"><h3>순위</h3>${this.tableHtml(table(s))}</div>`;
     this.wireInfo(this.el.results, "results");
     this.wireClubTaps(this.el.results);
     this.wireStory(this.el.results);
+    document.getElementById("btnFtTalk")?.addEventListener("click", () => this.openFullTimeTalk(kind, round, cupStage));
     document.getElementById("btnNextRound")!.addEventListener("click", () => {
       // each competition closes its own matchday: a cup or continental day never advances the league round,
       // and advanceRound would refuse anyway (the round's league fixtures are still unplayed), leaving the

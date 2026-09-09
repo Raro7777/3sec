@@ -116,6 +116,29 @@ describe("팀 토크", () => {
     }
   });
 
+  it("after the whistle the result sets the room", () => {
+    const won = ctx({ lead: 2, final: true });
+    const droppedTwo = ctx({ lead: 0, final: true, favourite: true });
+    const wonOne = ctx({ lead: 0, final: true, favourite: false });
+    const beaten = ctx({ lead: -3, final: true });
+    // a win is praised, and a rebuke after one costs the room for nothing
+    expect(toneFit("praise", won)).toBeGreaterThan(toneFit("demand", won));
+    expect(toneFit("rebuke", won)).toBeLessThan(0);
+    // the same draw reads differently depending on who dropped the points
+    expect(toneFit("demand", droppedTwo)).toBeGreaterThan(toneFit("praise", droppedTwo));
+    expect(toneFit("praise", wonOne)).toBeGreaterThan(toneFit("demand", wonOne));
+    // a beating is the one result that answers to a rebuke
+    expect(toneFit("rebuke", beaten)).toBeGreaterThan(toneFit("praise", beaten));
+    // and full time is not half time: the same score reads differently once nothing can be rescued
+    expect(toneFit("rebuke", ctx({ lead: 1, final: true }))).not.toBe(toneFit("rebuke", ctx({ lead: 1 })));
+  });
+
+  it("full time has its own lines", () => {
+    const ht = talkOptions(ctx({ lead: 1 }));
+    const ft = talkOptions(ctx({ lead: 1, final: true }));
+    for (let i = 0; i < 4; i++) expect(ft[i]!.line).not.toBe(ht[i]!.line);
+  });
+
   it("an unhappy dressing room takes everything worse than a settled one", () => {
     const s = newGame(9);
     const p = clubOf(s, s.userClub)!.squad[0]!;
