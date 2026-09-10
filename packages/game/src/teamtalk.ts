@@ -16,6 +16,9 @@ import { adjustMorale, matchAttrs, moraleOf, personalityOf, leadership, captainO
 
 export type TalkTone = "praise" | "calm" | "demand" | "rebuke";
 
+/** Everything the manager could say, in the order the sheet offers it. */
+export const TONES: readonly TalkTone[] = ["praise", "calm", "demand", "rebuke"];
+
 /** How the dressing room stands when the manager walks in. */
 export interface TalkContext {
   /** the user's side is at home */
@@ -59,14 +62,24 @@ export interface TalkResult {
   reactions: TalkReaction[];
   /** the room's own line back */
   note: string;
+  /** how worn out this tone was before it was used (0 = fresh) */
+  worn: number;
 }
 
 /** The biggest morale a single talk can move a player, either way. */
 export const TALK_MAX = 8;
-/** The fit at which a tone is worth nothing: below it the talk costs morale, above it the talk pays. */
-export const TALK_NEUTRAL = 1.9;
-/** How far the fit either side of neutral is stretched into morale. */
-export const TALK_SCALE = 1.9;
+/** How far a tone's edge over the room's average is stretched into morale. */
+export const TALK_SCALE = 2.0;
+/** Morale left to either end below which a talk starts losing its grip on a player. */
+export const TALK_HEADROOM = 35;
+/**
+ * A tone the room has heard lately is worth this much less fit per recent use, weighted by how recent.
+ * Say the same thing three times running and the players stop hearing it; keep saying it and it turns.
+ */
+export const STALE_STEP = 0.9;
+/** How far back the room remembers, newest first. */
+export const STALE_WEIGHTS = [1, 0.8, 0.6, 0.45, 0.3, 0.2, 0.12, 0.07] as const;
+export const TALK_LOG_MAX = STALE_WEIGHTS.length;
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number): number => Math.round(x * 10) / 10;
@@ -95,14 +108,33 @@ export function toneFit(tone: TalkTone, ctx: TalkContext): number {
 }
 
 /**
+ * How much a tone has been worn out by repetition. Recent uses count for more; the same thing three times
+ * running has already stopped landing, and past that the players hear a manager with one line.
+ */
+export function staleness(log: readonly TalkTone[], tone: TalkTone): number {
+  let n = 0;
+  for (let i = 0; i < Math.min(log.length, STALE_WEIGHTS.length); i++) if (log[i] === tone) n += STALE_WEIGHTS[i]!;
+  return round1(n * STALE_STEP);
+}
+
+/** A tone's fit as this room hears it today: what it is worth, less what it has been worn down to. */
+export const heardFit = (tone: TalkTone, ctx: TalkContext, log: readonly TalkTone[] = []): number =>
+  toneFit(tone, ctx) - staleness(log, tone);
+
+/** What the four things the manager could say here are worth on average — the bar a tone has to clear. */
+export function roomAverage(ctx: TalkContext, log: readonly TalkTone[] = []): number {
+  return TONES.reduce((a, t) => a + heardFit(t, ctx, log), 0) / TONES.length;
+}
+
+/**
  * One player's answer. The tone's fit is the room's; on top of it his own character speaks: ambition wants
  * to be challenged, a hot temperament takes a rebuke personally, loyalty answers praise, and a professional
  * moves less than anyone whatever is said.
  */
-export function reactionOf(p: SquadPlayer, tone: TalkTone, ctx: TalkContext, room: number): number {
+export function reactionOf(p: SquadPlayer, tone: TalkTone, ctx: TalkContext, room: number, log: readonly TalkTone[] = []): number {
   const t = personalityOf(p);
   const m = moraleOf(p);
-  let d = toneFit(tone, ctx);
+  let d = heardFit(tone, ctx, log);
   switch (tone) {
     case "praise":
       d += (t.loyalty - 0.5) * 2.0 + (m < 45 ? 1.4 : 0) - (t.ambition - 0.5) * 1.2;
@@ -119,11 +151,17 @@ export function reactionOf(p: SquadPlayer, tone: TalkTone, ctx: TalkContext, roo
   }
   // a settled dressing room takes everything better than an unhappy one
   d += (room - 60) / 30;
-  // A tone that merely fits is worth nothing; the room notices only what suits it well or badly, so the
-  // scale is pulled down by TALK_NEUTRAL and then stretched — a good read lifts the room, a bad one splits it.
-  d = (d - TALK_NEUTRAL) * TALK_SCALE;
+  // What a talk is worth is not how well the tone fits in the abstract but whether it beat the other three
+  // things the manager could have said here. Measuring against the room's own average is what stops "always
+  // be nice" from working: in a situation where any tone would do, none of them pays.
+  d = (d - roomAverage(ctx, log)) * TALK_SCALE;
   // professionals keep their own counsel, whatever is said
   d *= 1 - (t.professionalism - 0.5) * 0.5;
+  // A player already flying has little left to gain from words, and one who has stopped listening cannot be
+  // talked further down. Without this a manager who reads every room correctly would simply pin the squad at
+  // 100 by the turn of the year; with it, the same manager converges somewhere high and keeps having to earn
+  // it. Words are worth most to a squad that needs them.
+  d *= Math.min(1, (d > 0 ? 100 - m : m) / TALK_HEADROOM);
   return round1(clamp(d, -TALK_MAX, TALK_MAX));
 }
 
@@ -276,8 +314,9 @@ export function talkOptions(ctx: TalkContext): TalkOption[] {
 }
 
 /** The room's line back, from how the eleven took it. */
-function roomNote(tone: TalkTone, lift: number, worst: TalkReaction | undefined, cap: SquadPlayer | null): string {
+function roomNote(tone: TalkTone, lift: number, worst: TalkReaction | undefined, cap: SquadPlayer | null, worn = 0): string {
   const who = cap ? `주장 ${cap.name}이(가)` : "고참들이";
+  if (worn >= 1.4 && lift < 0.8) return `또 같은 소리입니다. ${who} 시선을 피합니다.`;
   if (lift >= 2.5) return `${who} 고개를 끄덕입니다. 라커룸이 달아올랐습니다.`;
   if (lift >= 0.8) return `${who} 조용히 받아들입니다. 나쁘지 않은 반응입니다.`;
   if (lift > -0.5) return "라커룸은 조용합니다. 크게 달라진 건 없습니다.";
@@ -319,9 +358,11 @@ export const talkGiven = (s: GameState, key: string): boolean => s.lastTalk?.key
  */
 export function giveTalk(s: GameState, c: Club, tone: TalkTone, ctx: TalkContext, key: string): TalkResult {
   const room = c.lockerRoom ?? 60;
+  const log = talkLog(s);
+  const worn = staleness(log, tone);
   const xi = c.selection.starters.map((id) => c.squad.find((p) => p.id === id)).filter((p): p is SquadPlayer => !!p);
   const reactions: TalkReaction[] = xi.map((p) => {
-    const delta = reactionOf(p, tone, ctx, room);
+    const delta = reactionOf(p, tone, ctx, room, log);
     adjustMorale(p, delta);
     return { id: p.id, name: p.name, delta };
   });
@@ -329,5 +370,10 @@ export function giveTalk(s: GameState, c: Club, tone: TalkTone, ctx: TalkContext
   const lift = reactions.length ? round1(reactions.reduce((a, r) => a + r.delta, 0) / reactions.length) : 0;
   const sorted = [...reactions].sort((a, b) => b.delta - a.delta);
   s.lastTalk = { key, tone, lift };
-  return { tone, lift, reactions: sorted, note: roomNote(tone, lift, sorted[sorted.length - 1], captainOf(c)) };
+  // the room remembers what it has been told, and this is now part of that
+  s.talkLog = [tone, ...log].slice(0, TALK_LOG_MAX);
+  return { tone, lift, worn, reactions: sorted, note: roomNote(tone, lift, sorted[sorted.length - 1], captainOf(c), worn) };
 }
+
+/** What this dressing room has been told lately, newest first. */
+export const talkLog = (s: GameState): readonly TalkTone[] => s.talkLog ?? [];

@@ -300,7 +300,9 @@
       /* 라커룸: four things the manager can say, and how the eleven took it */
       .talk .talkOpts { display:flex; flex-direction:column; gap:7px; margin:10px 0 4px; }
       .talkOpt { display:grid; grid-template-columns:52px 1fr; gap:10px; align-items:center; text-align:left; padding:9px 11px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); color:var(--text); font:inherit; cursor:pointer; }
-      .talkOpt b { font-size:14px; letter-spacing:.1em; color:var(--accent); text-align:center; }
+      .talkOpt b { font-size:14px; letter-spacing:.1em; color:var(--accent); text-align:center; display:flex; flex-direction:column; align-items:center; gap:3px; }
+      .talkOpt .worn { font-style:normal; font-size:9px; letter-spacing:.06em; font-weight:600; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:0 5px; white-space:nowrap; }
+      .talkOpt .worn.hot { color:var(--warn); border-color:rgba(244,162,89,.5); }
       .talkOpt span { font-size:12.5px; line-height:1.45; color:var(--muted); }
       .talkOpt:hover { border-color:var(--accent); }
       .talkOpt:hover span { color:var(--text); }

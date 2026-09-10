@@ -33,7 +33,7 @@ import {
 } from "@3sec/game";
 import {
   clubLore, derbyFor, answerInterview, resolveEvent, pendingEvents, setCaptain, moraleOf, moraleLabel, moraleBand, personalityTags, captainOf, type InterviewOption,
-  talkOptions, talkGiven, giveTalk, talkAttrDelta, feudWith, type TalkTone, type TalkContext,
+  talkOptions, talkGiven, giveTalk, talkAttrDelta, staleness, talkLog, feudWith, type TalkTone, type TalkContext,
 } from "@3sec/game";
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
@@ -491,6 +491,9 @@ export class Game {
       <li>경기 시작을 누르면 라커룸에서 <b>한 번</b> 말할 수 있습니다. <b>격려·침착·요구·질책</b> 중 하나를 고르면 선발 열한 명의 사기가 각자의 성격대로 움직이고, 그 사기가 경기의 능력치가 됩니다.</li>
       <li>상황을 읽어야 합니다. 부진하거나 전력이 열세면 <b>격려</b>, 더비처럼 흥분하기 쉬운 날은 <b>침착</b>, 전력이 우세하고 흐름이 좋으면 <b>요구</b>가 잘 먹힙니다. <b>질책</b>은 연패 중일 때만 통하고, 다혈질 선수는 등을 돌립니다.</li>
       <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li>
+      <li><b>좋은 말이 좋은 게 아닙니다.</b> 어떤 톤이 얼마를 주는지는 그 자체로 정해져 있지 않고, <b>그 상황에서 할 수 있었던 네 마디의 평균</b>을 얼마나 넘었느냐로 정해집니다. 아무 말이나 해도 되는 상황에서는 어떤 말도 이득이 없고, 상황을 읽어야만 값이 붙습니다.</li>
+      <li><b>같은 말은 통하지 않습니다.</b> 최근에 쓴 톤은 값이 깎이고, 세 번 연달아 쓰면 효과가 0에 가까워졌다가 마이너스로 돌아섭니다. 버튼에 <b>최근에 함</b>·<b>또 그 말</b> 표시가 붙습니다. 매번 격려만 하는 감독은 아무렇게나 고르는 감독보다 손해입니다.</li>
+      <li>이미 사기가 높은 선수에게는 말이 거의 먹히지 않고, 바닥인 선수는 더 내려가지 않습니다. 말은 <b>필요한 팀에게 가장 값집니다</b>.</li>
       <li><b>하프타임</b>에도 한 번 더 말할 수 있습니다. 하프타임 카드의 <b>라커룸 →</b>을 누르세요. 이때는 최근 성적이 아니라 <b>점수</b>가 방을 정합니다: 앞서면 <b>침착</b>이 지켜 주고, 동점이면 <b>요구</b>가 경기를 가져오고, 크게 뒤지면 <b>질책</b>이 통합니다. 이기고 있을 때의 질책은 경기를 던지는 짓입니다.</li>
       <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 그 자리에서 능력치가 움직이고(사기 이동의 3배로 계산), 시즌에 남는 사기는 표시된 값 그대로입니다.</li>
       <li>경기가 끝나면 결과 화면 맨 위에 <b>경기 후 라커룸</b>이 열립니다. 인터뷰보다 먼저, 선수들에게 하는 말입니다. 이미 끝난 경기라 능력치는 움직이지 않고 <b>사기만 다음 주로 넘어갑니다</b>. 이겼으면 <b>격려</b>, 이길 경기를 비겼으면 <b>요구</b>, 크게 졌으면 <b>질책</b>이 통합니다. 이긴 뒤의 질책은 얻는 것 없이 라커룸만 잃습니다.</li></ul>`)}
@@ -3230,7 +3233,12 @@ export class Game {
       <div class="pcMain"><div class="pcName">라커룸</div>${sub}</div></div>`;
     this.openSheet(`<div class="pc talk"><h3 style="margin:0">팀 토크 <span style="color:var(--muted);font-weight:400;font-size:12px">한 번만 말할 수 있습니다</span></h3>
       ${head}
-      <div class="talkOpts">${opts.map((o) => `<button class="talkOpt" data-tone="${o.tone}"><b>${o.label}</b><span>${o.line}</span></button>`).join("")}</div>
+      <div class="talkOpts">${opts.map((o) => {
+        // a tone the room has been hearing is worth less; say so rather than letting the player find out
+        const worn = staleness(talkLog(s), o.tone);
+        const mark = worn >= 1.4 ? `<i class="worn hot">또 그 말</i>` : worn >= 0.6 ? `<i class="worn">최근에 함</i>` : "";
+        return `<button class="talkOpt" data-tone="${o.tone}"><b>${o.label}${mark}</b><span>${o.line}</span></button>`;
+      }).join("")}</div>
       <div class="actions" style="justify-content:flex-end"><button data-talk-skip>말없이 나간다</button></div></div>`);
     const sheet = document.getElementById("sheet")!;
     sheet.querySelector<HTMLButtonElement>("[data-talk-skip]")?.addEventListener("click", () => { this.closeSheet(); onSkip(); });

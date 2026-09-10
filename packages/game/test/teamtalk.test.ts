@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   newGame, clubOf, giveTalk, talkOptions, talkGiven, toneFit, reactionOf, talkAttrDelta, moraleOf, TALK_MAX,
+  heardFit, roomAverage, staleness, TONES,
   type TalkContext, type TalkTone,
 } from "../src/index";
 
@@ -137,6 +138,68 @@ describe("팀 토크", () => {
     const ht = talkOptions(ctx({ lead: 1 }));
     const ft = talkOptions(ctx({ lead: 1, final: true }));
     for (let i = 0; i < 4; i++) expect(ft[i]!.line).not.toBe(ht[i]!.line);
+  });
+
+  it("no tone is worth anything on its own: what pays is beating the other three", () => {
+    // by construction the four tones average out to nothing in every situation, so there is no situation
+    // where any tone can be picked for a free lift
+    for (const over of [{}, { lead: 1 }, { lead: -2, final: true }, { favourite: true, form: "WWWWW" }]) {
+      const c = ctx(over as Partial<TalkContext>);
+      const spread = TONES.map((t) => heardFit(t, c) - roomAverage(c));
+      expect(spread.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 6);
+      // and there is always a real choice: someone is clearly right and someone clearly wrong
+      expect(Math.max(...spread) - Math.min(...spread)).toBeGreaterThan(1);
+    }
+  });
+
+  it("saying the same thing stops working, and then turns", () => {
+    const c = ctx({ form: "LLLDL" });
+    const fresh = heardFit("praise", c, []);
+    const twice = heardFit("praise", c, ["praise", "praise"]);
+    const often = heardFit("praise", c, ["praise", "praise", "praise", "praise"]);
+    expect(twice).toBeLessThan(fresh);
+    expect(often).toBeLessThan(twice);
+    // worn out, the room's best answer is no longer the one it has been hearing
+    const worn: TalkTone[] = ["praise", "praise", "praise", "praise"];
+    const best = TONES.reduce((b, t) => (heardFit(t, c, worn) > heardFit(b, c, worn) ? t : b));
+    expect(best).not.toBe("praise");
+    // another voice is untouched by it
+    expect(heardFit("calm", c, worn)).toBe(heardFit("calm", c, []));
+  });
+
+  it("always being nice is worse than saying nothing in particular", () => {
+    const sits: TalkContext[] = [];
+    for (const favourite of [true, false]) for (const form of ["WWWDW", "LLDLL"]) {
+      sits.push(ctx({ favourite, form }));
+      for (const lead of [1, 0, -2]) { sits.push(ctx({ favourite, form, lead })); sits.push(ctx({ favourite, form, lead, final: true })); }
+    }
+    const strategy = (pick: (c: TalkContext, log: TalkTone[]) => TalkTone): number => {
+      let sum = 0, log: TalkTone[] = [];
+      for (const c of sits) {
+        const s2 = newGame(6);
+        s2.talkLog = [...log];
+        const r = giveTalk(s2, clubOf(s2, s2.userClub)!, pick(c, log), c, "k");
+        log = [...(s2.talkLog ?? [])];
+        sum += r.lift;
+      }
+      return sum / sits.length;
+    };
+    const nice = strategy(() => "praise");
+    const read = strategy((c, log) => TONES.reduce((b, t) => (heardFit(t, c, log) > heardFit(b, c, log) ? t : b)));
+    expect(nice).toBeLessThan(0);
+    expect(read).toBeGreaterThan(1);
+    expect(read).toBeGreaterThan(nice + 3);
+  });
+
+  it("words are worth most to a squad that needs them", () => {
+    const c = ctx({ form: "LLLDL" });
+    const s = newGame(21);
+    const p = clubOf(s, s.userClub)!.squad[0]!;
+    const at = (morale: number) => reactionOf({ ...p, morale } as typeof p, "praise", c, 60);
+    // the same talk to a player at 55 and one at 95: the one who needs it moves further
+    expect(at(55)).toBeGreaterThan(at(95));
+    // and a room already at the ceiling barely moves at all
+    expect(Math.abs(at(98))).toBeLessThan(Math.abs(at(55)) * 0.35);
   });
 
   it("an unhappy dressing room takes everything worse than a settled one", () => {
