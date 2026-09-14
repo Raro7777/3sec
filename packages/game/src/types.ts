@@ -371,7 +371,7 @@ export interface Fixture {
   derby?: boolean;
 }
 
-/** One knockout tie of the 3sec 컵. Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
+/** One knockout tie of the domestic cup (cup.ts CUP_NAME). Stage 0 = round 1 (8 clubs), 1 = QF, 2 = SF, 3 = final. */
 export interface CupTie {
   id: number;
   stage: number;

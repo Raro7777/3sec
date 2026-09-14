@@ -10,7 +10,7 @@ import { expireOffers, freeAgentRollover, incomingOffers, returnLoans, seasonBud
 import { trainWeek, ATTR_LABEL, playingTimeBonus } from "./training";
 import { payWages, settleContracts, wageBill, weeklyRevenue } from "./contracts";
 import { youthIntake, youthRollover, youthWeek } from "./youth";
-import { cupDayDue, cupPrize, newCup } from "./cup";
+import { cupDayDue, cupPrize, newCup, CUP_NAME } from "./cup";
 import { clDayDue, ensureForeign, foreignRollover, newContinental, noteQualifiers, pendingClTies } from "./continental";
 import { overall } from "./rating";
 import { REVIEW_FROM_ROUND, applyManagerMatchday, applyManagerPolicy, boardReview, clearUserManager, managerRollover } from "./managers";
@@ -191,7 +191,7 @@ export function createMatch(s: GameState, f: Fixture, opts: GameMatchOptions = {
 export function recordResult(s: GameState, f: Fixture, m: Match, opts: RecordOptions = {}): void {
   if (m.state.phase !== "FULL_TIME") throw new Error("match not finished");
   const cup = opts.competition === "cup" || opts.competition === "cl";
-  const prefix = opts.competition === "cl" ? "동아시아 CL: " : opts.competition === "cup" ? "3sec 컵: " : "";
+  const prefix = opts.competition === "cl" ? "동아시아 CL: " : opts.competition === "cup" ? `${CUP_NAME}: ` : "";
   f.score = [m.state.score[0], m.state.score[1]];
   f.scorers = m.state.events
     .filter((e) => e.type === "GOAL" || e.type === "OWN_GOAL")

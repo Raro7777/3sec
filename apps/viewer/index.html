@@ -12,7 +12,17 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap" />
+    <!-- The fonts ship with the app. A game that plays on a subway platform cannot fetch its typography,
+         and asking Google for it on every launch is a third party in an app that otherwise talks to no one.
+         Subset with fontTools: Latin for the display and mono faces, the whole Hangul syllable block for the
+         body face so a club or manager the player names themselves can never come out as tofu. (SIL OFL 1.1) -->
+    <style>
+      @font-face { font-family:"Barlow Condensed"; src:url("./fonts/barlow-600.woff2") format("woff2"); font-weight:600; font-style:normal; font-display:swap; }
+      @font-face { font-family:"Barlow Condensed"; src:url("./fonts/barlow-700.woff2") format("woff2"); font-weight:700; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Sans KR"; src:url("./fonts/plex-kr-400.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Sans KR"; src:url("./fonts/plex-kr-600.woff2") format("woff2"); font-weight:600; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Mono"; src:url("./fonts/plex-mono-400.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap; }
+    </style>
     <style>
       :root { color-scheme: dark; --bg:#0b1014; --panel:#121a21; --panel2:#0e151b; --line:#22303b; --text:#e7edf2; --muted:#93a4b3; --accent:#ffd166; --good:#5fd38a; --warn:#f4a259; --bad:#ef5b5b; }
       html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif; }

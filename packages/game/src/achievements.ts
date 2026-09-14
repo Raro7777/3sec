@@ -3,7 +3,7 @@ import type { Club, EarnedAchievement, Fixture, GameState, Records, SeasonRecord
 import { clubOf, seasonRounds, table, topScorers } from "./season";
 import { roundsPerSeason } from "./fixtures";
 import { expectedPositions } from "./managers";
-import { tieWinner } from "./cup";
+import { tieWinner, CUP_NAME } from "./cup";
 import { MAX_STAFF } from "./staff";
 
 export type AchievementTier = "bronze" | "silver" | "gold";
@@ -61,7 +61,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "season_unbeaten", title: "시즌 무패", desc: "리그 한 시즌을 한 번도 지지 않고 마친다.", tier: "gold", check: (c) => c.seasonEnd && c.row.played >= c.rounds && c.row.lost === 0 },
   { id: "league_title", title: "리그 우승", desc: "리그 1위로 시즌을 마친다.", tier: "gold", check: (c) => c.seasonEnd && c.position === 1 },
   { id: "back_to_back", title: "2연패", desc: "리그를 두 시즌 연속 제패한다.", tier: "gold", check: (c) => c.seasonEnd && c.position === 1 && c.s.seasonHistory.some((r) => r.season === c.s.season - 1 && wonTitle(r, c.s)) },
-  { id: "cup_win", title: "컵 우승", desc: "3sec 컵을 들어올린다.", tier: "silver", check: (c) => c.s.cup?.holder === c.s.userClub || c.s.seasonHistory.some((r) => wonCup(r, c.s)) },
+  { id: "cup_win", title: "컵 우승", desc: `${CUP_NAME}을 들어올린다.`, tier: "silver", check: (c) => c.s.cup?.holder === c.s.userClub || c.s.seasonHistory.some((r) => wonCup(r, c.s)) },
   { id: "double", title: "더블", desc: "같은 시즌에 리그와 컵을 모두 우승한다.", tier: "gold", check: (c) => c.seasonEnd && c.position === 1 && c.s.cup?.holder === c.s.userClub },
   { id: "underdog_title", title: "언더독의 반란", desc: "이사회 기대 6위 이하인 팀으로 리그 우승을 차지한다.", tier: "gold", check: (c) => c.seasonEnd && c.position === 1 && c.expected >= 6 },
   { id: "title_no_debt", title: "적자 없는 우승", desc: "시즌 내내 예산이 한 번도 마이너스가 되지 않고 우승한다.", tier: "gold", check: (c) => c.seasonEnd && c.position === 1 && (c.s.seasonMinBudget ?? c.me.budget) >= 0 && c.me.budget >= 0 },

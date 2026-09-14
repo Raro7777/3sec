@@ -15,3 +15,7 @@ apps/viewer/android/app/src/main/assets/public/
 apps/viewer/android/app/src/main/assets/capacitor.config.json
 apps/viewer/android/app/src/main/assets/capacitor.plugins.json
 apps/viewer/android/capacitor-cordova-android-plugins/
+
+# the upload key and its passwords never enter the repo
+apps/viewer/android/keystore.properties
+*.jks

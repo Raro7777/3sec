@@ -3,6 +3,7 @@
  * native Capacitor Share plugin inside the APK) or fall back to a download; plus the 1080×1350
  * season summary card painter.
  */
+import { CUP_NAME } from "@3sec/game";
 
 type ShareNav = Navigator & { share?: (d: { files?: File[]; title?: string; text?: string }) => Promise<void>; canShare?: (d: { files?: File[] }) => boolean };
 
@@ -109,7 +110,7 @@ export function drawSeasonCard(d: SeasonCard): HTMLCanvasElement {
   });
   // detail rows
   ctx.textAlign = "left";
-  const rows: [string, string][] = [["리그 우승", d.champion], ["팀 내 최다 득점", d.topScorer], ["3sec 컵", d.cupResult]];
+  const rows: [string, string][] = [["리그 우승", d.champion], ["팀 내 최다 득점", d.topScorer], [CUP_NAME, d.cupResult]];
   let y = 910;
   for (const [l, v] of rows) {
     ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.font = `600 32px ${F}`; ctx.fillText(l, 64, y);

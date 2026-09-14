@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CUP_D2_ENTRANTS, CUP_PRIZE, CUP_ROUNDS, CLUBS_PER_DIVISION, advanceCupDay, advanceRound, createCupMatch, cupByes, cupDayDue, cupField, cupPrize, currentCupTies, deserialize,
+  CUP_D2_ENTRANTS, CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CLUBS_PER_DIVISION, advanceCupDay, advanceRound, createCupMatch, cupByes, cupDayDue, cupField, cupPrize, currentCupTies, deserialize,
   divisionOf, newGame, pendingCupTies, recordCupResult, seasonRounds, serialize, simulateCupDay, simulateRound, table, tieWinner, userCupStatus,
 } from "../src/index";
 import type { GameState } from "../src/index";
@@ -12,7 +12,7 @@ function playCup(s: GameState): void {
   while (s.cup.stage < 4) simulateCupDay(s, SHORT);
 }
 
-describe("3sec 컵 bracket", () => {
+describe("컵 대회 bracket", () => {
   it("draws a 16-club field: the whole top flight plus the best four below it, nobody resting", () => {
     const s = newGame(11);
     expect(cupByes(s)).toEqual([]);
@@ -52,7 +52,7 @@ describe("3sec 컵 bracket", () => {
       expect(s.cup.ties.every((t) => t.score !== null && tieWinner(t) !== null)).toBe(true);
     }
     expect(a.cup).toEqual(b.cup);
-    expect(a.news.some((n) => n.includes("3sec 컵 우승"))).toBe(true);
+    expect(a.news.some((n) => n.includes(`${CUP_NAME} 우승`))).toBe(true);
   });
 
   it("decides drawn ties by a shoot-out and only those", () => {
@@ -157,7 +157,7 @@ describe("3sec 컵 bracket", () => {
     expect(t.scorers.length).toBe(t.score![0] + t.score![1]);
     expect(tieWinner(t)).not.toBeNull();
     // only a level tie goes to penalties, and that is what puts the cup line at the top of the news
-    if (t.score![0] === t.score![1]) expect(s.news[0]).toMatch(/3sec 컵/);
+    if (t.score![0] === t.score![1]) expect(s.news[0]).toContain(CUP_NAME);
     else expect(t.penalties).toBeUndefined();
   });
 });

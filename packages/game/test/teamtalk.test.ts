@@ -8,7 +8,6 @@ import {
 const ctx = (over: Partial<TalkContext> = {}): TalkContext =>
   ({ home: true, opponent: "포항", favourite: false, derby: false, form: "WDLDW", ...over });
 
-const TONES: TalkTone[] = ["praise", "calm", "demand", "rebuke"];
 
 describe("팀 토크", () => {
   it("offers four tones, each with a line written for the situation", () => {

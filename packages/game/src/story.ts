@@ -31,6 +31,7 @@ import { forgetAlumnus, noteDeparture, returnFee, returnable, returningPlayer } 
 import { FEUD_AT, adjustFeud, feudWith, tauntLine } from "./rivalry";
 import { clubLore } from "./lore";
 import { clubCapacity, fanBase } from "./fans";
+import { CUP_NAME } from "./cup";
 
 export const STORY_CHANCE = 0.25;
 /** Rounds a pending event waits before it settles itself with the last choice. */
@@ -690,7 +691,7 @@ export function storyMatch(s: GameState, f: Pick<Fixture, "home" | "away">, m: M
         adjustMorale(p, 4);
       }
       if (g && (p.loanFrom === opp.id || p.lastLoanClub === opp.id)) {
-        s.news.unshift(`${cup ? "3sec 컵: " : ""}${p.loanFrom === opp.id ? "임대생" : "임대 복귀한"} ${p.name}, 친정팀 ${opp.shortName} 상대로 득점! 세리머니는 하지 않았습니다.`);
+        s.news.unshift(`${cup ? `${CUP_NAME}: ` : ""}${p.loanFrom === opp.id ? "임대생" : "임대 복귀한"} ${p.name}, 친정팀 ${opp.shortName} 상대로 득점! 세리머니는 하지 않았습니다.`);
       }
     }
   }

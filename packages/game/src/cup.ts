@@ -7,7 +7,7 @@ import { clubOf, createMatch, fixtureSeed, prepareRound, recordResult, seasonOve
 import { clubsIn, divisionOf } from "./divisions";
 import { clDayDue } from "./continental";
 
-export const CUP_NAME = "3sec 컵";
+export const CUP_NAME = "대한컵";
 /** Cup matchdays: before league round index r (0-based) when the season reaches it → stage index. */
 export const CUP_ROUNDS = [6, 11, 16, 21] as const;
 export const CUP_STAGES = 4;

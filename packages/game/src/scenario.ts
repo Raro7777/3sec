@@ -10,7 +10,7 @@ import type { Club, GameState, SeasonRecord, SquadPlayer } from "./types";
 import { clubsIn, divisionOf } from "./divisions";
 import { isForeignPlayer } from "./foreign";
 import { overall } from "./rating";
-import { CUP_STAGES } from "./cup";
+import { CUP_STAGES, CUP_NAME } from "./cup";
 
 /** What a scenario forbids for its season; every rule is checked in transfers.ts through `scenarioBlock`. */
 export interface ScenarioRules {
@@ -103,7 +103,7 @@ export const SCENARIOS: Scenario[] = [
     name: "토종 군단",
     tagline: "외국인 없이 컵 4강",
     brief: "\"우리 돈으로 외국인은 못 씁니다.\" 국내 선수만으로 컵에서 사고를 쳐야 합니다.",
-    goal: "외국인 영입 없이 3sec 컵 4강 진출",
+    goal: `외국인 영입 없이 ${CUP_NAME} 4강 진출`,
     stars: 2,
     rules: { noForeign: true },
     pick: (s) => byReputation(s, 1, true)[4]!.id,

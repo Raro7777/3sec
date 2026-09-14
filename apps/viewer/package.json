@@ -11,7 +11,9 @@
     "typecheck": "node scripts/build-worker.mjs && tsc -p tsconfig.json --noEmit",
     "preview": "vite preview",
     "android:sync": "node scripts/build-worker.mjs && vite build && cap sync android",
-    "android:apk": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleDebug"
+    "android:apk": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleDebug",
+    "android:bundle": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew bundleRelease",
+    "android:release": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@3sec/engine": "workspace:*",
