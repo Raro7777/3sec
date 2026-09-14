@@ -29,7 +29,7 @@ export interface DifficultyProfile {
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyProfile> = {
   easy: { id: "easy", label: "쉬움", blurb: "예산 넉넉 · 이사회 관대", startBudget: 1.4, expectationSlack: 2, startConfidence: 65, injury: 0.7, askMarkup: 0.92, refusal: 0.6 },
-  normal: { id: "normal", label: "보통", blurb: "설계된 그대로", startBudget: 1, expectationSlack: 0, startConfidence: 60, injury: 1, askMarkup: 1, refusal: 1 },
+  normal: { id: "normal", label: "보통", blurb: "기본", startBudget: 1, expectationSlack: 0, startConfidence: 60, injury: 1, askMarkup: 1, refusal: 1 },
   hard: { id: "hard", label: "어려움", blurb: "예산 빠듯 · 이사회 조급", startBudget: 0.7, expectationSlack: -1, startConfidence: 55, injury: 1.3, askMarkup: 1.15, refusal: 1.3 },
 };
 

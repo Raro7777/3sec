@@ -423,7 +423,7 @@
       .bcXIHead i { display:inline-flex; width:16px; height:16px; }
       .bcXIHead i svg { width:100%; height:100%; }
       .bcXIHead b { font-size:14px; letter-spacing:.02em; }
-      .bcXIHead small { color:var(--muted); font-family:"IBM Plex Mono",monospace; font-size:10px; margin-left:auto; }
+      .bcXIHead small { color:var(--muted); font-family:"IBM Plex Mono",monospace; font-size:10px; margin-left:auto; white-space:nowrap; }
       .bcXI.r .bcXIHead small { margin-left:0; margin-right:auto; }
       .bcXI ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px; }
       .bcXI li { font-size:11.5px; color:#dbe4ec; display:flex; gap:6px; align-items:baseline; animation:bcIn .32s cubic-bezier(.2,.9,.2,1) backwards; }
@@ -631,11 +631,16 @@
       .immersive #topbar { grid-area:bar; display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:4px 3px; padding-right:calc(3px + env(safe-area-inset-right)); background:rgba(11,16,20,.85); border-bottom:0; border-left:1px solid var(--line); overflow-y:auto; overflow-x:hidden; flex-wrap:nowrap; width:auto; min-width:46px; scrollbar-width:none; }
       .immersive #topbar::-webkit-scrollbar { display:none; }
       .immersive #topbar > * { flex:none; }
-      .immersive #topbar button, .immersive #topbar select { width:40px; min-height:34px; height:34px; padding:0; font-size:15px; line-height:1; white-space:nowrap; overflow:hidden; text-align:center; text-align-last:center; border-radius:8px; }
+      .immersive #topbar button, .immersive #topbar select { width:48px; min-height:40px; height:40px; padding:0; font-size:15px; line-height:1; white-space:nowrap; overflow:hidden; text-align:center; text-align-last:center; border-radius:8px; }
+      /* an icon alone is a guess on a phone; the caption under it is what makes the rail readable */
+      .immersive #topbar button[data-cap] { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; }
+      .immersive #topbar button[data-cap]::after { content:attr(data-cap); font-size:8.5px; letter-spacing:.02em; color:var(--muted); font-family:"IBM Plex Sans KR", sans-serif; line-height:1; }
+      .immersive #topbar button.primary[data-cap]::after { color:#1a1400; opacity:.85; }
       .immersive #topbar label { flex-direction:column; gap:0; font-size:0; }
       .immersive #topbar label #speed { font-size:11px; padding:0 2px; appearance:none; -webkit-appearance:none; }
       .immersive #topbar label.dbg { display:none; }
-      .immersive #btnPanel, .immersive #btnLog { display:inline-block !important; }
+      /* shown only in immersive (the inline display:none is the portrait default); flex so the caption stacks under the icon */
+      .immersive #btnPanel, .immersive #btnLog { display:flex !important; }
       .immersive #btnPanel { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:700; }
       .immersive.log-open #btnLog { border-color:var(--accent); color:var(--accent); }
       /* compact score + clock pill, top-left, the only HUD over the pitch */
@@ -754,7 +759,7 @@
       <section class="screen" id="screen-match">
         <div id="topbar">
           <div id="scoreboard"><div id="score">—</div><div id="clock">00:00</div><div id="phase"></div></div>
-          <button id="btnPlay" class="primary">▶ 재생</button>
+          <button id="btnPlay" data-cap="재생" class="primary">▶ 재생</button>
           <label>속도
             <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 5분)">
               <option value="auto" selected>자동</option>
@@ -766,15 +771,15 @@
               <option value="32">32x</option>
             </select>
           </label>
-          <button id="btnSkip" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
+          <button id="btnSkip" data-cap="결과로" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
           <button id="btnContinue" class="primary" style="display:none">계속 →</button>
-          <button id="btnFull" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
-          <button id="btnSound" title="효과음">🔊</button>
-          <button id="btnHaptics" title="진동">📳</button>
-          <button id="btnReplay" title="골 자동 리플레이">🔁</button>
-          <button id="btnTags" title="선수 이름표 표시">🏷</button>
-          <button id="btnLog" style="display:none" title="중계 자막 표시">💬</button>
-          <button id="btnPanel" style="display:none">☰ 전술·교체</button>
+          <button id="btnFull" data-cap="크게" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
+          <button id="btnSound" data-cap="소리" title="효과음">🔊</button>
+          <button id="btnHaptics" data-cap="진동" title="진동">📳</button>
+          <button id="btnReplay" data-cap="리플레이" title="골 자동 리플레이">🔁</button>
+          <button id="btnTags" data-cap="이름표" title="선수 이름표 표시">🏷</button>
+          <button id="btnLog" data-cap="자막" style="display:none" title="중계 자막 표시">💬</button>
+          <button id="btnPanel" data-cap="전술" style="display:none">☰ 전술·교체</button>
           <!-- The offside lines and player intents: a tool for tuning the engine, not a control for a
                player. Kept in the DOM so the drawing code and the tests still reach it, out of the toolbar
                so nobody finds it by accident. Turn it on from 설정 → 설명서 (long-press the version line). -->

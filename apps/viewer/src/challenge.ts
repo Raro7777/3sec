@@ -111,7 +111,23 @@ export const CHALLENGES: ChallengeScenario[] = [
   },
 ];
 
+/**
+ * 첫 출근: the game's opening. The outgoing manager has gone at the break of a home match the side is losing
+ * by one, and the board has sent the new one down to the bench. The player takes over ten seconds before
+ * the whistle, so the first thing they ever do is the half-time talk, then a second half with the drawer
+ * and the last call, then a verdict — the whole loop in four minutes, on their own squad, against a real
+ * league club, with nothing of the season at stake. Not listed under 도전 모드; the first run offers it.
+ */
+export const PROLOGUE: ChallengeScenario = {
+  id: "prologue", icon: "🚪", title: "첫 출근", stars: 1, kind: "match",
+  desc: "전임 감독이 전반 종료 후 사임했습니다. 0:1로 끌려가는 홈 경기, 후반 45분을 당신이 맡습니다.",
+  goal: "무승부 이상이면 성공", startAt: 44 * 60 + 50, score: [0, 1], side: 0, realOpponent: true,
+  oppDelta: 0, oppName: "", oppShort: "", oppColor: "#888",
+  win: (a, b) => a >= b,
+};
+
 export function challengeById(id: string): ChallengeScenario | undefined {
+  if (id === PROLOGUE.id) return PROLOGUE;
   return CHALLENGES.find((c) => c.id === id);
 }
 

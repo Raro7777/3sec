@@ -52,7 +52,7 @@ function loadRosterPack(): RosterPack | null {
 }
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
 import { celebrate } from "./celebrate";
-import { CHALLENGES, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
+import { CHALLENGES, PROLOGUE, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
 import { MatchScreen } from "./match-screen";
 import { condColor, formationSvg, liveFormationSvg, type LiveNode } from "./formation-svg";
@@ -300,10 +300,30 @@ export class Game {
     let seen = false;
     try { seen = localStorage.getItem("3sec.guide.seen") === "1"; } catch { /* ignore */ }
     if (this.state.board.sacked) { this.renderSacked(); this.show("sacked"); return; }
+    this.show("home");
     if (!seen && this.state.round === 0 && this.state.season === 1) {
-      this.show("guide");
       try { localStorage.setItem("3sec.guide.seen", "1"); } catch { /* ignore */ }
-    } else this.show("home");
+      const me = this.me;
+      this.openSheet(`<div class="pc welcome"><h3 style="margin:0">첫 출근 <span style="color:var(--muted);font-weight:400;font-size:12px">${me.name}</span></h3>
+        <p style="margin:10px 0 6px;font-size:15px;line-height:1.6">${PROLOGUE.desc}</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:var(--muted)">약 4분. 라커룸에서 한마디 하고, 전술을 만지고, 후반을 지휘합니다. 결과는 시즌에 남지 않습니다.</p>
+        <div class="actions" style="justify-content:space-between"><button data-prologue-skip>건너뛰고 감독실로</button><button class="primary" data-prologue-go>벤치로 내려간다 →</button></div></div>`);
+      this.sheet.querySelector("[data-prologue-go]")?.addEventListener("click", () => { this.closeSheet(); void this.startChallenge(PROLOGUE.id); });
+      this.sheet.querySelector("[data-prologue-skip]")?.addEventListener("click", () => { this.closeSheet(); this.welcome(); });
+    }
+  }
+
+  /** The room, introduced: what the things on the walls and the desk are, and where the match is. */
+  private welcome(): void {
+    const me = this.me;
+    {
+      this.openSheet(`<div class="pc welcome"><h3 style="margin:0">감독실 <span style="color:var(--muted);font-weight:400;font-size:12px">${me.name}</span></h3>
+        <p style="margin:10px 0 4px;font-size:15px;line-height:1.6">여기가 당신 방입니다. <b>벽의 전술판</b>이 다음 상대를, <b>책상의 신문</b>이 리그 판도를, <b>전화기</b>가 들어온 제안을 말해 줍니다. 방 안의 물건을 눌러 보세요.</p>
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.6">준비가 되면 아래 <b>경기 시작</b>입니다. 킥오프 전에 라커룸에서 한마디 하게 됩니다.</p>
+        <div class="actions" style="justify-content:space-between"><button data-welcome-guide>📖 설명서</button><button class="primary" data-welcome-go>방 둘러보기 →</button></div></div>`);
+      this.sheet.querySelector("[data-welcome-go]")?.addEventListener("click", () => this.closeSheet());
+      this.sheet.querySelector("[data-welcome-guide]")?.addEventListener("click", () => { this.closeSheet(); this.show("guide"); });
+    }
   }
 
   // ------------------------------------------------------------ onboarding
@@ -459,7 +479,8 @@ export class Game {
 
   private finishOnboarding(club: number | null, name: string): void {
     const seed = Math.floor(Math.random() * 1e6) + 1;
-    const manager = name.trim() || "감독";
+    // "신임" reads naturally with the 감독 suffix the UI adds everywhere ("신임 감독"); "감독" doubled up
+    const manager = name.trim() || "신임";
     this.state = this.pickedScenario
       ? newScenarioGame(seed, this.pickedScenario, manager, this.pickedDifficulty, loadRosterPack())
       : newGame(seed, club ?? 0, manager, this.pickedDifficulty, loadRosterPack());
@@ -476,7 +497,7 @@ export class Game {
   private renderGuide(): void {
     const sec = (title: string, body: string, open = false) => `<details ${open ? "open" : ""}><summary>${title}</summary><div class="guide">${body}</div></details>`;
     this.el.guide.innerHTML = `<div class="card guide"><h3>설명서 <span>가난한자의 FM · 만든이 raro</span></h3>
-      <p>당신은 12개 구단 리그의 감독입니다. 한 시즌은 홈·원정 22라운드이고, 목표는 우승입니다. 스쿼드를 꾸리고 전술을 정한 뒤 경기를 지휘하고, 이적·훈련·계약으로 팀을 키워 갑니다. 진행은 이 기기에 자동 저장됩니다.</p>
+      <p>당신은 12개 구단 리그의 감독입니다. 한 시즌은 홈·원정 22라운드이고, 목표는 구단마다 다릅니다 — 잔류, 승격, 우승. 스쿼드를 꾸리고 전술을 정한 뒤 경기를 지휘하고, 이적·훈련·계약으로 팀을 키워 갑니다. 진행은 이 기기에 자동 저장됩니다.</p>
       <div class="actions" style="margin-top:6px"><button class="primary" data-act="start">시작하기 →</button></div></div>
     ${sec("한 라운드의 흐름", `<ul>
       <li><b>홈</b>에서 다음 상대를 확인하고 <b>스쿼드 점검</b>으로 선발을 다듬습니다.</li>
@@ -1347,7 +1368,7 @@ export class Game {
         <div class="weather">${look.night ? "야간" : "주간"} · ${wx}</div>
         <div class="officeHud">
           <span class="cn" data-customize title="구단 꾸미기"><i style="background:${me.color}"></i>${me.name}</span>
-          <span class="st">${divisionName(userDivision(s))} <b>${seasonOver(s) ? "종료" : `${table(s).findIndex((r) => r.club === me.id) + 1}위`}</b> · 예산 ${me.budget}억</span>
+          <span class="st">${divisionName(userDivision(s))} <b>${seasonOver(s) ? "종료" : s.round === 0 ? "개막전" : `${table(s).findIndex((r) => r.club === me.id) + 1}위`}</b> · 예산 ${me.budget}억</span>
         </div>
       </div>
       ${say}
@@ -1374,7 +1395,7 @@ export class Game {
       opponent: opp && fx ? { short: opp.shortName, color: opp.color, home: fx.home === me.id } : null,
       rounds: seasonRounds(s),
       offers: openOffers(s).length,
-      leader: rows.length ? clubOf(s, rows[0]!.club).shortName : null,
+      leader: rows.length && rows[0]!.played > 0 ? clubOf(s, rows[0]!.club).shortName : null,
       lastResult,
     });
   }
@@ -3309,12 +3330,12 @@ export class Game {
    * it moves reaches the pitch as well as the season — `talkAttrDelta` turns each reaction into the
    * attribute change the running match takes on (match-screen pushes it into the engine).
    */
-  private halfTimeTalk(side: TeamId, opp: Club, derby: boolean): Promise<Record<string, Partial<Attributes>> | null> {
+  private halfTimeTalk(side: TeamId, opp: Club, derby: boolean, keyOverride?: string): Promise<Record<string, Partial<Attributes>> | null> {
     const s = this.state, me = this.me;
-    const m = this.live?.find((x) => x.fixture.home === s.userClub || x.fixture.away === s.userClub)?.match;
+    const m = this.live?.find((x) => x.fixture.home === s.userClub || x.fixture.away === s.userClub)?.match ?? this.challenge?.match;
     if (!m) return Promise.resolve(null);
     const lead = m.state.score[side] - m.state.score[1 - side]!;
-    const key = `${s.season}:${s.round}:${this.liveKindNext()}:ht`;
+    const key = keyOverride ?? `${s.season}:${s.round}:${this.liveKindNext()}:ht`;
     const ctx: TalkContext = { home: side === 0, opponent: opp.shortName, favourite: me.reputation >= opp.reputation, derby, form: "", lead };
     const room = Math.round(me.lockerRoom ?? 60);
     const sub = `<div class="hint">하프타임 · ${opp.shortName} 전${derby ? " · 더비" : ""}</div>
@@ -3755,12 +3776,17 @@ export class Game {
     this.show("match");
     const homeClub = side === 0 ? me : null;
     const capacity = homeClub ? clubCapacity(homeClub) : 30000;
+    const oppClub = built.opponent.clubId !== undefined ? clubOf(s, built.opponent.clubId) : null;
     this.screen.start(match, side, [], () => {
       const { ok, mine, theirs } = challengeOutcome(match, scen, side);
       void this.finishChallenge(scen, ok, mine, theirs);
     }, {
       crowd: { attendance: Math.round(capacity * (scen.derby ? 0.98 : 0.8)), capacity, derby: !!scen.derby },
       derby: !!scen.derby,
+      competition: scen.id === PROLOGUE.id ? "친선경기" : `도전 · ${scen.title}`,
+      clubs: oppClub ? (side === 0 ? [this.clubLook(me), this.clubLook(oppClub)] : [this.clubLook(oppClub), this.clubLook(me)]) : undefined,
+      // a real opponent means a real dressing room at the break; the prologue is built on exactly that
+      halfTimeTalk: oppClub ? () => this.halfTimeTalk(side, oppClub, !!scen.derby, `challenge:${scen.id}:ht`) : undefined,
     });
   }
 
@@ -3771,6 +3797,18 @@ export class Game {
     if (this.current === "match") this.screen.leave();
     this.renderAll();
     this.show("home");
+    if (scen.id === PROLOGUE.id) {
+      // the opening is over; what they did is named, and the room is theirs
+      const line = ok
+        ? (mine > theirs ? "뒤집었습니다. 이사회가 계약서를 내밉니다." : "무너지지 않았습니다. 이사회가 계약서를 내밉니다.")
+        : "졌지만 이사회는 후반전을 봤습니다. 계약서를 내밉니다.";
+      this.openSheet(`<div class="pc welcome"><h3 style="margin:0">첫 출근 <span style="color:var(--muted);font-weight:400;font-size:12px">${mine} - ${theirs}</span></h3>
+        <p style="margin:10px 0 6px;font-size:15px;line-height:1.6">${line}</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:var(--muted)">방금 한 것이 이 게임의 전부입니다 — <b style="color:var(--text)">라커룸에서 한마디</b>, <b style="color:var(--text)">전술과 교체</b>, 그리고 <b style="color:var(--text)">마지막 지시</b>. 이제 정식 시즌입니다. 이 경기는 기록에 남지 않습니다.</p>
+        <div class="actions" style="justify-content:flex-end"><button class="primary" data-welcome-go>감독실로 →</button></div></div>`);
+      this.sheet.querySelector("[data-welcome-go]")?.addEventListener("click", () => { this.closeSheet(); this.welcome(); });
+      return;
+    }
     if (ok) {
       await celebrate({
         kind: "clinch",

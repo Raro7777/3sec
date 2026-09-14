@@ -909,7 +909,12 @@ export class MatchScreen {
     this.bc.reset(home, away, comp);
     const xi = (i: 0 | 1): string[] => this.match.state.players.filter((p) => p.team === i && p.onPitch).slice(0, 11).map((p) => this.match.def(p.id).name);
     const note = extra.crowd ? `${comp} · ${extra.crowd.attendance.toLocaleString("ko-KR")}명` : comp;
-    void this.bc.lineups(xi(0), xi(1), this.match.teams[0].tactics.formation, this.match.teams[1].tactics.formation, note);
+    void this.bc.lineups(xi(0), xi(1), this.match.teams[0].tactics.formation, this.match.teams[1].tactics.formation, note).then(() => {
+      // the line-ups are gone and the pitch is still: say what starts it, once, and only if nothing has
+      if (!this.playing && !this.finished && this.match.state.tick === 0) {
+        this.bc?.strap({ kind: "note", title: "킥오프", who: "▶ 을 누르면 시작합니다", minute: "", color: "#ffd166", note: "☰ 에서 전술과 교체" });
+      }
+    });
   }
 
   private teamOf(e: MatchEvent): { name: string; shortName: string; color: string } | null {
@@ -1830,7 +1835,8 @@ export class MatchScreen {
     const h = fs * lines + pad * 2 + 4 * (lines - 1);
     // in immersive mode the translucent top bar overlays the canvas top; sit below it
     const x0 = 8;
-    const y0 = immersive ? 48 : 8;
+    // the broadcast bug owns the top-left corner; the banner sits under it rather than behind it
+    const y0 = this.bc ? (immersive ? 96 : 92) : immersive ? 48 : 8;
     ctx.fillStyle = "rgba(10,14,20,0.72)";
     ctx.fillRect(x0, y0, w, h);
     ctx.fillStyle = home.color;
