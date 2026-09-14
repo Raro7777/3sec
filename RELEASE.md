@@ -17,6 +17,11 @@ Google Play 출시를 위한 체크리스트. **저장소에서 끝난 것**과 
 | 업로드 서명 | `keystore.properties` 또는 환경변수에서 읽도록 배선. 키는 저장소에 **없고**, `.gitignore`가 막고 있음 |
 | AAB 빌드 | `pnpm --filter viewer android:bundle` → `android/app/build/outputs/bundle/release/app-release.aab` (7.9MB) |
 | 네트워크 의존 | **없음**. 구글 폰트 CDN을 쓰던 것을 앱에 넣음 (아래 참조) |
+| 뒤로가기 버튼 | 열린 것을 닫고, 홈에서만 두 번 눌러 종료. 경기 중에는 무시 |
+| 경기 중 화면 꺼짐 | 웨이크 락으로 방지 |
+| 백그라운드 저장 | 앱이 내려갈 때 저장 |
+| 개발자용 UI | 엔진 오버레이를 경기 툴바에서 뺌 (설정의 버전 줄을 길게 눌러야 나옴) |
+| 설정의 버전 표기 | `v0.24` → `v1.0` (실제 빌드와 어긋나 있었음) |
 | 서드파티 라이선스 | `apps/viewer/public/fonts/OFL.txt` (SIL OFL 1.1) |
 
 ### 폰트를 앱에 넣은 이유
@@ -86,14 +91,12 @@ WebView 인터셉트로 파일을 서빙하므로 이론상 필요 없지만, **
 | 인앱 결제 | 없음 |
 | 개인정보처리방침 | **URL 필수** — 수집하는 데이터가 없어도 Play는 링크를 요구합니다. 초안은 `PRIVACY.md` |
 | 아이콘 | 512×512 PNG — `apps/viewer/public/icons/icon-512.png` |
-| 그래픽 이미지 | 1024×500 PNG — **아직 없음, 만들어야 함** |
+| 그래픽 이미지 | 1024×500 PNG — `docs/store/feature-graphic.png` (원본 `feature-graphic.html`) |
 | 스크린샷 | 휴대전화 2장 이상 (16:9 또는 9:16, 최소 320px) — `docs/store/` 참조 |
 
 ### 2-5. 남은 제작물
 
-- **그래픽 이미지(피처 그래픽) 1024×500** — 스토어 상단에 걸리는 배너
-- 스토어 설명 문구 — 초안은 `docs/store/listing-ko.md`
-- 스크린샷 — `docs/store/` 에 생성해 둠
+전부 `docs/store/`에 있습니다 — 피처 그래픽, 스크린샷 10장, 설명 문구 초안.
 
 ---
 

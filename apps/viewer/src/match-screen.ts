@@ -1,3 +1,4 @@
+import { keepAwake } from "./platform";
 import { DT, PITCH, type Attributes, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
 import { applyCamera, drawPitch, type Camera, type View, project, unproject, screenAngle } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
@@ -358,6 +359,8 @@ export class MatchScreen {
     this.fxEvents = 0;
     this.htShown = false;
     this.htTalked = false;
+    // nine minutes of watching with no touches is exactly how long Android waits before dimming
+    void keepAwake(true);
     this.startBroadcast(extra);
     this.lastCallUsed = false;
     this.closeCall(false);
@@ -472,6 +475,7 @@ export class MatchScreen {
 
   /** Called by the controller when leaving the match screen. */
   leave(): void {
+    void keepAwake(false); // the match is over; the screen may sleep again
     this.bc?.dispose();
     this.bc = null;
     document.body.classList.remove("bcOn");
@@ -978,6 +982,18 @@ export class MatchScreen {
       if (done) { this.onFinish?.(); return; }
       if (wasPlaying && !this.finished) this.setPlaying(true);
     }, talk);
+  }
+
+  /**
+   * What the Android back button should do while a match is on screen: shut the drawer, then leave the
+   * immersive view. A match itself is never abandoned by back — there is no way back to the week from a
+   * game in progress, and a stray gesture would throw the result away.
+   */
+  backOut(): boolean {
+    if (this.bc?.hasCard()) return false; // an interval card is a decision, not a thing to dismiss
+    if (document.body.classList.contains("panel-open")) { this.closePanel(); return true; }
+    if (document.body.classList.contains("immersive")) { this.setImmersive(false, true); return true; }
+    return false;
   }
 
   private fmtClock(): string {

@@ -313,6 +313,10 @@
       .talkOpt b { font-size:14px; letter-spacing:.1em; color:var(--accent); text-align:center; display:flex; flex-direction:column; align-items:center; gap:3px; }
       .talkOpt .worn { font-style:normal; font-size:9px; letter-spacing:.06em; font-weight:600; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:0 5px; white-space:nowrap; }
       .talkOpt .worn.hot { color:var(--warn); border-color:rgba(244,162,89,.5); }
+      /* a line that says itself and goes (platform back-to-exit, and anything else too small for a dialog) */
+      #note { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translate(-50%, 8px); z-index:60; pointer-events:none; background:rgba(11,16,20,.94); color:var(--text); border:1px solid var(--line); border-radius:20px; padding:8px 16px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.5); opacity:0; transition:opacity .18s ease, transform .18s ease; }
+      #note.on { opacity:1; transform:translate(-50%, 0); }
+      @media (prefers-reduced-motion: reduce) { #note { transition:none; } }
       .talkOpt span { font-size:12.5px; line-height:1.45; color:var(--muted); }
       .talkOpt:hover { border-color:var(--accent); }
       .talkOpt:hover span { color:var(--text); }
@@ -771,7 +775,10 @@
           <button id="btnTags" title="선수 이름표 표시">🏷</button>
           <button id="btnLog" style="display:none" title="중계 자막 표시">💬</button>
           <button id="btnPanel" style="display:none">☰ 전술·교체</button>
-          <label class="dbg"><input id="debug" type="checkbox" /> 디버그</label>
+          <!-- The offside lines and player intents: a tool for tuning the engine, not a control for a
+               player. Kept in the DOM so the drawing code and the tests still reach it, out of the toolbar
+               so nobody finds it by accident. Turn it on from 설정 → 설명서 (long-press the version line). -->
+          <label class="dbg" hidden><input id="debug" type="checkbox" /> 디버그</label>
         </div>
         <div id="stats"></div>
         <div id="main">

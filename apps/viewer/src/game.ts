@@ -38,6 +38,7 @@ import {
 import { stadiumFor } from "./stadiums";
 import { alternateKit, kitForClub, kitTextColor, paintKit, type Kit } from "./kits";
 import { emblemSvg } from "./emblem";
+import { handleBack, installPlatform, keepAwake, onBack } from "./platform";
 import { cabinetHtml, type Trophy } from "./cabinet";
 import { portraitSvg } from "./portrait";
 import { managerArt, userArt } from "./manager-art";
@@ -67,7 +68,7 @@ const AUTO_SLOTS = [1, 2, 3];
 /** When the last automatic backup was taken, so the timer survives a reload. */
 const AUTO_AT_KEY = "3sec.auto.at";
 const AUTO_EVERY_MS = 30 * 60 * 1000;
-const APP_VERSION = "0.24";
+const APP_VERSION = "1.0";
 
 /** Rough category of a news line, for the home-screen filter chips. */
 export function newsKind(n: string): "market" | "fans" | "board" | "squad" | "comp" | "other" {
@@ -261,7 +262,20 @@ export class Game {
     });
     this.cta.addEventListener("click", () => this.ctaAction());
     this.applyFontSize(this.fontSize());
-    (window as unknown as { __fm?: Game }).__fm = this; // test hook (Playwright drives the UI through it)
+    (window as unknown as { __fm?: Game; __back?: typeof handleBack }).__fm = this; // test hook (Playwright drives the UI through it)
+    (window as unknown as { __back?: typeof handleBack }).__back = handleBack;
+    // Android: back unwinds what is open instead of closing the game, the screen stays on during a match,
+    // and the save happens on the way out (platform.ts).
+    installPlatform({ save: () => { try { this.save(); } catch { /* a failed save must not block the exit */ } }, toast: (m) => this.note(m) });
+    onBack([
+      // a sheet that has locked itself open (the shoot-out order) is not dismissible by back either
+      () => { if (this.sheet.hidden || this.sheetLock) return false; this.closeSheet(); return true; },
+      () => this.screen.backOut(),
+      // A match in progress is not a screen to back out of: there is no way back to the week from one, so
+      // swallowing the press is the only honest answer. Leaving mid-match would throw the result away.
+      () => this.current === "match" && !!this.live,
+      () => { if (this.current === "home") return false; this.show("home"); return true; },
+    ]);
     this.renderGuide();
     if (!saved) {
       this.startOnboarding();
@@ -491,11 +505,11 @@ export class Game {
       <li>경기 시작을 누르면 라커룸에서 <b>한 번</b> 말할 수 있습니다. <b>격려·침착·요구·질책</b> 중 하나를 고르면 선발 열한 명의 사기가 각자의 성격대로 움직이고, 그 사기가 경기의 능력치가 됩니다.</li>
       <li>상황을 읽어야 합니다. 부진하거나 전력이 열세면 <b>격려</b>, 더비처럼 흥분하기 쉬운 날은 <b>침착</b>, 전력이 우세하고 흐름이 좋으면 <b>요구</b>가 잘 먹힙니다. <b>질책</b>은 연패 중일 때만 통하고, 다혈질 선수는 등을 돌립니다.</li>
       <li>잘못 고르면 라커룸이 내려앉습니다. 프로페셔널한 선수는 무슨 말을 해도 덜 흔들리고, 라커룸 분위기가 좋을수록 모든 말이 잘 받아들여집니다. 아무 말 없이 나갈 수도 있습니다.</li>
-      <li><b>좋은 말이 좋은 게 아닙니다.</b> 어떤 톤이 얼마를 주는지는 그 자체로 정해져 있지 않고, <b>그 상황에서 할 수 있었던 네 마디의 평균</b>을 얼마나 넘었느냐로 정해집니다. 아무 말이나 해도 되는 상황에서는 어떤 말도 이득이 없고, 상황을 읽어야만 값이 붙습니다.</li>
+      <li><b>좋은 말이 좋은 게 아닙니다.</b> 선수들은 당신이 한 말을, <b>그 자리에서 할 수 있었던 다른 세 마디와 견주어</b> 듣습니다. 무슨 말을 해도 괜찮은 날에는 어떤 말도 티가 나지 않고, 방을 제대로 읽었을 때만 값이 붙습니다.</li>
       <li><b>같은 말은 통하지 않습니다.</b> 최근에 쓴 톤은 값이 깎이고, 세 번 연달아 쓰면 효과가 0에 가까워졌다가 마이너스로 돌아섭니다. 버튼에 <b>최근에 함</b>·<b>또 그 말</b> 표시가 붙습니다. 매번 격려만 하는 감독은 아무렇게나 고르는 감독보다 손해입니다.</li>
       <li>이미 사기가 높은 선수에게는 말이 거의 먹히지 않고, 바닥인 선수는 더 내려가지 않습니다. 말은 <b>필요한 팀에게 가장 값집니다</b>.</li>
       <li><b>하프타임</b>에도 한 번 더 말할 수 있습니다. 하프타임 카드의 <b>라커룸 →</b>을 누르세요. 이때는 최근 성적이 아니라 <b>점수</b>가 방을 정합니다: 앞서면 <b>침착</b>이 지켜 주고, 동점이면 <b>요구</b>가 경기를 가져오고, 크게 뒤지면 <b>질책</b>이 통합니다. 이기고 있을 때의 질책은 경기를 던지는 짓입니다.</li>
-      <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 그 자리에서 능력치가 움직이고(사기 이동의 3배로 계산), 시즌에 남는 사기는 표시된 값 그대로입니다.</li>
+      <li>하프타임 토크는 <b>후반전에 바로 반영됩니다</b>. 인터벌의 말은 당장의 경기력을 시즌에 남는 사기보다 훨씬 크게 흔듭니다 — 표시된 사기는 다음 주까지 가는 몫이고, 후반 45분에는 그보다 세게 작용합니다.</li>
       <li>경기가 끝나면 결과 화면 맨 위에 <b>경기 후 라커룸</b>이 열립니다. 인터뷰보다 먼저, 선수들에게 하는 말입니다. 이미 끝난 경기라 능력치는 움직이지 않고 <b>사기만 다음 주로 넘어갑니다</b>. 이겼으면 <b>격려</b>, 이길 경기를 비겼으면 <b>요구</b>, 크게 졌으면 <b>질책</b>이 통합니다. 이긴 뒤의 질책은 얻는 것 없이 라커룸만 잃습니다.</li></ul>`)}
     ${sec("결정적 순간", `<ul>
       <li><b>페널티킥</b>이 우리 팀에 주어지면 경기가 멈추고 키커를 고릅니다. 결정력·침착성·남은 체력이 성공률을 좌우합니다. 전술 탭의 PK 키커는 기본값입니다.</li>
@@ -714,7 +728,7 @@ export class Game {
     const s = this.state;
     const slots = [1, 2, 3].map((n) => ({ n, info: this.slotInfo(n) }));
     const autos = this.autoBackups();
-    this.el.settings.innerHTML = `<div class="card"><h3>설정 <span>가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
+    this.el.settings.innerHTML = `<div class="card"><h3>설정 <span id="verLine">가난한자의 FM v${APP_VERSION} · 만든이 raro</span></h3>
       <div class="hint">현재 게임: <b>${this.stateLabel()}</b> — 진행 상황은 매 조작마다 자동 저장됩니다. 아래 슬롯은 별도 백업이고, 파일로 내보내면 다른 기기로 옮길 수 있습니다.</div>
       <div class="actions" style="margin-top:6px"><button data-set="guide">📖 설명서 보기</button><button class="danger" data-set="newGame">새 게임 시작</button></div>
       <div class="actions" style="margin-top:4px;align-items:center"><span class="hint">글자 크기</span>${(["s", "m", "l"] as const).map((k) => `<button data-fs="${k}" class="${this.fontSize() === k ? "primary" : ""}">${k === "s" ? "작게" : k === "m" ? "보통" : "크게"}</button>`).join("")}</div></div>
@@ -740,6 +754,7 @@ export class Game {
 
     this.el.settings.insertAdjacentHTML("beforeend", this.challengeCardHtml(true));
     this.wireChallenge(this.el.settings);
+    this.wireDebugUnlock();
     const q = (sel: string) => this.el.settings.querySelector<HTMLElement>(sel)!;
     // The claude.ai artifact viewer blocks page-initiated downloads; there the share/copy paths remain.
     if (location.hostname.endsWith("claude.ai")) q('[data-set="export"]').style.display = "none";
@@ -1654,6 +1669,29 @@ export class Game {
     this.sheet.hidden = false;
     this.sheetBody.scrollTop = 0;
   }
+
+  /** A line that says itself and goes. Used where a dialog would be too much (the exit warning). */
+  /** Long-press the version line to put the engine overlay back in the match toolbar. */
+  private wireDebugUnlock(): void {
+    const line = document.getElementById("verLine");
+    const box = document.getElementById("debug")?.closest("label");
+    if (!line || !box) return;
+    let timer = 0;
+    const arm = () => { timer = window.setTimeout(() => { box.hidden = !box.hidden; this.note(box.hidden ? "엔진 오버레이 끔" : "엔진 오버레이 켬 — 경기 화면 상단"); }, 1200); };
+    const cancel = () => window.clearTimeout(timer);
+    line.addEventListener("pointerdown", arm);
+    for (const e of ["pointerup", "pointerleave", "pointercancel"]) line.addEventListener(e, cancel);
+  }
+
+  private note(msg: string): void {
+    let el = document.getElementById("note");
+    if (!el) { el = document.createElement("div"); el.id = "note"; document.body.appendChild(el); }
+    el.textContent = msg;
+    el.classList.add("on");
+    window.clearTimeout(this.noteTimer);
+    this.noteTimer = window.setTimeout(() => el!.classList.remove("on"), 1800);
+  }
+  private noteTimer = 0;
 
   private closeSheet(): void {
     if (this.sheetLock) return;
