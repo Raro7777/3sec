@@ -1,0 +1,14 @@
+The fonts in this directory are subsets of typefaces licensed under the
+SIL Open Font License, Version 1.1.
+
+  IBM Plex Sans KR, IBM Plex Mono — Copyright © 2017 IBM Corp.
+    https://github.com/IBM/plex
+  Barlow Condensed — Copyright © 2017 The Barlow Project Authors
+    https://github.com/jpt/barlow
+
+Each file here was produced with fontTools.subset from the upstream release
+and is redistributed under the same licence. The full licence text is at
+https://openfontlicense.org — its terms in brief: the fonts may be used,
+studied, modified and redistributed freely, including inside this app; they
+may not be sold on their own; and any derivative may not use the Reserved
+Font Names.

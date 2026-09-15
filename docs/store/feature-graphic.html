@@ -1,0 +1,64 @@
+<meta charset="utf-8">
+<title>가난한자의 FM — feature graphic</title>
+<style>
+  @font-face { font-family:"PlexKR"; src:url("../../apps/viewer/public/fonts/plex-kr-600.woff2") format("woff2"); font-weight:600; }
+  @font-face { font-family:"PlexKR"; src:url("../../apps/viewer/public/fonts/plex-kr-400.woff2") format("woff2"); font-weight:400; }
+  @font-face { font-family:"PlexMono"; src:url("../../apps/viewer/public/fonts/plex-mono-400.woff2") format("woff2"); font-weight:400; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { background:#0b1014; }
+  .fg {
+    position:relative; width:1024px; height:500px; overflow:hidden;
+    background:#0b1014; font-family:"PlexKR", sans-serif; color:#e7edf2;
+  }
+  /* the room, anchored so the lamp and the desk hold the right half */
+  .fg .art {
+    position:absolute; inset:0; left:34%;
+    background:url("../../apps/viewer/public/art/office-1.webp") 62% 88% / 152% no-repeat;
+  }
+  /* the seam: the room resolves into the dark the title sits on */
+  .fg .veil {
+    position:absolute; inset:0;
+    background:linear-gradient(95deg, #0b1014 0 34%, rgba(11,16,20,.94) 44%, rgba(11,16,20,.55) 58%, rgba(11,16,20,.12) 74%, rgba(11,16,20,.35) 100%);
+  }
+  /* the lamp is the warm point of the picture; let it bleed a little into the type side */
+  .fg .glow {
+    position:absolute; left:46%; top:52%; width:520px; height:420px; transform:translate(-50%, -50%);
+    background:radial-gradient(ellipse at center, rgba(255,196,110,.20), transparent 68%);
+  }
+  /* the window is blown out in the source art (the game paints a live stadium through it); cool and
+     darken that corner so the lamp stays the brightest thing in the frame */
+  .fg .window {
+    position:absolute; right:0; top:0; width:46%; height:62%;
+    background:linear-gradient(205deg, rgba(23,44,66,.78) 0%, rgba(14,24,34,.40) 48%, transparent 78%);
+  }
+  .fg .copy { position:absolute; left:56px; top:50%; transform:translateY(-50%); width:470px; }
+  .fg .eyebrow {
+    font-family:"PlexMono", monospace; font-size:14px; letter-spacing:.13em; color:#ffd166;
+    text-transform:uppercase; margin-bottom:16px;
+  }
+  .fg h1 {
+    font-weight:600; font-size:62px; line-height:1.04; letter-spacing:-.025em; color:#fff;
+    text-shadow:0 4px 24px rgba(0,0,0,.75);
+  }
+  .fg .rule { width:74px; height:4px; background:#ffd166; border-radius:2px; margin:22px 0 18px; }
+  .fg .hook { font-size:23px; font-weight:400; line-height:1.45; color:#cfdae4; }
+  .fg .hook b { color:#fff; font-weight:600; }
+  .fg .foot {
+    position:absolute; left:56px; bottom:36px; font-family:"PlexMono", monospace;
+    font-size:13px; letter-spacing:.06em; color:#8ea0b1;
+  }
+  .fg .foot span { color:#ffd166; }
+</style>
+<div class="fg">
+  <div class="art"></div>
+  <div class="veil"></div>
+  <div class="window"></div>
+  <div class="glow"></div>
+  <div class="copy">
+    <div class="eyebrow">축구 감독 시뮬레이션</div>
+    <h1>가난한자의<br>FM</h1>
+    <div class="rule"></div>
+    <div class="hook"><b>2부 리그 꼴찌 구단</b>의 감독.<br>전술을 짜고, 라커룸에서 한마디 하고,<br>90분을 지휘합니다.</div>
+  </div>
+  <div class="foot">오프라인 <span>·</span> 광고 없음 <span>·</span> 결제 없음</div>
+</div>

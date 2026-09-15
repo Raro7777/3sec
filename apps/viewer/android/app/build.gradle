@@ -1,0 +1,96 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "dev.threesec.fm"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "dev.threesec.fm"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 29
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // One debug key checked into the repo: every CI build must be signed by the same certificate,
+    // or Android refuses to install a new build over the previous one ("앱이 설치되지 않았습니다").
+    //
+    // The upload key is the opposite: it must never be in the repo, and losing it means never being able to
+    // update the app again. Put it outside the tree and point `keystore.properties` (gitignored) at it:
+    //
+    //   storeFile=/absolute/path/to/upload-keystore.jks
+    //   storePassword=…
+    //   keyAlias=upload
+    //   keyPassword=…
+    //
+    // or set ANDROID_KEYSTORE / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD in the
+    // environment for CI. With neither, a release build is simply left unsigned rather than failing, so a
+    // debug build never needs the key to exist.
+    def keystoreProps = new Properties()
+    def keystorePropsFile = rootProject.file('keystore.properties')
+    if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+    def ksPath = keystoreProps.getProperty('storeFile') ?: System.getenv('ANDROID_KEYSTORE')
+    def hasUploadKey = ksPath != null && file(ksPath).exists()
+
+    signingConfigs {
+        debug {
+            storeFile rootProject.file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        if (hasUploadKey) {
+            release {
+                storeFile file(ksPath)
+                storePassword keystoreProps.getProperty('storePassword') ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias keystoreProps.getProperty('keyAlias') ?: System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword keystoreProps.getProperty('keyPassword') ?: System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            if (hasUploadKey) signingConfig signingConfigs.release
+            // The app is a WebView around one bundled JS file; there is no Java of ours to shrink, and R8
+            // stripping a class Capacitor reaches by reflection is a real way to ship a blank screen.
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

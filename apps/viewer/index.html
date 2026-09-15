@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>가난한자의 FM</title>
+    <meta name="theme-color" content="#121a21" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="가난한자의 FM" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <!-- The fonts ship with the app. A game that plays on a subway platform cannot fetch its typography,
+         and asking Google for it on every launch is a third party in an app that otherwise talks to no one.
+         Subset with fontTools: Latin for the display and mono faces, the whole Hangul syllable block for the
+         body face so a club or manager the player names themselves can never come out as tofu. (SIL OFL 1.1) -->
+    <style>
+      @font-face { font-family:"Barlow Condensed"; src:url("./fonts/barlow-600.woff2") format("woff2"); font-weight:600; font-style:normal; font-display:swap; }
+      @font-face { font-family:"Barlow Condensed"; src:url("./fonts/barlow-700.woff2") format("woff2"); font-weight:700; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Sans KR"; src:url("./fonts/plex-kr-400.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Sans KR"; src:url("./fonts/plex-kr-600.woff2") format("woff2"); font-weight:600; font-style:normal; font-display:swap; }
+      @font-face { font-family:"IBM Plex Mono"; src:url("./fonts/plex-mono-400.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap; }
+    </style>
+    <style>
+      :root { color-scheme: dark; --bg:#0b1014; --panel:#121a21; --panel2:#0e151b; --line:#22303b; --text:#e7edf2; --muted:#93a4b3; --accent:#ffd166; --good:#5fd38a; --warn:#f4a259; --bad:#ef5b5b; }
+      html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif; }
+      * { box-sizing:border-box; }
+      [hidden] { display:none !important; }
+      button, .row, .tab { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+      #app { display:flex; flex-direction:column; height:100%; background:var(--bg); }
+      #nav { display:flex; align-items:center; gap:4px; padding:6px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
+      #nav .brand { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:18px; letter-spacing:.03em; margin-right:8px; color:var(--accent); }
+      #nav .brand small { color:var(--muted); font-weight:600; font-size:12px; margin-left:6px; letter-spacing:0; }
+      #nav button.tab { background:transparent; border:1px solid transparent; color:var(--muted); padding:6px 10px; border-radius:6px; font-weight:600; }
+      #nav button.tab.active { color:var(--text); background:#1a2530; border-color:#2c3d4b; }
+      #nav .spacer { flex:1; }
+      #nav .season { font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--muted); }
+      .screen { flex:1; min-height:0; overflow-y:auto; display:none; }
+      .screen.active { display:flex; flex-direction:column; }
+      .page { padding:14px; display:flex; flex-direction:column; gap:14px; max-width:980px; width:100%; margin:0 auto; }
+      .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+      .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+      .card h3 { margin:0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:15px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:baseline; }
+      .card h3 span { font-family:"IBM Plex Mono", monospace; font-size:12px; text-transform:none; letter-spacing:0; }
+      .card h3 .mgr + span { margin-left:8px; }
+      .fixture { display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:10px; padding:8px 0; }
+      .fixture .team { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:22px; }
+      .fixture .team.r { text-align:right; }
+      .fixture .team small { display:block; font-family:"IBM Plex Sans KR", sans-serif; font-weight:400; font-size:12px; color:var(--muted); }
+      .fixture .vs { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:13px; text-align:center; min-width:60px; }
+      .fixture .vs b { display:block; font-size:20px; color:var(--text); }
+      .actions { display:flex; gap:8px; flex-wrap:wrap; }
+      button, select, input { background:#1a2530; color:var(--text); border:1px solid #2c3d4b; border-radius:6px; padding:6px 10px; font-size:14px; font-family:inherit; }
+      button { cursor:pointer; } button:hover { background:#24333f; } button:disabled { opacity:.45; cursor:default; }
+      button:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+      button.primary { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:600; }
+      button.danger { border-color:var(--bad); color:var(--bad); background:transparent; }
+      label { font-size:13px; color:var(--muted); display:flex; gap:6px; align-items:center; }
+      table.std { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+      table.std th, table.std td { padding:5px 6px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
+      table.std th { color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+      table.std td.l, table.std th.l { text-align:left; }
+      table.std tr.me td { background:#1c2a1f; }
+      table.std tr.me td:first-child { border-left:3px solid var(--good); }
+      /* promotion / relegation places: a coloured edge on the position cell, so the zone reads at a glance
+         and still reads without colour thanks to the divider line above it (divisions.ts) */
+      table.std tr.promo td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+      table.std tr.releg td:first-child { box-shadow:inset 3px 0 0 var(--bad); }
+      table.std tr.me.promo td:first-child, table.std tr.me.releg td:first-child { border-left-color:transparent; }
+      table.std tr.zoneline td { border-top:2px solid var(--line); }
+      /* 최근 5경기: the run a club is on, newest last */
+      .pips { display:inline-flex; gap:2px; align-items:center; }
+      .pips i { width:7px; height:7px; border-radius:2px; display:block; }
+      .pips i.w { background:var(--good); } .pips i.d { background:var(--muted); opacity:.55; } .pips i.l { background:var(--bad); }
+      .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+      /* club emblem (emblem.ts): inline crest used where the colour dot used to be */
+      .embWrap { display:inline-block; line-height:0; margin-right:6px; vertical-align:middle; }
+      .embWrap.r { margin:0 0 0 6px; }
+      svg.emb { display:inline-block; }
+      .news { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+      .news div::before { content:"·"; margin-right:6px; color:var(--accent); }
+      .result { display:grid; grid-template-columns: 1fr auto 1fr; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+      .result .r { text-align:right; } .result .sc { font-family:"IBM Plex Mono", monospace; min-width:54px; text-align:center; }
+      .result.me { color:var(--accent); }
+      .scorers { grid-column:1 / -1; font-size:11px; color:var(--muted); line-height:1.5; }
+      .hint { color:var(--muted); font-size:12px; line-height:1.5; }
+      .slot { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
+      .slot .meta { font-size:12px; color:var(--muted); }
+      .slot .btns { display:flex; gap:4px; }
+      textarea { width:100%; min-height:90px; background:#1a2530; color:var(--text); border:1px solid #2c3d4b; border-radius:6px; padding:6px; font-family:'IBM Plex Mono', monospace; font-size:11px; }
+      .guide h4 { margin:10px 0 4px; font-size:14px; color:var(--accent); }
+      .guide p, .guide li { font-size:13px; line-height:1.6; color:var(--text); margin:0; }
+      .guide ul { margin:0; padding-left:18px; }
+      .guide .kbd { font-family:"IBM Plex Mono", monospace; background:#1a2530; border:1px solid #2c3d4b; border-radius:4px; padding:0 5px; font-size:12px; }
+      .guide details { border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:var(--panel2); }
+      .guide summary { cursor:pointer; font-weight:600; font-size:14px; }
+      /* onboarding */
+      body.onboarding #nav { display:none; }
+      body.onboarding #app { padding-bottom:0; }
+      .onb-title { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-weight:700; font-size:26px; letter-spacing:.02em; color:var(--text); line-height:1.2; }
+      .onb-welcome input { flex:1; min-width:0; max-width:260px; }
+      .club-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; }
+      .club-card { display:flex; flex-direction:column; gap:6px; align-items:stretch; text-align:left; padding:10px 12px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; min-width:0; cursor:pointer; }
+      .club-card:hover { background:#18232d; border-color:#2c3d4b; }
+      .club-card.sel { border-color:var(--accent); background:#1d2733; box-shadow:0 0 0 1px var(--accent) inset; }
+      .club-card .cc-head { display:flex; align-items:center; gap:4px; min-width:0; }
+      .club-card .cc-head b { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:18px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .club-card .cc-head small { color:var(--muted); font-size:11px; margin-left:auto; font-family:"IBM Plex Mono", monospace; }
+      .club-card .cc-meta { display:flex; justify-content:space-between; align-items:center; font-size:12px; }
+      .club-card .stars { color:var(--accent); letter-spacing:.05em; font-size:13px; } .club-card .stars i { font-style:normal; color:#2c3d4b; }
+      .club-card .cc-form { font-family:"IBM Plex Mono", monospace; color:var(--muted); }
+      .club-card .cc-blurb { font-size:12px; color:var(--muted); line-height:1.45; }
+      .onb-actions { align-items:center; }
+      .card h3 .mgr { color:var(--accent); margin-left:6px; margin-right:auto; white-space:nowrap; }
+      .chal summary { list-style:none; } .chal summary::-webkit-details-marker { display:none; }
+      .chalList { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+      .chalRow { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.02); }
+      .chalRow .chalInfo { min-width:0; flex:1; }
+      .chalRow button { flex:none; }
+      .chalStars { color:var(--accent); font-family:"IBM Plex Mono", monospace; font-size:12px; letter-spacing:.1em; }
+      .chalDone { color:var(--good); font-weight:700; }
+      .chalBest { font-family:"IBM Plex Mono", monospace; }
+      /* cup & season review */
+      .cupTag { display:inline-block; font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:12px; letter-spacing:.06em; color:#1a1400; background:var(--accent); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle; }
+      .fixture.cup .vs { color:var(--accent); }
+      .cupLine { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+      .cupLine b { color:var(--accent); }
+      .bracket { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+      .bracket .stage { display:flex; flex-direction:column; gap:4px; min-width:0; }
+      .bracket .stageHead { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:14px; letter-spacing:.04em; color:var(--accent); }
+      .bracket .stageHead small { color:var(--muted); font-family:"IBM Plex Mono", monospace; font-weight:400; margin-left:4px; }
+      .bracket .tie { display:grid; grid-template-columns:1fr auto 1fr; gap:4px; align-items:center; font-size:12px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--panel2); }
+      .bracket .tie.me { border-color:var(--accent); }
+      .bracket .tie > span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .bracket .tie .w { color:var(--text); font-weight:600; } .bracket .tie .l { color:var(--muted); }
+      .bracket .tie .sc { font-family:"IBM Plex Mono", monospace; text-align:center; display:flex; flex-direction:column; }
+      .bracket .tie .sc small { font-size:10px; color:var(--accent); }
+      .bracket .tie > span:last-child { text-align:right; }
+      /* illustrations (public/art): bleed to the card's edges so they read as the card's header */
+      .evCard { overflow:hidden; }
+      .onb-diff-title { font-size:13px; font-weight:600; margin-top:6px; }
+      .onb-diff-title small { color:var(--muted); font-weight:400; margin-left:6px; }
+      .onb-diff { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .diff-card { display:flex; flex-direction:column; gap:3px; text-align:left; padding:8px 9px; background:#1a2530; border:1px solid var(--line); border-radius:8px; color:var(--text); cursor:pointer; font:inherit; }
+      .diff-card small { font-size:11px; color:var(--muted); line-height:1.4; }
+      .diff-card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+      .diff-card.sel b { color:var(--accent); }
+      .onbArt { display:block; width:calc(100% + 28px); margin:-12px -14px 6px; aspect-ratio:16/9; object-fit:cover; object-position:50% 62%; border-radius:10px 10px 0 0; }
+      .venue { position:relative; margin:0 -14px 10px; overflow:hidden; }
+      .venueArt { display:block; width:100%; aspect-ratio:16/6; object-fit:cover; }
+      .venueCap { position:absolute; left:12px; bottom:6px; font-size:12px; color:#e7edf2; text-shadow:0 1px 3px #000, 0 0 8px #000; }
+      .pc .venue { margin:-10px -14px 4px; border-radius:16px 16px 0 0; }
+      .mgrArt { border-radius:50%; object-fit:cover; vertical-align:middle; flex:none; background:#0b1014; }
+      .evArt { display:block; width:calc(100% + 28px); margin:-12px -14px 10px; aspect-ratio:16/9; object-fit:cover; }
+      .rvArt { display:block; width:calc(100% + 28px); margin:-4px -14px 10px; aspect-ratio:16/7; object-fit:cover; border-radius:0; }
+      .review .rvTitle { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:40px; line-height:1; color:var(--accent); margin:4px 0; }
+      .review .rvTitle small { font-size:16px; color:var(--muted); margin-left:6px; font-family:"IBM Plex Sans KR", sans-serif; font-weight:600; }
+      .review .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-top:8px; }
+      .review .stat { border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:var(--panel2); display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .review .stat small { color:var(--muted); font-size:11px; }
+      .review .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .review .stat b small { font-size:11px; font-weight:400; }
+      tr.rel td { color:var(--warn); } .relTag { display:inline-block; margin-left:4px; font-size:10px; color:var(--bad); }
+      @media (max-width: 860px) { .bracket { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+      /* squad */
+      .squad-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+      .fmWrap { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:8px; }
+      .fmBig { flex:none; width:min(100%, 250px); }
+      .fmBig svg { width:100%; height:auto; display:block; border-radius:8px; }
+      .fmList { flex:1; min-width:180px; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; }
+      .fmBtn { width:62px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:4px 3px 3px; text-align:center; font-size:11px; color:var(--text); cursor:pointer; }
+      .fmBtn svg { width:100%; height:auto; display:block; }
+      .fmBtn.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; color:var(--accent); }
+      .fmBtn:disabled { opacity:.5; cursor:default; }
+      /* 전술판: the board is the object on the selection tab, the tables underneath are the paperwork */
+      .tacCard { padding-bottom:10px; }
+      .tacBoard { margin:8px -4px 10px; border-radius:10px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06) inset; }
+      .tacBoard svg { display:block; width:100%; height:auto; }
+      .tacBoard [data-pid] { transition:opacity .12s ease; }
+      .tacBoard [data-pid]:hover { opacity:.82; }
+      .benchStrip { display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; align-items:stretch; scrollbar-width:thin; }
+      .stripLbl { font-size:11px; letter-spacing:.16em; color:var(--muted); margin:6px 0 4px; }
+      .pCard { flex:none; width:78px; display:grid; grid-template-rows:auto auto auto 4px; gap:2px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:6px 5px 5px; cursor:pointer; text-align:center; color:var(--text); font:inherit; }
+      .pCard .pcNum { justify-self:center; width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:12px; }
+      .pCard .pcName { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .pCard .pcMeta { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .pCard .pcCond { display:block; height:4px; border-radius:2px; background:rgba(255,255,255,.1); overflow:hidden; }
+      .pCard .pcCond i { display:block; height:100%; }
+      .pCard.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+      .pCard.out { opacity:.45; }
+      .pCard:disabled { cursor:default; }
+      .roster { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
+      .row { display:grid; grid-template-columns: 30px 30px 1fr 64px; gap:6px; align-items:center; padding:4px 6px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
+      .row.wide { grid-template-columns: 26px 34px 1fr 40px 34px 64px 70px 24px; }
+      .row.tr { grid-template-columns: 26px 34px 1fr 40px 34px 56px 150px 24px; }
+      .row .info, .of-acts .info { padding:0; width:22px; height:22px; border-radius:50%; font-size:12px; line-height:20px; text-align:center; color:var(--muted); background:transparent; border-color:var(--line); justify-self:end; }
+      .row .info:hover, .of-acts .info:hover { color:var(--accent); border-color:var(--accent); background:transparent; }
+      /* board confidence strip (home) */
+      .board { margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+      .board .boardHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; }
+      .board .boardHead b { font-family:"IBM Plex Mono", monospace; font-size:14px; }
+      .board .boardHead small { color:var(--muted); font-size:12px; white-space:nowrap; }
+      .board .bar { height:6px; }
+      /* player profile */
+      .profile .pfHead { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+      .profile .pfNum { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:34px; color:var(--muted); min-width:44px; text-align:center; }
+      .profile .pfName { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-weight:700; font-size:26px; line-height:1.1; }
+      .profile .pfOvr { text-align:center; } .profile .pfOvr b { display:block; font-family:"IBM Plex Mono", monospace; font-size:24px; } .profile .pfOvr small { color:var(--muted); font-size:11px; }
+      .profile .stats, .card .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; }
+      .card .stat { border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:var(--panel2); display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .card .stat small { color:var(--muted); font-size:11px; }
+      .card .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .card .stat b small { font-size:11px; font-weight:400; }
+      .stars { color:var(--accent); letter-spacing:.05em; } .stars i { font-style:normal; color:#2c3d4b; }
+      /* 감독실: the canvas room and the objects you tap on it */
+      .office { border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#0d1116; }
+      .officeStage { position:relative; width:100%; aspect-ratio: 4 / 3; max-height:62vh; }
+      @media (min-width: 720px) { .officeStage { aspect-ratio: 16 / 10; } }
+      .office canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+      /* the objects are found by looking, not by reading: the label waits for a hover or a focus */
+      .office .spot { position:absolute; background:transparent; border:1.5px solid transparent; border-radius:9px; color:var(--text); padding:0; display:flex; align-items:flex-start; justify-content:flex-start; transition:border-color .15s, background .15s, box-shadow .15s; }
+      .office .spot:hover, .office .spot:focus-visible { border-color:rgba(255,244,214,.65); background:rgba(255,246,224,.07); outline:none; box-shadow:0 0 22px rgba(255,236,190,.22) inset; }
+      .office .spot b { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; background:rgba(8,12,16,.82); color:#f0f5f9; padding:1px 6px; border-radius:0 0 6px 0; line-height:1.6; opacity:0; transform:translateY(-3px); transition:opacity .15s, transform .15s; }
+      .office .spot:hover b, .office .spot:focus-visible b { opacity:1; transform:none; }
+      .office .spot.hot { border-color:rgba(242,193,78,.75); animation:spotPulse 2.2s ease-in-out infinite; }
+      .office .spot.hot b { opacity:1; transform:none; background:var(--accent); color:#1b1400; }
+      @keyframes spotPulse { 0%,100% { box-shadow:0 0 0 rgba(242,193,78,0); } 50% { box-shadow:0 0 26px rgba(242,193,78,.35); } }
+      @media (prefers-reduced-motion: reduce) { .office .spot.hot { animation:none; } }
+      .officeHud { position:absolute; top:8px; right:10px; display:flex; flex-direction:column; align-items:flex-end; gap:2px; pointer-events:none; text-align:right; }
+      .officeHud .cn { display:flex; align-items:center; gap:5px; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-weight:700; font-size:16px; letter-spacing:.02em; background:rgba(8,12,16,.6); padding:1px 8px; border-radius:999px; pointer-events:auto; cursor:pointer; }
+      .officeHud .cn i { width:8px; height:8px; border-radius:50%; display:inline-block; }
+      .officeHud .st { font-family:"IBM Plex Mono",monospace; font-size:11px; color:#cfdae3; background:rgba(8,12,16,.55); padding:1px 7px; border-radius:999px; }
+      .officeHud .st b { color:var(--accent); }
+      .office .weather { position:absolute; top:8px; left:10px; font-size:10.5px; color:#dbe6ee; background:rgba(8,12,16,.55); padding:2px 8px; border-radius:999px; pointer-events:none; letter-spacing:.03em; }
+      /* the assistant leaning in with a word before the match */
+      .officeSay { display:flex; gap:9px; align-items:center; padding:8px 10px; background:linear-gradient(180deg, rgba(8,12,16,.85), rgba(8,12,16,.95)); border-top:1px solid var(--line); }
+      .officeSay img { width:38px; height:38px; border-radius:50%; box-shadow:0 2px 10px rgba(0,0,0,.6); flex:0 0 auto; }
+      .officeSay .bub { font-size:11.5px; line-height:1.45; color:var(--muted); }
+      .officeSay .bub b { color:var(--text); }
+      /* the zoom that carries an object into its screen */
+      #zoomer { position:fixed; z-index:60; pointer-events:none; border-radius:10px; border:1px solid var(--accent); background:rgba(242,193,78,.10); box-shadow:0 0 40px rgba(242,193,78,.25); }
+      details.tip { margin-top:4px; }
+      details.tip > summary { list-style:none; cursor:pointer; color:var(--muted); font-size:11.5px; display:inline-flex; align-items:center; gap:4px; padding:2px 0; }
+      details.tip > summary::-webkit-details-marker { display:none; }
+      details.tip > summary::before { content:"？"; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; border:1px solid var(--line); font-size:9px; line-height:1; }
+      details.tip[open] > summary { color:var(--accent); }
+      details.tip[open] > summary::before { border-color:var(--accent); }
+      details.tip > .tipBody { color:var(--muted); font-size:11.5px; line-height:1.5; padding:4px 0 2px; }
+      .scen-grid { display:grid; grid-template-columns:1fr; gap:6px; margin-top:6px; }
+      @media (min-width: 560px) { .scen-grid { grid-template-columns:1fr 1fr; } }
+      .scen-card { text-align:left; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; color:var(--text); cursor:pointer; }
+      .scen-card:hover, .scen-card:focus-visible { border-color:var(--accent); outline:none; }
+      .scen-card.sel { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:rgba(242,193,78,.07); }
+      .scen-card .sc-head { display:flex; align-items:center; gap:6px; }
+      .scen-card .sc-head b { font-size:14px; }
+      .scen-card .sc-head .stars { font-size:11px; letter-spacing:.02em; }
+      .scen-card .sc-done { margin-left:auto; font-size:10px; color:var(--good); border:1px solid var(--good); border-radius:999px; padding:0 6px; }
+      .scen-card .sc-tag { color:var(--muted); font-size:12px; margin-top:2px; }
+      .scen-card .sc-goal { color:var(--accent); font-size:11px; margin-top:3px; font-family:"IBM Plex Mono",monospace; }
+      .nat { display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.04em; padding:0 4px; margin-left:2px; border-radius:3px; border:1px solid rgba(255,255,255,.22); color:var(--accent); vertical-align:1px; line-height:14px; }
+      .attrs { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px 16px; }
+      .attrGroup h4 { margin:0 0 4px; font-size:12px; color:var(--accent); letter-spacing:.04em; }
+      .attr { display:grid; grid-template-columns:64px 1fr 22px; gap:8px; align-items:center; font-size:12px; padding:2px 0; }
+      .attr span:first-child { color:var(--muted); }
+      .attr .bar { height:7px; } .attr b { font-family:"IBM Plex Mono", monospace; text-align:right; font-weight:600; }
+      .chips { display:flex; gap:6px; flex-wrap:wrap; }
+      .chip { display:inline-block; min-width:40px; text-align:center; padding:3px 8px; border-radius:12px; font-family:"IBM Plex Mono", monospace; font-size:12px; font-weight:600; color:#0b1014; }
+      .row.tr button { white-space:nowrap; width:100%; }
+      .row.yt { grid-template-columns: 34px 1fr 40px 64px 150px; cursor:default; }
+      .offer { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:6px 8px; border:1px solid var(--line); border-radius:8px; }
+      .offer .of-main { min-width:0; flex:1 1 200px; }
+      .offer .of-main .role { font-size:11px; color:var(--muted); }
+      .offer .of-acts { display:flex; gap:4px; flex-wrap:wrap; }
+      .offer .of-acts button { white-space:nowrap; }
+      /* 서류: an offer, a contract — paper on the desk, not a table row. The club's colour is the letterhead. */
+      .doc { position:relative; margin:10px 2px 14px; border-radius:3px; background:linear-gradient(180deg, #f7f4ec, #ece7db); color:#1b2430; box-shadow:0 10px 22px rgba(0,0,0,.42), 0 1px 0 rgba(255,255,255,.5) inset; border:1px solid rgba(0,0,0,.22); }
+      .doc::after { content:""; position:absolute; inset:0; pointer-events:none; border-radius:3px; background:linear-gradient(96deg, transparent 0 49%, rgba(0,0,0,.05) 49.4% 50%, rgba(255,255,255,.5) 50% 50.8%, transparent 51.4% 100%); }
+      .docHead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:2px solid var(--doc, #444); background:linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,0)); }
+      .docCrest { flex:none; display:flex; filter:drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+      .docFrom { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.25; }
+      .docFrom b { font-size:14px; color:#12181f; }
+      .docFrom small { font-size:10.5px; color:#5d6773; letter-spacing:.04em; }
+      .docStamp { flex:none; font-family:"IBM Plex Mono", monospace; font-size:10px; letter-spacing:.1em; padding:3px 7px; border:1.5px solid #6d7784; color:#6d7784; border-radius:3px; transform:rotate(-4deg); }
+      .docStamp.hot { border-color:#b03a3a; color:#b03a3a; }
+      .docBody { padding:9px 12px 4px; }
+      .docSubject { font-size:13px; color:#2a3542; }
+      .docSubject b { font-size:15px; color:#10161d; }
+      .docSubject .role { font-size:11px; color:#67717d; }
+      .docFee { display:flex; align-items:baseline; gap:8px; margin:8px 0 4px; padding:6px 8px; background:rgba(0,0,0,.045); border-left:3px solid var(--doc, #444); border-radius:2px; }
+      .docFee .docFeeK { font-size:10px; letter-spacing:.16em; color:#6d7784; }
+      .docFee b { font-family:"IBM Plex Mono", monospace; font-size:22px; font-variant-numeric:tabular-nums; }
+      .docFee .docFeeSub { font-size:11px; color:#67717d; margin-left:auto; }
+      .docTerms { display:flex; gap:10px; margin:8px 0 6px; }
+      .docTerms span { flex:1; display:flex; flex-direction:column; gap:2px; padding:6px 9px; background:rgba(0,0,0,.045); border-left:3px solid var(--doc, #444); border-radius:2px; }
+      .docTerms i { font-style:normal; font-size:10px; letter-spacing:.16em; color:#6d7784; }
+      .docTerms b { font-family:"IBM Plex Mono", monospace; font-size:19px; font-variant-numeric:tabular-nums; color:#10161d; }
+      .docFine { font-size:11px; color:#5d6773; line-height:1.5; margin:4px 0 2px; }
+      .docNote { font-size:11.5px; color:#8a5a1e; background:rgba(200,140,40,.12); border-radius:3px; padding:5px 7px; margin-bottom:4px; }
+      .docActs { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; align-items:center; padding:7px 10px 9px; border-top:1px dashed rgba(0,0,0,.18); }
+      /* the controls are ink on the paper, not the app's dark chrome */
+      .docActs button { white-space:nowrap; background:rgba(255,255,255,.6); border-color:rgba(0,0,0,.3); color:#1b2430; }
+      .docActs button:hover:not(:disabled) { background:#fff; border-color:#1b2430; }
+      .docActs button.primary { background:var(--accent); border-color:#a8842a; color:#1a1400; }
+      .docActs button.danger { color:#a33; border-color:rgba(160,50,50,.5); }
+      .docActs button:disabled { opacity:.4; }
+      .docActs .info { color:#5d6773; border-color:rgba(0,0,0,.25); margin-right:auto; }
+      .docActs .info:hover { color:#12181f; border-color:#12181f; }
+      /* 라커룸: four things the manager can say, and how the eleven took it */
+      .talk .talkOpts { display:flex; flex-direction:column; gap:7px; margin:10px 0 4px; }
+      .talkOpt { display:grid; grid-template-columns:52px 1fr; gap:10px; align-items:center; text-align:left; padding:9px 11px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); color:var(--text); font:inherit; cursor:pointer; }
+      .talkOpt b { font-size:14px; letter-spacing:.1em; color:var(--accent); text-align:center; display:flex; flex-direction:column; align-items:center; gap:3px; }
+      .talkOpt .worn { font-style:normal; font-size:9px; letter-spacing:.06em; font-weight:600; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:0 5px; white-space:nowrap; }
+      .talkOpt .worn.hot { color:var(--warn); border-color:rgba(244,162,89,.5); }
+      /* a line that says itself and goes (platform back-to-exit, and anything else too small for a dialog) */
+      #note { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translate(-50%, 8px); z-index:60; pointer-events:none; background:rgba(11,16,20,.94); color:var(--text); border:1px solid var(--line); border-radius:20px; padding:8px 16px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.5); opacity:0; transition:opacity .18s ease, transform .18s ease; }
+      #note.on { opacity:1; transform:translate(-50%, 0); }
+      @media (prefers-reduced-motion: reduce) { #note { transition:none; } }
+      .talkOpt span { font-size:12.5px; line-height:1.45; color:var(--muted); }
+      .talkOpt:hover { border-color:var(--accent); }
+      .talkOpt:hover span { color:var(--text); }
+      .talkSaid { margin:10px 0 2px; padding:10px 12px; border-left:3px solid var(--accent); background:rgba(242,193,78,.07); border-radius:0 6px 6px 0; font-size:14px; line-height:1.5; }
+      .talkRes { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:5px; margin-top:4px; max-height:44vh; overflow-y:auto; }
+      .talkRe { display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:7px; background:var(--panel2); border:1px solid var(--line); font-size:12px; }
+      .talkRe svg, .talkRe img { flex:none; }
+      .talkRe span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .talkRe b { font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .talkRe.up { border-color:rgba(95,211,138,.5); } .talkRe.up b { color:var(--good); }
+      .talkRe.down { border-color:rgba(239,91,91,.5); } .talkRe.down b { color:var(--bad); }
+      /* 트로피 진열장: a wooden case with lit glass shelves, and the empty shelf that says what is missing */
+      .cabinet { position:relative; margin:10px 0 4px; border-radius:8px; padding:9px; background:linear-gradient(160deg, #4a3524, #2e2117 60%, #241a12); box-shadow:0 14px 34px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.12) inset; border:1px solid rgba(0,0,0,.5); }
+      .cabinetIn { border-radius:4px; background:linear-gradient(180deg, #141a1f, #0d1216); box-shadow:0 0 0 1px rgba(0,0,0,.6) inset, 0 8px 26px rgba(0,0,0,.55) inset; overflow:hidden; }
+      .cabinetGlass { position:absolute; inset:9px; border-radius:4px; pointer-events:none; background:linear-gradient(112deg, rgba(255,255,255,.09) 0 16%, transparent 17% 42%, rgba(255,255,255,.05) 43% 50%, transparent 51% 100%); }
+      .shelf { position:relative; padding:10px 10px 0; }
+      .shelf + .shelf { margin-top:2px; }
+      /* the light strip under the shelf above: a cabinet is lit from its own frame */
+      .shelf::before { content:""; position:absolute; left:8%; right:8%; top:0; height:38px; background:radial-gradient(ellipse at 50% 0%, rgba(255,224,160,.16), transparent 70%); pointer-events:none; }
+      .shelfItems { display:flex; align-items:flex-end; justify-content:center; gap:14px; min-height:calc(var(--unit) + 26px); flex-wrap:wrap; }
+      .shelfEmpty { align-self:center; font-size:11px; letter-spacing:.2em; color:rgba(255,255,255,.22); padding:calc(var(--unit) / 2.6) 0; }
+      .shelfBoard { height:7px; margin:2px -10px 0; background:linear-gradient(180deg, #6b4f36, #3b2b1d 55%, #241a12); box-shadow:0 4px 9px rgba(0,0,0,.55); }
+      .trophy { display:flex; flex-direction:column; align-items:center; gap:3px; max-width:96px; }
+      .trArt { position:relative; display:flex; align-items:flex-end; filter:drop-shadow(0 5px 7px rgba(0,0,0,.6)); }
+      .trArt svg { display:block; }
+      .trRibbon { position:absolute; left:50%; bottom:26%; transform:translateX(-50%) rotate(-7deg); font-size:9px; font-weight:700; letter-spacing:.08em; color:#2a1a00; background:linear-gradient(180deg, #ffdd8a, #e8b84a); padding:1px 5px; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.5); white-space:nowrap; }
+      .trPlaque { display:flex; flex-direction:column; align-items:center; text-align:center; padding:2px 6px; border-radius:2px; background:linear-gradient(180deg, #3b2f20, #241c12); border:1px solid rgba(255,220,150,.18); max-width:100%; }
+      .trPlaque b { font-size:10px; color:#e6d3aa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:88px; }
+      .trPlaque small { font-size:9px; color:rgba(230,211,170,.6); font-family:"IBM Plex Mono", monospace; }
+      .row.yt .pot { font-family:"IBM Plex Mono", monospace; font-size:12px; text-align:right; color:var(--muted); }
+      .row.yt .acts { display:flex; gap:4px; justify-content:flex-end; }
+      .row.yt .acts button { padding:3px 8px; font-size:12px; white-space:nowrap; }
+      .row:hover { background:#18232d; }
+      .row.sel { border-color:var(--accent); background:#1d2733; }
+      .row.off { opacity:.45; }
+      .row .num { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:12px; }
+      /* a face in the number's cell: the number rides along underneath, small, so the row keeps its grid */
+      .row .num.face { display:flex; flex-direction:column; align-items:center; gap:1px; line-height:1; }
+      .row .num.face i { font-style:normal; font-size:9px; opacity:.85; }
+      .row.off .num.face .pt { filter:grayscale(1); opacity:.55; }
+      .pcNum, .pfNum { display:flex; flex-direction:column; align-items:center; gap:2px; }
+      .pcNum small, .pfNum small { font-size:12px; font-weight:600; }
+      .row .role { font-size:11px; color:var(--muted); letter-spacing:.04em; }
+      .row .name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .row .ovr { font-family:"IBM Plex Mono", monospace; font-weight:600; text-align:right; }
+      .row .age { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:12px; text-align:right; }
+      .row .st { font-size:11px; color:var(--warn); text-align:right; }
+      .row .card { display:inline-block; width:7px; height:10px; background:#ffd60a; border-radius:1px; margin-left:4px; vertical-align:middle; }
+      .row .card.red { background:var(--bad); }
+      .bar { height:8px; background:#1c2833; border-radius:4px; overflow:hidden; }
+      .bar i { display:block; height:100%; border-radius:4px; }
+      .tactic { display:grid; grid-template-columns: 64px 1fr 44px; gap:8px; align-items:center; margin-top:6px; }
+      .tactic input[type=range] { width:100%; padding:0; accent-color:var(--accent); background:transparent; border:0; }
+      .tactic .val { font-family:"IBM Plex Mono", monospace; color:var(--muted); text-align:right; font-size:12px; }
+      .tactic .lbl { color:var(--muted); }
+      /* match */
+      #topbar { display:flex; gap:12px; align-items:center; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+      #score { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-weight:700; font-size:24px; min-width:180px; letter-spacing:.02em; }
+      #clock { font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; color:var(--muted); min-width:64px; }
+      #phase { color:var(--accent); font-size:13px; min-width:70px; }
+      #stats { display:flex; gap:18px; padding:5px 14px; font-size:12px; color:var(--muted); background:var(--panel2); flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+      #stats b { color:var(--text); font-weight:600; margin-right:4px; }
+      #others { display:flex; gap:0; padding:0; font-size:12px; color:#c8d3dc; background:linear-gradient(90deg, #0a0f14, #10171e); border-top:2px solid var(--accent); flex-wrap:wrap; font-family:"IBM Plex Mono", monospace; align-items:stretch; }
+      #others > span { padding:5px 12px; border-right:1px solid rgba(255,255,255,.07); display:flex; align-items:center; gap:6px; }
+      #others > span b { color:#fff; font-weight:700; }
+      /* 동시 중계: live position line, flashes when the position changes */
+      #others .liveTable { flex-basis:100%; color:var(--accent); font-family:"IBM Plex Sans KR", sans-serif; }
+      .immersive #others .liveTable { flex-basis:auto; }
+      #others .liveTable.flash { animation:liveFlash .8s ease-in-out 2; }
+      @keyframes liveFlash { 0%,100% { background:transparent; } 50% { background:rgba(242,193,78,.28); } }
+      /* 휘슬 직전: stoppage time with the result on a knife edge */
+      #clock.danger { color:#ff4d4f; animation:clockPulse .9s ease-in-out infinite; }
+      @keyframes clockPulse { 0%,100% { opacity:1; text-shadow:0 0 0 rgba(255,77,79,0); } 50% { opacity:.55; text-shadow:0 0 12px rgba(255,77,79,.8); } }
+      @media (prefers-reduced-motion: reduce) { #clock.danger, #others .liveTable.flash { animation:none; } }
+      #main { flex:1; display:flex; min-height:0; }
+      #stage { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; min-width:0; padding:8px; position:relative; }
+      /* ---- 중계 그래픽 (broadcast.ts): laid over the pitch, never in the way of it */
+      .bc { position:absolute; inset:0; pointer-events:none; z-index:5; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; }
+      .bc > * { pointer-events:auto; }
+      .bcBug { position:absolute; z-index:3; left:10px; top:10px; display:flex; flex-direction:column; gap:0; filter:drop-shadow(0 6px 18px rgba(0,0,0,.55)); }
+      .bcTeams { display:flex; align-items:stretch; height:30px; border-radius:4px; overflow:hidden; }
+      .bcSide { display:flex; align-items:center; gap:5px; padding:0 9px; background:var(--c); color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5); font-size:16px; font-weight:700; letter-spacing:.04em; }
+      .bcSide b { font-weight:700; }
+      .bcSide .bcCrest { display:inline-flex; width:17px; height:17px; }
+      .bcSide .bcCrest svg { width:100%; height:100%; }
+      .bcScore { display:flex; align-items:center; padding:0 11px; background:#0c1116; color:#fff; font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.06em; }
+      .bcScore.hit { animation:bcScoreHit .5s cubic-bezier(.2,.9,.2,1); }
+      @keyframes bcScoreHit { 0% { transform:scale(1); color:#fff; } 30% { transform:scale(1.25); color:var(--accent); } 100% { transform:scale(1); color:#fff; } }
+      .bcMeta { display:flex; align-items:center; gap:7px; align-self:flex-start; margin-top:3px; background:rgba(8,12,16,.82); border-radius:3px; padding:1px 8px; }
+      .bcClock { font-family:"IBM Plex Mono",monospace; font-size:12px; color:#e8eef3; font-variant-numeric:tabular-nums; }
+      .bcClock.danger { color:#ff6b6b; animation:clockPulse .9s ease-in-out infinite; }
+      .bcComp { font-size:10.5px; letter-spacing:.10em; text-transform:uppercase; color:var(--accent); }
+      .bcPhase { font-size:10.5px; letter-spacing:.06em; color:var(--muted); }
+      /* line-ups */
+      .bcLineups { position:absolute; z-index:2; inset:0; display:flex; flex-direction:column; justify-content:center; gap:8px; background:linear-gradient(180deg, rgba(6,9,12,.55), rgba(6,9,12,.82)); backdrop-filter:blur(2px); padding:10px; }
+      .bcLineups.out { animation:bcFade .3s ease forwards; }
+      @keyframes bcFade { to { opacity:0; } }
+      .bcLineHead { text-align:center; color:var(--accent); font-size:12px; letter-spacing:.16em; text-transform:uppercase; }
+      .bcXIs { display:flex; gap:8px; justify-content:center; }
+      .bcXI { flex:1 1 0; min-width:0; background:rgba(10,14,19,.86); border-top:3px solid var(--c); border-radius:3px; padding:6px 8px 8px; max-width:280px; }
+      .bcXI.r { text-align:right; }
+      .bcXIHead { display:flex; align-items:center; gap:5px; margin-bottom:5px; }
+      .bcXI.r .bcXIHead { flex-direction:row-reverse; }
+      .bcXIHead i { display:inline-flex; width:16px; height:16px; }
+      .bcXIHead i svg { width:100%; height:100%; }
+      .bcXIHead b { font-size:14px; letter-spacing:.02em; }
+      .bcXIHead small { color:var(--muted); font-family:"IBM Plex Mono",monospace; font-size:10px; margin-left:auto; white-space:nowrap; }
+      .bcXI.r .bcXIHead small { margin-left:0; margin-right:auto; }
+      .bcXI ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px; }
+      .bcXI li { font-size:11.5px; color:#dbe4ec; display:flex; gap:6px; align-items:baseline; animation:bcIn .32s cubic-bezier(.2,.9,.2,1) backwards; }
+      .bcXI.r li { flex-direction:row-reverse; }
+      .bcXI li span { font-family:"IBM Plex Mono",monospace; font-size:9.5px; color:var(--muted); min-width:12px; }
+      @keyframes bcIn { from { opacity:0; transform:translateX(-14px); } }
+      .bcXI.r li { animation-name:bcInR; }
+      @keyframes bcInR { from { opacity:0; transform:translateX(14px); } }
+      /* lower third */
+      .bcStrap { position:absolute; z-index:3; left:0; right:0; bottom:14px; display:flex; align-items:stretch; height:52px; background:linear-gradient(90deg, rgba(9,13,17,.96), rgba(9,13,17,.82)); box-shadow:0 8px 30px rgba(0,0,0,.5); animation:bcSlide .32s cubic-bezier(.2,.9,.2,1); }
+      .bcStrap.out { animation:bcSlideOut .3s ease forwards; }
+      @keyframes bcSlide { from { transform:translateX(-22px); opacity:0; } }
+      @keyframes bcSlideOut { to { transform:translateY(16px); opacity:0; } }
+      .bcStrap .bcStripe { width:7px; background:var(--c); }
+      .bcStrapMain { flex:1; min-width:0; padding:5px 11px; display:flex; flex-direction:column; justify-content:center; }
+      .bcStrapTitle { font-size:12px; letter-spacing:.20em; text-transform:uppercase; color:var(--c); font-weight:700; filter:brightness(1.5); }
+      .bcStrap.goal .bcStrapTitle { color:var(--accent); font-size:15px; letter-spacing:.26em; }
+      .bcStrapWho { font-size:18px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .bcStrapWho small { font-size:11px; color:var(--muted); font-weight:400; margin-left:7px; }
+      .bcStrapRight { display:flex; flex-direction:column; align-items:flex-end; justify-content:center; padding:5px 12px; background:rgba(0,0,0,.35); }
+      .bcStrapRight b { font-family:"IBM Plex Mono",monospace; font-size:17px; color:#fff; font-variant-numeric:tabular-nums; }
+      .bcStrapRight span { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent); }
+      /* interval card */
+      .bcCard { position:absolute; z-index:4; inset:0; margin:auto; width:min(400px, calc(100% - 20px)); height:max-content; max-height:calc(100% - 20px); overflow:auto; background:rgba(9,13,18,.96); border:1px solid var(--line); border-top:3px solid var(--accent); border-radius:5px; padding:12px 14px 14px; box-shadow:0 20px 60px rgba(0,0,0,.6); animation:bcCardIn .3s cubic-bezier(.2,.9,.2,1); }
+      .bcCard.out { animation:bcFade .28s ease forwards; }
+      @keyframes bcCardIn { from { opacity:0; transform:translateY(12px) scale(.98); } }
+      .bcCardTitle { font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); }
+      .bcCardScore { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0 10px; }
+      .bcCardScore .bcSide { background:transparent; color:#fff; padding:0; font-size:15px; }
+      .bcCardScore .bcSide b { border-bottom:3px solid var(--c); padding-bottom:2px; }
+      .bcBig { font-family:"IBM Plex Mono",monospace; font-size:30px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+      .bcStats { display:flex; flex-direction:column; gap:7px; }
+      .bcStat { display:grid; grid-template-columns:auto 1fr auto; gap:6px; align-items:center; font-size:12px; }
+      .bcStat .k { text-align:center; color:var(--muted); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; }
+      .bcStat .l, .bcStat .r { font-family:"IBM Plex Mono",monospace; color:#e9eff4; font-variant-numeric:tabular-nums; }
+      .bcStat .r { text-align:right; }
+      .bcBar { grid-column:1 / -1; display:flex; height:4px; border-radius:2px; overflow:hidden; background:rgba(255,255,255,.08); }
+      .bcBar i, .bcBar u { display:block; height:100%; }
+      .bcCardActs { display:flex; justify-content:flex-end; margin-top:12px; }
+      .bcWipe { position:absolute; z-index:6; inset:-10% -40%; background:linear-gradient(100deg, transparent 0 38%, var(--c) 38% 50%, rgba(255,255,255,.9) 50% 52%, var(--c) 52% 64%, transparent 64% 100%); animation:bcWipe .46s cubic-bezier(.4,0,.2,1) forwards; opacity:.92; }
+      @keyframes bcWipe { from { transform:translateX(-70%); } to { transform:translateX(70%); } }
+      .bcReplay { position:absolute; right:12px; top:12px; display:flex; align-items:center; gap:6px; background:rgba(200,40,40,.9); color:#fff; font-size:11px; letter-spacing:.18em; padding:3px 9px; border-radius:3px; }
+      .bcReplay i { width:7px; height:7px; border-radius:50%; background:#fff; animation:bcBlink 1s steps(2) infinite; }
+      @keyframes bcBlink { 50% { opacity:.2; } }
+      @media (prefers-reduced-motion: reduce) {
+        .bcStrap, .bcCard, .bcXI li, .bcScore.hit, .bcReplay i { animation:none !important; }
+      }
+      #btnLastCall { position:absolute; right:14px; bottom:14px; z-index:5; background:var(--accent); color:#1b1400; border:0; border-radius:999px; padding:9px 14px; font-weight:800; font-size:13px; box-shadow:0 6px 24px rgba(242,193,78,.45); animation:lcPulse 1.6s ease-in-out infinite; }
+      @keyframes lcPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.06); } }
+      @media (prefers-reduced-motion: reduce) { #btnLastCall { animation:none; } }
+      #callOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:6; background:rgba(5,8,11,.55); backdrop-filter:blur(3px); padding:10px; }
+      #callOverlay .callCard { width:min(420px, 100%); max-height:100%; overflow:auto; background:rgba(11,16,20,.96); border:1px solid var(--accent); border-radius:14px; padding:12px 14px 14px; box-shadow:0 0 40px rgba(242,193,78,.25); }
+      #callOverlay .callTitle { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:20px; font-weight:700; margin:0 0 2px; }
+      #callOverlay .callSub { color:var(--muted); font-size:12px; margin-bottom:10px; }
+      #callOverlay .callOpt { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:9px 10px; margin-top:6px; color:var(--text); cursor:pointer; }
+      #callOverlay .callOpt:hover, #callOverlay .callOpt:focus-visible { border-color:var(--accent); outline:none; }
+      #callOverlay .callOpt.cur { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+      #callOverlay .callOpt > span:nth-child(2) { flex:1; min-width:0; }
+      #callOverlay .callOpt b { font-size:14px; white-space:nowrap; }
+      #callOverlay .callOpt small { color:var(--muted); font-size:11px; display:block; }
+      #callOverlay .callOpt .ico { font-size:22px; width:30px; text-align:center; }
+      #callOverlay .callOpt .num { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted); margin-left:auto; text-align:right; line-height:1.35; }
+      #callOverlay .callActs { display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+      .soPick .soRow { cursor:pointer; }
+      .soPick .soRow.on { background:rgba(242,193,78,.08); }
+      .soPick .soNum { width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; background:var(--panel2); border:1px solid var(--line); color:var(--muted); }
+      .soPick .soRow.on .soNum { background:var(--accent); color:#1b1400; border-color:var(--accent); }
+      .soPick .soMeta { color:var(--muted); font-size:11px; font-family:"IBM Plex Mono",monospace; margin-left:auto; white-space:nowrap; }
+      #ftOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; }
+      #ftOverlay .ftCard { pointer-events:auto; background:rgba(11,16,20,.88); border:1px solid var(--accent); border-radius:14px; padding:14px 22px 16px; text-align:center; box-shadow:0 0 40px rgba(242,193,78,.25); backdrop-filter:blur(4px); }
+      #ftOverlay .ftTitle { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+      #ftOverlay #ftScore { font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:30px; font-weight:700; margin:2px 0 4px; white-space:nowrap; }
+      #ftOverlay #btnContinue2 { margin-top:8px; font-size:16px; padding:10px 22px; }
+      .finished #btnPlay, .finished #btnSkip, .finished #speed { display:none !important; }
+      canvas { max-width:100%; max-height:100%; touch-action:none; border-radius:4px; }
+      #panel { width:340px; flex:none; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:10px 12px 16px; display:flex; flex-direction:column; gap:10px; font-size:13px; }
+      #panel h3 { margin:0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:16px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:baseline; }
+      #panel h3 span { font-family:"IBM Plex Mono", monospace; font-size:12px; text-transform:none; letter-spacing:0; }
+      #panelHead { display:flex; align-items:center; gap:10px; }
+      #panelHead h3 { flex:1; gap:8px; justify-content:flex-start; }
+      #panelHead #subsUsed { font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--muted); white-space:nowrap; }
+      #btnPanelClose { display:none; padding:2px 8px; font-size:14px; }
+      #panelBack { display:none; }
+      /* formation diagram + substitution picker */
+      #fmTop { display:grid; grid-template-columns:1fr; gap:10px; }
+      #fmDiag { width:100%; max-width:300px; margin:0 auto; }
+      #fmDiag svg { width:100%; height:auto; display:block; border-radius:8px; }
+      #fmSide { display:flex; flex-direction:column; gap:6px; min-width:0; }
+      #subPick { display:flex; flex-direction:column; gap:4px; }
+      #subPick .spHead { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; }
+      #subPick .spHead b { color:var(--bad); }
+      #subPick .spHead button { padding:2px 8px; font-size:12px; }
+      #subPick .spOut { display:grid; grid-template-columns:28px 1fr; gap:6px; align-items:center; padding:5px 8px; border:1px solid var(--bad); border-radius:8px; background:rgba(239,91,91,.08); font-size:12px; }
+      .cand { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:4px 8px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); cursor:pointer; text-align:left; color:var(--text); font-family:inherit; }
+      .cand:hover { border-color:var(--accent); background:#18232d; }
+      .cand .num { font-family:"IBM Plex Mono", monospace; color:var(--muted); font-size:12px; }
+      .cand .who { display:flex; align-items:baseline; gap:6px; min-width:0; flex-wrap:wrap; }
+      .cand .who b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+      .cand .who b { font-size:13px; }
+      .cand .who small { color:var(--muted); font-size:11px; }
+      .cand .ovr { text-align:right; font-family:"IBM Plex Mono", monospace; font-size:14px; font-weight:600; }
+      .cand .ovr small { font-size:11px; font-weight:400; margin-left:3px; }
+      .cand .kv { grid-column:2 / 4; display:flex; flex-wrap:wrap; gap:3px 10px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .cand .kv span b { color:var(--text); font-weight:600; font-family:"IBM Plex Mono", monospace; }
+      .cand em { font-style:normal; font-family:"IBM Plex Mono", monospace; font-size:11px; font-weight:600; margin-left:4px; }
+      .cand em.up { color:var(--good); } .cand em.dn { color:var(--bad); }
+      .cand em.up::before { content:"▲"; font-size:8px; margin-right:1px; } .cand em.dn::before { content:"▼"; font-size:8px; margin-right:1px; }
+      .cand.far { opacity:.7; }
+      #panel details.sec { border:1px solid var(--line); border-radius:8px; background:var(--panel2); padding:0 10px 8px; }
+      #panel details.sec > summary { cursor:pointer; padding:8px 0; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:15px; letter-spacing:.04em; color:var(--muted); list-style:none; display:flex; align-items:center; gap:6px; }
+      #panel details.sec > summary::before { content:"▸"; font-size:12px; transition:transform .15s; }
+      #panel details.sec[open] > summary::before { transform:rotate(90deg); }
+      #panel details.sec > summary::-webkit-details-marker { display:none; }
+      .subbox { border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; }
+      .subbox .line { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+      .subbox .pend { color:var(--muted); font-size:12px; display:flex; justify-content:space-between; align-items:center; }
+      .subbox .pend button { padding:2px 8px; font-size:12px; }
+      #btnSub { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:600; width:100%; }
+      #subMsg { font-size:12px; color:var(--warn); min-height:14px; }
+      #scoreboard { display:contents; }
+      /* the broadcast bug owns the scoreline; the old readouts stay for screen readers only */
+      body.bcOn #score, body.bcOn #clock, body.bcOn #phase { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+      #log { height:120px; overflow-y:auto; font-size:12px; padding:6px 14px; background:var(--panel2); border-top:1px solid var(--line); font-family:"IBM Plex Mono", ui-monospace, monospace; }
+      #log div { opacity:.9; line-height:1.55; }
+      /* ---- sub-tabs, bottom sheet, progress button */
+      .subtabs { display:flex; gap:4px; position:sticky; top:0; z-index:5; background:var(--bg); padding:6px 0 8px; }
+      .subtabs button { flex:1; padding:9px 4px; font-size:13px; border-radius:8px; min-width:0; white-space:nowrap; }
+      .subtabs button.on { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:700; }
+      .subtabs .badge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--bad); color:#fff; font-style:normal; font-size:11px; line-height:16px; margin-left:2px; }
+      .subtabs button.on .badge { background:#1a1400; color:var(--accent); }
+      .subpanel { display:flex; flex-direction:column; gap:14px; }
+      .subpanel[hidden] { display:none; }
+      #sheet { position:fixed; inset:0; z-index:30; display:flex; align-items:flex-end; justify-content:center; }
+      #sheet[hidden] { display:none; }
+      #sheet .sheetBack { position:absolute; inset:0; background:rgba(0,0,0,.6); }
+      #sheet .sheetBody { position:relative; width:100%; max-width:560px; max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); overflow:auto; background:var(--panel); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; padding:10px 14px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -10px 40px rgba(0,0,0,.55); animation:sheetUp .18s ease-out; }
+      @keyframes sheetUp { from { transform:translateY(24px); opacity:.6; } to { transform:none; opacity:1; } }
+      /* 승부차기 sheet */
+      .shootout .soRow { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); }
+      .shootout .soTeam { width:48px; font-weight:700; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:18px; }
+      .shootout .soCells { display:flex; gap:6px; flex:1; flex-wrap:wrap; }
+      .shootout .soCell { width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1px solid var(--line); display:inline-flex; align-items:center; justify-content:center; font-size:16px; color:var(--muted); }
+      .shootout .soCell.ok { background:rgba(46,204,113,.18); border-color:var(--good); animation:soPop .35s ease-out; }
+      .shootout .soCell.miss { background:rgba(255,77,79,.15); border-color:var(--bad); animation:soPop .35s ease-out; }
+      @keyframes soPop { from { transform:scale(.4); } 60% { transform:scale(1.25); } to { transform:none; } }
+      .shootout .soTally { font-family:"Barlow Condensed",sans-serif; font-size:26px; min-width:28px; text-align:right; }
+      .shootout .soLast { margin-top:10px; font-size:15px; text-align:center; min-height:22px; }
+      .shootout .soResult { margin-top:8px; text-align:center; font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; font-size:22px; font-weight:700; }
+      @media (prefers-reduced-motion: reduce) { .shootout .soCell.ok, .shootout .soCell.miss { animation:none; } }
+      @media (prefers-reduced-motion: reduce) { #sheet .sheetBody { animation:none; } }
+      .pc { display:flex; flex-direction:column; gap:8px; }
+      .pcHead { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; }
+      .pcNum { font-family:"Barlow Condensed", sans-serif; font-size:30px; font-weight:700; color:var(--muted); min-width:34px; text-align:center; }
+      .pcName { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:22px; font-weight:700; line-height:1.1; }
+      .pcOvr { text-align:right; } .pcOvr b { display:block; font-family:"Barlow Condensed", sans-serif; font-size:30px; line-height:1; } .pcOvr small { color:var(--muted); font-size:11px; }
+      .pcStats { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+      .pcStats > div { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:5px 7px; font-size:11px; color:var(--muted); min-width:0; }
+      .pcStats b { display:block; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .pcStats small { display:block; font-size:10px; }
+      .pcStats.wrap b { white-space:normal; font-size:12px; line-height:1.25; }
+      .pcMid { display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; }
+      .pcAttrs { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; font-size:12px; }
+      .pcAttrs > div { display:flex; justify-content:space-between; border-bottom:1px dashed var(--line); padding:2px 0; } .pcAttrs b { font-family:"IBM Plex Mono", monospace; }
+      .pcSeason { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--muted); align-items:center; } .pcSeason b { color:var(--text); }
+      .pcSeason .chips { display:inline-flex; gap:3px; } .pcSeason .chip { min-width:30px; padding:1px 5px; font-size:11px; }
+      .pcActions { display:flex; gap:6px; flex-wrap:wrap; } .pcActions button { flex:1; min-height:38px; white-space:nowrap; }
+      /* 구단 꾸미기 sheet */
+      .custSec { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+      .custTitle { font-family:"Barlow Condensed", sans-serif; font-weight:700; font-size:15px; letter-spacing:.02em; color:var(--accent); }
+      .kitRow { display:flex; gap:12px; align-items:center; }
+      .kitPrev { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; color:var(--muted); }
+      .kitInputs { display:flex; gap:8px; flex-wrap:wrap; align-items:end; } .kitInputs label { display:flex; flex-direction:column; align-items:flex-start; gap:3px; font-size:11px; color:var(--muted); min-width:0; } .kitInputs label > input[type=text], .kitInputs label > select, .kitInputs label > input[type=range] { align-self:stretch; }
+      .kitInputs input[type=color] { width:56px; height:32px; padding:2px; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+      .kitInputs input[type=text], .kitInputs select { min-height:32px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); padding:4px 8px; font:inherit; }
+      .kitInputs input[type=range] { width:100%; accent-color:var(--accent); }
+      .kitTiles { display:flex; gap:6px; } .kitTile { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 2px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--muted); font-size:10px; min-height:0; }
+      .kitTile.on { border-color:var(--accent); color:var(--text); box-shadow:0 0 0 1px var(--accent) inset; }
+      .pcMarket button.primary { font-size:15px; }
+      .todo { display:flex; flex-direction:column; gap:4px; margin:2px 0 4px; }
+      .todoRow { display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; padding:8px 10px; border-left:3px solid var(--accent); border-radius:6px; background:var(--panel2); font-size:13px; }
+      .todoRow b { color:var(--muted); }
+      .sortChip { padding:3px 9px; font-size:12px; border-radius:12px; } .sortChip.on { background:var(--accent); color:#1a1400; border-color:var(--accent); }
+      body.fs-s #app { zoom:0.9; } body.fs-l #app { zoom:1.12; }
+      .card.mine { border-color:var(--accent); }
+      .news .nIcon { display:inline-block; width:18px; margin-right:2px; }
+      .newsFilter { display:inline-flex; gap:4px; flex-wrap:wrap; } .newsFilter .sortChip { padding:2px 7px; font-size:11px; min-height:0; }
+      .cmpHead { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; }
+      .cmpHead .vs { font-family:"Barlow Condensed", sans-serif; font-weight:700; color:var(--muted); }
+      .cmpP b { display:block; font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; font-size:20px; } .cmpP small { color:var(--muted); font-size:11px; }
+      .cmpRows { display:flex; flex-direction:column; }
+      .cmpRow { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; padding:3px 0; border-bottom:1px dashed var(--line); font-size:13px; }
+      .cmpRow span { color:var(--muted); font-size:11px; text-align:center; min-width:70px; }
+      .cmpRow b { font-family:"IBM Plex Mono", monospace; font-weight:500; color:var(--muted); } .cmpRow b:last-child { text-align:right; }
+      .cmpRow b.w { color:var(--good); font-weight:700; }
+      #cta { position:fixed; right:14px; bottom:14px; z-index:12; padding:12px 20px; font-size:15px; font-weight:700; border-radius:999px; background:var(--accent); color:#1a1400; border:0; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+      #cta.warn { background:var(--warn); }
+      #cta[hidden], .immersive #cta, body.onboarding #cta { display:none !important; }
+      #app { padding-bottom:72px; }
+      table.std tr[data-club]:active td { background:#1a2530; }
+      /* immersive match view: the pitch fills the screen; the manager panel is a slide-out drawer on the right */
+      .immersive #intro, .immersive #nav, .immersive #stats { display:none !important; }
+      .immersive #app { padding-bottom:0 !important; }
+      .immersive #screen-match { position:fixed; inset:0; z-index:15; background:#000; }
+      .immersive #screen-match.active { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) auto; grid-template-areas:"main bar" "ticker ticker"; overflow:hidden; }
+      /* right-hand control column (icons only; scrolls if the phone is short) */
+      .immersive #topbar { grid-area:bar; display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:4px 3px; padding-right:calc(3px + env(safe-area-inset-right)); background:rgba(11,16,20,.85); border-bottom:0; border-left:1px solid var(--line); overflow-y:auto; overflow-x:hidden; flex-wrap:nowrap; width:auto; min-width:46px; scrollbar-width:none; }
+      .immersive #topbar::-webkit-scrollbar { display:none; }
+      .immersive #topbar > * { flex:none; }
+      .immersive #topbar button, .immersive #topbar select { width:48px; min-height:40px; height:40px; padding:0; font-size:15px; line-height:1; white-space:nowrap; overflow:hidden; text-align:center; text-align-last:center; border-radius:8px; }
+      /* an icon alone is a guess on a phone; the caption under it is what makes the rail readable */
+      .immersive #topbar button[data-cap] { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; }
+      .immersive #topbar button[data-cap]::after { content:attr(data-cap); font-size:8.5px; letter-spacing:.02em; color:var(--muted); font-family:"IBM Plex Sans KR", sans-serif; line-height:1; }
+      .immersive #topbar button.primary[data-cap]::after { color:#1a1400; opacity:.85; }
+      .immersive #topbar label { flex-direction:column; gap:0; font-size:0; }
+      .immersive #topbar label #speed { font-size:11px; padding:0 2px; appearance:none; -webkit-appearance:none; }
+      .immersive #topbar label.dbg { display:none; }
+      /* the terrace band under an upright pitch, carrying the match's numbers when it is tall enough */
+      #bandStats { display:none; }
+      .immersive #screen-match.has-band #bandStats { display:block; position:absolute; left:10px; right:10px; bottom:6px; height:calc(var(--band, 0px) - 12px); overflow:hidden; z-index:2; padding:5px 12px 3px; border-radius:8px; background:rgba(9,13,17,.78); border:1px solid rgba(255,255,255,.06); backdrop-filter:blur(3px); font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; }
+      .immersive.panel-open #screen-match.has-band #bandStats { display:none; }
+      #bandStats .bandHead { display:flex; justify-content:space-between; align-items:baseline; font-size:11px; letter-spacing:.14em; color:var(--muted); margin-bottom:0; }
+      #bandStats .bandHead b { font-size:13px; letter-spacing:0; }
+      #bandStats .bcStat { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; column-gap:8px; font-size:12.5px; line-height:1.1; padding:1px 0; font-variant-numeric:tabular-nums; }
+      #bandStats .bcStat .l { text-align:left; color:#fff; } #bandStats .bcStat .r { text-align:right; color:#fff; } #bandStats .bcStat .k { font-size:10.5px; letter-spacing:.1em; color:var(--muted); }
+      #bandStats .bcBar { grid-column:1 / -1; height:3px; margin-top:1px; }
+      /* shown only in immersive (the inline display:none is the portrait default); flex so the caption stacks under the icon */
+      .immersive #btnPanel, .immersive #btnLog { display:flex !important; }
+      .immersive #btnPanel { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:700; }
+      .immersive.log-open #btnLog { border-color:var(--accent); color:var(--accent); }
+      /* compact score + clock pill, top-left, the only HUD over the pitch */
+      .immersive #scoreboard { display:flex; position:absolute; top:calc(6px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); z-index:3; align-items:center; gap:8px; padding:3px 12px 3px 10px; border-radius:999px; background:rgba(11,16,20,.78); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.08); pointer-events:none; }
+      .immersive #scoreboard #score { min-width:0; font-size:19px; white-space:nowrap; line-height:1.2; }
+      .immersive #scoreboard #clock { min-width:0; font-size:13px; white-space:nowrap; }
+      .immersive #scoreboard #phase { min-width:0; flex-basis:auto; font-size:11px; white-space:nowrap; }
+      .immersive #scoreboard #phase:empty { display:none; }
+      .immersive #main { grid-area:main; position:relative; flex-direction:row !important; overflow:hidden !important; min-height:0; }
+      .immersive #stage { flex:1 !important; height:100% !important; max-height:none !important; padding:0 !important; padding-left:env(safe-area-inset-left) !important; }
+      /* the running commentary: hidden by default, a translucent strip over the bottom-left of the pitch when toggled on */
+      .immersive #log { display:none; position:absolute; left:calc(8px + env(safe-area-inset-left)); bottom:calc(28px + env(safe-area-inset-bottom)); z-index:2; width:min(52vw, 460px); height:auto; max-height:96px; overflow-y:auto; background:rgba(11,16,20,.62); backdrop-filter:blur(4px); border:0; border-radius:8px; padding:4px 8px; font-size:12px; line-height:1.35; }
+      .immersive.log-open #log { display:block; }
+      /* one-line ticker under the pitch: last event + the other grounds (rotating) + 동시 중계 */
+      .immersive #others { grid-area:ticker; display:flex; flex-wrap:nowrap; align-items:center; gap:12px; padding:2px 10px calc(2px + env(safe-area-inset-bottom)); padding-left:calc(10px + env(safe-area-inset-left)); background:rgba(11,16,20,.92); border-top:1px solid var(--line); font-size:12px; line-height:18px; overflow:hidden; white-space:nowrap; justify-content:flex-start; }
+      .immersive #others .tick { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--text); font-family:"IBM Plex Sans KR", sans-serif; }
+      .immersive #others .tick i { font-style:normal; color:var(--muted); margin-right:6px; }
+      .immersive #others .og { flex:none; display:flex; gap:12px; color:var(--muted); }
+      .immersive #others .og b { color:var(--text); }
+      .immersive #others .liveTable { flex:none; flex-basis:auto; max-width:38vw; overflow:hidden; text-overflow:ellipsis; }
+      /* drawer */
+      .immersive #panelBack { display:block; position:absolute; inset:0; z-index:3; background:rgba(0,0,0,.45); opacity:0; pointer-events:none; transition:opacity .2s ease; }
+      .immersive.panel-open #panelBack { opacity:1; pointer-events:auto; }
+      .immersive #panel { position:absolute; top:0; right:0; bottom:0; width:min(92vw, 560px); transform:translateX(102%); transition:transform .22s ease; z-index:4; border-left:1px solid var(--line); border-top:0; padding:8px 12px 14px; padding-top:calc(8px + env(safe-area-inset-top)); box-shadow:-8px 0 24px rgba(0,0,0,.5); background:rgba(18,26,33,.97); }
+      .immersive.panel-open #panel { transform:none; }
+      .immersive #btnPanelClose { display:inline-block; }
+      .immersive #fmTop { grid-template-columns:minmax(0, 44%) minmax(0, 1fr); align-items:start; }
+      .immersive #fmDiag { max-width:none; margin:0; }
+      .immersive #ftOverlay { z-index:5; }
+      @media (prefers-reduced-motion: reduce) { .immersive #panel, .immersive #panelBack { transition:none; } }
+      #overlay { position:fixed; inset:0; background:rgba(5,8,11,0.82); display:none; align-items:center; justify-content:center; z-index:20; flex-direction:column; gap:10px; }
+      #overlay.show { display:flex; }
+      #overlay .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; min-width:260px; text-align:center; }
+      #overlay .prog { height:6px; background:#1c2833; border-radius:3px; overflow:hidden; margin-top:10px; }
+      #overlay .prog i { display:block; height:100%; background:var(--accent); width:0; }
+      @media (max-width: 860px) {
+        .grid2 { grid-template-columns: 1fr; }
+        .club-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }
+        .club-card { padding:9px 10px; }
+        .club-card .cc-head b { font-size:16px; }
+        .onb-title { font-size:22px; }
+        .onb-actions .primary { flex:1; padding:10px; font-size:15px; }
+        .card h3 .mgr { margin-right:0; }
+        #app { padding-bottom: calc(118px + env(safe-area-inset-bottom)); }
+        #cta { left:12px; right:12px; bottom:calc(62px + env(safe-area-inset-bottom)); padding:13px; font-size:16px; text-align:center; }
+        .mgrcol { display:none; }
+        /* the form pips survive the phone; the manager's name does not */
+        table.std th.formcol, table.std td.formcol { padding-left:8px; }
+        table.std { font-size:12px; } table.std th, table.std td { padding:6px 4px; }
+        .row { min-height:40px; }
+        button, select { min-height:34px; }
+        .pcMid { grid-template-columns:140px 1fr; }
+        #nav { position:fixed; left:0; right:0; bottom:0; top:auto; z-index:10; border-top:1px solid var(--line); border-bottom:0; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); justify-content:space-around; background:#0f161cf2; backdrop-filter:blur(8px); }
+        #nav .brand, #nav .spacer { display:none; }
+        #nav .season { display:none; }
+        #nav button.tab { flex:1; padding:9px 2px; font-size:13px; white-space:nowrap; min-width:0; }
+        .page { padding:12px 10px; gap:10px; }
+        .fixture .team { font-size:18px; }
+        .row { padding:7px 6px; }
+        #topbar { padding:6px 10px; gap:8px; padding-top: calc(6px + env(safe-area-inset-top)); }
+        #topbar label { font-size:12px; }
+        #intro { font-size:11px !important; padding:6px 10px !important; }
+        #topbar #score { order:0; } #topbar #clock { order:1; } #topbar #phase { order:2; flex-basis:100%; min-height:0; }
+        #stats { gap:10px; font-size:11px; }
+        #others { gap:10px; }
+        /* phone, non-immersive: the screen itself scrolls, so a tall standing pitch is never clipped by #main */
+        #main { flex:none; flex-direction:column; overflow:visible; }
+        #stage { flex:none; height:min(calc(100dvh - 250px), 150vw); max-height:none; }
+        #panel { width:auto; border-left:0; border-top:1px solid var(--line); }
+        #score { font-size:20px; min-width:140px; }
+        #log { height:100px; }
+        .row.wide { grid-template-columns: 22px 30px 1fr 36px 56px 24px; }
+        .row.wide .age, .row.wide .st { display:none; }
+        /* phones: the price/offer control stays on the row, sized to its own text, and the name gives way */
+        .row.tr { grid-template-columns: 22px 28px minmax(0,1fr) 42px auto 22px; gap:5px; }
+        .row.tr > span:nth-last-child(2) { display:flex; justify-content:flex-end; align-items:center; gap:5px; font-size:12px; }
+        .row.tr > span:nth-last-child(2) button { width:auto; padding:3px 8px; font-size:12px; }
+        .row.tr > span:nth-last-child(2) input { max-width:76px; }
+        .profile .pfName { font-size:22px; }
+        .attrs { grid-template-columns:1fr; }
+        .row.tr .age, .row.tr .val { display:none; }
+        .row.yt { grid-template-columns: 30px 1fr 36px 52px 112px; }
+      }
+      @media (max-width: 420px) { .club-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <nav id="nav">
+        <span class="brand">가난한자의 FM<small>by raro</small></span>
+        <button class="tab" data-screen="home">홈</button>
+        <button class="tab" data-screen="squad">스쿼드</button>
+        <button class="tab" data-screen="table">순위</button>
+        <button class="tab" data-screen="transfers">이적</button>
+        <button class="tab" data-screen="youth">유스</button>
+        <button class="tab" data-screen="match" id="tabMatch" disabled>경기</button>
+        <button class="tab" data-screen="guide" title="설명서">📖</button>
+        <button class="tab" data-screen="settings" title="설정">⚙</button>
+        <span class="spacer"></span>
+        <span class="season" id="seasonLabel"></span>
+      </nav>
+
+      <section class="screen" id="screen-onboarding"><div class="page" id="onboarding"></div></section>
+      <section class="screen" id="screen-home"><div class="page" id="home"></div></section>
+      <section class="screen" id="screen-squad"><div class="page" id="squad"></div></section>
+      <section class="screen" id="screen-table"><div class="page" id="tableView"></div></section>
+      <section class="screen" id="screen-transfers"><div class="page" id="transfers"></div></section>
+      <section class="screen" id="screen-youth"><div class="page" id="youth"></div></section>
+      <section class="screen" id="screen-guide"><div class="page" id="guide"></div></section>
+      <section class="screen" id="screen-settings"><div class="page" id="settings"></div></section>
+      <section class="screen" id="screen-results"><div class="page" id="results"></div></section>
+      <section class="screen" id="screen-review"><div class="page" id="review"></div></section>
+      <section class="screen" id="screen-profile"><div class="page" id="profile"></div></section>
+      <section class="screen" id="screen-sacked"><div class="page" id="sacked"></div></section>
+
+      <section class="screen" id="screen-match">
+        <div id="topbar">
+          <div id="scoreboard"><div id="score">—</div><div id="clock">00:00</div><div id="phase"></div></div>
+          <button id="btnPlay" data-cap="재생" class="primary">▶ 재생</button>
+          <label>속도
+            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 5분)">
+              <option value="auto" selected>자동</option>
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+              <option value="8">8x</option>
+              <option value="16">16x</option>
+              <option value="32">32x</option>
+            </select>
+          </label>
+          <button id="btnSkip" data-cap="결과로" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
+          <button id="btnContinue" class="primary" style="display:none">계속 →</button>
+          <button id="btnFull" data-cap="크게" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
+          <button id="btnSound" data-cap="소리" title="효과음">🔊</button>
+          <button id="btnHaptics" data-cap="진동" title="진동">📳</button>
+          <button id="btnReplay" data-cap="리플레이" title="골 자동 리플레이">🔁</button>
+          <button id="btnTags" data-cap="이름표" title="선수 이름표 표시">🏷</button>
+          <button id="btnLog" data-cap="자막" style="display:none" title="중계 자막 표시">💬</button>
+          <button id="btnPanel" data-cap="전술" style="display:none">☰ 전술·교체</button>
+          <!-- The offside lines and player intents: a tool for tuning the engine, not a control for a
+               player. Kept in the DOM so the drawing code and the tests still reach it, out of the toolbar
+               so nobody finds it by accident. Turn it on from 설정 → 설명서 (long-press the version line). -->
+          <label class="dbg" hidden><input id="debug" type="checkbox" /> 디버그</label>
+        </div>
+        <div id="stats"></div>
+        <div id="main">
+          <div id="stage"><canvas id="pitch"></canvas>
+            <button id="btnLastCall" hidden title="이번 경기 한 번만 쓸 수 있는 터치라인 지시">📣 마지막 지시</button>
+            <div id="callOverlay" hidden></div>
+            <div id="ftOverlay" hidden><div class="ftCard"><div class="ftTitle">경기 종료</div><div id="ftScore"></div><div id="ftNote" class="hint"></div><button id="btnContinue2" class="primary">다음으로 →</button></div></div>
+          </div>
+          <div id="panelBack"></div>
+          <aside id="panel">
+            <div id="panelHead"><h3>전술·교체 <span id="teamName"></span></h3><span id="subsUsed"></span><button id="btnPanelClose" title="닫기">✕</button></div>
+            <div id="fmTop">
+              <div id="fmDiag"></div>
+              <div id="fmSide">
+                <div id="subPick" hidden></div>
+                <div id="pending"></div>
+                <div id="subMsg"></div>
+                <div class="hint" id="fmHint">그림의 선수를 탭하면 교체 후보가 나옵니다. 교체는 실제 규칙대로 다음 경기 중단(아웃/파울/골) 때 이루어집니다.</div>
+              </div>
+            </div>
+            <details class="sec" open>
+              <summary>전술</summary>
+              <div class="tactic"><span class="lbl">포메이션</span>
+                <select id="formation" style="grid-column: 2 / 4">
+                  <option>4-3-3</option><option>4-4-2</option><option>4-2-3-1</option><option>3-5-2</option>
+                </select>
+              </div>
+              <div id="sliders"></div>
+            </details>
+            <details class="sec">
+              <summary>선발 · 역할 지정</summary>
+              <div id="lineup" class="roster"></div>
+            </details>
+            <details class="sec">
+              <summary>벤치 · 수동 교체</summary>
+              <div id="bench" class="roster"></div>
+              <div class="subbox">
+                <div class="line"><span id="subPlan" class="hint">나갈 선수(선발)와 들어올 선수(벤치)를 차례로 선택하세요.</span></div>
+                <button id="btnSub" disabled>교체 예약</button>
+                <div class="hint">다른 경기장의 라운드 경기도 동시에 진행됩니다.</div>
+              </div>
+            </details>
+          </aside>
+        </div>
+        <div id="others"></div>
+        <div id="log"></div>
+      </section>
+
+      <div id="overlay"><div class="box"><div id="overlayText">시뮬레이션 중…</div><div class="prog"><i id="overlayBar"></i></div></div></div>
+    </div>
+    <div id="sheet" hidden><div class="sheetBack"></div><div class="sheetBody" id="sheetBody"></div></div>
+    <button id="cta" hidden>경기 시작 ▶</button>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,16 +1,21 @@
-node_modules
-.next
-dist
+node_modules/
+dist/
+.turbo/
+*.log
+.DS_Store
 .env
 .env.local
-.env.production
-public/uploads/*
-!public/uploads/.gitkeep
-*.log
-.pnpm-debug.log*
-.npm
-.eslintcache
-.stylelintcache
-.prettiercache
-.vercel
-.turbo
+coverage/
+# Capacitor / Android build outputs
+apps/viewer/android/app/build/
+apps/viewer/android/build/
+apps/viewer/android/.gradle/
+apps/viewer/android/local.properties
+apps/viewer/android/app/src/main/assets/public/
+apps/viewer/android/app/src/main/assets/capacitor.config.json
+apps/viewer/android/app/src/main/assets/capacitor.plugins.json
+apps/viewer/android/capacitor-cordova-android-plugins/
+
+# the upload key and its passwords never enter the repo
+apps/viewer/android/keystore.properties
+*.jks

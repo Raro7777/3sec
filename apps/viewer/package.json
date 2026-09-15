@@ -1,0 +1,33 @@
+{
+  "name": "viewer",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:worker": "node scripts/build-worker.mjs",
+    "check:worker": "node scripts/check-worker.mjs",
+    "dev": "node scripts/build-worker.mjs && vite --host",
+    "build": "node scripts/build-worker.mjs && tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "node scripts/build-worker.mjs && tsc -p tsconfig.json --noEmit",
+    "preview": "vite preview",
+    "android:sync": "node scripts/build-worker.mjs && vite build && cap sync android",
+    "android:apk": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleDebug",
+    "android:bundle": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew bundleRelease",
+    "android:release": "node scripts/build-worker.mjs && vite build && cap sync android && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@3sec/engine": "workspace:*",
+    "@3sec/game": "workspace:*",
+    "@capacitor/app": "^6.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/haptics": "^6.0.3",
+    "@capacitor/share": "^6.0.4",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7"
+  }
+}

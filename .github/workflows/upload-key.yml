@@ -1,0 +1,84 @@
+name: 업로드 키 만들기
+
+# 한 번만 실행한다. Actions 탭 → "업로드 키 만들기" → Run workflow.
+#
+# GitHub의 러너가 키를 만들고, 결과를 이 실행의 아티팩트(zip)로 남긴다. 키와 비밀번호는 로그에 찍히지
+# 않고 아티팩트 안 README.txt에만 있다. 아티팩트는 하루 뒤 사라지므로 바로 내려받아 두 곳에 보관한다.
+# 그런 다음 README에 적힌 두 값을 저장소 Secrets에 넣으면 "Android 릴리스" 워크플로가 서명한다.
+#
+# 이 방식인 이유: 개발이 원격에서만 이루어질 때 키를 만들 컴퓨터가 없다. 러너에서 만들어 계정 주인의
+# 브라우저로만 내려가는 것이, 대화 채널을 거치는 것보다 낫다.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  key:
+    name: 키 생성 → 아티팩트
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: 키 생성
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW="$(openssl rand -base64 30 | tr -d '/+=' | cut -c1-24)"
+          mkdir -p out
+          keytool -genkey -v -keystore out/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload \
+            -storepass "$PW" -keypass "$PW" \
+            -dname "CN=Raro, OU=Game, O=Poor Mans FM, L=Seoul, ST=Seoul, C=KR" >/dev/null 2>&1
+          FP="$(keytool -list -v -keystore out/upload-keystore.jks -storepass "$PW" 2>/dev/null | grep 'SHA256:' | head -1 | sed 's/^[[:space:]]*//')"
+          B64="$(base64 -w0 out/upload-keystore.jks)"
+          cat > out/README.txt <<README
+          가난한자의 FM — 업로드 키 (dev.threesec.fm)
+          만든 날: $(date -u +%Y-%m-%d)
+
+          파일:      upload-keystore.jks
+          alias:     upload
+          비밀번호:  $PW
+          $FP
+
+          ── 보관 ──
+          이 폴더(zip 그대로)를 서로 다른 두 곳에 두세요:
+            1) Google Drive 개인 폴더 (공유 링크 만들지 말 것)
+            2) 비밀번호 관리자 (첨부 + 비밀번호)
+          git 저장소에는 절대 넣지 마세요. 잃어버리면 앱을 영영 업데이트할 수 없습니다.
+
+          ── 저장소 Secrets에 넣을 두 값 ──
+          GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret
+
+          이름: UPLOAD_KEYSTORE_PASSWORD
+          값:   $PW
+
+          이름: UPLOAD_KEYSTORE_B64
+          값:   (아래 한 줄 전체)
+          $B64
+          README
+          echo "made=1" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upload-keystore
+          path: out/
+          retention-days: 1
+          if-no-files-found: error
+      - name: 다음 할 일
+        shell: bash
+        run: |
+          {
+            echo "## 업로드 키가 만들어졌습니다"
+            echo
+            echo "1. 이 페이지 아래 **Artifacts → upload-keystore** 를 내려받으세요 (24시간 뒤 사라집니다)."
+            echo "2. zip을 **Google Drive 개인 폴더**와 **비밀번호 관리자**, 두 곳에 두세요."
+            echo "3. zip 안 README.txt 에 적힌 두 값을 저장소 **Settings → Secrets → Actions** 에 넣으세요:"
+            echo "   - \`UPLOAD_KEYSTORE_PASSWORD\`"
+            echo "   - \`UPLOAD_KEYSTORE_B64\`"
+            echo "4. 그다음 Actions → **Android 릴리스** 를 실행하면 서명된 AAB가 나옵니다."
+            echo
+            echo "비밀번호는 이 로그 어디에도 없습니다. README.txt에만 있습니다."
+          } >> "$GITHUB_STEP_SUMMARY"

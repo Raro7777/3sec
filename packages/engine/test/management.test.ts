@@ -1,0 +1,231 @@
+import { describe, expect, it } from "vitest";
+import { MAX_SUBS, Match } from "../src/match";
+import { generateTeam } from "../src/teams";
+import { FORMATIONS, roleDistance } from "../src/formation";
+
+function mk(seed = 7): Match {
+  const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 13, seed: 11 });
+  const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 12, seed: 22 });
+  return new Match(home, away, { seed, aiManaged: [] });
+}
+
+function toOpenPlay(m: Match): void {
+  let n = 0;
+  while (m.state.phase !== "PLAY" && n++ < 2000) m.step();
+  expect(m.state.phase).toBe("PLAY");
+}
+
+function toNextStoppage(m: Match): void {
+  let n = 0;
+  while (m.state.phase === "PLAY" && n++ < 20 * 60 * 10) m.step();
+  expect(m.state.phase).not.toBe("PLAY");
+}
+
+describe("substitutions (Law 3)", () => {
+  it("teams have a bench and it starts off the pitch", () => {
+    const m = mk();
+    expect(m.teams[0].bench.length).toBe(7);
+    expect(m.activePlayers(0).length).toBe(11);
+    for (const b of m.teams[0].bench) expect(m.player(b.id).onPitch).toBe(false);
+  });
+
+  it("a sub requested during play waits for the next stoppage, then swaps the slot", () => {
+    const m = mk();
+    toOpenPlay(m);
+    const out = m.state.lineups[0][9]!; // ST slot in 4-3-3
+    const inn = m.teams[0].bench.find((b) => b.role === "ST")!.id;
+    expect(m.requestSubstitution(0, out, inn)).toBeNull();
+    // still on the pitch while the ball is in play
+    expect(m.player(out).onPitch).toBe(true);
+    expect(m.state.pendingSubs.length).toBe(1);
+    toNextStoppage(m);
+    expect(m.player(out).onPitch).toBe(false);
+    expect(m.player(inn).onPitch).toBe(true);
+    expect(m.state.lineups[0][9]).toBe(inn);
+    expect(m.state.subsUsed[0]).toBe(1);
+    expect(m.activePlayers(0).length).toBe(11);
+    expect(m.state.events.some((e) => e.type === "SUBSTITUTION" && e.playerId === inn)).toBe(true);
+  });
+
+  it("a sub requested while the ball is dead is applied immediately", () => {
+    const m = mk();
+    // Before kick-off the ball is dead.
+    const out = m.state.lineups[0][5]!;
+    const inn = m.teams[0].bench.find((b) => b.role === "CM")!.id;
+    expect(m.requestSubstitution(0, out, inn)).toBeNull();
+    expect(m.player(inn).onPitch).toBe(true);
+    expect(m.player(out).onPitch).toBe(false);
+  });
+
+  it("rejects invalid requests and enforces the limit", () => {
+    const m = mk();
+    const bench = m.teams[0].bench;
+    expect(m.requestSubstitution(0, m.state.lineups[1][3]!, bench[1]!.id)).toMatch(/unknown|not/);
+    expect(m.requestSubstitution(0, m.state.lineups[0][3]!, m.state.lineups[0][4]!)).toMatch(/not a bench|not available/);
+    let ok = 0;
+    for (let i = 1; i < bench.length; i++) {
+      const r = m.requestSubstitution(0, m.state.lineups[0][i]!, bench[i]!.id);
+      if (r === null) ok++;
+    }
+    expect(ok).toBe(MAX_SUBS);
+    expect(m.state.subsUsed[0]).toBe(MAX_SUBS);
+    // the substituted player cannot come back
+    expect(m.requestSubstitution(0, bench[1]!.id, m.teams[0].players[1]!.id)).not.toBeNull();
+  });
+
+  it("a substitute keeper takes over keeper duties", () => {
+    const m = mk();
+    const gkOut = m.state.lineups[0][0]!;
+    const gkIn = m.teams[0].bench[0]!.id;
+    expect(m.requestSubstitution(0, gkOut, gkIn)).toBeNull();
+    expect(m.keeper(0).id).toBe(gkIn);
+    expect(m.isKeeper(gkIn)).toBe(true);
+    expect(m.isKeeper(gkOut)).toBe(false);
+  });
+});
+
+describe("live tactics", () => {
+  it("changing formation re-assigns the eleven to fitting roles", () => {
+    const m = mk();
+    m.setTactics(0, { formation: "4-4-2" });
+    const slots = FORMATIONS["4-4-2"];
+    const lineup = m.state.lineups[0];
+    expect(new Set(lineup).size).toBe(11);
+    expect(m.def(lineup[0]!).role).toBe("GK");
+    // Every outfield slot is filled by a player within one line of its role.
+    for (let i = 1; i < 11; i++) {
+      expect(roleDistance(m.def(lineup[i]!).role, slots[i]!.role)).toBeLessThanOrEqual(3.5);
+    }
+    expect(m.state.events.at(-1)?.type).toBe("TACTICS");
+  });
+
+  it("clamps slider values and records a TACTICS event", () => {
+    const m = mk();
+    m.setTactics(0, { mentality: 1.7, pressing: -1 });
+    expect(m.teams[0].tactics.mentality).toBe(1);
+    expect(m.teams[0].tactics.pressing).toBe(0);
+    expect(m.state.events.at(-1)?.type).toBe("TACTICS");
+  });
+
+  it("an attacking mentality moves the block higher up the pitch", () => {
+    // 3 seeds x 12 minutes each: a single short sample is dominated by where the ball happens to be.
+    const avgX = (mentality: number): number => {
+      let total = 0;
+      for (let k = 0; k < 3; k++) {
+        const m = mk(3 + k);
+        m.setTactics(0, { mentality });
+        m.setTactics(1, { mentality: 0.5 });
+        let sum = 0;
+        let n = 0;
+        let ticks = 0;
+        while (ticks++ < 20 * 60 * 12) {
+          m.step();
+          if (m.state.phase !== "PLAY") continue;
+          for (const p of m.activePlayers(0)) {
+            if (m.isKeeper(p.id)) continue;
+            sum += p.pos.x * m.dirOf(0);
+            n++;
+          }
+        }
+        total += sum / n;
+      }
+      return total / 3;
+    };
+    expect(avgX(0.9)).toBeGreaterThan(avgX(0.1) + 2);
+  });
+});
+
+describe("fatigue", () => {
+  it("accumulates over a match in a stamina-dependent, realistic range", () => {
+    const m = mk(5);
+    m.runToEnd();
+    const outfield = m.state.players.filter((p) => p.onPitch && !m.isKeeper(p.id) && p.distance > 0);
+    const fat = outfield.map((p) => p.fatigue);
+    const avg = fat.reduce((a, b) => a + b, 0) / fat.length;
+    expect(avg).toBeGreaterThan(0.3);
+    expect(avg).toBeLessThan(0.85);
+    // subs came on fresh: those with less distance are less tired
+    const km = outfield.map((p) => p.distance / 1000);
+    expect(Math.max(...km)).toBeGreaterThan(7); // a 90-minute outfielder covers 8-12 km in reality
+  });
+
+  it("degrades technique: tired legs pass and shoot worse than fresh ones (TUNING.fatigue*)", () => {
+    // Same fixtures and seeds; only the home side's starting fatigue differs.
+    const run = (fatigue: number) => {
+      const acc = { passes: 0, completed: 0, shots: 0, onTarget: 0 };
+      for (const seed of [31, 32, 33]) {
+        const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 13, seed: 11 });
+        const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 13, seed: 22 });
+        const initialFatigue: Record<string, number> = {};
+        for (const p of [...home.players, ...home.bench]) initialFatigue[p.id] = fatigue;
+        const m = new Match(home, away, { seed, halfLength: 10 * 60, aiManaged: [0, 1], initialFatigue });
+        m.runToEnd();
+        const st = m.state.stats[0];
+        acc.passes += st.passes; acc.completed += st.passesCompleted; acc.shots += st.shots; acc.onTarget += st.shotsOnTarget;
+      }
+      return { pass: acc.completed / acc.passes, shots: acc.shots, onTarget: acc.onTarget };
+    };
+    const fresh = run(0);
+    const tired = run(0.6);
+    expect(tired.pass).toBeLessThan(fresh.pass - 0.01); // at least a point of pass completion
+    expect(tired.shots).toBeLessThan(fresh.shots);
+  });
+});
+
+describe("AI manager", () => {
+  it("uses substitutions and a late tactical shift for its team", () => {
+    const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 15, seed: 11 });
+    const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 10, seed: 22 });
+    const m = new Match(home, away, { seed: 9, aiManaged: [1] });
+    m.runToEnd();
+    expect(m.state.subsUsed[1]).toBeGreaterThan(0);
+    expect(m.state.subsUsed[0]).toBe(0);
+    expect(m.state.events.some((e) => e.type === "TACTICS" && e.team === 1)).toBe(true);
+  });
+});
+
+describe("adjustAttrs (the half-time talk reaching the pitch)", () => {
+  it("adds to the values the match is using and takes effect immediately", () => {
+    const m = mk();
+    const id = m.teams[0].players[3]!.id;
+    const was = m.def(id).attrs.composure;
+    expect(m.adjustAttrs(id, { composure: 0.4 })).toBe(true);
+    expect(m.def(id).attrs.composure).toBeCloseTo(was + 0.4, 5);
+    // twice over, it keeps adding rather than replacing
+    m.adjustAttrs(id, { composure: -0.9 });
+    expect(m.def(id).attrs.composure).toBeCloseTo(was - 0.5, 5);
+  });
+
+  it("keeps what was baked in at kick-off, including the home edge", () => {
+    const home = generateTeam({ id: 0, name: "Home", shortName: "HOM", color: "#f00", formation: "4-3-3", quality: 13, seed: 11 });
+    const away = generateTeam({ id: 1, name: "Away", shortName: "AWY", color: "#00f", formation: "4-4-2", quality: 12, seed: 22 });
+    const m = new Match(home, away, { seed: 3, aiManaged: [], homeEdge: 0.3 });
+    const id = home.players[2]!.id;
+    const raw = home.players[2]!.attrs.passing;
+    const withEdge = m.def(id).attrs.passing;
+    expect(withEdge).toBeCloseTo(raw + 0.3, 5);
+    // an empty move leaves the value exactly where it was: no rounding, no drift
+    m.adjustAttrs(id, {});
+    expect(m.def(id).attrs.passing).toBe(withEdge);
+    m.adjustAttrs(id, { passing: 0.2 });
+    expect(m.def(id).attrs.passing).toBeCloseTo(withEdge + 0.2, 5);
+  });
+
+  it("clamps to the 1..20 range and refuses an unknown id", () => {
+    const m = mk();
+    const id = m.teams[1].players[1]!.id;
+    m.adjustAttrs(id, { pace: 99 });
+    expect(m.def(id).attrs.pace).toBe(20);
+    m.adjustAttrs(id, { pace: -99 });
+    expect(m.def(id).attrs.pace).toBe(1);
+    expect(m.adjustAttrs("nobody", { pace: 1 })).toBe(false);
+  });
+
+  it("the second half is played with the new values", () => {
+    const a = mk(5), b = mk(5);
+    for (const id of b.teams[0].players.map((p) => p.id)) b.adjustAttrs(id, { finishing: 4, technique: 4, passing: 4 });
+    for (const m of [a, b]) { let n = 0; while (m.state.phase !== "FULL_TIME" && n++ < 20 * 60 * 120) m.step(); }
+    // a materially better home side is not the same match any more
+    expect(b.state.stats[0].xg).not.toBe(a.state.stats[0].xg);
+  });
+});

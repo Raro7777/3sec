@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  engine:
+    name: typecheck + tests (incl. match-stats gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # vitest runs the physics/law/management tests plus test/stats-gate.test.ts and
+      # test/scenarios.test.ts, which simulate full matches and fail when aggregate
+      # statistics leave their football-like bands. Any engine change must keep them green.
+      - run: pnpm test

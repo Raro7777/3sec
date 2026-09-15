@@ -1,0 +1,161 @@
+import type { GameState, SquadPlayer } from "./types";
+import { CLUBS } from "./world";
+import { overall } from "./rating";
+import { wageFor } from "./contracts";
+import { Rng, normalizeTactics } from "@3sec/engine";
+import { generateManager } from "./managers";
+
+/** Romanized names from saves made before the Korean localisation → Hangul. */
+const FAMILY: Record<string, string> = { Kim: "김", Lee: "이", Park: "박", Choi: "최", Jung: "정", Kang: "강", Cho: "조", Yoon: "윤", Jang: "장", Lim: "임", Han: "한", Oh: "오", Seo: "서", Shin: "신", Kwon: "권", Hwang: "황", Ahn: "안", Song: "송", Ryu: "류", Hong: "홍", Moon: "문", Yang: "양", Bae: "배", Baek: "백", Nam: "남" };
+const GIVEN: Record<string, string> = { Minjun: "민준", Seojun: "서준", Doyun: "도윤", Yejun: "예준", Siwoo: "시우", Hajun: "하준", Jiho: "지호", Juwon: "주원", Jihoon: "지훈", Junseo: "준서", Hyunwoo: "현우", Woojin: "우진", Sunwoo: "선우", Eunwoo: "은우", Jaeyoon: "재윤", Taeyang: "태양", Yujun: "유준", Seungmin: "승민", Dohyun: "도현", Geonwoo: "건우", Minseok: "민석", Jinwoo: "진우", Sangho: "상호", Youngjin: "영진", Kyungmin: "경민" };
+export function koreanName(name: string): string {
+  const m = /^([A-Za-z]+) ([A-Za-z]+)$/.exec(name);
+  if (!m) return name;
+  const f = FAMILY[m[1]!], g = GIVEN[m[2]!];
+  return f && g ? f + g : name;
+}
+import { DEFAULT_MANAGER_NAME } from "./season";
+import { newCup } from "./cup";
+import { migrateStaff } from "./staff";
+import { isDifficulty } from "./difficulty";
+import { advanceClDay, clDayDue, ensureForeign, newContinental, simulateClDay } from "./continental";
+import { newBoard } from "./board";
+import { migrateFans } from "./fans";
+import { migrateAchievements } from "./achievements";
+import { migrateCareer } from "./career";
+import { migrateMorale } from "./morale";
+import { migrateStory } from "./story";
+import { markDerbies } from "./lore";
+import { CLUBS_PER_DIVISION, buildAllFixtures, divisionOf, simulateFixture } from "./divisions";
+import { buildClubs } from "./world";
+
+export const SAVE_KEY = "3sec.save.v1";
+
+/** Saves from before assists, match ratings, form and the career list. */
+function migrateRatings(p: SquadPlayer): void {
+  if (!p.stats) p.stats = { apps: 0, goals: 0, minutes: 0, yellows: 0, reds: 0 };
+  for (const k of ["assists", "ratingSum", "ratedApps", "motm"] as const) if (typeof p.stats[k] !== "number") p.stats[k] = 0;
+  if (!Array.isArray(p.form)) p.form = [];
+  if (!Array.isArray(p.career)) p.career = [];
+}
+
+export function serialize(s: GameState): string {
+  return JSON.stringify(s);
+}
+
+export function deserialize(json: string | null | undefined): GameState | null {
+  if (!json) return null;
+  try {
+    const s = JSON.parse(json) as GameState;
+    if (s.version !== 1 || !Array.isArray(s.clubs) || !Array.isArray(s.fixtures)) return null;
+    // Saves from before the onboarding flow have no manager name.
+    if (typeof s.managerName !== "string" || !s.managerName.trim()) s.managerName = DEFAULT_MANAGER_NAME;
+    for (const c of s.clubs) {
+      if (typeof c.budget !== "number") c.budget = Math.round(20 + (c.reputation - 10) * 12);
+      // Older saves carry English club names; the roster of clubs is fixed by id, so refresh the labels.
+      const def = CLUBS[c.id];
+      if (def && !c.baseName) { c.name = def.name; c.shortName = def.shortName; }
+      if (!c.training) c.training = { focus: "balanced", intensity: "normal" };
+      if (typeof c.seasonStartBudget !== "number") c.seasonStartBudget = c.budget;
+      // Saves from before the season review's counters.
+      if (typeof c.seasonInjuries !== "number") c.seasonInjuries = 0;
+      if (typeof c.seasonWages !== "number") c.seasonWages = 0;
+      if (typeof c.seasonRevenue !== "number") c.seasonRevenue = 0;
+      c.tactics = normalizeTactics({ ...c.tactics, formation: c.selection?.formation ?? c.tactics.formation });
+      // Saves from before the academy: an empty one that fills at the next intake (season start / round 11).
+      if (!c.youth || !Array.isArray(c.youth.prospects)) c.youth = { prospects: [], scouting: "local", coaching: 1, nextId: 1 };
+      if (typeof c.youth.nextId !== "number") c.youth.nextId = c.youth.prospects.length + 1;
+      for (const y of c.youth.prospects) if (typeof y.growth !== "number") y.growth = 0;
+      // Saves from before AI manager personalities: give every AI dugout a head coach, the user's club none.
+      if (c.id === s.userClub) c.manager = null;
+      else if (!c.manager || typeof c.manager !== "object" || !c.manager.traits) c.manager = generateManager(new Rng(s.seed * 31 + c.id * 1009 + 7 + 99), Math.max(1, s.season - 1), `M${c.id}-S${s.season}`);
+      else if (!Array.isArray(c.manager.history)) c.manager.history = [];
+      if (typeof c.pressure !== "number") c.pressure = 0;
+      for (const p of c.squad) {
+        p.name = koreanName(p.name);
+        if (typeof p.potential !== "number") { const o = overall(p.attrs, p.role); p.potential = Math.max(o, Math.min(20, Math.round((o + Math.max(0, 27 - p.age) * 0.55 + 0.5) * 10) / 10)); }
+        if (typeof p.growth !== "number") p.growth = 0;
+        if (typeof p.contractUntil !== "number") p.contractUntil = s.season + 1;
+        if (typeof p.wage !== "number") p.wage = wageFor(p);
+        if (typeof p.lastMinutes !== "number") p.lastMinutes = 0;
+        migrateRatings(p);
+      }
+    }
+    s.news = (s.news ?? []).filter((n) => !/[A-Za-z]{4,}/.test(n));
+    // Saves from before the cup: draw round 1 now; the cup days slot in from the next cup round on.
+    if (!s.cup || !Array.isArray(s.cup.ties) || typeof s.cup.stage !== "number") newCup(s);
+    if (typeof s.pendingCupDay !== "boolean") s.pendingCupDay = false;
+    // Saves from before the deeper market: no offers, free agents or loans yet.
+    if (!Array.isArray(s.offers)) s.offers = [];
+    if (!Array.isArray(s.freeAgents)) s.freeAgents = [];
+    if (!Array.isArray(s.loans)) s.loans = [];
+    if (!Array.isArray(s.aiDeals)) s.aiDeals = [];
+    // Saves from before the market log and the season history.
+    if (!Array.isArray(s.marketLog)) s.marketLog = [];
+    if (!Array.isArray(s.seasonHistory)) s.seasonHistory = [];
+    if (!Array.isArray(s.freeManagers)) s.freeManagers = [];
+    migrateStaff(s);
+    // Saves from before the fans: capacity, content supporters and empty attendance counters.
+    migrateFans(s);
+    for (const p of s.freeAgents) { p.name = koreanName(p.name); if (typeof p.growth !== "number") p.growth = 0; if (typeof p.wage !== "number") p.wage = wageFor(p); migrateRatings(p); }
+    // Saves from before the continental competition: the foreign field and this season's draw, caught up headlessly.
+    ensureForeign(s);
+    if (typeof s.pendingClDay !== "boolean") s.pendingClDay = false;
+    if (!s.continental || s.continental.season !== s.season) {
+      newContinental(s);
+      for (let guard = 0; guard < 8 && clDayDue(s) && !s.pendingCupDay; guard++) { s.pendingClDay = true; simulateClDay(s); advanceClDay(s); }
+    }
+    // Saves from before the difficulty setting play on normal.
+    if (!isDifficulty(s.difficulty)) s.difficulty = "normal";
+    // Saves from before the user's board.
+    if (!s.board || typeof s.board.confidence !== "number") s.board = newBoard();
+    if (typeof s.board.warnings !== "number") s.board.warnings = 0;
+    if (typeof s.board.lastReview !== "number") s.board.lastReview = -1;
+    if (typeof s.board.lowWeeks !== "number") s.board.lowWeeks = 0;
+    // Saves from before the achievements and the manager career: empty counters, reputation from the club.
+    migrateAchievements(s);
+    migrateCareer(s);
+    // Saves from the one-league game: everyone is first division, and the second one is built and
+    // caught up so the table it will be promoted from is not empty (divisions.ts).
+    migrateDivisions(s);
+    // Saves from before personalities / morale, the story layer and derby flags (morale.ts, story.ts, lore.ts).
+    migrateMorale(s);
+    migrateStory(s);
+    markDerbies(s.fixtures);
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bring a save made before the second division up to date.
+ *
+ * The clubs it knows about are the top flight, so they keep their ids and their played fixtures. The
+ * second division is generated from the same seed the world was built with — so it is the same
+ * twelve clubs a new game would have — and its fixtures are added to the existing calendar. Rounds
+ * the save has already played are then resolved statistically, because a league nobody has watched
+ * still needs a table for the promotion places to mean anything at the rollover.
+ */
+function migrateDivisions(s: GameState): void {
+  for (const c of s.clubs) if (typeof c.division !== "number") c.division = 1;
+  if (s.clubs.length > CLUBS_PER_DIVISION) return;
+
+  const fresh = buildClubs(s.seed).slice(CLUBS_PER_DIVISION);
+  if (!fresh.length) return;
+  s.clubs.push(...fresh);
+
+  // Keep the fixtures already played and add only the new division's, numbered after them.
+  const played = s.fixtures;
+  const nextId = played.reduce((m, f) => Math.max(m, f.id), -1) + 1;
+  const added = buildAllFixtures(s.clubs)
+    .filter((f) => divisionOf(s.clubs[f.home]!) > 1)
+    .map((f, i) => ({ ...f, id: nextId + i }));
+  s.fixtures = [...played, ...added];
+
+  // Catch the new division up to the round the save is on.
+  for (const f of added) {
+    if (f.round >= s.round) continue;
+    simulateFixture(s, f, new Rng((s.seed * 7919 + s.season * 104729 + f.id * 131 + 17) >>> 0));
+  }
+}
