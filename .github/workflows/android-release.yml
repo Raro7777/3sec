@@ -83,7 +83,8 @@ jobs:
           AAB=apps/viewer/android/app/build/outputs/bundle/release/app-release.aab
           APK=apps/viewer/android/app/build/outputs/apk/release/app-release.apk
           jarsigner -verify "$AAB" | grep -q "jar verified" || { echo "::error::AAB가 서명되지 않았습니다."; exit 1; }
-          "$ANDROID_HOME"/build-tools/*/apksigner verify "$APK" || { echo "::error::APK 서명 확인 실패"; exit 1; }
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify "$APK" || { echo "::error::APK 서명 확인 실패"; exit 1; }
           V=$(grep -o 'versionName "[^"]*"' apps/viewer/android/app/build.gradle | cut -d'"' -f2)
           C=$(grep -o 'versionCode [0-9]*' apps/viewer/android/app/build.gradle | awk '{print $2}')
           mkdir -p dist-release
