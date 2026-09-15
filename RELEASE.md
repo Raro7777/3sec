@@ -51,6 +51,11 @@ Google Play 출시를 위한 체크리스트. **저장소에서 끝난 것**과 
 
 ### 2-1. 업로드 키 (가장 중요 — 잃어버리면 앱을 영영 업데이트할 수 없습니다)
 
+**한 줄로 끝내기:** 본인 컴퓨터에서 `bash scripts/make-upload-key.sh`. 강한 비밀번호를 만들고,
+`~/upload-keystore.jks`를 생성하고, `keystore.properties`를 쓰고, `~/upload-keystore-backup/`에
+키·비밀번호·지문을 모아 두고, `ANDROID_HOME`이 있으면 서명된 AAB까지 빌드합니다. 그 백업 폴더를
+**서로 다른 두 곳**(예: Google Drive 개인 폴더 + 비밀번호 관리자)에 올리세요. 아래는 손으로 할 때의 순서입니다.
+
 ```bash
 keytool -genkey -v -keystore ~/upload-keystore.jks -keyalg RSA -keysize 2048 \
         -validity 10000 -alias upload
