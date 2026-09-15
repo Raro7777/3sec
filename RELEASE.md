@@ -51,6 +51,12 @@ Google Play 출시를 위한 체크리스트. **저장소에서 끝난 것**과 
 
 ### 2-1. 업로드 키 (가장 중요 — 잃어버리면 앱을 영영 업데이트할 수 없습니다)
 
+**컴퓨터가 없을 때 (원격 개발만 할 때):** GitHub Actions가 대신 만듭니다.
+1. 저장소 → **Actions → 업로드 키 만들기 → Run workflow**. 끝나면 그 실행 페이지 아래 **Artifacts → upload-keystore** 내려받기 (24시간 뒤 사라짐).
+2. 그 zip을 **Google Drive 개인 폴더**와 **비밀번호 관리자**에 보관.
+3. zip 안 `README.txt`의 두 값을 **Settings → Secrets and variables → Actions**에 넣기: `UPLOAD_KEYSTORE_PASSWORD`, `UPLOAD_KEYSTORE_B64`.
+4. **Actions → Android 릴리스 → Run workflow** → Artifacts에서 서명된 `.aab`/`.apk` 내려받기 → Play Console에 업로드.
+
 **한 줄로 끝내기:** 본인 컴퓨터에서 `bash scripts/make-upload-key.sh`. 강한 비밀번호를 만들고,
 `~/upload-keystore.jks`를 생성하고, `keystore.properties`를 쓰고, `~/upload-keystore-backup/`에
 키·비밀번호·지문을 모아 두고, `ANDROID_HOME`이 있으면 서명된 AAB까지 빌드합니다. 그 백업 폴더를
