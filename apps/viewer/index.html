@@ -639,6 +639,15 @@
       .immersive #topbar label { flex-direction:column; gap:0; font-size:0; }
       .immersive #topbar label #speed { font-size:11px; padding:0 2px; appearance:none; -webkit-appearance:none; }
       .immersive #topbar label.dbg { display:none; }
+      /* the terrace band under an upright pitch, carrying the match's numbers when it is tall enough */
+      #bandStats { display:none; }
+      .immersive #screen-match.has-band #bandStats { display:block; position:absolute; left:10px; right:10px; bottom:6px; height:calc(var(--band, 0px) - 12px); overflow:hidden; z-index:2; padding:5px 12px 3px; border-radius:8px; background:rgba(9,13,17,.78); border:1px solid rgba(255,255,255,.06); backdrop-filter:blur(3px); font-family:"Barlow Condensed","IBM Plex Sans KR",sans-serif; }
+      .immersive.panel-open #screen-match.has-band #bandStats { display:none; }
+      #bandStats .bandHead { display:flex; justify-content:space-between; align-items:baseline; font-size:11px; letter-spacing:.14em; color:var(--muted); margin-bottom:0; }
+      #bandStats .bandHead b { font-size:13px; letter-spacing:0; }
+      #bandStats .bcStat { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; column-gap:8px; font-size:12.5px; line-height:1.1; padding:1px 0; font-variant-numeric:tabular-nums; }
+      #bandStats .bcStat .l { text-align:left; color:#fff; } #bandStats .bcStat .r { text-align:right; color:#fff; } #bandStats .bcStat .k { font-size:10.5px; letter-spacing:.1em; color:var(--muted); }
+      #bandStats .bcBar { grid-column:1 / -1; height:3px; margin-top:1px; }
       /* shown only in immersive (the inline display:none is the portrait default); flex so the caption stacks under the icon */
       .immersive #btnPanel, .immersive #btnLog { display:flex !important; }
       .immersive #btnPanel { background:var(--accent); color:#1a1400; border-color:var(--accent); font-weight:700; }

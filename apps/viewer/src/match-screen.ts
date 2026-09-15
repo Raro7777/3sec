@@ -1,5 +1,5 @@
 import { keepAwake } from "./platform";
-import { DT, PITCH, type Attributes, type Match, type MatchEvent, type PlayerState, type TeamId } from "@3sec/engine";
+import { DT, PITCH, type Attributes, type Match, type MatchEvent, type MatchState, type PlayerState, type TeamId } from "@3sec/engine";
 import { applyCamera, drawPitch, type Camera, type View, project, unproject, screenAngle } from "./render";
 import { DEFAULT_STADIUM, stadiumFor, type Stadium } from "./stadiums";
 import { ManagerPanel } from "./panel";
@@ -209,6 +209,8 @@ export class MatchScreen {
   private htShown = false;
   /** the dressing room has been used this match (one talk at the interval, like the one before kick-off) */
   private htTalked = false;
+  /** the numbers panel in the terrace band under an upright pitch (renderBand) */
+  private bandEl: HTMLDivElement | null = null;
   /** the goal a replay is about, so the scorer stays named while it runs */
   private replayStrap: import("./broadcast").StrapSpec | null = null;
   /** 결정적 순간: the penalty-taker pick and the once-a-match last call share this overlay */
@@ -1030,6 +1032,7 @@ export class MatchScreen {
   private renderStats(): void {
     const [a, b] = this.match.state.stats;
     const tot = Math.max(1, a.possessionTicks + b.possessionTicks);
+    this.renderBand(a, b, tot);
     const row = (label: string, x: string | number, y: string | number) => `<span><b>${label}</b> ${x} : ${y}</span>`;
     this.statsEl.innerHTML = [
       row("점유율", `${Math.round((100 * a.possessionTicks) / tot)}%`, `${Math.round((100 * b.possessionTicks) / tot)}%`),
@@ -1145,6 +1148,14 @@ export class MatchScreen {
     if (document.body.classList.contains("immersive")) { w = maxW; h = maxH; }
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
+    // On an upright phone the pitch is narrower than the stage is tall, and the stadium painting fills the
+    // rest as terraces. The band under the pitch is dead space until it is big enough to carry the match's
+    // numbers; then it does, and #stats (hidden in this layout) has somewhere to live.
+    const scale = portrait ? Math.min(w / (PITCH.width + 8), h / (PITCH.length + 8)) : 0;
+    const band = portrait ? (h - scale * (PITCH.length + 8)) / 2 : 0;
+    const screen = document.getElementById("screen-match");
+    screen?.classList.toggle("has-band", document.body.classList.contains("immersive") && band >= BAND_MIN);
+    stage.style.setProperty("--band", `${Math.round(band)}px`);
     this.syncBitmap(true);
     if (this.match) this.render();
   }
@@ -1805,6 +1816,27 @@ export class MatchScreen {
     }
   }
 
+  /** The match's numbers in the terrace band under an upright pitch: a broadcast panel, not a strip of text. */
+  private renderBand(a: MatchState["stats"][0], b: MatchState["stats"][1], tot: number): void {
+    let el = this.bandEl;
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "bandStats";
+      document.getElementById("stage")?.appendChild(el);
+      this.bandEl = el;
+    }
+    if (!document.getElementById("screen-match")?.classList.contains("has-band")) { el.hidden = true; return; }
+    el.hidden = false;
+    const h = this.match.teams[0], w = this.match.teams[1];
+    const pos = Math.round((100 * a.possessionTicks) / tot);
+    const cell = (label: string, x: string, y: string, share?: number) => `<div class="bcStat"><span class="l">${x}</span><span class="k">${label}</span><span class="r">${y}</span>${share === undefined ? "" : `<div class="bcBar"><i style="width:${Math.round(share * 100)}%;background:${h.color}"></i><u style="width:${Math.round((1 - share) * 100)}%;background:${w.color}"></u></div>`}</div>`;
+    el.innerHTML = `<div class="bandHead"><b style="color:${h.color}">${h.shortName}</b><span>경기 기록</span><b style="color:${w.color}">${w.shortName}</b></div>` +
+      cell("점유율", `${pos}%`, `${100 - pos}%`, a.possessionTicks / tot) +
+      cell("슈팅 (유효)", `${a.shots} (${a.shotsOnTarget})`, `${b.shots} (${b.shotsOnTarget})`, a.shots / Math.max(1, a.shots + b.shots)) +
+      cell("xG", a.xg.toFixed(2), b.xg.toFixed(2), a.xg / Math.max(0.01, a.xg + b.xg)) +
+      cell("패스 성공", `${a.passesCompleted}/${a.passes}`, `${b.passesCompleted}/${b.passes}`);
+  }
+
   /** Ground name, capacity and the home side, top-left, until ~5 s after the first play press. */
   private drawStadiumBanner(v: View, age: number): void {
     const ctx = this.ctx;
@@ -1888,6 +1920,8 @@ export class MatchScreen {
   }
 }
 
+/** the terrace band under an upright pitch has to be this tall before the numbers move into it */
+const BAND_MIN = 118;
 /** kick-off banner lifetime in real ms after the first play press */
 const BANNER_MS = 5000;
 
