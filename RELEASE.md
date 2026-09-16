@@ -10,10 +10,10 @@ Google Play 출시를 위한 체크리스트. **저장소에서 끝난 것**과 
 |---|---|
 | 앱 이름 | `가난한자의 FM` — 런처, 액티비티, 웹 매니페스트, 문서 제목 전부 일치 |
 | 개발 코드네임 노출 | 없음. 게임 안 컵 대회가 `3sec 컵` → **`대한컵`** |
-| `targetSdkVersion` | **35** (Play는 2025-08-31부터 신규 앱에 35 이상을 요구) |
-| `compileSdkVersion` | 35 (Android Gradle Plugin 8.6.1로 올림) |
+| `targetSdkVersion` | **36** (Play는 2026-08-31부터 신규 앱에 36 이상을 요구. 첫 업로드에서 35가 거부됐음) |
+| `compileSdkVersion` | 36 (Android Gradle Plugin 8.9.2 / Gradle 8.11.1) |
 | `minSdkVersion` | 22 (Android 5.1, 실사용 기기의 99% 이상) |
-| 버전 | `versionCode 29` / `versionName "1.0"` |
+| 버전 | `versionCode 30` / `versionName "1.0"` |
 | 업로드 서명 | `keystore.properties` 또는 환경변수에서 읽도록 배선. 키는 저장소에 **없고**, `.gitignore`가 막고 있음 |
 | AAB 빌드 | `pnpm --filter viewer android:bundle` → `android/app/build/outputs/bundle/release/app-release.aab` (7.9MB) |
 | 네트워크 의존 | **없음**. 구글 폰트 CDN을 쓰던 것을 앱에 넣음 (아래 참조) |
