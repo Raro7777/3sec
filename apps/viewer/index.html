@@ -462,7 +462,7 @@
       .bcStat .r { text-align:right; }
       .bcBar { grid-column:1 / -1; display:flex; height:4px; border-radius:2px; overflow:hidden; background:rgba(255,255,255,.08); }
       .bcBar i, .bcBar u { display:block; height:100%; }
-      .bcCardActs { display:flex; justify-content:flex-end; margin-top:12px; }
+      .bcCardActs { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:12px; }
       .bcWipe { position:absolute; z-index:6; inset:-10% -40%; background:linear-gradient(100deg, transparent 0 38%, var(--c) 38% 50%, rgba(255,255,255,.9) 50% 52%, var(--c) 52% 64%, transparent 64% 100%); animation:bcWipe .46s cubic-bezier(.4,0,.2,1) forwards; opacity:.92; }
       @keyframes bcWipe { from { transform:translateX(-70%); } to { transform:translateX(70%); } }
       .bcReplay { position:absolute; right:12px; top:12px; display:flex; align-items:center; gap:6px; background:rgba(200,40,40,.9); color:#fff; font-size:11px; letter-spacing:.18em; padding:3px 9px; border-radius:3px; }
@@ -770,7 +770,7 @@
           <div id="scoreboard"><div id="score">—</div><div id="clock">00:00</div><div id="phase"></div></div>
           <button id="btnPlay" data-cap="재생" class="primary">▶ 재생</button>
           <label>속도
-            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 5분)">
+            <select id="speed" title="자동: 위험한 순간과 세트피스는 천천히, 나머지는 빠르게 (경기당 약 7분)">
               <option value="auto" selected>자동</option>
               <option value="1">1x</option>
               <option value="2">2x</option>
@@ -780,7 +780,7 @@
               <option value="32">32x</option>
             </select>
           </label>
-          <button id="btnSkip" data-cap="결과로" title="남은 시간을 즉시 시뮬레이션합니다">⏩ 결과로</button>
+          <button id="btnSkip" data-cap="결과로" title="남은 경기를 수석코치에게 맡기고 결과만 봅니다 (확인 창이 뜹니다)">⏩ 결과로</button>
           <button id="btnContinue" class="primary" style="display:none">계속 →</button>
           <button id="btnFull" data-cap="크게" title="경기장을 화면에 꽉 채웁니다 (가로 모드 권장)">⛶ 크게</button>
           <button id="btnSound" data-cap="소리" title="효과음">🔊</button>

@@ -96,22 +96,22 @@ const AUTO_TAU_UP = 0.8;
 /** "just happened" hold after a shot / save / block / corner / penalty / red card (ms) */
 const DANGER_HOLD_MS = 1100;
 /**
- * 자동 pacing tiers (sim seconds per real second). Tuned so a full match lands at ~5 real minutes:
+ * 자동 pacing tiers (sim seconds per real second). Tuned so a full match lands at ~7 real minutes:
  * open play runs from PLAY_FAST (nothing on) down to PLAY_SLOW (box entries, shots, penalties);
  * dead balls far from goal fly at DEAD_FAST, a corner / penalty / close free kick is set up at
  * SETPIECE; a goal celebration holds CELEB_SLOW for CELEB_MS and then DEAD_FAST.
  */
-const PLAY_FAST = 26;
-const PLAY_MID = 9;
-const PLAY_SLOW = 2.5;
-const PLAY_SLOW_TIGHT = 2;
-const DEAD_FAST = 48;
-const SETPIECE = 5;
-const CELEB_SLOW = 3;
+const PLAY_FAST = 14;
+const PLAY_MID = 6;
+const PLAY_SLOW = 2.2;
+const PLAY_SLOW_TIGHT = 1.8;
+const DEAD_FAST = 36;
+const SETPIECE = 4;
+const CELEB_SLOW = 2.5;
 const CELEB_MS = 1500;
 /** ceilings late in a tight game, and in stoppage time with the user level or behind */
-const CAP_LATE_TIGHT = 12;
-const CAP_STOPPAGE = 8;
+const CAP_LATE_TIGHT = 9;
+const CAP_STOPPAGE = 6;
 /** the bottom ticker rotates the other grounds' scores this often (ms) */
 const TICKER_MS = 3500;
 const TICKER_PER = 2;
@@ -281,7 +281,7 @@ export class MatchScreen {
       const clip = this.clips.find((c) => c.id === Number(b.dataset.clip));
       if (clip) this.startReplay(clip, false);
     });
-    this.btnSkip.addEventListener("click", () => void this.skipToEnd());
+    this.btnSkip.addEventListener("click", () => this.confirmSkip());
     this.btnContinue.addEventListener("click", () => this.onFinish?.());
     document.getElementById("btnContinue2")!.addEventListener("click", () => this.onFinish?.());
     this.btnLastCall.addEventListener("click", () => this.openLastCall());
@@ -604,6 +604,26 @@ export class MatchScreen {
     return this.match.state.phase === "FULL_TIME" && this.others.every((o) => o.match.state.phase === "FULL_TIME");
   }
 
+  /**
+   * "결과로" hands the rest of the match to the assistant and jumps to the final score. New players read
+   * it as "show me the score so far", so the tap opens the interval card first and says exactly what it
+   * skips; the small button on the card is the one that skips, the primary one goes back to the game.
+   */
+  private confirmSkip(): void {
+    if (this.finished || !this.bc || this.bc.hasCard()) { void this.skipToEnd(); return; }
+    const s = this.match.state;
+    const left = Math.max(0, Math.round((this.match.halfLength * 2 - (s.half === 2 ? this.match.halfLength + s.clock : s.clock)) / 60));
+    const wasPlaying = this.playing;
+    if (wasPlaying) this.setPlaying(false);
+    this.bc.closeStrap();
+    this.bc.interval(`결과로 건너뛰기 · 남은 시간 약 ${left}분`, `${s.score[0]} - ${s.score[1]}`, [], "계속 지휘한다 ▶", () => {
+      if (wasPlaying && !this.finished) this.setPlaying(true);
+    }, {
+      label: "남은 경기를 수석코치에게 맡기고 결과만 본다 ⏩",
+      onPick: () => { this.bc?.closeCard(); void this.skipToEnd(); },
+    });
+  }
+
   private async skipToEnd(): Promise<void> {
     this.setPlaying(false);
     this.btnSkip.disabled = true;
@@ -831,7 +851,7 @@ export class MatchScreen {
    * the live state picks a speed between PLAY_FAST (nothing on) and PLAY_SLOW (box entries, shots,
    * penalties); dead balls run at DEAD_FAST far from goal and SETPIECE when a corner / free kick /
    * penalty is being set up; a goal celebration holds CELEB_SLOW for CELEB_MS and then DEAD_FAST.
-   * Late in a tight game the ceiling drops. A 90-minute match takes about 5 real minutes.
+   * Late in a tight game the ceiling drops. A 90-minute match takes about 7 real minutes.
    */
   private autoSpeed(now: number): number {
     const m = this.match, s = m.state;
