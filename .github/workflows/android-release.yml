@@ -14,14 +14,17 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: "Play 에 올릴 트랙 (서비스 계정 키가 있을 때만)"
-        type: choice
+        description: "Play 트랙: internal, alpha(기본 비공개), beta, production, 또는 직접 만든 비공개 트랙 이름"
+        type: string
         default: internal
-        options: [internal, alpha, beta, production]
       upload:
         description: "Play 에 자동 업로드"
         type: boolean
         default: true
+      promote_version_code:
+        description: "비워 두면 새로 빌드해 올린다. 숫자를 넣으면 빌드 없이 Play 에 이미 있는 그 버전을 위 트랙에 배정만 한다"
+        type: string
+        default: ""
   push:
     tags: ["v*"]
 
@@ -29,8 +32,23 @@ permissions:
   contents: read
 
 jobs:
+  promote:
+    name: 기존 버전을 트랙에 배정
+    if: github.event_name == 'workflow_dispatch' && inputs.promote_version_code != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install google-auth requests
+      - env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: python scripts/play-promote.py "${{ inputs.track }}" "${{ inputs.promote_version_code }}"
   release:
     name: 서명된 AAB + APK
+    if: github.event_name != 'workflow_dispatch' || inputs.promote_version_code == ''
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
