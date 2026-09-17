@@ -5,7 +5,7 @@ name: 웹 페이지 (GitHub Pages)
 # 처음 한 번은 Settings → Pages → Build and deployment → Source 를 "GitHub Actions" 로 두어야 한다.
 on:
   push:
-    branches: [main]
+    branches: [main, claude/goodmorning-aebxd3]
     paths: [PRIVACY.md, docs/site/**, docs/store/feature-graphic.png, scripts/build-site.py, .github/workflows/pages.yml]
   workflow_dispatch:
 
