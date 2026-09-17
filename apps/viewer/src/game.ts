@@ -14,7 +14,7 @@ import {
   CUP_NAME, CUP_PRIZE, CUP_ROUNDS, CUP_STAGE_LABEL, advanceCupDay, createCupMatch, cupByes, cupDone, cupFixture, cupPrize, pendingCupTies, recordCupResult,
   tieWinner, userCupStatus, userEnteredCup, userCupTie, type CupTie,
   marketSummary, homeAwayRecord, financeSummary,
-  managerTags, managerOfYear, expectedPositions, type Manager,
+  managerTags, managerOfYear, expectedPositions, pressQuote, type Manager,
   ATTR_LABEL, RATING_MIN_APPS, avgRating, topAssists, topRatings,
   BOARD_FROM_ROUND, TRUST_AT, WARN_BELOW, acceptJob, confidenceBand, jobOffers, userExpectation, userPosition,
   titleClinched,
@@ -1359,7 +1359,7 @@ export class Game {
     const opp = fx ? clubOf(s, fx.home === me.id ? fx.away : fx.home) : null;
     const m = opp?.manager;
     const say = m && hasMatch
-      ? `<div class="officeSay">${managerArt(s, m, 44, opp!.color).replace('class="mgrArt"', 'class="mgrArt say"')}<div class="bub"><b>${opp!.shortName} ${m.name}</b> 감독 · ${managerPreview(m, me, opp!)}</div></div>`
+      ? `<div class="officeSay">${managerArt(s, m, 44, opp!.color).replace('class="mgrArt"', 'class="mgrArt say"')}<div class="bub"><b>${opp!.shortName} ${m.name}</b> 감독, 이번 주 기자회견에서 · ${pressQuote(s, m, me, opp!)}</div></div>`
       : "";
     return `<div class="office" id="office">
       <div class="officeStage">
@@ -1488,7 +1488,7 @@ export class Game {
     const m = opp.manager;
     if (!m) return "";
     const since = m.since < this.state.season ? ` · ${this.state.season - m.since}시즌째` : " · 부임 첫 시즌";
-    return `<div class="hint" style="display:flex;gap:8px;align-items:flex-start">${managerArt(this.state, m, 40, opp.color)}<span>상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since} — ${managerPreview(m, this.me, opp)}</span></div>`;
+    return `<div class="hint" style="display:flex;gap:8px;align-items:flex-start">${managerArt(this.state, m, 40, opp.color)}<span>상대 감독 <b>${m.name}</b>${managerTags(m).length ? ` <span style="color:var(--accent)">${managerTags(m).join(" · ")}</span>` : ""}${since}<br><span style="color:var(--muted)">수석코치 메모 —</span> ${managerPreview(m, this.me, opp)}</span></div>`;
   }
 
   /** One-line cup status for the home card: next stage and the user's tie / 탈락 / 부전승. */

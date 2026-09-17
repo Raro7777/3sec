@@ -107,6 +107,6 @@ export { FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, fore
 export { askingPriceFor } from "./transfers";
 export { RED_ARREARS_WEEKS, ARREARS_MORALE, ARREARS_FLOOR, LOAN_WEEKS, LOAN_INTEREST, redWeeks, inArrears, financeStatus, takeEmergencyLoan, financeWeek, financeRollover, type FinanceStatus } from "./finance";
 export { RETURN_AFTER, RETURN_FEE_SHARE, noteDeparture, returnable, returningPlayer, returnFee, forgetAlumnus, alumniRollover, type Alumnus } from "./alumni";
-export { FEUD_AT, FEUD_MAX, feudWith, adjustFeud, rivalManager, recordManagerH2H, h2hTable, tauntLine, derbyQuote, rivalryRollover, type ManagerH2H } from "./rivalry";
+export { FEUD_AT, FEUD_MAX, feudWith, adjustFeud, rivalManager, recordManagerH2H, h2hTable, tauntLine, derbyQuote, pressQuote, rivalryRollover, type ManagerH2H } from "./rivalry";
 export { SCENARIOS, scenarioById, activeScenario, scenarioBlock, judgeScenario, clearedScenarios, cupRounds, type Scenario, type ScenarioState, type ScenarioOutcome, type ScenarioRules } from "./scenario";
 export { LAST_CALL_FROM, LAST_CALL_MINUTE, LAST_CALLS, lastCallById, lastCallDue, type LastCall, type LastCallId } from "./lastcall";

@@ -1,0 +1,43 @@
+name: 웹 페이지 (GitHub Pages)
+
+# 앱 소개와 개인정보처리방침을 https://raro7777.github.io/3sec/ 에 올린다.
+# Play Console 의 개인정보처리방침 URL 은 https://raro7777.github.io/3sec/privacy.html
+# 처음 한 번은 Settings → Pages → Build and deployment → Source 를 "GitHub Actions" 로 두어야 한다.
+on:
+  push:
+    branches: [main, claude/goodmorning-aebxd3]
+    paths: [PRIVACY.md, docs/site/**, docs/store/feature-graphic.png, scripts/build-site.py, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install markdown
+      - run: python scripts/build-site.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

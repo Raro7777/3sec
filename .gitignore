@@ -19,3 +19,4 @@ apps/viewer/android/capacitor-cordova-android-plugins/
 # the upload key and its passwords never enter the repo
 apps/viewer/android/keystore.properties
 *.jks
+_site/
