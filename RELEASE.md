@@ -131,3 +131,25 @@ ANDROID_HOME=/path/to/sdk pnpm --filter viewer android:release
 
 버전을 올릴 때는 `apps/viewer/android/app/build.gradle`의 `versionCode`(정수, 매번 증가)와
 `versionName`(표시용 문자열)을 함께 고칩니다.
+
+## 4. Play 자동 업로드 (한 번만 설정)
+
+`Android 릴리스` 워크플로는 Secrets 에 `PLAY_SERVICE_ACCOUNT_JSON` 이 있으면 빌드한 AAB 를
+Play 의 내부 테스트 트랙(또는 Run workflow 에서 고른 트랙)에 바로 올립니다. 없으면 그 단계만 건너뜁니다.
+첫 번째 AAB 는 Play 정책상 Console 화면에서 직접 올려야 하고, 그 뒤부터 자동화가 됩니다.
+
+1. Play Console → 왼쪽 맨 아래 **설정 → API 액세스** → "Google Cloud 프로젝트 연결"에서 새 프로젝트 만들기.
+2. 같은 화면의 **서비스 계정 → 새 서비스 계정 만들기** → 안내대로 Google Cloud Console 이 열리면
+   서비스 계정 이름(예: `play-upload`)을 정하고 만듭니다. 역할은 주지 않아도 됩니다.
+3. Cloud Console 에서 그 서비스 계정 → **키 → 키 추가 → 새 키 만들기 → JSON** → 내려받습니다.
+4. Play Console 의 API 액세스 화면으로 돌아와 **"액세스 권한 관리"** → 방금 계정을 앱 `가난한자의 FM` 에
+   추가하고 권한은 **"출시 → 프로덕션·테스트 트랙에 출시" 와 "앱 정보 보기"** 를 켭니다. (계정 수준
+   권한 "릴리스 관리자"를 주면 한 번에 됩니다.)
+5. GitHub → Settings → Secrets and variables → Actions → New repository secret →
+   이름 `PLAY_SERVICE_ACCOUNT_JSON`, 값은 JSON 파일 **내용 전체**를 붙여넣기.
+6. Actions → Android 릴리스 → Run workflow. 끝나면 Play Console → 내부 테스트에 새 버전이 보입니다.
+
+권한 반영에 최대 24시간이 걸린다는 안내가 나오지만 보통 몇 분이면 됩니다. "The caller does not have
+permission" 이 나오면 4번의 권한이 아직 안 붙은 것입니다.
+
+출시 노트는 `apps/viewer/android/whatsnew/whatsnew-ko-KR` 파일이 그대로 올라갑니다. 버전마다 고치세요.
