@@ -13,7 +13,7 @@ Google Play 출시를 위한 체크리스트. **저장소에서 끝난 것**과 
 | `targetSdkVersion` | **36** (Play는 2026-08-31부터 신규 앱에 36 이상을 요구. 첫 업로드에서 35가 거부됐음) |
 | `compileSdkVersion` | 36 (Android Gradle Plugin 8.9.2 / Gradle 8.11.1) |
 | `minSdkVersion` | 22 (Android 5.1, 실사용 기기의 99% 이상) |
-| 버전 | `versionCode 32` / `versionName "1.0"` |
+| 버전 | `versionCode 33` / `versionName "1.0"` |
 | 업로드 서명 | `keystore.properties` 또는 환경변수에서 읽도록 배선. 키는 저장소에 **없고**, `.gitignore`가 막고 있음 |
 | AAB 빌드 | `pnpm --filter viewer android:bundle` → `android/app/build/outputs/bundle/release/app-release.aab` (7.9MB) |
 | 네트워크 의존 | **없음**. 구글 폰트 CDN을 쓰던 것을 앱에 넣음 (아래 참조) |
