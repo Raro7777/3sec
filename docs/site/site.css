@@ -1,0 +1,32 @@
+:root { --bg:#0b1014; --panel:#121a21; --line:#22303b; --text:#e7edf2; --muted:#93a4b3; --accent:#ffd166; }
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans KR", system-ui, sans-serif; line-height:1.6; }
+body { padding:0 16px 48px; }
+.hero { max-width:900px; margin:0 auto; padding:32px 0 8px; text-align:center; }
+.hero .fg { width:100%; max-width:720px; border-radius:12px; border:1px solid var(--line); display:block; margin:0 auto 20px; }
+h1, h2 { font-family:"Barlow Condensed", "IBM Plex Sans KR", sans-serif; letter-spacing:.02em; margin:0 0 8px; }
+h1 { font-size:44px; color:var(--accent); }
+h2 { font-size:22px; }
+.lead { color:var(--muted); font-size:17px; max-width:600px; margin:0 auto 20px; text-wrap:balance; }
+.cta { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.btn { display:inline-block; padding:10px 18px; border-radius:8px; background:var(--accent); color:#1b1400; font-weight:600; text-decoration:none; }
+.btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+main { max-width:900px; margin:0 auto; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; margin:28px 0; }
+.grid article { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.grid p { margin:0; color:var(--muted); font-size:14.5px; }
+.shots { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+.shots img { width:100%; border-radius:10px; border:1px solid var(--line); }
+@media (max-width:600px) { .shots { grid-template-columns:1fr; } h1 { font-size:34px; } }
+.promise { margin:28px 0; }
+.promise ul { columns:2; padding-left:20px; color:var(--muted); }
+footer { max-width:900px; margin:32px auto 0; color:var(--muted); font-size:13px; text-align:center; border-top:1px solid var(--line); padding-top:16px; }
+footer a { color:var(--muted); }
+.doc { max-width:720px; margin:0 auto; padding:32px 0; }
+.doc h1 { font-size:34px; }
+.doc h2 { margin-top:28px; font-size:20px; color:var(--accent); }
+.doc p, .doc li { color:var(--text); font-size:15.5px; }
+.doc table { border-collapse:collapse; width:100%; font-size:14px; }
+.doc th, .doc td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+.doc code { font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.92em; background:var(--panel); padding:1px 5px; border-radius:4px; }
+.doc .back { color:var(--muted); font-size:13px; }
