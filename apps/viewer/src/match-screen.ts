@@ -12,6 +12,7 @@ import { encodeGif, type GifFrame } from "./gif";
 import { downloadsBlocked, isNativeApp, shareFile } from "./share";
 import { Broadcast, type IntervalStat } from "./broadcast";
 import { emblemSvg } from "./emblem";
+import { Commentator, josa } from "./commentary";
 
 /** On-canvas text burst (골!, 오프사이드!, 퇴장!) */
 interface Fx { text: string; sub: string; color: string; t0: number; dur: number; big: boolean }
@@ -232,6 +233,8 @@ export class MatchScreen {
   private resumeOnClose = false;
   /** last visible event of the user's match, for the bottom ticker */
   private lastEventHtml = "";
+  /** 중계 자막: turns the engine's event log into a commentator's lines */
+  private commentator: Commentator | null = null;
   private readonly speedSel = document.getElementById("speed") as HTMLSelectElement;
   private readonly debugChk = document.getElementById("debug") as HTMLInputElement;
   private readonly panel: ManagerPanel;
@@ -350,6 +353,7 @@ export class MatchScreen {
     this.pendingReplay = null;
     this.bannerT0 = null;
     this.userTeam = userTeam;
+    this.commentator = new Commentator(match);
     this.tactics = new TacticsRecorder(match, userTeam);
     this.others = others;
     this.onFinish = onFinish;
@@ -1035,14 +1039,19 @@ export class MatchScreen {
   }
 
   private appendLog(e: MatchEvent): void {
-    if (HIDDEN_EVENTS.has(e.type) && !this.debugChk.checked) return;
+    const raw = this.debugChk.checked;
+    if (HIDDEN_EVENTS.has(e.type) && !raw) return;
+    // the engine's own text with the overlay on; otherwise the commentator's line, or silence
+    const said = raw ? e.text : this.commentator?.line(e) ?? null;
+    if (said === null) return;
+    const text = raw ? said : josa(said);
     const div = document.createElement("div");
     const team = e.team === null ? "" : this.match.teams[e.team].shortName;
     const color = e.team === null ? "#e6edf3" : this.match.teams[e.team].color;
-    div.innerHTML = `<span style="opacity:.6">${String(e.minute).padStart(2, "0")}'</span> <span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
+    div.innerHTML = `<span style="opacity:.6">${String(e.minute).padStart(2, "0")}'</span> <span style="color:${color};font-weight:600">${team}</span> ${text}`;
     if (e.type === "GOAL" || e.type === "OWN_GOAL") div.style.color = "#ffd166";
     if (e.type === "SUBSTITUTION" || e.type === "TACTICS") div.style.color = "#8ecae6";
-    this.lastEventHtml = `<i>${e.minute}'</i><span style="color:${color};font-weight:600">${team}</span> ${e.text}`;
+    this.lastEventHtml = `<i>${e.minute}'</i><span style="color:${color};font-weight:600">${team}</span> ${text}`;
     const clip = this.clipByEvent.get(this.loggedEvents - 1);
     if (clip) div.innerHTML += ` <button data-clip="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px;margin-left:4px" title="주요 장면 다시 보기">▶ 리플레이</button> <button data-gif="${clip.id}" style="padding:0 6px;font-size:11px;border-radius:10px" title="이 장면을 GIF로 저장/공유">GIF 공유</button>`;
     this.logEl.appendChild(div);
