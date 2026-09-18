@@ -1,5 +1,7 @@
+import { installErrorLog } from "./diagnostics";
 import { Game } from "./game";
 
+installErrorLog();
 new Game();
 
 // Offline app shell (real hosting only – file:// and the single-file artifact have no service worker scope).

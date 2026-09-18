@@ -51,6 +51,7 @@ function loadRosterPack(): RosterPack | null {
   try { const raw = localStorage.getItem(ROSTER_KEY); if (!raw) return null; return parseRoster(raw).pack; } catch { return null; }
 }
 import { canvasBlob, downloadsBlocked, isNativeApp, drawSeasonCard, shareFile } from "./share";
+import { buildReport, sendReport, openMail, clearErrors, recentErrors, FEEDBACK_MAIL } from "./diagnostics";
 import { celebrate } from "./celebrate";
 import { CHALLENGES, PROLOGUE, applyScenario, buildChallenge, challengeById, challengeOutcome, clearChallengeRecords, loadChallengeRecords, recordChallenge, stars as chalStars, type ChallengeScenario } from "./challenge";
 import type { Attributes } from "@3sec/engine";
@@ -64,6 +65,8 @@ type ScreenName = "home" | "squad" | "table" | "transfers" | "youth" | "results"
 const SLOT_KEY = (n: number) => `3sec.slot.${n}`;
 /** Rolling automatic backups: three snapshots, oldest overwritten first (see `backupNow`). */
 const AUTO_KEY = (n: number) => `3sec.auto.${n}`;
+/** where an unreadable autosave is parked so a report can carry it */
+const CORRUPT_KEY = "3sec.save.corrupt";
 const AUTO_SLOTS = [1, 2, 3];
 /** When the last automatic backup was taken, so the timer survives a reload. */
 const AUTO_AT_KEY = "3sec.auto.at";
@@ -279,6 +282,7 @@ export class Game {
     this.renderGuide();
     if (!saved) {
       this.startOnboarding();
+      if (this.corruptSave) this.offerRecovery();
       return;
     }
     this.renderAll();
@@ -600,12 +604,50 @@ export class Game {
   }
 
   // ------------------------------------------------------------ persistence
+  /** The autosave was there but could not be read; the raw text is kept under CORRUPT_KEY for the report. */
+  private corruptSave = false;
   private load(): GameState | null {
+    let raw: string | null = null;
     try {
-      return deserialize(localStorage.getItem(SAVE_KEY));
-    } catch {
-      return null;
+      raw = localStorage.getItem(SAVE_KEY);
+      const st = deserialize(raw);
+      if (st) return st;
+    } catch { /* fall through */ }
+    if (raw) {
+      this.corruptSave = true;
+      try { localStorage.setItem(CORRUPT_KEY, raw); localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
     }
+    return null;
+  }
+
+  /**
+   * The autosave could not be read. Before onboarding pretends nothing existed, offer what is still on the
+   * device: the automatic backups and the slots, newest first, or a fresh start.
+   */
+  private offerRecovery(): void {
+    this.corruptSave = false;
+    type Backup = { kind: "auto" | "slot"; n: number; info: { savedAt: string; label: string; data: string } };
+    const autos: Backup[] = this.autoBackups().map(({ n, info }) => ({ kind: "auto", n, info }));
+    const slots: Backup[] = [];
+    for (const n of [1, 2, 3]) { const info = this.slotInfo(n); if (info) slots.push({ kind: "slot", n, info }); }
+    const all = [...autos, ...slots].sort((a, b) => b.info.savedAt.localeCompare(a.info.savedAt));
+    const rows = all.map((x, i) => `<div class="slot"><div><div>${x.kind === "auto" ? "자동 백업" : `슬롯 ${x.n}`}</div><div class="meta">${x.info.label}<br>${new Date(x.info.savedAt).toLocaleString("ko-KR")}</div></div><div class="btns"><button class="primary" data-recover="${i}">이걸로 이어가기</button></div></div>`).join("");
+    this.openSheet(`<div class="pc"><h3 style="margin:0">저장 데이터를 읽지 못했습니다</h3>
+      <p style="margin:10px 0 6px;font-size:14px;line-height:1.6;color:var(--muted)">기기에 남아 있는 자동 저장이 손상되었습니다. ${all.length ? "아래 백업 중 하나로 이어갈 수 있습니다. 가장 최근 것이 맨 위입니다." : "남아 있는 백업이 없어 새로 시작해야 합니다."} 손상된 데이터는 설정의 「의견 보내기」에 함께 담겨 원인을 찾는 데 쓰입니다.</p>
+      ${rows}
+      <div class="actions" style="margin-top:10px;justify-content:flex-end"><button data-recover="new">새로 시작</button></div></div>`);
+    this.sheetLock = true;
+    this.sheetBody.querySelectorAll<HTMLButtonElement>("[data-recover]").forEach((b) => b.addEventListener("click", () => {
+      const v = b.dataset.recover!;
+      this.sheetLock = false;
+      this.closeSheet();
+      if (v === "new") return;
+      const pick = all[Number(v)]!;
+      const st = deserialize(pick.info.data);
+      if (!st) { alert("이 백업도 읽을 수 없습니다. 다른 것을 골라 주세요."); this.offerRecovery(); return; }
+      document.body.classList.remove("onboarding");
+      this.applyLoaded(st, pick.kind === "auto" ? "자동 백업" : `슬롯 ${pick.n}`);
+    }));
   }
   private save(): void {
     let data: string;
@@ -771,6 +813,11 @@ export class Game {
     <div class="card"><h3>난이도 <span>${difficultyOf(s).label}</span></h3><div class="hint">${difficultyOf(s).blurb} 난이도는 새 게임을 시작할 때만 고를 수 있습니다.</div></div>
     ${this.rosterCardHtml()}
     <div class="card"><h3>구단 꾸미기 <span>${s.clubs[s.userClub]?.name ?? ""}</span></h3><div class="actions"><button data-set="customize">🎨 유니폼 · 구단명 · 홈구장</button></div><div class="hint">유니폼 색과 패턴, 구단명, 구장 이름을 바꾸고 예산으로 좌석을 늘립니다. 홈 화면의 구단명을 눌러도 열립니다.</div></div>
+    <div class="card"><h3>의견 보내기 <span>${FEEDBACK_MAIL}</span></h3>
+      <div class="hint">불편한 점, 이상한 장면, 바라는 것을 적어 주세요. 앱 버전과 기기 정보, 최근 오류 기록${recentErrors().length ? ` ${recentErrors().length}건` : ""}이 자동으로 함께 담깁니다. 이름이나 연락처는 들어가지 않습니다.</div>
+      <textarea id="fbText" placeholder="예) 하프타임 카드에서 뒤로가기를 누르면 화면이 멈춰요 (갤럭시 S23)" style="font-family:inherit;font-size:14px;min-height:80px"></textarea>
+      <div class="actions"><button class="primary" data-fb="send">보내기</button><button data-fb="mail">메일 앱으로</button><button data-fb="copy">복사</button></div>
+      <div class="hint" id="fbNote" style="margin-top:4px"></div></div>
     <div class="card"><h3>데이터</h3><div class="actions"><button class="danger" data-set="wipe">모든 데이터 초기화</button></div><div class="hint">자동 저장과 슬롯, 자동 백업을 모두 지우고 처음 화면으로 돌아갑니다.</div></div>`;
 
     this.el.settings.insertAdjacentHTML("beforeend", this.challengeCardHtml(true));
@@ -821,21 +868,37 @@ export class Game {
       });
     }
     const fileName = () => `gananhanja-fm-s${s.season}-r${s.round + 1}.json`;
-    q('[data-set="export"]').addEventListener("click", () => {
-      const blob = new Blob([serialize(s)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = fileName(); document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    // Inside the Android app a page download never reaches the Downloads folder (share.ts); both
+    // buttons go through shareFile, which writes the file natively and opens the share sheet there.
+    const report = async () => {
+      const text = await buildReport({
+        message: (document.getElementById("fbText") as HTMLTextAreaElement).value,
+        appVersion: APP_VERSION, saveLabel: this.stateLabel(), difficulty: difficultyOf(s).label,
+        saveBytes: (() => { try { return serialize(s).length; } catch { return 0; } })(),
+      });
+      let corrupt = "";
+      try { corrupt = localStorage.getItem(CORRUPT_KEY) ?? ""; } catch { /* ignore */ }
+      return corrupt ? `${text}\n\n---- 손상된 저장 (앞 2000자) ----\n${corrupt.slice(0, 2000)}` : text;
+    };
+    const fbNote = (m: string) => { const el = document.getElementById("fbNote"); if (el) el.textContent = m; };
+    q('[data-fb="send"]').addEventListener("click", async () => {
+      const ok = await sendReport(await report());
+      fbNote(ok ? "고맙습니다. 보낸 뒤에는 이 칸을 비워도 됩니다." : "공유할 앱을 찾지 못했습니다. 「복사」 뒤 메일이나 메신저에 붙여 주세요.");
+      if (ok) clearErrors();
+    });
+    q('[data-fb="mail"]').addEventListener("click", async () => { if (!openMail(await report())) fbNote("메일 앱을 열지 못했습니다. 「복사」를 써 주세요."); });
+    q('[data-fb="copy"]').addEventListener("click", async () => {
+      const text = await report();
+      try { await navigator.clipboard.writeText(text); fbNote(`복사했습니다. ${FEEDBACK_MAIL} 로 보내 주세요.`); }
+      catch { (document.getElementById("fbText") as HTMLTextAreaElement).value = text; fbNote("아래 칸에 채웠습니다. 길게 눌러 복사하세요."); }
+    });
+    q('[data-set="export"]').addEventListener("click", async () => {
+      const r = await shareFile(new Blob([serialize(s)], { type: "application/json" }), fileName(), "가난한자의 FM 저장");
+      if (r === "blocked") alert("이 환경에서는 파일을 내려받을 수 없습니다. '텍스트 복사'를 사용하세요.");
     });
     q('[data-set="share"]').addEventListener("click", async () => {
-      const nav = navigator as Navigator & { share?: (d: { files?: File[]; title?: string; text?: string }) => Promise<void>; canShare?: (d: { files?: File[] }) => boolean };
-      try {
-        const file = new File([serialize(s)], fileName(), { type: "application/json" });
-        if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) await nav.share({ files: [file], title: "가난한자의 FM 저장" });
-        else if (nav.share) await nav.share({ title: "가난한자의 FM 저장", text: serialize(s) });
-        else alert("이 기기는 공유를 지원하지 않습니다. '텍스트 복사'를 사용하세요.");
-      } catch { /* cancelled */ }
+      const r = await shareFile(new Blob([serialize(s)], { type: "application/json" }), fileName(), "가난한자의 FM 저장");
+      if (r === "blocked") alert("이 기기는 공유를 지원하지 않습니다. '텍스트 복사'를 사용하세요.");
     });
     q('[data-set="copy"]').addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(serialize(s)); alert("저장 텍스트를 복사했습니다. 메모장이나 메신저에 붙여 두세요."); }
