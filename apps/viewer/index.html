@@ -215,9 +215,13 @@
       .card .stat b small { font-size:11px; font-weight:400; }
       .stars { color:var(--accent); letter-spacing:.05em; } .stars i { font-style:normal; color:#2c3d4b; }
       /* 감독실: the canvas room and the objects you tap on it */
-      .office { border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#0d1116; }
-      .officeStage { position:relative; width:100%; aspect-ratio: 4 / 3; max-height:62vh; }
-      @media (min-width: 720px) { .officeStage { aspect-ratio: 16 / 10; } }
+      .office { border-radius:12px; overflow:hidden; border:1px solid var(--line); background:linear-gradient(180deg, #16292d, #0d1116); }
+      /* the room keeps its shape: on a short (landscape) screen it shrinks to fit 62vh instead of being cropped */
+      .officeStage { position:relative; width:min(100%, calc(62vh * 4 / 3)); margin:0 auto; aspect-ratio: 4 / 3; }
+      @media (min-width: 720px) { .officeStage { aspect-ratio: 16 / 10; width:min(100%, calc(62vh * 16 / 10)); } }
+      @media (min-width: 720px) and (max-height: 520px) { .officeStage { width:min(100%, calc(76vh * 16 / 10)); } }
+      /* the first screen's picture must leave the form in view when the phone is on its side */
+      @media (max-height: 520px) { .onbArt { max-height:40vh; object-fit:cover; } }
       .office canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
       /* the objects are found by looking, not by reading: the label waits for a hover or a focus */
       .office .spot { position:absolute; background:transparent; border:1.5px solid transparent; border-radius:9px; color:var(--text); padding:0; display:flex; align-items:flex-start; justify-content:flex-start; transition:border-color .15s, background .15s, box-shadow .15s; }
