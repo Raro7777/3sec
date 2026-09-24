@@ -11,8 +11,8 @@ android {
         applicationId = "app.triggertap.probe"
         minSdk = 34
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.0.3-probe"
+        versionCode = 4
+        versionName = "0.0.4-probe"
     }
 
     signingConfigs {

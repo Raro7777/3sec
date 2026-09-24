@@ -69,6 +69,7 @@ class ProbeService : AccessibilityService() {
     private var lastResult: String? = null
     private var lastWindowId: Int? = null
     private var lastSuccessAt = 0L
+    private var lastRequestAt = 0L
 
     // 창 상태 변경 이벤트로 본 마지막 전면 패키지 (root 를 못 읽는 창의 보조 식별용)
     @Volatile
@@ -151,7 +152,8 @@ class ProbeService : AccessibilityService() {
         lastResult = null
         lastWindowId = null
         ProbeLog.add("감시 시작: $target, 간격 ${prefs.pollIntervalMs}ms (세션 $pollSession)")
-        schedulePoll(0)
+        // 탭 회차 직후 재개할 때 OS의 캡처 요청 간격 제한에 걸리지 않도록 직전 요청 기준으로 기다린다.
+        schedulePoll(lastRequestAt + prefs.pollIntervalMs - SystemClock.uptimeMillis())
     }
 
     fun stopPolling(reason: String = "사용자 중지") = worker.post {
@@ -214,6 +216,7 @@ class ProbeService : AccessibilityService() {
         }
 
         val request = ++requestSeq
+        lastRequestAt = SystemClock.uptimeMillis()
         inFlightRequest = request
         val timeout = Runnable {
             if (inFlightRequest == request) {

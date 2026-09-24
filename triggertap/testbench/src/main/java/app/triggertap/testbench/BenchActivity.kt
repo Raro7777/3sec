@@ -118,8 +118,8 @@ class BenchActivity : Activity() {
             text = "접근성 민감"
             setTextColor(Color.WHITE)
             setOnCheckedChangeListener { _, c ->
-                area.setAccessibilityDataSensitive(if (c) View.ACCESSIBILITY_DATA_SENSITIVE_YES else View.ACCESSIBILITY_DATA_SENSITIVE_NO)
-                logSetting("accessibilityDataSensitive=$c")
+                area.setAccessibilityDataSensitive(if (c) View.ACCESSIBILITY_DATA_SENSITIVE_YES else View.ACCESSIBILITY_DATA_SENSITIVE_AUTO)
+                logSetting("accessibilityDataSensitive=${if (c) "YES" else "AUTO(기본)"}")
             }
         })
 
