@@ -1,0 +1,68 @@
+name: 트리거탭 APK
+
+# triggertap/ 폴더(3sec 게임과 별개 프로젝트)가 바뀔 때만 돈다.
+# 진단 앱과 테스트벤치 디버그 APK를 만들어 이 실행의 아티팩트와
+# 롤링 프리릴리스(triggertap-latest)에 올린다. 폰에서는 릴리스 페이지에서 바로 받는다:
+# https://github.com/<owner>/<repo>/releases/tag/triggertap-latest
+on:
+  push:
+    paths: ["triggertap/**", ".github/workflows/triggertap.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: triggertap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: build debug APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: triggertap
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Android SDK (러너에 내장된 SDK 사용)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER=$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools" >/dev/null
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+      - name: Build + lint
+        run: chmod +x gradlew && ./gradlew assembleDebug lintDebug --no-daemon
+      - name: Name APKs
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk triggertap-probe.apk
+          cp testbench/build/outputs/apk/debug/testbench-debug.apk triggertap-testbench.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triggertap-debug-apks
+          path: |
+            triggertap/triggertap-probe.apk
+            triggertap/triggertap-testbench.apk
+          retention-days: 30
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: triggertap-latest
+          name: "트리거탭 0단계 — 최신 디버그 빌드"
+          prerelease: true
+          body: |
+            트리거탭 0단계 진단용 디버그 APK (3sec 게임과 별개).
+            - `triggertap-probe.apk`: 진단 앱 (접근성 서비스)
+            - `triggertap-testbench.apk`: 시험 대상 앱
+            사용법: triggertap/docs/STAGE0.md
+            커밋: ${{ github.sha }} · 브랜치: ${{ github.ref_name }}
+          files: triggertap/triggertap-*.apk

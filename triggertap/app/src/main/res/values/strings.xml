@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">트리거탭 진단</string>
+    <string name="service_label">트리거탭 진단 (0단계)</string>
+    <string name="service_description">트리거탭 0단계 진단 도구입니다. 장애인 보조 기능이 아닌 개발용 자동화 시험 도구입니다.\n\n• 사용자가 선택한 앱의 창에 캡처를 요청해 결과 코드(성공 / 보안 거부 / 기타 오류)만 기록합니다. 캡처 이미지는 즉시 해제하며 분석·저장·전송하지 않습니다.\n• 사용자가 플로팅 패널에서 버튼을 누를 때만, 사용자가 지정한 좌표에 시험 탭을 보냅니다. 캡처 결과로 자동 탭을 보내지 않습니다.\n• 인터넷 권한이 없고, 기록은 메모리에만 있습니다.</string>
+</resources>
