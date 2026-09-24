@@ -13,6 +13,11 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import java.util.concurrent.Executor
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.random.Random
 
 /**
  * 0단계 타당성 확인용 서비스.
@@ -76,6 +81,9 @@ class ProbeService : AccessibilityService() {
     private var tapping = false
     private var tapsCompleted = 0
     private val sentTimes = mutableListOf<Long>()
+    private var plannedOffset = 0L // 이번 탭의 목표 시작(회차 시작 기준 ms), 기록용
+    private var jitterInterval = 0
+    private var jitterRadius = 0
     private var resumePollingAfterTaps = false
 
     @Volatile
@@ -302,6 +310,9 @@ class ProbeService : AccessibilityService() {
         tapping = true
         tapsCompleted = 0
         sentTimes.clear()
+        plannedOffset = 0
+        jitterInterval = prefs.jitterIntervalMs
+        jitterRadius = prefs.jitterRadiusPx
         val run = ++tapRun
         resumePollingAfterTaps = polling
         if (polling) {
@@ -310,7 +321,7 @@ class ProbeService : AccessibilityService() {
             pollSession++
             inFlightRequest = 0
         }
-        ProbeLog.add("탭 회차 $run 시작: ($x,$y) ${count}회, 간격 ${interval}ms, 누름 ${hold}ms")
+        ProbeLog.add("탭 회차 $run 시작: ($x,$y) ${count}회, 간격 ${interval}ms, 누름 ${hold}ms, 흔들림 ±${jitterInterval}ms / 반경 ${jitterRadius}px")
         setStatus("탭 0/$count")
         main.post {
             overlay.hideMarker()
@@ -330,7 +341,8 @@ class ProbeService : AccessibilityService() {
         val sent = sentTimes
         if (run != tapRun || !tapping) return
         val now = SystemClock.uptimeMillis()
-        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val (tx, ty) = jitteredPoint(x, y)
+        val path = Path().apply { moveTo(tx.toFloat(), ty.toFloat()) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, hold))
             .setDisplayId(Display.DEFAULT_DISPLAY)
@@ -343,14 +355,14 @@ class ProbeService : AccessibilityService() {
                 worker.removeCallbacks(timeout)
                 val done = SystemClock.uptimeMillis()
                 tapsCompleted = index + 1
-                val planned = if (index == 0) 0 else (sent[index - 1] - runStart) + interval
-                ProbeLog.add("  탭 ${index + 1}: 목표 +${planned}ms, 전송 +${now - runStart}ms, 완료 +${done - runStart}ms")
+                ProbeLog.add("  탭 ${index + 1}: ($tx,$ty) 목표 +${plannedOffset}ms, 전송 +${now - runStart}ms, 완료 +${done - runStart}ms")
                 setStatus("탭 ${index + 1}/$count")
                 if (index + 1 >= count) {
                     finishTaps(run, null)
                 } else {
-                    // 다음 탭 = 직전 실제 전송 + 간격. 늦었으면 바로 보내되 몰아서 보충하지 않는다.
-                    val nextAt = now + interval
+                    // 다음 탭 = 직전 실제 전송 + (흔든) 간격. 늦었으면 바로 보내되 몰아서 보충하지 않는다.
+                    val nextAt = now + jitteredInterval(interval, hold)
+                    plannedOffset = nextAt - runStart
                     worker.postAtTime(
                         { sendTap(run, index + 1, count, x, y, interval, hold, runStart) },
                         maxOf(nextAt, SystemClock.uptimeMillis()),
@@ -371,6 +383,25 @@ class ProbeService : AccessibilityService() {
         }
         sent.add(now)
         worker.postDelayed(timeout, hold + 1_000)
+    }
+
+    /** 반경 안에서 고르게 흩뿌린 좌표. 화면 밖이나 패널 위로 나가면 원래 좌표를 쓴다. */
+    private fun jitteredPoint(x: Int, y: Int): Pair<Int, Int> {
+        if (jitterRadius <= 0) return x to y
+        val r = jitterRadius * sqrt(Random.nextDouble())
+        val a = Random.nextDouble(0.0, 2 * Math.PI)
+        val px = x + (r * cos(a)).roundToInt()
+        val py = y + (r * sin(a)).roundToInt()
+        val screen = getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+        return if (screen.contains(px, py) && !overlay.panelContains(px, py)) px to py else x to y
+    }
+
+    /** 간격 ± 흔들림. 설정 범위 안에 두고, 누름 시간보다 최소 10ms 길게 유지한다. */
+    private fun jitteredInterval(interval: Long, hold: Long): Long {
+        if (jitterInterval <= 0) return interval
+        val j = Random.nextLong(-jitterInterval.toLong(), jitterInterval.toLong() + 1)
+        val min = maxOf(Prefs.TAP_INTERVAL_RANGE.first.toLong(), hold + 10)
+        return (interval + j).coerceIn(min, Prefs.TAP_INTERVAL_RANGE.last.toLong())
     }
 
     private fun finishTaps(run: Int, abortReason: String?) {

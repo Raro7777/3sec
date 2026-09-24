@@ -67,7 +67,7 @@ object ProbeLog {
         appendLine("기기: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("빌드: ${Build.DISPLAY}")
         appendLine("대상: ${prefs.targetLabel ?: "-"} (${prefs.targetPackage ?: "미지정"})")
-        appendLine("감시 간격 ${prefs.pollIntervalMs}ms, 탭 ${prefs.tapCount}회 / 간격 ${prefs.tapIntervalMs}ms / 누름 ${prefs.tapHoldMs}ms, 좌표 ${prefs.point ?: "-"}")
+        appendLine("감시 간격 ${prefs.pollIntervalMs}ms, 탭 ${prefs.tapCount}회 / 간격 ${prefs.tapIntervalMs}ms / 누름 ${prefs.tapHoldMs}ms, 좌표 ${prefs.point ?: "-"}, 흔들림 ±${prefs.jitterIntervalMs}ms / 반경 ${prefs.jitterRadiusPx}px")
         appendLine("기기 가동 ${SystemClock.uptimeMillis() / 1000}s")
         appendLine(summary())
         appendLine("--- 기록 (최근 ${lines.size}줄) ---")

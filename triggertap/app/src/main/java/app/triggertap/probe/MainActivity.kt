@@ -66,6 +66,8 @@ class MainActivity : Activity() {
         numberField(col, "탭 횟수(${Prefs.TAP_COUNT_RANGE.first}~${Prefs.TAP_COUNT_RANGE.last})", prefs.tapCount) { prefs.tapCount = it }
         numberField(col, "탭 시작 간격(ms, ${Prefs.TAP_INTERVAL_RANGE.first}~${Prefs.TAP_INTERVAL_RANGE.last})", prefs.tapIntervalMs) { prefs.tapIntervalMs = it }
         numberField(col, "누름 시간(ms, ${Prefs.TAP_HOLD_RANGE.first}~${Prefs.TAP_HOLD_RANGE.last})", prefs.tapHoldMs) { prefs.tapHoldMs = it }
+        numberField(col, "간격 흔들림(±ms, 0=끔, ~${Prefs.JITTER_INTERVAL_RANGE.last})", prefs.jitterIntervalMs) { prefs.jitterIntervalMs = it }
+        numberField(col, "위치 흔들림(반경 px, 0=끔, ~${Prefs.JITTER_RADIUS_RANGE.last})", prefs.jitterRadiusPx) { prefs.jitterRadiusPx = it }
         pointView = text("")
 
         text("3. 플로팅 패널", 16f, bold = true)

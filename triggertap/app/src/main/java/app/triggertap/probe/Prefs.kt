@@ -41,7 +41,19 @@ class Prefs(context: Context) {
         get() = sp.getInt("tapHoldMs", 30)
         set(v) = sp.edit().putInt("tapHoldMs", v.coerceIn(TAP_HOLD_RANGE)).apply()
 
+    /** 탭마다 시작 간격을 ±이 값 안에서 무작위로 흔든다. 0이면 끔. */
+    var jitterIntervalMs: Int
+        get() = sp.getInt("jitterIntervalMs", 15)
+        set(v) = sp.edit().putInt("jitterIntervalMs", v.coerceIn(JITTER_INTERVAL_RANGE)).apply()
+
+    /** 탭마다 좌표를 이 반경(px)의 원 안에서 무작위로 옮긴다. 0이면 끔. */
+    var jitterRadiusPx: Int
+        get() = sp.getInt("jitterRadiusPx", 10)
+        set(v) = sp.edit().putInt("jitterRadiusPx", v.coerceIn(JITTER_RADIUS_RANGE)).apply()
+
     companion object {
+        val JITTER_INTERVAL_RANGE = 0..30
+        val JITTER_RADIUS_RANGE = 0..40
         val POLL_RANGE = 200..2000
         val TAP_COUNT_RANGE = 1..10
         val TAP_INTERVAL_RANGE = 80..200
