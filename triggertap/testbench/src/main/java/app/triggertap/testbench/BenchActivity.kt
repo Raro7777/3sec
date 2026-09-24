@@ -166,11 +166,31 @@ class BenchActivity : Activity() {
 
     // 창 전체에 도착한 터치 (뷰 필터 이전)
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-            Touches.windowDowns++
-            if (isInjected(ev)) Touches.injected++
+        if (ev.actionMasked != MotionEvent.ACTION_DOWN) return super.dispatchTouchEvent(ev)
+        Touches.windowDowns++
+        if (isInjected(ev)) Touches.injected++
+        val areaBefore = Touches.areaDowns
+        val handled = super.dispatchTouchEvent(ev)
+        // 영역 안을 눌렀는데 영역이 못 받았다면 뷰 보안 필터가 버린 것
+        val loc = IntArray(2).also { area.getLocationOnScreen(it) }
+        val x = ev.rawX.toInt()
+        val y = ev.rawY.toInt()
+        val insideArea = x >= loc[0] && x < loc[0] + area.width && y >= loc[1] && y < loc[1] + area.height
+        if (insideArea && Touches.areaDowns == areaBefore) {
+            Touches.add("✗ 영역 미수신 ($x,$y) ${source(ev)}${if (secure) " 보안중" else ""} ${filterState()}${windowFlags(ev)}")
+            refresh()
         }
-        return super.dispatchTouchEvent(ev)
+        return handled
+    }
+
+    private fun source(ev: MotionEvent) = if (isInjected(ev)) "주입" else "손가락"
+
+    private fun filterState() =
+        "[가림필터 ${if (area.filterTouchesWhenObscured) "켬" else "끔"}, 민감 ${if (area.isAccessibilityDataSensitive) "예" else "아니오"}]"
+
+    private fun windowFlags(ev: MotionEvent) = buildString {
+        if (ev.flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED != 0) append(" 가려짐")
+        if (ev.flags and MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED != 0) append(" 일부가려짐")
     }
 
     // AOSP MotionEvent 의 비공개 플래그 FLAG_IS_ACCESSIBILITY_EVENT(0x800). 공개 API가 아니므로 참고용 표시다.
@@ -184,7 +204,7 @@ class BenchActivity : Activity() {
         Touches.areaDowns++
         Touches.add(
             "#${Touches.areaDowns} +${t - Touches.firstAt}ms 간격 ${gap}ms " +
-                "(${e.rawX.toInt()},${e.rawY.toInt()}) ${if (isInjected(e)) "주입" else "손가락"}${if (secure) " 보안중" else ""}"
+                "(${e.rawX.toInt()},${e.rawY.toInt()}) ${source(e)}${if (secure) " 보안중" else ""} ${filterState()}${windowFlags(e)}"
         )
         refresh()
     }

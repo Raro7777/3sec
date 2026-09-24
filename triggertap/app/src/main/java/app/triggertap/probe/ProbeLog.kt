@@ -68,7 +68,7 @@ object ProbeLog {
         appendLine("빌드: ${Build.DISPLAY}")
         appendLine("대상: ${prefs.targetLabel ?: "-"} (${prefs.targetPackage ?: "미지정"})")
         appendLine("감시 간격 ${prefs.pollIntervalMs}ms, 탭 ${prefs.tapCount}회 / 간격 ${prefs.tapIntervalMs}ms / 누름 ${prefs.tapHoldMs}ms, 좌표 ${prefs.point ?: "-"}")
-        appendLine("가동 ${SystemClock.uptimeMillis() / 1000}s")
+        appendLine("기기 가동 ${SystemClock.uptimeMillis() / 1000}s")
         appendLine(summary())
         appendLine("--- 기록 (최근 ${lines.size}줄) ---")
         lines.forEach { appendLine(it) }

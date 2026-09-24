@@ -11,8 +11,8 @@ android {
         applicationId = "app.triggertap.testbench"
         minSdk = 34
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.0.1-testbench"
+        versionCode = 2
+        versionName = "0.0.2-testbench"
     }
 
     signingConfigs {
