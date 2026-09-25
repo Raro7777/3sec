@@ -3369,6 +3369,7 @@ export class Game {
       const before = new Map(me.squad.map((p) => [p.id, moraleOf(p)]));
       const r = giveTalk(s, me, b.dataset.tone as TalkTone, ctx, key);
       const roomAfter = Math.round(me.lockerRoom ?? 60);
+      this.lastTalk = { at: Date.now(), reactions: r.reactions.map((x) => ({ id: x.id, delta: x.delta })) };
       after?.(r, before);
       this.save();
       const line = opts.find((o) => o.tone === r.tone)!;
@@ -3393,6 +3394,18 @@ export class Game {
    * it moves reaches the pitch as well as the season — `talkAttrDelta` turns each reaction into the
    * attribute change the running match takes on (match-screen pushes it into the engine).
    */
+  /** the most recent team talk's reactions, so the match that follows can have the commentator notice them */
+  private lastTalk: { at: number; reactions: { id: string; delta: number }[] } | null = null;
+
+  /** The talk just given (within ten minutes), reduced to who it lifted and who it knocked; consumed once. */
+  private talkEcho(): { up: string[]; down: string[] } | undefined {
+    const t = this.lastTalk;
+    this.lastTalk = null;
+    if (!t || Date.now() - t.at > 10 * 60 * 1000) return undefined;
+    const sorted = [...t.reactions].sort((a, b) => b.delta - a.delta);
+    return { up: sorted.filter((x) => x.delta >= 1).slice(0, 2).map((x) => x.id), down: sorted.filter((x) => x.delta <= -1).slice(-2).map((x) => x.id) };
+  }
+
   private halfTimeTalk(side: TeamId, opp: Club, derby: boolean, keyOverride?: string): Promise<Record<string, Partial<Attributes>> | null> {
     const s = this.state, me = this.me;
     const m = this.live?.find((x) => x.fixture.home === s.userClub || x.fixture.away === s.userClub)?.match ?? this.challenge?.match;
@@ -3441,6 +3454,7 @@ export class Game {
     const attendance = expectedAttendance(s, home, away, this.liveKind !== "league", new Rng((fixtureSeed(s, mine) ^ 0x2545f491) >>> 0));
     const derby = !!derbyFor(s, mine);
     this.screen.start(user.match, side, others, () => this.finishRound(), {
+      talkEcho: this.talkEcho(),
       crowd: { attendance, capacity: clubCapacity(home), derby },
       derby,
       live: this.liveKind === "league" ? { state: s, fixture: mine } : undefined,
@@ -3844,6 +3858,7 @@ export class Game {
       const { ok, mine, theirs } = challengeOutcome(match, scen, side);
       void this.finishChallenge(scen, ok, mine, theirs);
     }, {
+      talkEcho: this.talkEcho(),
       crowd: { attendance: Math.round(capacity * (scen.derby ? 0.98 : 0.8)), capacity, derby: !!scen.derby },
       derby: !!scen.derby,
       competition: scen.id === PROLOGUE.id ? "친선경기" : `도전 · ${scen.title}`,
