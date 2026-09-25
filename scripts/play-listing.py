@@ -22,8 +22,8 @@ H = {"Authorization": f"Bearer {creds.token}"}
 B = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PKG}"
 U = f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PKG}"
 
-def call(method, url, **kw):
-    r = requests.request(method, url, headers=H, timeout=120, **kw)
+def call(method, url, headers=None, **kw):
+    r = requests.request(method, url, headers={**H, **(headers or {})}, timeout=120, **kw)
     if r.status_code >= 300:
         sys.exit(f"{method} {url} → {r.status_code}\n{r.text}")
     return r.json() if r.text else {}
@@ -32,7 +32,7 @@ def put_images(edit, kind, files):
     call("DELETE", f"{B}/edits/{edit}/listings/{LANG}/{kind}")
     for f in files:
         data = (ROOT / f"{f}.png").read_bytes()
-        call("POST", f"{U}/edits/{edit}/listings/{LANG}/{kind}?uploadType=media", headers={**H, "Content-Type": "image/png"}, data=data)
+        call("POST", f"{U}/edits/{edit}/listings/{LANG}/{kind}?uploadType=media", headers={"Content-Type": "image/png"}, data=data)
         print(f"  {kind}: {f}.png ({len(data) // 1024} KB)")
 
 shots = sys.argv[1:] or SHOTS
