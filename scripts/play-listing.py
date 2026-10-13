@@ -40,8 +40,22 @@ for f in ["icon-512", "feature-graphic", *shots]:
     if not (ROOT / f"{f}.png").exists():
         sys.exit(f"missing docs/store/{f}.png")
 edit = call("POST", f"{B}/edits")["id"]
+# A read first: the listing endpoints answer only with the store-presence permission, so a 403 here says the
+# service account's grant has not reached the API yet (Play takes minutes to hours to propagate it).
+langs = [l.get("language") for l in call("GET", f"{B}/edits/{edit}/listings").get("listings", [])]
+print(f"listings readable: {langs}")
 put_images(edit, "icon", ["icon-512"])
 put_images(edit, "featureGraphic", ["feature-graphic"])
 put_images(edit, "phoneScreenshots", shots)
-call("POST", f"{B}/edits/{edit}:commit")
-print(f"listing images updated for {LANG}; edit {edit} committed")
+# validate separates "not allowed" from "not valid" before the commit is attempted
+v = requests.post(f"{B}/edits/{edit}:validate", headers=H, timeout=120)
+print(f"validate → {v.status_code}{'' if v.status_code < 300 else ' ' + v.text}")
+r = requests.post(f"{B}/edits/{edit}:commit", headers=H, timeout=120)
+if r.status_code >= 300:
+    # a listing change the Console would hold for review cannot be auto-sent; commit it unsent instead
+    r2 = requests.post(f"{B}/edits/{edit}:commit", params={"changesNotSentForReview": "true"}, headers=H, timeout=120)
+    if r2.status_code >= 300:
+        sys.exit(f"commit → {r.status_code}\n{r.text}\ncommit (changesNotSentForReview) → {r2.status_code}\n{r2.text}")
+    print(f"listing images updated for {LANG}; edit {edit} committed (changes not sent for review: send them from the Console)")
+else:
+    print(f"listing images updated for {LANG}; edit {edit} committed")
