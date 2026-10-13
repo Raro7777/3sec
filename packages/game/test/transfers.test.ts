@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_SQUAD, askingPrice, bestOffer, buyPlayer, newGame, playerValue, sellPlayer, selectionProblem, transferTargets, windowOpen, aiTransfers, overall } from "../src/index";
+import { MIN_SQUAD, askingPrice, bestOffer, buyPlayer, movedThisSeason, newGame, playerValue, sellPlayer, selectionProblem, transferTargets, windowOpen, aiTransfers, overall } from "../src/index";
 import { Rng } from "@3sec/engine";
 
 describe("transfer market", () => {
@@ -56,6 +56,20 @@ describe("transfer market", () => {
     expect(me.budget).toBe(budget + offer.fee);
     expect(offer.club.squad.some((p) => p.id === star.id)).toBe(true);
     expect(me.squad.some((p) => p.id === star.id)).toBe(false);
+  });
+
+  it("an AI club does not buy back a player it sold this season", () => {
+    const s = newGame(25);
+    const [seller, buyer] = s.clubs.filter((c) => c.id !== s.userClub).slice(0, 2) as [typeof s.clubs[number], typeof s.clubs[number]];
+    const star = [...seller.squad].sort((a, b) => overall(b.attrs, b.role) - overall(a.attrs, a.role))[0]!;
+    // the sale already happened this season: the log remembers it
+    seller.squad = seller.squad.filter((p) => p !== star);
+    buyer.squad.push(star);
+    s.marketLog.unshift({ season: s.season, text: "", kind: "transfer", fee: 10, from: seller.id, to: buyer.id, playerId: star.id, playerName: star.name });
+    expect(movedThisSeason(s, star.id)).toBe(true);
+    seller.budget = 100000; // money is no object, so only the rule can stop the buy-back
+    for (let i = 0; i < 30; i++) aiTransfers(s, new Rng(100 + i));
+    expect(seller.squad.some((p) => p.id === star.id)).toBe(false);
   });
 
   it("AI clubs trade among themselves and stay legal", () => {

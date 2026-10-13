@@ -104,7 +104,7 @@ export {
 export { clubRecords, type ClubRecords, type ClubRecordLine, type SeasonBest } from "./annals";
 export { nameFor, NAT_CODE, NATIONALITIES, type Nationality } from "./names";
 export { FOREIGN_QUOTA, FOREIGN_ON_PITCH, FOREIGN_PREMIUM, isForeignPlayer, foreignCount, foreignStarters } from "./foreign";
-export { askingPriceFor } from "./transfers";
+export { askingPriceFor, movedThisSeason } from "./transfers";
 export { RED_ARREARS_WEEKS, ARREARS_MORALE, ARREARS_FLOOR, LOAN_WEEKS, LOAN_INTEREST, redWeeks, inArrears, financeStatus, takeEmergencyLoan, financeWeek, financeRollover, type FinanceStatus } from "./finance";
 export { RETURN_AFTER, RETURN_FEE_SHARE, noteDeparture, returnable, returningPlayer, returnFee, forgetAlumnus, alumniRollover, type Alumnus } from "./alumni";
 export { FEUD_AT, FEUD_MAX, feudWith, adjustFeud, rivalManager, recordManagerH2H, h2hTable, tauntLine, derbyQuote, pressQuote, rivalryRollover, type ManagerH2H } from "./rivalry";

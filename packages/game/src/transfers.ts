@@ -215,6 +215,10 @@ function movePlayer(s: GameState, from: Club, to: Club, p: SquadPlayer, fee: num
   for (const o of s.offers) if (o.playerId === p.id && (o.status === "open" || o.status === "countered")) o.status = "expired";
 }
 
+/** Whether the player has already changed clubs for a fee this season (the market log, newest first). */
+export const movedThisSeason = (s: GameState, playerId: string): boolean =>
+  (s.marketLog ?? []).some((e) => e.season === s.season && e.kind === "transfer" && e.playerId === playerId);
+
 /** How much better the player is than the club's best in his role (positive = he would start). */
 function roleGap(club: Club, p: SquadPlayer): number {
   const theirBest = playing(club).filter((q) => q.role === p.role).map(ovr).sort((a, b) => b - a)[0] ?? 0;
@@ -715,6 +719,9 @@ export function aiTransfers(s: GameState, rng: Rand): void {
     const candidates = transferTargets(s)
       .filter((t) => !t.abroad || canAbroad)
       .filter((t) => t.club.id !== club.id && needFor.has(t.player.role) && t.price !== null && t.price <= club.budget && t.price <= t.value * maxRatio)
+      // One move a season: without this a club sold its top scorer and bought him straight back at the
+      // same price inside one window, which is two news lines and no transfer.
+      .filter((t) => !movedThisSeason(s, t.player.id))
       .filter((t) => !pol.youth || t.player.age <= 24)
       .filter((t) => ovr(t.player) >= needFor.get(t.player.role)! + (surplusPlayers(t.club).includes(t.player) ? 0.5 : t.abroad ? AI_FOREIGN_MARGIN : 1.5))
       // A player has a say: a starter will not drop down the pyramid to sit in someone else's team
