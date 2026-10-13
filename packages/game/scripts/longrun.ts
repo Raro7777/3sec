@@ -89,7 +89,7 @@ function snapshot(s: GameState, before: { marketLen: number }): Snapshot {
   const me = clubOf(s, s.userClub);
   const t1 = divisionTable(s, 1);
   const t2 = divisionTable(s, 2);
-  const ovr = clubs.map(topN);
+  const ovr = clubs.map((c) => topN(c));
   const reps = clubs.map((c) => c.reputation);
   const repMean = mean(reps);
   const season = s.marketLog.filter((e) => e.season === s.season);
