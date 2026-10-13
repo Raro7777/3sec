@@ -15,14 +15,49 @@ export class Commentator {
   private lastScore: [number, number] = [0, 0];
   /** which kick-off comes next: the opening one, the second half's, or a restart after a goal */
   private nextKickOff: "first" | "second" | "restart" = "first";
+  /** players the last team talk moved most; each gets one aside at their first involvement afterwards */
+  private echo = new Map<string, "up" | "down">();
+  private echoUntil = 0;
 
   constructor(private readonly match: Match) {}
 
   /** Reset for a new match. */
-  reset(): void { this.lastShot = null; this.lastScore = [0, 0]; this.nextKickOff = "first"; }
+  reset(): void { this.lastShot = null; this.lastScore = [0, 0]; this.nextKickOff = "first"; this.echo.clear(); }
+
+  /**
+   * The dressing room just spoke: the players it lifted or knocked get one aside when they next do
+   * something, for the next `windowS` of match time. Later talks replace earlier ones.
+   */
+  setEcho(up: string[], down: string[], nowT: number, windowS = 25 * 60): void {
+    this.echo.clear();
+    for (const id of up) this.echo.set(id, "up");
+    for (const id of down) this.echo.set(id, "down");
+    this.echoUntil = nowT + windowS;
+  }
 
   /** The line for this event, or null when a commentator would let it pass. */
   line(e: MatchEvent): string | null {
+    let base = this.eventLine(e);
+    if (!e.playerId || !this.echo.size) return base;
+    if (e.t > this.echoUntil) { this.echo.clear(); return base; }
+    const mood = this.echo.get(e.playerId);
+    if (!mood) return base;
+    // the quiet events (a tackle, an interception, a block) get a line only when they carry an aside
+    if (base === null) {
+      const quiet = QUIET_ACTS[e.type];
+      if (!quiet) return null;
+      base = quiet;
+    } else if (!ECHO_EVENTS.has(e.type)) return base;
+    this.echo.delete(e.playerId);
+    const name = this.match.def(e.playerId).name;
+    const i = Math.floor(e.t) % 3;
+    const aside = mood === "up"
+      ? [`라커룸에서 힘을 얻은 듯한 ${name}.`, `감독 말에 눈빛이 달라진 ${name}!`, `${name}, 라커룸을 나올 때부터 표정이 달랐습니다.`][i]!
+      : [`감독 말에 고개를 떨궜던 ${name}…`, `라커룸에서 표정이 굳었던 ${name}.`, `${name}, 아직 감독 말이 마음에 남은 걸까요.`][i]!;
+    return `${aside} ${base}`;
+  }
+
+  private eventLine(e: MatchEvent): string | null {
     const m = this.match;
     const s = m.state;
     const team = e.team === null ? null : m.teams[e.team];
@@ -139,6 +174,10 @@ export class Commentator {
     }
   }
 }
+
+/** the moments worth an aside about the dressing room: the player did something, not a restart named after him */
+const ECHO_EVENTS = new Set<MatchEvent["type"]>(["SHOT", "SAVE", "GOAL", "ASSIST", "FOUL", "YELLOW_CARD", "OFFSIDE", "INJURY"]);
+const QUIET_ACTS: Partial<Record<MatchEvent["type"], string>> = { TACKLE: "태클로 공을 따냅니다.", INTERCEPTION: "패스를 가로챕니다.", BLOCK: "몸으로 슛을 막아냅니다." };
 
 /** Tidy the 이(가)/은(는)/을(를)/(으)로 placeholders by the syllable before them. */
 export function josa(text: string): string {

@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "balance": "tsx scripts/balance.ts"
+    "balance": "tsx scripts/balance.ts",
+    "longrun": "tsx scripts/longrun.ts"
   },
   "dependencies": {
     "@3sec/engine": "workspace:*"

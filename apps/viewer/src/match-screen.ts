@@ -75,6 +75,8 @@ export interface MatchExtra {
    * match — the second half is played with them.
    */
   halfTimeTalk?: () => Promise<Record<string, Partial<Attributes>> | null>;
+  /** the pre-match talk's strongest reactions, for the commentator's asides in the opening minutes */
+  talkEcho?: { up: string[]; down: string[] };
 }
 
 /** What the viewer needs of a club beyond the engine's team def. */
@@ -354,6 +356,7 @@ export class MatchScreen {
     this.bannerT0 = null;
     this.userTeam = userTeam;
     this.commentator = new Commentator(match);
+    if (extra.talkEcho) this.commentator.setEcho(extra.talkEcho.up, extra.talkEcho.down, 0);
     this.tactics = new TacticsRecorder(match, userTeam);
     this.others = others;
     this.onFinish = onFinish;
@@ -1002,6 +1005,9 @@ export class MatchScreen {
               if (!moves) return;
               this.htTalked = true;
               for (const [id, deltas] of Object.entries(moves)) this.match.adjustAttrs(id, deltas);
+              // the second half's commentary knows who came out of the dressing room changed
+              const sum = Object.entries(moves).map(([id, d]) => [id, Object.values(d).reduce((a, v) => a + (v ?? 0), 0)] as const).sort((a, b) => b[1] - a[1]);
+              this.commentator?.setEcho(sum.filter(([, v]) => v > 0.6).slice(0, 2).map(([id]) => id), sum.filter(([, v]) => v < -0.6).slice(-2).map(([id]) => id), this.match.matchSeconds());
               // the talk's own button walks the manager out, so the card behind it goes
               this.bc?.closeCard();
               if (!this.finished) this.setPlaying(true);
@@ -1040,8 +1046,8 @@ export class MatchScreen {
 
   private appendLog(e: MatchEvent): void {
     const raw = this.debugChk.checked;
-    if (HIDDEN_EVENTS.has(e.type) && !raw) return;
-    // the engine's own text with the overlay on; otherwise the commentator's line, or silence
+    // the engine's own text with the overlay on; otherwise the commentator's line, or silence (the
+    // commentator itself stays quiet on the routine events, tackles and interceptions, unless one carries an aside)
     const said = raw ? e.text : this.commentator?.line(e) ?? null;
     if (said === null) return;
     const text = raw ? said : josa(said);
@@ -1954,7 +1960,6 @@ const BAND_MIN = 118;
 /** kick-off banner lifetime in real ms after the first play press */
 const BANNER_MS = 5000;
 
-const HIDDEN_EVENTS = new Set(["SHOT_ON_TARGET", "INTERCEPTION", "TACKLE", "BLOCK"]);
 /** events that hold the auto pacing slow for a moment afterwards */
 const DANGER_EVENTS = new Set<string>(["SHOT", "SHOT_ON_TARGET", "SAVE", "BLOCK", "CORNER", "PENALTY", "RED_CARD"]);
 

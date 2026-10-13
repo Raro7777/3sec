@@ -25,6 +25,10 @@ on:
         description: "비워 두면 새로 빌드해 올린다. 숫자를 넣으면 빌드 없이 Play 에 이미 있는 그 버전을 위 트랙에 배정만 한다"
         type: string
         default: ""
+      listing:
+        description: "docs/store 의 아이콘·피처 그래픽·스크린샷을 Play 스토어 등록정보(ko-KR)에 올린다 (빌드 없음)"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -32,6 +36,20 @@ permissions:
   contents: read
 
 jobs:
+  listing:
+    name: 스토어 등록정보 이미지
+    if: github.event_name == 'workflow_dispatch' && inputs.listing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install google-auth requests
+      - env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: python scripts/play-listing.py
   promote:
     name: 기존 버전을 트랙에 배정
     if: github.event_name == 'workflow_dispatch' && inputs.promote_version_code != ''
@@ -48,7 +66,7 @@ jobs:
         run: python scripts/play-promote.py "${{ inputs.track }}" "${{ inputs.promote_version_code }}"
   release:
     name: 서명된 AAB + APK
-    if: github.event_name != 'workflow_dispatch' || inputs.promote_version_code == ''
+    if: github.event_name != 'workflow_dispatch' || (inputs.promote_version_code == '' && !inputs.listing)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
