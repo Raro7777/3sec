@@ -1442,26 +1442,25 @@ function create(canvas, opts) {
     var hr = RIG.headR, hry = hr * 1.1;
     c.fillStyle = hair[0]; c.strokeStyle = stroke; c.lineWidth = lineW;
     c.beginPath(); c.ellipse(X(headX - 0.006), Y(headY + 0.014), hr * 1.1 * U, hry * 1.12 * U, 0, 0, 6.284); c.fill(); c.stroke();
-    var face = head && head.face ? head.face : null;
-    // 표정(16.11): 랠리가 끝나면 이긴 쪽 환호·진 쪽 낙담, 공을 다루는 선수(방금 침·다음 차례·예고)는 집중, 나머지는 평상(카드 얼굴)
-    if (head && head.faces) {
-      var mood = (R.ended && R.point) ? (R.point.side === p.side ? 'cheer' : 'sad') : ((p.active || g.ready || p.tell) ? 'focus' : null);
-      if (mood && head.faces[mood]) { face = head.faces[mood]; R.debug.moods++; }
-    }
-    if (face) {
-      c.save(); c.translate(X(headX), Y(headY)); c.scale(mirror, 1);
-      c.beginPath(); c.ellipse(0, 0, hr * 1.0 * U, hry * U, 0, 0, 6.284); c.closePath(); c.clip();
-      c.drawImage(face, -hr * 1.0 * U, -hry * U, hr * 2.0 * U, hry * 2 * U); c.restore();
-      c.fillStyle = 'rgba(30,20,40,.16)';                                 // 턱 아래 그늘
-      c.beginPath(); c.ellipse(X(headX), Y(headY - hry * 0.72), hr * 0.75 * U, hry * 0.3 * U, 0, 0, 6.284); c.fill();
-    } else {
-      blob(headX, headY, hr, hry, skin[0], null);
-      c.fillStyle = hair[0]; c.beginPath(); c.arc(X(headX), Y(headY), hr * U, 3.3, 6.1); c.fill();
+    // 머리(사용자 요청 2026-10): 코트에선 카드 사진을 쓰지 않고 '머리 모양'을 그린다 — 피부 얼굴 + 눈 + 입(상태 변주).
+    // 식별은 머리색·스타일(위 뒷머리·아래 앞머리)과 등번호·이름으로. 작아도 떠 있는 사진 원판 느낌이 없어 깔끔하다.
+    blob(headX, headY, hr, hry, skin[0], null);
+    var em = (R.ended && R.point) ? (R.point.side === p.side ? 1 : -1) : 0;    // 환호(+)/낙담(-)/평상(0)
+    var eR = Math.max(0.9, hr * 0.17 * U), eyX = hr * 0.40, eyY = headY - hry * 0.04;
+    c.fillStyle = '#2B2B34';
+    c.beginPath(); c.ellipse(X(headX - eyX), Y(eyY), eR, eR * 1.25, 0, 0, 6.284); c.fill();
+    c.beginPath(); c.ellipse(X(headX + eyX), Y(eyY), eR, eR * 1.25, 0, 0, 6.284); c.fill();
+    var mY = headY - hry * 0.44, mw = hr * 0.42;
+    if (em > 0) { c.fillStyle = '#9A5A4A'; c.beginPath(); c.ellipse(X(headX), Y(mY), mw * 0.7 * U, mw * 0.5 * U, 0, 0, 6.284); c.fill(); }   // 벌린 입
+    else {
+      c.strokeStyle = '#9A5A4A'; c.lineWidth = Math.max(1, hr * 0.1 * U); c.lineCap = 'round';
+      var myy = em < 0 ? mY - hry * 0.05 : mY;
+      c.beginPath(); c.moveTo(X(headX - mw), Y(myy)); c.lineTo(X(headX + mw), Y(myy)); c.stroke();
     }
     c.strokeStyle = hair[0]; c.lineWidth = hr * 0.26 * U; c.lineCap = 'round';
     c.beginPath(); c.ellipse(X(headX), Y(headY), hr * 0.94 * U, hry * 0.94 * U, 0, 3.4 + headTilt, 6.0 + headTilt); c.stroke();
     var mk = R.markOf ? R.markOf(p.pid) : null;
-    if (mk) { c.beginPath(); c.ellipse(X(headX), Y(headY), hr * 1.32 * U, hry * 1.32 * U, 0, 0, 6.284); c.lineWidth = Math.max(1.5, 0.07 * s); c.strokeStyle = mk; c.stroke(); }
+    if (mk) { c.fillStyle = mk; c.beginPath(); c.arc(X(headX), Y(headY + hry * 1.18), Math.max(1.6, 0.05 * s), 0, 6.284); c.fill(); }   // 데뷔 표시 — 원 테두리 대신 머리 위 작은 금색 점
     c.restore();
     R.debug.rigs++;
     // 이름·스킬 예고 — 화면 좌표

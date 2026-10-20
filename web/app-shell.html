@@ -453,8 +453,12 @@ details[open] summary::after{content:"▴"}
 .intro .tm{text-align:center}
 .intro .tm b{display:block;font-size:15px;margin-bottom:8px}
 .intro .tm.a b{color:#F09080} .intro .tm.h b{color:var(--court)}
-.intro .row{display:flex;justify-content:center;gap:5px}
+.intro .row{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
 .intro .row .ava{width:38px;height:38px}
+/* 미니 카드 — 라인업·인트로에서 누군지 또렷하게(카드 프레임, 조금 크게) */
+.mcard{display:inline-block;aspect-ratio:3/4;border-radius:8px;overflow:hidden;line-height:0;vertical-align:top;
+  border:2px solid rgba(255,255,255,.55);box-shadow:0 3px 10px rgba(0,0,0,.4);background:var(--panel2)}
+.mcard img,.mcard svg{display:block;width:100%;height:100%;object-fit:cover}
 .intro .vs{text-align:center;font-family:"Barlow Condensed",sans-serif;font-size:30px;font-weight:700;letter-spacing:.1em;color:var(--ink3)}
 /* ---- 선수 B: 성격·인연·스토리 표현 + 남은 그림 자리(art-pipeline 16.4) */
 .bust{display:block;overflow:hidden;border-radius:10px;background:var(--panel2);line-height:0;aspect-ratio:4/5;border:1px solid var(--line2);flex:none}
@@ -480,6 +484,7 @@ details[open] summary::after{content:"▴"}
 /* 육성→코트 연결 연출: 데뷔전 선수 표시 */
 .avw{position:relative;display:inline-block;line-height:0}
 .avw .ava{border-color:var(--ssr)!important;box-shadow:0 0 0 2px rgba(233,185,73,.45)}
+.avw .mcard{border-color:var(--ssr)!important;box-shadow:0 0 0 2px rgba(233,185,73,.5),0 3px 10px rgba(0,0,0,.4)}
 .avw .dbt{position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);font-family:"Barlow Condensed",sans-serif;font-size:9.5px;font-weight:700;
   letter-spacing:.06em;padding:0 5px;border-radius:6px;background:var(--ssr);color:#1A1200;line-height:1.5;white-space:nowrap}
 .tch.debut{border-color:var(--ssr)}
@@ -1138,6 +1143,12 @@ function drawnBust(p){
   var g = personG(p, uid);
   return '<svg viewBox="10 0 80 100" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" aria-hidden="true">'+
     '<defs>'+g.bg+'</defs><rect x="10" y="0" width="80" height="100" fill="url(#g'+uid+')"/>'+g.body+'</svg>';
+}
+// 미니 카드 — 라인업 등에서 '누군지' 또렷하게: 카드 아트를 3:4 로 조금 크게, 카드 프레임으로(사용자 요청 2026-10). 아트 없으면 SVG 초상.
+function miniCard(p, w){
+  var real = artOf(p, 'card');
+  if (real) return '<span class="mcard" style="width:'+w+'px"><img src="'+real+'" alt="" loading="lazy" decoding="async"></span>';
+  return '<span class="mcard" style="width:'+w+'px">'+portraitSvg(p, w)+'</span>';
 }
 function shade(hex, amt){
   var n = parseInt(hex.slice(1),16), r=(n>>16)+amt, g=((n>>8)&255)+amt, b=(n&255)+amt;
@@ -3301,7 +3312,7 @@ function cutTrace(ct){
 function showCut(el, ct){
   var sp = (mv && mv.speed) || 1;
   if (!ct.p || sp >= 4) return;
-  var bust = drawnBust(ct.p);   // 사진 대신 머리 모양 상반신(사용자 요청)
+  var bust = artBust(ct.p, ct.name) || drawnBust(ct.p);   // 카드 얼굴(알아보기 쉬움) 우선, 없으면 그린 상반신
   if (!bust) return;
   var mine = ct.side === mySide;
   // 자막 우선순위: 캠프 흔적(경기당 한 번) → 성격 양념(commentary.js) → 이름
@@ -3324,7 +3335,7 @@ function showIntro(){
   var debut = debutSet(m);
   var row = function(ids){
     return '<div class="row">'+ids.map(function(id){ var p = m.ctx.players[id]; if (!p) return '';
-      var av = '<span class="ava">'+drawnHead(p, 38)+'</span>';
+      var av = miniCard(p, 42);
       return debut[id] ? '<span class="avw">'+av+'<i class="dbt">데뷔</i></span>' : av; }).join('')+'</div>';
   };
   var oppId = m.ctx.homeId === G.clubId ? m.ctx.awayId : m.ctx.homeId;
@@ -3349,7 +3360,7 @@ function rallyStrip(r, shown, ended){
     var note = t.type===4 && QN[t.quality] ? ' ' + QN[t.quality] : '';
     var sk = (t.skills && t.skills.length)
       ? '<span class="skb">'+esc(t.skills[0].skillName)+(t.skills.length>1?' +'+(t.skills.length-1):'')+'</span>' : '';
-    var face = t.player ? '<span class="ava xs">'+drawnHead(t.player, 22)+'</span>' : '';
+    var face = t.player ? '<span class="ava xs">'+portraitSvg(t.player, 22)+'</span>' : '';
     return (i? '<span class="tch arrow">›</span>' : '') +
       '<span class="'+cls+'">'+face+'<span class="tx"><span class="tact">'+act+note+'</span><span class="who2">'+esc(t.name)+'</span>'+sk+'</span></span>';
   }).join('');

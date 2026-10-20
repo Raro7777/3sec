@@ -212,24 +212,24 @@ await page.waitForTimeout(300);
 check('경기 뷰어가 뜬다', inMatch);
 if (inMatch) {
   check('처음에는 건너뛰기가 잠겨 있다', (await count('[data-mv="skipset"]')) === 0);
-  check('경기 인트로에 양 팀 얼굴이 선다', (await count('#lvIntro.show .ava')) >= 12, `ava ${await count('#lvIntro.show .ava')}`);
+  check('경기 인트로에 양 팀 얼굴이 선다', (await count('#lvIntro.show .mcard')) >= 12, `mcard ${await count('#lvIntro.show .mcard')}`);
   check('인트로가 졸업생의 데뷔전을 알린다', (await count('#lvIntro.show .avw .dbt')) >= 1 && (await text('#lvIntro')).includes('데뷔전'));
   await tap('#lvIntro', 200);
   check('인트로를 탭하면 바로 시작한다', (await count('#lvIntro.show')) === 0);
   const sp = await page.$('[data-mv="speed"]');
   if (sp) { await sp.click(); await page.waitForTimeout(120); }
-  // 2배속에서 컷인(득점·스킬)과 랠리 칩 머리 모양이 한 번은 나와야 한다(4배속은 컷인을 띄우지 않는다)
-  // 중계 얼굴 자리는 사진이 아니라 SVG 드로잉(머리 모양) — 코트의 리그 머리와 통일(사용자 요청 2026-10)
+  // 2배속에서 컷인(득점·스킬)과 랠리 칩 얼굴이 한 번은 나와야 한다(4배속은 컷인을 띄우지 않는다)
+  // 랠리 칩·컷인·인트로는 알아보기 쉬운 카드 얼굴(사진), 코트 선수 머리는 그린 머리 모양(court-render). 사용자 요청 2026-10.
   let sawCut = false, sawFace = false;
   for (let i = 0; i < 120; i++) {
     await page.waitForTimeout(200);
     if (!sawCut && (await count('#lvCut.show')) > 0) sawCut = true;
-    if (!sawFace && (await count('.tch .ava svg')) > 0) sawFace = true;
+    if (!sawFace && (await count('.tch .ava img')) > 0) sawFace = true;
     if (sawCut && sawFace) break;
     if ((await count('#lvCanvas')) === 0) break;
   }
   check('득점·스킬 컷인이 뜬다', sawCut);
-  check('랠리 칩에 머리 모양이 붙는다', sawFace);
+  check('랠리 칩에 얼굴이 붙는다', sawFace);
   if (sp) { await sp.click(); await page.waitForTimeout(120); }
   check('속도를 4배까지 올릴 수 있다', (await text('[data-mv="speed"]')).includes('4'));
 
