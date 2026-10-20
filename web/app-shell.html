@@ -728,8 +728,37 @@ details[open] summary::after{content:"▴"}
   @keyframes rheroin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
   @keyframes rvslam{0%{opacity:0;transform:scale(1.7)}58%{opacity:1;transform:scale(.93)}100%{transform:scale(1)}}
 }
+/* ===== 육성 전용 몰입 모드 (A) — 캠프에 들어가면 상단바·탭바를 감추고 훈련장 씬 배너 아래 훈련에만 집중. ===== */
+#campbg{position:fixed;left:0;right:0;top:0;height:210px;z-index:0;display:none;background:#cfe0f2 center 42%/cover no-repeat}
+body.camp #campbg{display:block}
+#campbg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,22,36,.34) 0%,rgba(231,239,248,.06) 30%,var(--bg) 92%,var(--bg) 100%)}
+body.camp .topbar,body.camp .nav,body.camp .coach{display:none!important}
+body.camp #app{background:transparent}
+body.camp main{position:relative;z-index:1;padding:0 14px 28px}
+.camp-bar{position:sticky;top:0;z-index:20;margin:0 -14px 12px;padding:calc(12px + env(safe-area-inset-top,0)) 16px 11px;
+  display:flex;align-items:center;gap:8px;color:#fff;text-shadow:0 1px 8px rgba(8,16,28,.6)}
+.camp-bar .cb-ic{font-size:19px}
+.camp-bar b{font-family:var(--display);font-size:20px;letter-spacing:0}
+.camp-bar .cb-who{color:rgba(255,255,255,.9);font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camp-bar .cb-x{margin-left:auto;flex:none;min-width:40px;min-height:40px;margin:-8px -6px -8px 0;border-radius:10px;
+  color:rgba(255,255,255,.92);font-size:12.5px;font-weight:700;background:rgba(10,18,30,.32);border:1px solid rgba(255,255,255,.25);padding:0 11px}
+/* 캠프 입소 연출 — 훈련장 씬 + "훈련 캠프 입소" 가 잠깐 */
+.campin{position:fixed;inset:0;z-index:68;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0A1220}
+.campin .ci-scene{position:absolute;inset:0;background:#12223c center 42%/cover no-repeat;opacity:.5}
+.campin::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(10,18,32,.25),rgba(10,18,32,.86))}
+.campin .ci-tx{position:relative;text-align:center;color:#fff}
+.campin .ci-k{display:block;font-family:"Barlow Condensed",sans-serif;letter-spacing:.28em;font-size:13px;color:var(--hot-2);font-weight:700}
+.campin .ci-tx b{display:block;font-family:var(--display);font-size:38px;margin:6px 0 4px;text-shadow:0 3px 16px rgba(0,0,0,.6)}
+.campin .ci-s{display:block;font-size:13.5px;color:rgba(233,240,247,.85);font-weight:700}
+@media (prefers-reduced-motion:no-preference){
+  .campin{animation:cifade .35s ease-out both} .campin.out{animation:cifadeout .35s ease-in both}
+  .campin .ci-tx{animation:ciin .5s cubic-bezier(.2,.8,.2,1.05) both}
+  @keyframes cifade{from{opacity:0}to{opacity:1}} @keyframes cifadeout{to{opacity:0}}
+  @keyframes ciin{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+}
 </style>
 
+<div id="campbg"></div>
 <div id="app">
   <div class="topbar">
     <div class="club" id="clubName">—</div>
@@ -1317,6 +1346,9 @@ function renderTop(){
 // ---------------------------------------------------------------- views
 function render(){
   renderTop(); renderNav();
+  var inCampView = (view==='trainSup' || view==='trainTurn');   // 육성 몰입 모드(A) — 졸업(trainGrad)은 결과 화면이라 일반 크롬으로 복귀
+  document.body.classList.toggle('camp', inCampView);
+  if (inCampView) { var cb = document.getElementById('campbg'), sc = sceneOf('train'); if (cb && sc && cb.getAttribute('data-set')!=='1') { cb.style.backgroundImage = 'url('+sc+')'; cb.setAttribute('data-set','1'); } }
   var el = document.getElementById('view');
   var fn = ({
     home:vHome, scout:vScout, train:vTrain, trainSup:vTrainSup, trainTurn:vTrainTurn,
@@ -2013,12 +2045,32 @@ function vTrain(){
 }
 
 // ---------- 육성: 서포터
+// ---------- 육성 몰입 모드(A): 캠프 상단 바 + 입소 연출
+function campName(){ try { return ses ? ses.trainee.card.name : (trainPick ? E.trainingCard(G, trainPick).name : ''); } catch(e){ return ''; } }
+function campBar(){
+  var name = campName();
+  return '<div class="camp-bar"><span class="cb-ic">🏐</span><b>훈련 캠프</b>'+
+    (name ? '<span class="cb-who">· '+esc(name)+'</span>' : '')+'</div>';
+}
+function campEnter(onDone){
+  try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(e){}
+  var reduced = false; try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  var sc = sceneOf('train'), name = campName();
+  var ov = document.createElement('div'); ov.className = 'campin';
+  ov.innerHTML = '<div class="ci-scene"'+(sc?' style="background-image:url('+sc+')"':'')+'></div>'+
+    '<div class="ci-tx"><span class="ci-k">훈련 캠프 입소</span><b>'+esc(name)+'</b><span class="ci-s">12턴 프리시즌 — 집중!</span></div>';
+  document.body.appendChild(ov);
+  try { ensureAudio(); if (snd && snd.on) tone('sine', 320, 540, 0.5, 0.06); } catch(e){}
+  haptic(reduced ? 10 : [0,30,40,30]);
+  setTimeout(function(){ ov.classList.add('out'); setTimeout(function(){ if (ov.parentNode) ov.parentNode.removeChild(ov); onDone && onDone(); }, reduced?60:330); }, reduced?260:1150);
+}
+
 function vTrainSup(){
   var cands = E.supporterCandidates(G, trainPick);
   var card = E.trainingCard(G, trainPick);
   if (!cands.length) { startCamp([]); return vTrainTurn(); }
   if (supPick === null) supPick = E.recommendSupporters(G, trainPick);
-  return h('<h2>서포터 편성</h2><p class="sub">졸업한 선수를 최대 3명까지 붙이면 훈련 효율이 오릅니다. 추천 편성이 미리 선택돼 있습니다.</p>'+
+  return h(campBar()+'<h2>서포터 편성</h2><p class="sub">졸업한 선수를 최대 3명까지 붙이면 훈련 효율이 오릅니다. 추천 편성이 미리 선택돼 있습니다.</p>'+
     '<div class="card flat"><div class="spread"><div><b>'+esc(card.name)+'</b> <span class="pill pos">'+POSK[card.pos]+'</span></div><div class="tiny">캠프 입소</div></div></div>'+
     cands.map(function(s){
       var on = supPick.indexOf(s.id)>=0;
@@ -2144,7 +2196,7 @@ function vTrainTurn(){
   var fd = feed.length ? '<ul class="feed">'+feed.slice(-5).reverse().map(function(f){
       return '<li class="'+(f.cls||'')+'">'+f.html+'</li>'; }).join('')+'</ul>' : '';
 
-  return head + body + auto + fd;
+  return campBar() + head + body + auto + fd;
 }
 
 // ---------- 육성: 졸업
@@ -3918,15 +3970,15 @@ document.addEventListener('click', function(e){
   if (d.act === 'sgeval') { evalFlash(d.eval || '합격 — 좋은 평가'); return; }
   if (d.scoutpos !== undefined) return doScout(POSK[+d.scoutpos]);
   if (d.trainthis) { trainPick = d.trainthis; supPick = null;
-    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); } return; }
+    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); campEnter(); } return; }
   if (d.pick) { trainPick = d.pick; supPick = null;
-    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); } return; }
+    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); campEnter(); } return; }
   if (d.sup) {
     var i = supPick.indexOf(d.sup);
     if (i>=0) supPick.splice(i,1); else if (supPick.length<3) supPick.push(d.sup); else toast('서포터는 최대 3명');
     render(); return;
   }
-  if (d.act === 'startcamp') { startCamp(supPick); render(); window.scrollTo(0,0); return; }
+  if (d.act === 'startcamp') { startCamp(supPick); render(); window.scrollTo(0,0); campEnter(); return; }
   if (d.act === 'coachoff') { coach.on = false; saveCoach(); renderCoach(); toast('코치 안내를 껐습니다. 도움말에서 다시 켤 수 있습니다.'); return; }
   if (d.act === 'coachon') { coach = { on:true, intro:false, done:false }; introPage = 0; saveCoach(); go('home'); return; }
   if (d.act === 'intronext') { introPage++; renderIntro(); return; }
