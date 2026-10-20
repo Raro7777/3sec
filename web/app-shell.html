@@ -741,6 +741,15 @@ body.camp main{position:relative;z-index:1;padding:0 14px 28px}
 .camp-bar .cb-ic{font-size:19px}
 .camp-bar b{font-family:var(--display);font-size:20px;letter-spacing:0}
 .camp-bar .cb-who{color:rgba(255,255,255,.9);font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camp-bar .cb-goal{margin-left:auto;flex:none;font-size:12px;font-weight:800;color:#fff;background:rgba(241,145,60,.9);
+  padding:4px 10px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 8px rgba(241,145,60,.4)}
+/* 캠프 목표 결과(B) — 졸업 화면 상단 */
+.goal-result{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:14px;margin-bottom:12px;box-shadow:var(--sh1)}
+.goal-result.met{background:linear-gradient(120deg,var(--court-bg),var(--panel));border:1px solid var(--court)}
+.goal-result.miss{background:var(--panel2);border:1px solid var(--line2)}
+.goal-result .gr-ic{font-size:26px;flex:none}
+.goal-result b{font-size:15px}
+.goal-result.met b{color:var(--court)}
 .camp-bar .cb-x{margin-left:auto;flex:none;min-width:40px;min-height:40px;margin:-8px -6px -8px 0;border-radius:10px;
   color:rgba(255,255,255,.92);font-size:12.5px;font-weight:700;background:rgba(10,18,30,.32);border:1px solid rgba(255,255,255,.25);padding:0 11px}
 /* 캠프 입소 연출 — 훈련장 씬 + "훈련 캠프 입소" 가 잠깐 */
@@ -2064,10 +2073,21 @@ function vTrain(){
 // ---------- 육성: 서포터
 // ---------- 육성 몰입 모드(A): 캠프 상단 바 + 입소 연출
 function campName(){ try { return ses ? ses.trainee.card.name : (trainPick ? E.trainingCard(G, trainPick).name : ''); } catch(e){ return ''; } }
+// 이번 캠프의 목표(B) — 재육성이면 '기존 대표 OVR 넘기', 신규면 'A등급 도전'. 스테이크를 준다.
+function campGoalInfo(){
+  try {
+    var cid = ses ? ses.trainee.card.id : trainPick;
+    var rep = cid ? E.representativeOf(G, cid) : null;
+    if (rep) return { kind:'ovr', target: rep.ovr, label:'로스터 OVR '+rep.ovr.toFixed(1)+' 넘기' };
+  } catch(e){}
+  return { kind:'grade', target: 1, label:'A등급 도전' };
+}
 function campBar(){
-  var name = campName();
+  var name = campName(), goal = '';
+  try { goal = campGoalInfo().label; } catch(e){}
   return '<div class="camp-bar"><span class="cb-ic">🏐</span><b>훈련 캠프</b>'+
-    (name ? '<span class="cb-who">· '+esc(name)+'</span>' : '')+'</div>';
+    (name ? '<span class="cb-who">· '+esc(name)+'</span>' : '')+
+    (goal ? '<span class="cb-goal">🎯 '+esc(goal)+'</span>' : '')+'</div>';
 }
 function campEnter(onDone){
   try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(e){}
@@ -2222,7 +2242,14 @@ function vTrainGrad(){
   if (!g) return '<div class="empty">…</div>';
   var inst = g.instance;
   var gc = ['S','A','B','C','D'][inst.grade];
+  var isRetrain = (g.prevOvr !== null && g.prevOvr !== undefined);
+  var goalMet = isRetrain ? (g.kept === 'replaced') : (inst.grade <= 1);   // 재육성=대표 넘기 / 신규=A↑
+  var goalLabel = isRetrain ? ('로스터 OVR '+g.prevOvr.toFixed(1)+' 넘기') : 'A등급 도전';
+  var goalBanner = '<div class="goal-result '+(goalMet?'met':'miss')+'"><span class="gr-ic">'+(goalMet?'🎯':'💪')+'</span>'+
+    '<div><b>'+(goalMet?'목표 달성!':'목표까지 조금 더')+'</b>'+
+    '<div class="tiny">'+esc(goalLabel)+(goalMet?' — 해냈어요.':' — 다시 도전하면 더 좋게 나올 수 있어요.')+'</div></div></div>';
   return h('<h2>졸업</h2>'+
+    goalBanner+
     '<div class="card" style="text-align:center;border-color:var(--line2)">'+
       '<div class="rv rone" style="width:58%;position:relative;margin-bottom:8px">'+cardFace(inst, ['N','R','SR','SSR'][inst.rarity], { eager:true, sub: POSK[inst.pos]+' · OVR '+g.ovr.toFixed(1) })+
         '<span class="stamp g-'+gc+'">'+gc+'</span></div>'+
@@ -3808,8 +3835,11 @@ function finishCamp(){
   ses = null; trainPick = null; supPick = null;
   save();
   var gotMissions = checkMissions();
+  var g0 = lastGrad, isRetrain0 = (g0.prevOvr !== null && g0.prevOvr !== undefined);
+  var goalMet0 = isRetrain0 ? (g0.kept === 'replaced') : (g0.instance.grade <= 1);
   runGradeReveal(lastGrad.grade, function(){   // 12턴의 보상 — 등급을 극적으로 공개하고 결과 화면으로
     view = 'trainGrad'; render(); window.scrollTo(0,0);
+    if (goalMet0) setTimeout(confetti, 150);   // 캠프 목표 달성 축포(B)
     if (earned && !gotMissions.length) setTimeout(function(){ toast('자동 진행이 열렸습니다'); }, 600);
   });
 }
