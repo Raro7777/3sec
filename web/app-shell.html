@@ -197,6 +197,7 @@ h2::before{content:"";position:absolute;left:0;top:14%;bottom:14%;width:6px;bord
 .apt.S,.apt.A{background:rgba(79,191,149,.16);color:var(--good)}
 .apt.D,.apt.C{background:rgba(227,112,95,.14);color:var(--bad)}
 .risk{font-family:"Barlow Condensed",sans-serif;font-size:12.5px;font-weight:700;color:var(--hot)}
+.risk-yellow{color:#C9962B} .risk-orange{color:var(--hot)} .risk-red{color:var(--bad)}
 .fat{font-family:"Barlow Condensed",sans-serif;font-size:12.5px;color:var(--ink3)}
 .act.rest{background:var(--panel2)}
 
@@ -756,6 +757,22 @@ body.camp main{position:relative;z-index:1;padding:0 14px 28px}
   @keyframes cifade{from{opacity:0}to{opacity:1}} @keyframes cifadeout{to{opacity:0}}
   @keyframes ciin{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
 }
+/* ===== 평가전 '모의고사' 리포트 (C) — 캠프의 평가전을 '경기'가 아니라 '측정'으로 확실히 구분. ===== */
+.evalrep{position:fixed;inset:0;z-index:64;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,14,24,.5);backdrop-filter:blur(2px)}
+.er-card{width:100%;max-width:320px;background:var(--panel);border-radius:18px;box-shadow:0 16px 44px rgba(8,14,24,.42);padding:18px 18px 16px;text-align:center;border-top:4px solid var(--court)}
+.er-card.mvp{border-top-color:var(--ssr)} .er-card.good{border-top-color:var(--good)} .er-card.poor{border-top-color:var(--bad)}
+.er-k{font-family:"Barlow Condensed",sans-serif;letter-spacing:.1em;font-size:12.5px;font-weight:700;color:var(--ink2)}
+.er-score{margin:8px 0 2px}
+.er-score .num{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:52px;line-height:1;color:var(--court)}
+.er-card.mvp .er-score .num{color:var(--ssr)} .er-card.good .er-score .num{color:var(--good)} .er-card.poor .er-score .num{color:var(--bad)}
+.er-score small{display:block;font-size:12px;color:var(--ink3);font-weight:700;margin-top:2px}
+.er-gauge{height:8px;border-radius:4px;background:var(--panel3);overflow:hidden;margin:10px 4px}
+.er-gauge span{display:block;height:100%;border-radius:4px;background:var(--court)}
+.er-card.mvp .er-gauge span{background:var(--ssr)} .er-card.good .er-gauge span{background:var(--good)} .er-card.poor .er-gauge span{background:var(--bad)}
+.er-tier{font-family:var(--display);font-size:22px;margin-top:6px}
+.er-gain{font-size:13px;color:var(--good);font-weight:700;margin-top:6px}
+.er-note{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.5} .er-note b{color:var(--court)}
+@media (prefers-reduced-motion:no-preference){ .er-card{animation:erin .35s cubic-bezier(.2,.8,.2,1.1) both} @keyframes erin{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}} }
 </style>
 
 <div id="campbg"></div>
@@ -2026,7 +2043,7 @@ function vTrain(){
   if (!ownedAll.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   if (!owned.length) return '<h2>육성</h2><div class="empty">보유한 카드가 모두 은퇴했습니다.<br>스카우트로 새 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   var trainedN = owned.filter(function(cid){ return !!E.representativeOf(G, cid); }).length;
-  return h(roomHead('train', '육성', '12턴 프리시즌 캠프. 훈련으로 능력치를 올리고, 피로를 관리하며, 평가전 3번을 거쳐 졸업시킵니다. 한 번에 5~10분.')+
+  return h(roomHead('train', '육성', '<b>선수를 만드는 곳</b> — 12턴 캠프에서 훈련으로 키우고 평가전(모의고사)으로 점검해 졸업시키면, 그 선수를 <b>리그에서 씁니다</b>. 한 번에 5~10분.')+
     (trainedN ? '<div class="card flat"><div class="tiny"><b style="color:var(--ink2)">재육성</b>은 캠프를 처음부터 다시 도는 것입니다(초기화가 아닙니다). 졸업한 선수는 로스터에 그대로 있고, 새 결과가 더 좋을 때만 교체됩니다. 한계돌파가 있으면 천장이 높아져 더 좋게 나올 수 있습니다.</div></div>' : '')+
     (retiredN ? '<div class="card flat"><div class="tiny">은퇴한 카드 '+retiredN+'장은 목록에서 제외됩니다. 재육성해도 나이는 되돌아가지 않습니다.</div></div>' : '')+
     owned.map(function(cid){
@@ -2177,7 +2194,7 @@ function vTrainTurn(){
         '<span class="gain">'+gains+'</span>'+
         '<span class="right">'+
           (op.hasAptitude?'<span class="apt '+op.aptitudeLabel+'">'+op.aptitudeLabel+'</span> ':'')+
-          (op.injuryBadge?'<span class="risk">'+esc(op.injuryBadge)+'</span> ':'')+
+          (op.injuryBadge?'<span class="risk risk-'+esc(op.injuryBadge.level||'')+'">부상 '+esc(op.injuryBadge.label||'')+'</span> ':'')+
           '<span class="fat">'+(op.fatigueDelta>0?'+':'')+op.fatigueDelta.toFixed(0)+'</span>'+
         '</span></button>';
     }).join('');
@@ -3683,6 +3700,30 @@ function runGradeReveal(grade, onDone){
   timers.push(setTimeout(finish, endAt));
   ov.addEventListener('click', function(){ if (done) return; if (!ov.classList.contains('burst')) showGrade(); clr(); timers.push(setTimeout(finish, 300)); });
 }
+// 평가전 '모의고사' 리포트(C) — 활약도 측정 + 성장, '진짜 무대는 리그' 로 역할을 분리. 결과가 아니라 측정으로 읽히게.
+function evalReport(o){
+  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
+  var perf = Math.round(o.performance || 0);
+  var tier = perf>=80?'코트를 지배':(perf>=62?'좋은 측정':(perf>=40?'보통':'아쉬운 하루'));
+  var tcls = perf>=80?'mvp':(perf>=62?'good':(perf>=40?'ok':'poor'));
+  var round = (o.round||0)+1;
+  var gain = (o.coreGain>0 ? '핵심 스탯 +'+o.coreGain.toFixed(1) : '') +
+             (o.hint>0 ? (o.coreGain>0?' · ':'')+'스킬 힌트 +'+o.hint : '');
+  var el = document.createElement('div'); el.className = 'evalrep';
+  el.innerHTML = '<div class="er-card '+tcls+'">'+
+    '<div class="er-k">📋 평가전 · 모의고사 '+round+'/3</div>'+
+    '<div class="er-score"><span class="num">'+perf+'</span><small>활약도</small></div>'+
+    '<div class="er-gauge"><span style="width:'+perf+'%"></span></div>'+
+    '<div class="er-tier">'+tier+(o.mvp?' · MVP':'')+'</div>'+
+    (gain ? '<div class="er-gain">'+gain+'</div>' : '')+
+    '<div class="er-note">연습 측정이에요. 진짜 무대는 <b>리그</b>에서.</div>'+
+  '</div>';
+  el.addEventListener('click', function(){ if (el.parentNode) el.parentNode.removeChild(el); });
+  document.body.appendChild(el);
+  try { ensureAudio(); if (snd && snd.on) sfx(perf>=62?'setend':'ui'); } catch(e){}
+  haptic(perf>=80?[0,40,30,40]:25);
+  setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, perf>=62?2600:2000);
+}
 // 평가전 순간 — 캠프 중 긴장 피크(T4·8·12). 결과 텍스트를 화면 중앙에 잠깐 띄운다(연출만).
 function evalFlash(txt){
   try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
@@ -3726,7 +3767,11 @@ function applyChoice(id){
   if (o.kind === 'graduated') { finishCamp(); return; }
   render();
   var evEv = (res.events||[]).filter(function(ev){ return ev.type === 'evaluation'; }).pop();   // 평가전 순간(졸업이 아닌 T4·8)
-  if (evEv) evalFlash(evEv.text);
+  if (evEv) {
+    var evs = (ses && ses.evaluations) || [];
+    var o = evs[evs.length - 1];
+    if (o && !o.absent && o.performance !== undefined) evalReport(o); else evalFlash(evEv.text);   // 측정 리포트(C), 결장 등은 간단 배너
+  }
 }
 
 function pushFeed(ev){
