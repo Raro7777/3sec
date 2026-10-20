@@ -782,6 +782,57 @@ body.camp main{position:relative;z-index:1;padding:0 14px 28px}
 .er-gain{font-size:13px;color:var(--good);font-weight:700;margin-top:6px}
 .er-note{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.5} .er-note b{color:var(--court)}
 @media (prefers-reduced-motion:no-preference){ .er-card{animation:erin .35s cubic-bezier(.2,.8,.2,1.1) both} @keyframes erin{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}} }
+/* ===== 성장 아크 프로토타입(core-loop v3 검증) — 선수 1명 · 벽 1개 · 증명 1번. 연출만, 판정 무관. ===== */
+.arc-strip{display:flex;gap:10px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--hot);
+  border-radius:14px;padding:10px 12px;margin-bottom:10px;box-shadow:var(--sh1)}
+.arc-strip.done{border-left-color:var(--good)}
+.arc-strip .as-ic{font-size:20px;line-height:1.2}
+.arc-strip .as-tx{flex:1;min-width:0}
+.arc-strip b{font-size:14px}
+.arc-bar{height:7px;border-radius:4px;background:var(--panel3);overflow:hidden;margin-top:6px}
+.arc-bar span{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--hot),var(--hot-2));transition:width .5s}
+.arc-strip.done .arc-bar span{background:var(--good)}
+.wall-tag{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;color:#fff;background:var(--hot);padding:1px 6px;border-radius:6px;vertical-align:2px}
+.arc-card{background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--sh1)}
+.arc-card .ac-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.arc-card .ac-h .ava{width:44px;height:44px}
+.arc-card .ac-k{font-family:"Barlow Condensed",sans-serif;letter-spacing:.1em;font-size:11.5px;color:var(--hot);font-weight:700}
+.arc-card .ac-row{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:6px 0;border-top:1px solid var(--line)}
+.arc-card .ac-row span{color:var(--ink3);flex:none}
+.arc-card .ac-row b{text-align:right}
+.arc-card .ac-row.dim b{color:var(--ink2);font-weight:600}
+.arc-chip{flex:none;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:var(--panel3);color:var(--ink2)}
+.arc-chip.ready{background:var(--hot-bg);color:var(--hot)}
+.arc-chip.ok{background:rgba(31,184,132,.14);color:var(--good)}
+.ac-next{margin-top:9px;font-size:12.5px;font-weight:700;color:var(--court);background:var(--court-bg);border-radius:10px;padding:8px 10px;line-height:1.45}
+.er-arc{margin-top:9px;font-size:12.5px;font-weight:700;color:var(--hot);background:var(--hot-bg);border-radius:10px;padding:7px 9px;line-height:1.45}
+.cut.proof .band{background:linear-gradient(90deg,rgba(233,185,73,.94),rgba(233,185,73,.05))}
+.cut.proof.away .band{background:linear-gradient(270deg,rgba(233,185,73,.94),rgba(233,185,73,.05))}
+.cut.proof .lbl{color:#FFE6A3;font-size:34px;line-height:1.12;word-break:keep-all;padding:0 14px;letter-spacing:0}
+/* 그때 vs 지금 */
+.arcsplit{position:fixed;inset:0;z-index:66;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(8,14,24,.62);backdrop-filter:blur(3px)}
+.asp-card{width:100%;max-width:360px;background:var(--panel);border-radius:20px;padding:16px 14px 14px;text-align:center;box-shadow:0 18px 50px rgba(8,14,24,.45)}
+.asp-k{font-size:12.5px;font-weight:800;color:var(--hot)}
+.asp-t{font-family:var(--display);font-size:30px;margin:2px 0 12px}
+.asp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.asp-side{border-radius:14px;padding:8px;background:var(--panel2)}
+.asp-side.now{background:linear-gradient(160deg,var(--court-bg),var(--panel2));box-shadow:0 0 0 2px var(--court) inset}
+.asp-img{display:block;width:100%;aspect-ratio:1;object-fit:cover;object-position:50% 18%;border-radius:10px;overflow:hidden;line-height:0}
+.asp-img.gray{filter:grayscale(.85) brightness(.85)}
+.asp-img svg{width:100%;height:100%}
+.asp-lb{font-size:11.5px;font-weight:800;color:var(--ink3);margin-top:7px}
+.asp-side.now .asp-lb{color:var(--court)}
+.asp-v{font-size:13px;font-weight:700;margin-top:3px;line-height:1.4}
+.asp-stat{margin:12px 0 4px;font-size:14px}
+.asp-stat b{font-family:"Barlow Condensed",sans-serif;font-size:20px;color:var(--court)}
+.asp-next{font-size:12.5px;color:var(--ink2);margin:6px 0 12px}
+.asp-next span{color:var(--ink3);font-size:11px}
+@media (prefers-reduced-motion:no-preference){
+  .asp-card{animation:erin .4s cubic-bezier(.2,.8,.2,1.1) both}
+  .asp-side.then{animation:aspl .5s ease-out .15s both} .asp-side.now{animation:aspr .5s ease-out .5s both}
+  @keyframes aspl{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+  @keyframes aspr{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+}
 </style>
 
 <div id="campbg"></div>
@@ -2089,6 +2140,199 @@ function campBar(){
     (name ? '<span class="cb-who">· '+esc(name)+'</span>' : '')+
     (goal ? '<span class="cb-goal">🎯 '+esc(goal)+'</span>' : '')+'</div>';
 }
+// ---------- 성장 아크 프로토타입 (docs/core-loop-v2.md → v3 검증용): 선수 1명 · 벽 1개 · 증명 1번
+// 결핍(벽) → 노력(캠프) → 시험(평가전·경기) → 증명. 엔진 세이브 밖(localStorage)에 두고 박스스코어·경기 로그만 읽는다 — 판정·밸런스 무관.
+var ARC_KEY = 'bloom-arc-v1';
+var WALL_OPT = { 0:'serve', 1:'receive', 3:'spike', 4:'block' };   // 벽 능력치 → 캠프 훈련 선택지
+var WALL_INFO = {
+  0:{ act:'서브',    what:'서브 성공',   story:'중요한 순간마다 서브 범실', proof:'그 서브를, 넣었다',      type:'rate' },
+  1:{ act:'리시브',  what:'안정 리시브', story:'서브만 오면 몸이 굳는다',   proof:'그 리시브를, 받아냈다',  type:'rate' },
+  3:{ act:'스파이크', what:'공격 성공',   story:'결정적인 공격이 번번이 막힌다', proof:'그 스파이크를, 꽂았다', type:'rate' },
+  4:{ act:'블로킹',  what:'블로킹 득점', story:'네트 앞에서 늘 한 박자 늦다', proof:'그 블로킹을, 해냈다',   type:'count' }
+};
+var lastArcToday = null, lastArcProof = false;
+function arcLoad(){ try { return JSON.parse(localStorage.getItem(ARC_KEY) || 'null'); } catch(e){ return null; } }
+function arcSave(a){ try { localStorage.setItem(ARC_KEY, JSON.stringify(a)); } catch(e){} }
+function arcGet(){   // 보유하지 않은 카드의 아크(처음부터 다시 등)는 무시
+  var a = arcLoad(); if (!a) return null;
+  try { if (!G || !G.ownedCards || G.ownedCards[a.cardId] === undefined) return null; } catch(e){ return null; }
+  return a;
+}
+function arcRep(a){ try { return a ? E.representativeOf(G, a.cardId) : null; } catch(e){ return null; } }
+function wallMetric(box, stat){
+  if (!box) return null;
+  if (stat === 0) return { made:(box.serves||0) - (box.serveErrors||0), att:box.serves||0 };
+  if (stat === 1) return { made:(box.receptionPerfect||0) + (box.receptionGood||0), att:box.receptions||0 };
+  if (stat === 3) return { made:box.kills||0, att:box.attacks||0 };
+  if (stat === 4) return { made:box.blockKills||0, att:null };
+  return null;
+}
+function wallText(stat, m){
+  var w = WALL_INFO[stat];
+  if (!m || (m.made === null || m.made === undefined)) return '기록 없음';
+  if (w.type === 'count' || !m.att) return w.what + ' ' + m.made + (w.type === 'count' ? '개' : '');
+  return w.what + ' ' + m.made + '/' + m.att + ' (' + Math.round(m.made / m.att * 100) + '%)';
+}
+function wallSuccessTouch(stat, t, r){
+  if (stat === 0) return t.type === 3 && (t.outcome === 2 || (r.point && r.point.clutch && t.outcome !== 4));
+  if (stat === 1) return t.type === 4 && t.quality === 1;
+  if (stat === 3) return t.type === 6 && (t.outcome === 3 || t.outcome === 7);
+  if (stat === 4) return t.type === 7 && t.outcome === 5;
+  return false;
+}
+// 첫 캠프에 들어온 선수가 주인공. 벽 = 포지션 핵심 능력치 중 가장 약한 것, 목표 = 한 캠프에 넘을 만큼(+12, 잠재력 상한 안).
+function arcEnsure(){
+  if (!ses) return;
+  var card = ses.trainee.card, a = arcLoad();
+  if (a && a.cardId !== card.id) { if (arcGet()) return; a = null; }   // 프로토타입은 아크 1개
+  if (a) return;
+  var o = E.trainingOptions(ses);
+  var cand = (CORE[card.pos] || []).filter(function(i){ return WALL_INFO[i]; });
+  if (!cand.length) cand = [0];
+  var stat = cand.slice().sort(function(x, y){ return o.stats[x] - o.stats[y]; })[0];
+  var base = Math.round(o.stats[stat]);
+  var target = Math.min(base + 12, Math.round(o.potential[stat]) - 1);
+  if (target < base + 5) target = base + 5;
+  arcSave({ cardId: card.id, name: card.name, pos: card.pos, stat: stat, base: base, target: target,
+            then: null, now: null, cleared: false, proven: false, defer: 0, matches: [] });
+}
+function arcForSession(){ var a = arcLoad(); return (a && ses && a.cardId === ses.trainee.card.id) ? a : null; }
+function arcStrip(o){
+  var a = arcForSession(); if (!a) return '';
+  var w = WALL_INFO[a.stat], cur = Math.round(o.stats[a.stat]);
+  var pct = Math.max(0, Math.min(100, (cur - a.base) / Math.max(1, a.target - a.base) * 100));
+  var done = cur >= a.target;
+  return '<div class="arc-strip'+(done?' done':'')+'"><span class="as-ic">🧱</span><div class="as-tx">'+
+    '<b>'+esc(a.name)+'의 벽 — '+w.act+'</b>'+
+    '<div class="tiny">'+esc(w.story)+' · '+STATK[a.stat]+' '+cur+' / 목표 '+a.target+(done?' · <b style="color:var(--good);font-size:12px">넘을 준비 완료</b>':'')+'</div>'+
+    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div></div></div>';
+}
+// 평가전(모의고사)에서 벽이 처음 시험받은 장면 = '그때'. 복선으로 남긴다.
+function arcCaptureEval(o){
+  var a = arcForSession(); if (!a || !o || o.absent) return '';
+  var m = wallMetric(o.box, a.stat), cur = 0;
+  try { cur = Math.round(E.trainingOptions(ses).stats[a.stat]); } catch(e){}
+  if (!a.then) {
+    a.then = { made: m ? m.made : null, att: m ? m.att : null, stage: '모의고사 '+((o.round||0)+1)+'차', statVal: cur };
+    arcSave(a);
+    // 이미 감을 잡았으면 '굳었다'고 하지 않는다 — 실전 증명이 남았다는 쪽으로.
+    if (m && m.att && m.made / m.att >= 0.5) return '🧱 벽 테스트 · '+wallText(a.stat, m)+' — 감은 잡았다. 이제 실전에서 증명할 차례.';
+    return '🧱 벽 테스트 · '+wallText(a.stat, m)+' — 이 장면, 기억해 두세요.';
+  }
+  return '🧱 벽 · '+wallText(a.stat, m)+' (그때 '+wallText(a.stat, { made:a.then.made, att:a.then.att })+')';
+}
+function arcOnGrad(g){
+  var a = arcLoad(); if (!a || !g || !g.instance || g.instance.cardId !== a.cardId) return;
+  var rep = arcRep(a) || g.instance;
+  var now = Math.round(rep.finalStats ? rep.finalStats[a.stat] : a.base);
+  a.now = now; a.cleared = a.cleared || now >= a.target;
+  if (!a.then) a.then = { made:null, att:null, stage:'캠프 시작', statVal:a.base };
+  arcSave(a);
+}
+function arcGradCard(g){
+  var a = arcLoad(); if (!a || !g || !g.instance || g.instance.cardId !== a.cardId) return '';
+  var w = WALL_INFO[a.stat], now = (a.now !== null && a.now !== undefined) ? a.now : a.base;
+  var pct = Math.max(0, Math.min(100, (now - a.base) / Math.max(1, a.target - a.base) * 100));
+  return '<div class="arc-strip'+(a.cleared?' done':'')+'"><span class="as-ic">🧱</span><div class="as-tx">'+
+    '<b>'+esc(a.name)+'의 벽 — '+w.act+'</b>'+
+    '<div class="tiny">'+STATK[a.stat]+' '+a.base+' → '+now+' / 목표 '+a.target+'</div>'+
+    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div>'+
+    '<div class="tiny" style="margin-top:6px;color:var(--ink2)">'+(a.cleared
+      ? '벽을 넘을 준비 완료! 이제 <b>진짜 경기</b>에서 증명할 차례예요.'
+      : '아직 벽 앞이에요. 다시 캠프에서 '+w.act+' 훈련을 더 하면 넘을 수 있어요.')+'</div></div></div>';
+}
+// 드라마 천장 — 결과는 엔진이 정하고, 우리는 어느 장면을 비출지만 고른다. 벽을 넘은 뒤 첫 의미 있는 성공을 '증명' 컷인으로.
+function arcProofTouch(r, t){
+  if (!mv || mv.arcProved || !t) return null;
+  var a = arcGet(); if (!a || !a.cleared || a.proven) return null;
+  var rep = arcRep(a); if (!rep || t.playerId !== rep.instanceId || t.side !== mySide) return null;
+  if (!wallSuccessTouch(a.stat, t, r)) return null;
+  if (r.set < 2 && !(r.point && r.point.clutch)) { mv.arcSeen = (mv.arcSeen || 0) + 1; if (mv.arcSeen < 3) return null; }   // 1세트 초반은 빌드업
+  mv.arcProved = true; mv.arcProvedRi = mv.ri;
+  var w = WALL_INFO[a.stat];
+  return { p: t.player, side: t.side, title: w.proof, name: t.name, proof: true,
+           sub: (a.then && a.then.stage && a.then.stage !== '캠프 시작' && !(a.then.att && a.then.made / a.then.att >= 0.5)
+             ? a.then.stage+' 땐 굳었는데 — 벽을 넘었다' : '캠프에서 쌓은 그대로 — 벽을 넘었다') };
+}
+function arcAfterMatch(m){
+  lastArcToday = null; lastArcProof = false;
+  var a = arcGet(); if (!a || !m) return;
+  var rep = arcRep(a); if (!rep) return;
+  var box = ((m.box && m.box.mine) || []).filter(function(b){ return b.playerId === rep.instanceId; })[0] || null;
+  var met = wallMetric(box, a.stat);
+  var oppName = m.ctx ? (mySide === 0 ? m.ctx.awayName : m.ctx.homeName) : '';
+  var played = !!(box && ((box.receptions||0) + (box.attacks||0) + (box.serves||0) + (box.blockKills||0) + (box.digAttempts||0) > 0));
+  a.matches = (a.matches || []).concat([{ opp: oppName, made: met ? met.made : 0, att: met ? met.att : null, played: played }]).slice(-12);
+  if (a.cleared && !a.proven && played && met && met.made >= 1) {
+    var thenR = (a.then && a.then.att) ? a.then.made / a.then.att : null, nowR = met.att ? met.made / met.att : null;
+    var better = (thenR === null || nowR === null) ? true : nowR > thenR;
+    if ((mv && mv.arcProved) || better || (a.defer || 0) >= 2) {
+      a.proven = true;
+      a.provenAt = { opp: oppName, made: met.made, att: met.att, better: better, statNow: Math.round(rep.finalStats ? rep.finalStats[a.stat] : a.target) };
+      lastArcProof = true;
+    } else a.defer = (a.defer || 0) + 1;
+  }
+  arcSave(a);
+  lastArcToday = { a: a, met: met, played: played, opp: oppName };
+}
+function arcNextLine(){
+  try {
+    if (!G.league) return '';
+    var sv = E.seasonView(G), nx = sv && sv.myNext;
+    if (!nx || nx.isBye || !nx.opponentId) return '';
+    var st = []; try { st = matchStory(nx.opponentId, sv) || []; } catch(e){}
+    return '<div class="ac-next">📺 다음 화 · 매치데이 '+nx.matchday+' vs '+esc(nx.opponentName)+(st[0] ? '<br><span style="font-weight:600;color:var(--ink2)">'+esc(st[0])+'</span>' : '')+'</div>';
+  } catch(e){ return ''; }
+}
+function arcResultCard(){
+  var t = lastArcToday; if (!t || !t.a) return '';
+  var a = t.a, w = WALL_INFO[a.stat], rep = arcRep(a);
+  var chip = a.proven ? '<span class="arc-chip ok">벽을 넘었다</span>' : (a.cleared ? '<span class="arc-chip ready">증명할 차례</span>' : '<span class="arc-chip">벽 앞</span>');
+  var today = t.played ? wallText(a.stat, t.met) : '오늘은 출전하지 않았어요';
+  var then = a.then ? ((a.then.att !== null && a.then.att !== undefined) ? a.then.stage+' · '+wallText(a.stat, { made:a.then.made, att:a.then.att }) : a.then.stage+' · '+STATK[a.stat]+' '+a.then.statVal) : '';
+  var note = a.proven ? '노력한 결과가 코트에서 드러났어요.'
+    : (a.cleared ? '벽을 넘을 준비는 끝났어요. 결정적인 장면이 오면 증명돼요.'
+                 : '아직 벽 앞이에요. 캠프에서 '+w.act+' 훈련을 더 하면 넘을 수 있어요. 오늘 장면, 기억해 두세요.');
+  return '<div class="arc-card"><div class="ac-h">'+(rep ? '<span class="ava">'+portraitSvg(rep, 44)+'</span>' : '')+
+      '<div style="flex:1;min-width:0"><div class="ac-k">오늘의 진전</div><b>'+esc(a.name)+'의 벽 — '+w.act+'</b></div>'+chip+'</div>'+
+    '<div class="ac-row"><span>오늘</span><b>'+esc(today)+'</b></div>'+
+    (then ? '<div class="ac-row dim"><span>그때</span><b>'+esc(then)+'</b></div>' : '')+
+    '<div class="tiny" style="margin-top:6px">'+esc(note)+'</div>'+arcNextLine()+'</div>';
+}
+// 그때 vs 지금 — 노력한 결과가 드러나는 순간을 대비로. 낙담 얼굴(그때) ↔ 환호 얼굴(지금).
+function showArcSplit(){
+  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
+  var a = arcLoad(); if (!a || !a.proven || !a.provenAt) return;
+  var rep = arcRep(a), e = rep ? artEntry(rep) : null, card = rep ? artOf(rep, 'card') : null;
+  var sad = e && e.x && e.x.sad, cheer = e && e.x && e.x.cheer;
+  var w = WALL_INFO[a.stat], pa = a.provenAt;
+  var thenRate = (a.then && a.then.att) ? wallText(a.stat, { made:a.then.made, att:a.then.att }) : null;
+  var nowRate = wallText(a.stat, { made:pa.made, att:pa.att });
+  // 비율은 '확실히 나아졌을 때'만 — 1/6 같은 약한 숫자는 오히려 김을 뺀다. 그땐 장면 서사 + 능력치 성장으로.
+  var showRates = pa.better && thenRate && pa.att && (pa.made / pa.att) >= 0.35;
+  var pic = function(src, cls){
+    if (src || card) return '<img class="asp-img '+cls+'" src="'+(src || card)+'" alt="">';
+    return '<span class="asp-img '+cls+'">'+(rep ? portraitSvg(rep, 120) : '')+'</span>';
+  };
+  var el = document.createElement('div'); el.className = 'arcsplit';
+  el.innerHTML = '<div class="asp-card">'+
+    '<div class="asp-k">🧱 '+esc(a.name)+'의 벽 — '+w.act+'</div><div class="asp-t">벽을 넘었다</div>'+
+    '<div class="asp-two">'+
+      '<div class="asp-side then">'+pic(sad, 'gray')+'<div class="asp-lb">그때 · '+esc((a.then && a.then.stage) || '캠프 시작')+'</div>'+
+        '<div class="asp-v">'+esc(showRates ? thenRate : w.story)+'</div></div>'+
+      '<div class="asp-side now">'+pic(cheer, '')+'<div class="asp-lb">지금 · vs '+esc(pa.opp || '')+'</div>'+
+        '<div class="asp-v">'+esc(showRates ? nowRate : w.proof)+'</div></div>'+
+    '</div>'+
+    '<div class="asp-stat">'+STATK[a.stat]+' <b>'+a.base+'</b> → <b>'+(pa.statNow || a.now || a.target)+'</b> · 캠프에서 키운 만큼</div>'+
+    '<div class="asp-next">다음 이야기: 새 꿈 <b>"클러치 해결사"</b><br><span>(프로토타입은 여기까지)</span></div>'+
+    '<button class="btn" data-act="arcclose">계속</button></div>';
+  el.addEventListener('click', function(ev){ if (ev.target === el && el.parentNode) el.parentNode.removeChild(el); });
+  document.body.appendChild(el);
+  confetti();
+  try { ensureAudio(); if (snd && snd.on) sfx('ssr'); } catch(err){}
+  haptic([0,60,40,60,40,90]);
+}
+
 function campEnter(onDone){
   try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(e){}
   var reduced = false; try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
@@ -2134,6 +2378,7 @@ function coachBadge(sup){
 
 function startCamp(ids){
   ses = E.startTraining(G, trainPick, ids || supPick || []);
+  try { arcEnsure(); } catch(e){}   // 성장 아크(프로토타입): 첫 캠프 선수에게 벽을 준다
   feed = [];
   usedAutoThisCamp = false;
   view = 'trainTurn';
@@ -2200,6 +2445,7 @@ function vTrainTurn(){
       '<button class="btn" data-choice="rest">치료하고 다음 턴으로</button>';
   } else {
     var rec = coachShowRec() ? coachRec() : null;
+    var arcA = arcForSession(), wallOp = arcA ? (WALL_OPT[arcA.stat] || null) : null;
     // 처음 보는 사람에게 버튼의 세 가지 표시(초록 능력치·적성 글자·피로 숫자)가 무엇인지 한 줄로.
     body = '<div class="tiny" style="margin:0 2px 8px">초록 글씨 = 이번 훈련으로 오르는 능력치 · S~D = 이 선수의 훈련 적성(S가 최고) · 오른쪽 숫자 = 피로 변화</div>';
     body += o.options.map(function(op){
@@ -2209,8 +2455,9 @@ function vTrainTurn(){
       if (op.id==='rest') gains = '피로 회복 · 컨디션 상승 '+Math.round((op.restCondUpP||0)*100)+'%';
       if (op.id==='special') gains = '<b>특훈</b> 큰 상승 · 피로 많이';
       var isRec = rec !== null && op.id === rec;
+      var isWall = wallOp !== null && op.id === wallOp;
       return '<button class="act'+(op.id==='rest'?' rest':'')+'" data-choice="'+op.id+'"'+(isRec?' data-rec="1"':'')+'>'+
-        '<span class="lbl">'+esc(op.label)+(isRec?'<span class="rec">추천</span>':'')+'</span>'+
+        '<span class="lbl">'+esc(op.label)+(isRec?'<span class="rec">추천</span>':'')+(isWall?'<span class="wall-tag">🧱 벽</span>':'')+'</span>'+
         '<span class="gain">'+gains+'</span>'+
         '<span class="right">'+
           (op.hasAptitude?'<span class="apt '+op.aptitudeLabel+'">'+op.aptitudeLabel+'</span> ':'')+
@@ -2233,7 +2480,7 @@ function vTrainTurn(){
   var fd = feed.length ? '<ul class="feed">'+feed.slice(-5).reverse().map(function(f){
       return '<li class="'+(f.cls||'')+'">'+f.html+'</li>'; }).join('')+'</ul>' : '';
 
-  return campBar() + head + body + auto + fd;
+  return campBar() + arcStrip(o) + head + body + auto + fd;
 }
 
 // ---------- 육성: 졸업
@@ -2249,7 +2496,7 @@ function vTrainGrad(){
     '<div><b>'+(goalMet?'목표 달성!':'목표까지 조금 더')+'</b>'+
     '<div class="tiny">'+esc(goalLabel)+(goalMet?' — 해냈어요.':' — 다시 도전하면 더 좋게 나올 수 있어요.')+'</div></div></div>';
   return h('<h2>졸업</h2>'+
-    goalBanner+
+    goalBanner+arcGradCard(g)+
     '<div class="card" style="text-align:center;border-color:var(--line2)">'+
       '<div class="rv rone" style="width:58%;position:relative;margin-bottom:8px">'+cardFace(inst, ['N','R','SR','SSR'][inst.rarity], { eager:true, sub: POSK[inst.pos]+' · OVR '+g.ovr.toFixed(1) })+
         '<span class="stamp g-'+gc+'">'+gc+'</span></div>'+
@@ -3260,7 +3507,9 @@ function finishViewer(){
   if (won) { confetti(); if (snd && snd.on) setTimeout(function(){ sfx('cheer'); }, 200); }
   else if (snd && snd.on) setTimeout(function(){ sfx('aww'); }, 200);
   if (!skipUnlocked) { skipUnlocked = true; try { localStorage.setItem(SKIP_KEY, '1'); } catch(e){} }
+  try { arcAfterMatch(lastMatch); } catch(e){ lastArcToday = null; lastArcProof = false; }
   view = 'matchResult'; render(); window.scrollTo(0,0);
+  if (lastArcProof) { lastArcProof = false; setTimeout(showArcSplit, 1100); }
 }
 
 function skipSet(){
@@ -3369,11 +3618,13 @@ function paintLive(ti){
     var ct = null;
     if (ended && r.point) {
       var last = r.touches[r.touches.length - 1];
-      if (last && last.side === r.point.side && (last.outcome === 2 || last.outcome === 3 || last.outcome === 5 || last.outcome === 7))
+      if (last && last.side === r.point.side && (last.outcome === 2 || last.outcome === 3 || last.outcome === 5 || last.outcome === 7) && mv.arcProvedRi !== mv.ri)
         ct = { p: last.player, side: last.side, title: OUTN[last.outcome], name: last.name, outcome: last.outcome, clutch: !!r.point.clutch, seq: mv.ri };
     } else if (ti < r.touches.length) {
       var tt = r.touches[ti];
-      if (tt && tt.skills && tt.skills.length) ct = { p: tt.player, side: tt.side, title: tt.skills[0].skillName, name: tt.name, skill: true };
+      var pr = null; try { pr = arcProofTouch(r, tt); } catch(e){}   // 성장 아크: 벽을 넘은 뒤 첫 성공 = 증명 컷인
+      if (pr) ct = pr;
+      else if (tt && tt.skills && tt.skills.length) ct = { p: tt.player, side: tt.side, title: tt.skills[0].skillName, name: tt.name, skill: true };
     }
     if (ct) showCut(cut, ct);
     if (fl && ct && !ct.skill && cut.className.indexOf('show') >= 0) fl.classList.add('up');
@@ -3412,17 +3663,26 @@ function showCut(el, ct){
   if (!bust) return;
   var mine = ct.side === mySide;
   // 자막 우선순위: 캠프 흔적(경기당 한 번) → 성격 양념(commentary.js) → 이름
-  var sub = ct.name || '', trace = cutTrace(ct);
-  if (trace) sub = trace;
+  var sub = ct.name || '', trace = ct.proof ? null : cutTrace(ct);
+  if (ct.proof) sub = ct.sub || sub;
+  else if (trace) sub = trace;
   else if (!ct.skill && ct.p && ct.p.personality && ct.p.personality.length) {
     var kind = ct.outcome === 2 ? 'ace' : (ct.outcome === 5 ? 'block' : (ct.clutch ? 'clutchKill' : ''));
     if (kind) { var q = E.personalityQuip(E.archetypeOf(ct.p.personality), kind, ct.name, ct.seq || 0); if (q) sub = q; }
   }
-  el.className = 'cut show ' + (mine ? 'home' : 'away') + (ct.skill ? ' sk' : '');
+  el.className = 'cut show ' + (mine ? 'home' : 'away') + (ct.skill ? ' sk' : '') + (ct.proof ? ' proof' : '');
+  if (ct.proof) {
+    try { if (snd && snd.on) sfx('ssr'); } catch(e){}
+    haptic([0,50,40,70]);
+    if (cr && mv && mv.playing) {   // 증명의 순간은 멈춰서 보여 준다 — 재개는 R.play 가 시간 기준을 새로 잡아 장면이 건너뛰지 않는다
+      cr.pause(); cr.frame();
+      setTimeout(function(){ if (cr && mv && mv.playing && !mv.done) cr.play(); }, 1500);
+    }
+  }
   el.innerHTML = '<div class="band"></div><div class="bust">'+bust+'</div>'+
     '<div class="lbl">'+esc(ct.title || '')+'<small'+(trace ? ' class="trace"' : '')+'>'+esc(sub)+'</small></div>';
   clearTimeout(cutTimer);
-  cutTimer = setTimeout(function(){ el.className = 'cut'; }, Math.max(500, (trace ? 1500 : 1100) / sp));
+  cutTimer = setTimeout(function(){ el.className = 'cut'; }, (ct.proof ? 1900 : Math.max(500, (trace ? 1500 : 1100) / sp)));
 }
 /** 경기 인트로(art-pipeline 16.2) — 양 팀 선발 얼굴을 마주 세운다. 탭하면 바로 시작. */
 function showIntro(){
@@ -3556,6 +3816,7 @@ function vMatchResult(){
   '</div>';
   return h(
    rhero+
+   arcResultCard()+
    '<div class="score">'+
      '<div class="teams">'+
        '<div class="tn">'+esc(m.ctx.homeName)+'</div>'+
@@ -3728,7 +3989,7 @@ function runGradeReveal(grade, onDone){
   ov.addEventListener('click', function(){ if (done) return; if (!ov.classList.contains('burst')) showGrade(); clr(); timers.push(setTimeout(finish, 300)); });
 }
 // 평가전 '모의고사' 리포트(C) — 활약도 측정 + 성장, '진짜 무대는 리그' 로 역할을 분리. 결과가 아니라 측정으로 읽히게.
-function evalReport(o){
+function evalReport(o, arcLine){
   try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
   var perf = Math.round(o.performance || 0);
   var tier = perf>=80?'코트를 지배':(perf>=62?'좋은 측정':(perf>=40?'보통':'아쉬운 하루'));
@@ -3743,6 +4004,7 @@ function evalReport(o){
     '<div class="er-gauge"><span style="width:'+perf+'%"></span></div>'+
     '<div class="er-tier">'+tier+(o.mvp?' · MVP':'')+'</div>'+
     (gain ? '<div class="er-gain">'+gain+'</div>' : '')+
+    (arcLine ? '<div class="er-arc">'+esc(arcLine)+'</div>' : '')+
     '<div class="er-note">연습 측정이에요. 진짜 무대는 <b>리그</b>에서.</div>'+
   '</div>';
   el.addEventListener('click', function(){ if (el.parentNode) el.parentNode.removeChild(el); });
@@ -3797,7 +4059,8 @@ function applyChoice(id){
   if (evEv) {
     var evs = (ses && ses.evaluations) || [];
     var o = evs[evs.length - 1];
-    if (o && !o.absent && o.performance !== undefined) evalReport(o); else evalFlash(evEv.text);   // 측정 리포트(C), 결장 등은 간단 배너
+    var arcLine = ''; try { arcLine = arcCaptureEval(o); } catch(e){}   // 성장 아크: 첫 평가전 = '그때'(복선)
+    if (o && !o.absent && o.performance !== undefined) evalReport(o, arcLine); else evalFlash(evEv.text);   // 측정 리포트(C), 결장 등은 간단 배너
   }
 }
 
@@ -3827,6 +4090,7 @@ function pushFeed(ev){
 
 function finishCamp(){
   lastGrad = E.graduate(ses, 'best');   // 재육성 결과가 기존 대표보다 나쁘면 로스터를 바꾸지 않는다
+  try { arcOnGrad(lastGrad); } catch(e){}
   var earned = !autoUnlocked && !usedAutoThisCamp;
   if (earned) {
     autoUnlocked = true;
@@ -4038,6 +4302,7 @@ document.addEventListener('click', function(e){
   if (d.act === 'dexback') { var back = dexBack; dexFocus = null; go(back === 'scout' ? 'scout' : 'album'); return; }
 
   if (d.act === 'dailyclaim') return claimDaily();
+  if (d.act === 'arcclose') { var asp = document.querySelector('.arcsplit'); if (asp && asp.parentNode) asp.parentNode.removeChild(asp); return; }
   if (d.act === 'scout') return doScout();
   if (d.act === 'scout10') return doScout10();
   if (d.act === 'sgsummon') { runSummon(d.rar || 'R', function(){}); return; }      // 디자인 시스템 화면 — 연출 미리보기
@@ -4121,6 +4386,7 @@ document.addEventListener('click', function(e){
     if (!confirm('저장된 진행을 지우고 처음부터 시작할까요?')) return;
     try { localStorage.removeItem(SAVE_KEY); } catch(err){}
     try { localStorage.removeItem(MISSION_KEY); } catch(err2){}
+    try { localStorage.removeItem(ARC_KEY); } catch(err3){}   // 성장 아크도 처음부터
     claimed = {};
     G = newGame();
     coach.on = true; coach.done = false; coachLastKey = null; saveCoach();
@@ -4130,6 +4396,6 @@ document.addEventListener('click', function(e){
 
 boot();
 // QA/스크린샷용 연출 훅(순수 연출, 판정 무관). 실제 게임 흐름은 이걸 쓰지 않는다.
-try { window.__fx = { grade: runGradeReveal, summon: runSummon, eval: evalFlash }; } catch(e){}
+try { window.__fx = { grade: runGradeReveal, summon: runSummon, eval: evalFlash, arcSplit: showArcSplit }; } catch(e){}
 })();
 </script>
