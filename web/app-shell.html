@@ -773,6 +773,7 @@ var mySide = 0;   // 이번 경기에서 내 팀이 홈(0)인지 원정(1)인지
 var detailId = null;   // 상세 화면에서 보고 있는 인스턴스
 var reportId = null;   // 스카우트 리포트 화면의 카드 id
 var facilityBack = 'home'; // 시설 화면에서 돌아갈 곳 — 결산 흐름(E.5 ⑭)에서 들어오면 'settle'
+var helpBack = 'home';     // 도움말에서 돌아갈 곳 — 경기 중계에서 열면 'matchLive'(경기로 복귀). 뷰어 상태(mv)는 보존돼 이어 본다.
 var leagueTab = 'now'; // 리그 화면 서브탭: now | sched | stats
 // world.md 3절 라이벌 구도
 var RIVALS = { t01:'t05', t05:'t01', t02:'t06', t06:'t02', t03:'t04', t04:'t03' };
@@ -1232,7 +1233,7 @@ var BACK_ROOT = { lineup:'roster', album:'roster', player:'roster', matchResult:
 window.bloomBack = function(){
   if (lineupPick != null) { lineupPick = null; render(); return true; }
   if (ses || view === 'matchLive') return true;
-  var to = view === 'feedback' ? (fbBack || 'home') : BACK_ROOT[view];
+  var to = view === 'feedback' ? (fbBack || 'home') : (view === 'help' ? (helpBack || 'home') : BACK_ROOT[view]);
   if (to) { go(to); return true; }
   if (view !== 'home') { go('home'); return true; }
   return false;
@@ -3775,7 +3776,7 @@ function vHelp(){
      '<b>멘탈</b><span>20점 이후 접전(클러치)에서 성공률 보정</span>'+
      '<b>스태미나</b><span>세트가 길어져도 능력치가 덜 떨어짐</span>'+
    '</div></div>'+
-   '<button class="btn" data-go="home">알겠습니다</button>'+
+   '<button class="btn" data-act="helpback">'+(helpBack === 'matchLive' ? '경기로 돌아가기' : '알겠습니다')+'</button>'+
    '<button class="btn ghost" data-act="coachon" style="margin-top:9px">코치 안내 다시 보기</button>'+
    '<button class="tiny" data-go="feedback" style="display:block;width:100%;margin-top:12px;padding:10px 0;text-decoration:underline;color:var(--ink2)">헷갈리는 게 있으면 · 피드백 보내기</button>');
 }
@@ -3932,7 +3933,8 @@ document.addEventListener('click', function(e){
     else if (d.mv === 'end') finishViewer();
     return;
   }
-  if (d.act === 'help') { stopViewer(); go('help'); return; }
+  if (d.act === 'help') { helpBack = (view === 'help') ? helpBack : view; go('help'); return; }   // 돌아갈 곳 기억(경기 중계 등)
+  if (d.act === 'helpback') { go(helpBack || 'home'); return; }
   if (d.fac) {
     try { var up = E.upgradeFacility(G, d.fac); save(); toast(up.name+' '+up.level+'단계 · −'+fmtGold(up.price)+'골드'); }
     catch(err){ toast(err.message); }
