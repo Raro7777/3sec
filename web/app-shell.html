@@ -432,21 +432,22 @@ details[open] summary::after{content:"▴"}
 .hero .hbg{position:absolute;right:-8%;top:-4%;width:58%;height:78%;object-fit:cover;object-position:50% 0;opacity:.62;
   pointer-events:none;-webkit-mask-image:linear-gradient(to left,#000 30%,transparent 100%);mask-image:linear-gradient(to left,#000 30%,transparent 100%)}
 .hero .hin{position:relative}
-.cut{position:absolute;left:0;right:0;bottom:0;height:46%;pointer-events:none;opacity:0;overflow:hidden}
+/* 컷인 — 스킬·결정적 득점 순간, 코트를 거의 가득 채우는 큰 연출(사용자 요청 2026-10). */
+.cut{position:absolute;inset:0;pointer-events:none;opacity:0;overflow:hidden}
 .cut.show{opacity:1}
-.cut .band{position:absolute;left:-10%;right:-10%;top:16%;bottom:16%;transform:skewY(-6deg);
-  background:linear-gradient(90deg,rgba(95,176,255,.82),rgba(95,176,255,.06))}
-.cut.away .band{background:linear-gradient(270deg,rgba(240,144,128,.82),rgba(240,144,128,.06))}
-.cut.sk .band{background:linear-gradient(90deg,rgba(233,185,73,.85),rgba(233,185,73,.06))}
-.cut.sk.away .band{background:linear-gradient(270deg,rgba(233,185,73,.85),rgba(233,185,73,.06))}
-.cut .bust{position:absolute;bottom:0;width:38%;aspect-ratio:4/5;overflow:hidden;border-radius:10px 10px 0 0;
-  box-shadow:0 0 0 2px rgba(233,240,247,.4),0 10px 30px rgba(0,0,0,.6);background:var(--panel2);line-height:0}
-.cut .bust img{display:block;max-width:none}
-.cut.home .bust{left:5%} .cut.away .bust{right:5%}
-.cut .lbl{position:absolute;top:24%;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:26px;
-  letter-spacing:.04em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.75);line-height:1.05}
-.cut .lbl small{display:block;font-family:"Gothic A1",sans-serif;font-size:13.5px;font-weight:700;color:rgba(233,240,247,.9);letter-spacing:0;margin-top:3px}
-.cut.home .lbl{left:47%} .cut.away .lbl{right:47%;text-align:right}
+.cut::before{content:"";position:absolute;inset:0;background:radial-gradient(135% 95% at 50% 62%,rgba(8,14,22,.12),rgba(8,14,22,.56))}
+.cut .band{position:absolute;left:-14%;right:-14%;top:26%;bottom:14%;transform:skewY(-7deg);
+  background:linear-gradient(90deg,rgba(95,176,255,.85),rgba(95,176,255,.05))}
+.cut.away .band{background:linear-gradient(270deg,rgba(240,144,128,.85),rgba(240,144,128,.05))}
+.cut.sk .band{background:linear-gradient(90deg,rgba(233,185,73,.88),rgba(233,185,73,.05))}
+.cut.sk.away .band{background:linear-gradient(270deg,rgba(233,185,73,.88),rgba(233,185,73,.05))}
+.cut .bust{position:absolute;bottom:0;width:58%;max-width:300px;aspect-ratio:4/5;overflow:hidden;border-radius:16px 16px 0 0;
+  box-shadow:0 0 0 2px rgba(233,240,247,.45),0 14px 40px rgba(0,0,0,.6);background:var(--panel2);line-height:0}
+.cut .bust img,.cut .bust svg{display:block;max-width:none;width:100%;height:100%}
+.cut.home .bust{left:3%} .cut.away .bust{right:3%}
+.cut .lbl{position:absolute;top:11%;left:0;right:0;text-align:center;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:42px;
+  letter-spacing:.04em;color:#fff;text-shadow:0 3px 14px rgba(0,0,0,.8);line-height:1.02}
+.cut .lbl small{display:block;font-family:"Gothic A1",sans-serif;font-size:15px;font-weight:700;color:rgba(233,240,247,.95);letter-spacing:0;margin-top:5px;padding:0 16px}
 .intro{position:absolute;inset:0;background:rgba(6,12,20,.86);display:none;flex-direction:column;justify-content:center;gap:14px;padding:14px}
 .intro.show{display:flex}
 .intro .tm{text-align:center}
@@ -1120,6 +1121,23 @@ function portraitSvg(p, size){
     '<defs><clipPath id="c'+uid+'"><circle cx="50" cy="50" r="49"/></clipPath>'+g.bg+'</defs>'+
     '<g clip-path="url(#c'+uid+')"><rect width="100" height="100" fill="url(#g'+uid+')"/>'+g.body+'</g>'+
   '</svg>';
+}
+// 경기 중계 전용 — 사진을 쓰지 않고 항상 '머리 모양'(SVG 드로잉)을 그린다. 코트의 리그 머리와 톤을 맞춘다(사용자 요청 2026-10).
+function drawnHead(p, size){
+  var uid = 'p' + hashId((p.cardId||p.id||'') + (p.instanceId||'')).toString(36);
+  var g = personG(p, uid);
+  return '<svg viewBox="0 0 100 100" width="'+size+'" height="'+size+'" aria-hidden="true">'+
+    '<defs><clipPath id="c'+uid+'"><circle cx="50" cy="50" r="49"/></clipPath>'+g.bg+'</defs>'+
+    '<g clip-path="url(#c'+uid+')"><rect width="100" height="100" fill="url(#g'+uid+')"/>'+g.body+'</g>'+
+  '</svg>';
+}
+// 컷인용 상반신 — 같은 드로잉을 4:5 세로 상자에 꽉 채운다(머리+어깨). 사진 대신.
+function drawnBust(p){
+  if (!p) return '';
+  var uid = 'p' + hashId((p.cardId||p.id||'') + (p.instanceId||'')).toString(36);
+  var g = personG(p, uid);
+  return '<svg viewBox="10 0 80 100" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" aria-hidden="true">'+
+    '<defs>'+g.bg+'</defs><rect x="10" y="0" width="80" height="100" fill="url(#g'+uid+')"/>'+g.body+'</svg>';
 }
 function shade(hex, amt){
   var n = parseInt(hex.slice(1),16), r=(n>>16)+amt, g=((n>>8)&255)+amt, b=(n&255)+amt;
@@ -3283,7 +3301,7 @@ function cutTrace(ct){
 function showCut(el, ct){
   var sp = (mv && mv.speed) || 1;
   if (!ct.p || sp >= 4) return;
-  var bust = artBust(ct.p, ct.name);
+  var bust = drawnBust(ct.p);   // 사진 대신 머리 모양 상반신(사용자 요청)
   if (!bust) return;
   var mine = ct.side === mySide;
   // 자막 우선순위: 캠프 흔적(경기당 한 번) → 성격 양념(commentary.js) → 이름
@@ -3306,7 +3324,7 @@ function showIntro(){
   var debut = debutSet(m);
   var row = function(ids){
     return '<div class="row">'+ids.map(function(id){ var p = m.ctx.players[id]; if (!p) return '';
-      var av = '<span class="ava">'+portraitSvg(p, 38)+'</span>';
+      var av = '<span class="ava">'+drawnHead(p, 38)+'</span>';
       return debut[id] ? '<span class="avw">'+av+'<i class="dbt">데뷔</i></span>' : av; }).join('')+'</div>';
   };
   var oppId = m.ctx.homeId === G.clubId ? m.ctx.awayId : m.ctx.homeId;
@@ -3331,7 +3349,7 @@ function rallyStrip(r, shown, ended){
     var note = t.type===4 && QN[t.quality] ? ' ' + QN[t.quality] : '';
     var sk = (t.skills && t.skills.length)
       ? '<span class="skb">'+esc(t.skills[0].skillName)+(t.skills.length>1?' +'+(t.skills.length-1):'')+'</span>' : '';
-    var face = t.player ? '<span class="ava xs">'+portraitSvg(t.player, 22)+'</span>' : '';
+    var face = t.player ? '<span class="ava xs">'+drawnHead(t.player, 22)+'</span>' : '';
     return (i? '<span class="tch arrow">›</span>' : '') +
       '<span class="'+cls+'">'+face+'<span class="tx"><span class="tact">'+act+note+'</span><span class="who2">'+esc(t.name)+'</span>'+sk+'</span></span>';
   }).join('');
