@@ -783,6 +783,34 @@ body.camp main{position:relative;z-index:1;padding:0 14px 28px}
 .er-note{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.5} .er-note b{color:var(--court)}
 @media (prefers-reduced-motion:no-preference){ .er-card{animation:erin .35s cubic-bezier(.2,.8,.2,1.1) both} @keyframes erin{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}} }
 /* ===== 성장 아크 프로토타입(core-loop v3 검증) — 선수 1명 · 벽 1개 · 증명 1번. 연출만, 판정 무관. ===== */
+/* 선수 이야기 */
+.as-dream{font-size:12px;color:var(--ink2);margin-top:3px;line-height:1.4}
+.storyreact{position:fixed;inset:0;z-index:80;background:rgba(10,18,30,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px 16px 24px;animation:srIn .25s ease}
+.sr-card{width:100%;max-width:440px;background:var(--panel);border-radius:22px;padding:18px 18px 14px;text-align:center;box-shadow:0 18px 40px rgba(0,0,0,.25);animation:srUp .3s cubic-bezier(.2,.9,.3,1.2)}
+.sr-face{display:block;width:132px;height:132px;margin:-64px auto 8px;border-radius:50%;object-fit:cover;border:4px solid var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.2);background:var(--panel2);overflow:hidden}
+.sr-name{font-weight:800;font-size:15px;color:var(--ink2)}
+.sr-text{font-size:17px;line-height:1.6;margin:8px 2px 10px;word-break:keep-all}
+.sr-tag{display:inline-block;font-size:14px;font-weight:700;color:var(--ink3);background:var(--panel2);border-radius:999px;padding:6px 12px}
+.sr-tag.ok{color:#D2477A;background:rgba(232,90,140,.12)}
+.sr-tap{font-size:12px;color:var(--ink3);margin-top:10px}
+@keyframes srIn{from{opacity:0}to{opacity:1}}
+@keyframes srUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.end-scene{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:12px;margin:0 0 12px}
+.end-scene .sr-face{width:84px;height:84px;margin:0;flex:none;border-width:3px}
+.end-scene.t2 .sr-face{filter:saturate(.7)}
+.es-tx{flex:1;min-width:0}
+.es-k{font-size:12px;font-weight:800;color:var(--ink3);letter-spacing:.04em}
+.es-line{font-size:16px;line-height:1.55;margin-top:2px;word-break:keep-all}
+.es-bond{font-size:13px;font-weight:700;color:#D2477A;margin-top:6px}
+.story-banner{display:flex;align-items:center;gap:10px;width:100%;min-height:60px;text-align:left;border:0;border-radius:16px;padding:12px 14px;margin:0 0 12px;
+  background:linear-gradient(120deg,#FFF3D6,#FFE1EC);color:#1F2A37;font:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(210,71,122,.12)}
+.sb-ic{font-size:26px}.sb-tx{flex:1;display:flex;flex-direction:column;font-size:16px}.sb-tx span{font-size:13px;color:#4A5868}.sb-go{font-size:24px;color:#8090A0}
+.storypick{position:fixed;inset:0;z-index:80;background:rgba(10,18,30,.55);display:flex;align-items:flex-end;justify-content:center;animation:srIn .2s ease}
+.sp-sheet{width:100%;max-width:480px;max-height:92vh;overflow-y:auto;background:var(--bg);border-radius:22px 22px 0 0;padding:16px 16px 20px;animation:srUp .3s ease}
+.sp-h{font-weight:800;font-size:18px;margin:2px 2px 8px}
+.sp-card{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:1px solid var(--line2);background:var(--panel);border-radius:16px;padding:12px;margin:0 0 10px;font:inherit;color:var(--ink);cursor:pointer;min-height:44px}
+.sp-card .sr-face{width:76px;height:76px;margin:0;flex:none;border-width:3px}
+.sp-tx{flex:1;min-width:0}.sp-flaw,.sp-dream{font-size:14px;line-height:1.45;margin-top:4px;word-break:keep-all}.sp-dream{color:var(--ink2)}
 .arc-strip{display:flex;gap:10px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--hot);
   border-radius:14px;padding:10px 12px;margin-bottom:10px;box-shadow:var(--sh1)}
 .arc-strip.done{border-left-color:var(--good)}
@@ -1500,6 +1528,7 @@ function coachStep(){
   // ① 캠프 안
   if (ses) {
     var o = E.trainingOptions(ses);
+    if (o.kind === 'event' && o.event && o.event.kind === 0 && storyFor(ses.trainee.card.id)) return { key:'ev'+o.turn, text:'이야기 선택입니다. 이 선수에게 지금 필요한 말을 골라 보세요. 마음이 통하면 표정이 달라지고, 그 말은 나중에 경기에서 돌아옵니다.', sel:'[data-choice^="event:"]' };
     if (o.kind === 'event') return { key:'ev'+o.turn, text:'이야기 선택입니다. 마음 가는 쪽을 고르세요. 정답은 없고, <b>추천</b>은 무난한 쪽입니다.', sel:'[data-rec="1"]' };
     if (o.treating) return { key:'treat'+o.turn, text:'부상 치료 턴입니다. 훈련은 못 하고 피로만 회복됩니다. <b>치료하고 다음 턴으로</b>를 누르세요.', sel:'[data-choice="rest"]' };
     if (o.kind === 'action') {
@@ -2100,10 +2129,11 @@ function vTrain(){
     try { return !E.isCardRetired(G, cid); } catch(e){ return true; }
   });
   var retiredN = ownedAll.length - owned.length;
-  if (!ownedAll.length) return '<h2>육성</h2><div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
+  if (!ownedAll.length) return '<h2>육성</h2>'+storyBanner()+'<div class="empty">아직 보유한 카드가 없습니다.<br>먼저 스카우트로 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   if (!owned.length) return '<h2>육성</h2><div class="empty">보유한 카드가 모두 은퇴했습니다.<br>스카우트로 새 선수를 데려오세요.</div><button class="btn" data-go="scout">스카우트 하러 가기</button>';
   var trainedN = owned.filter(function(cid){ return !!E.representativeOf(G, cid); }).length;
   return h(roomHead('train', '육성', '<b>선수를 만드는 곳</b> — 12턴 캠프에서 훈련으로 키우고 평가전(모의고사)으로 점검해 졸업시키면, 그 선수를 <b>리그에서 씁니다</b>. 한 번에 5~10분.')+
+    storyBanner()+
     (trainedN ? '<div class="card flat"><div class="tiny"><b style="color:var(--ink2)">재육성</b>은 캠프를 처음부터 다시 도는 것입니다(초기화가 아닙니다). 졸업한 선수는 로스터에 그대로 있고, 새 결과가 더 좋을 때만 교체됩니다. 한계돌파가 있으면 천장이 높아져 더 좋게 나올 수 있습니다.</div></div>' : '')+
     (retiredN ? '<div class="card flat"><div class="tiny">은퇴한 카드 '+retiredN+'장은 목록에서 제외됩니다. 재육성해도 나이는 되돌아가지 않습니다.</div></div>' : '')+
     owned.map(function(cid){
@@ -2113,7 +2143,7 @@ function vTrain(){
       var col = clubColor[c.teamId]||'#3E8FE0';
       var rar = ['N','R','SR','SSR'][c.rarity];
       return '<button class="pcard tap" data-pick="'+cid+'"><span class="ava" style="border-color:'+col+'">'+portraitSvg(c,44)+'</span>'+
-        '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span></div>'+
+        '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span> <span class="pill rar-'+rar+'">'+rar+'</span>'+(storyFor(cid)?' <span class="pill" style="background:#FFE1EC;color:#B23A66">📖 이야기</span>':'')+'</div>'+
         '<div class="pmeta">'+(rep?'<span style="color:var(--good)">로스터 OVR '+rep.ovr.toFixed(1)+' '+['S','A','B','C','D'][rep.grade]+'</span> · 재육성':'미육성 · 첫 캠프')+
         ((G.ownedCards[cid]||0)>0?' · 한계돌파 '+G.ownedCards[cid]:'')+
         (rep?ageBadge(rep,true):'')+reportBadge(cid)+'</div></div>'+
@@ -2174,7 +2204,7 @@ function wallText(stat, m){
   return w.what + ' ' + m.made + '/' + m.att + ' (' + Math.round(m.made / m.att * 100) + '%)';
 }
 function wallSuccessTouch(stat, t, r){
-  if (stat === 0) return t.type === 3 && (t.outcome === 2 || (r.point && r.point.clutch && t.outcome !== 4));
+  if (stat === 0) return t.type === 3 && t.outcome !== 4 && (t.outcome === 2 || (r.point && (r.point.clutch || r.point.side === t.side)));   // 에이스 · 클러치 · 그 서브로 시작한 랠리를 따냈다
   if (stat === 1) return t.type === 4 && t.quality === 1;
   if (stat === 3) return t.type === 6 && (t.outcome === 3 || t.outcome === 7);
   if (stat === 4) return t.type === 7 && t.outcome === 5;
@@ -2183,28 +2213,29 @@ function wallSuccessTouch(stat, t, r){
 // 첫 캠프에 들어온 선수가 주인공. 벽 = 포지션 핵심 능력치 중 가장 약한 것, 목표 = 한 캠프에 넘을 만큼(+12, 잠재력 상한 안).
 function arcEnsure(){
   if (!ses) return;
-  var card = ses.trainee.card, a = arcLoad();
-  if (a && a.cardId !== card.id) { if (arcGet()) return; a = null; }   // 프로토타입은 아크 1개
+  var card = ses.trainee.card, a = arcLoad(), sto = storyFor(card.id);
+  if (a && a.cardId !== card.id) { if (!sto && arcGet()) return; a = null; }   // 프로토타입은 아크 1개 — 이야기 선수는 자리를 이어받는다
   if (a) return;
   var o = E.trainingOptions(ses);
   var cand = (CORE[card.pos] || []).filter(function(i){ return WALL_INFO[i]; });
   if (!cand.length) cand = [0];
-  var stat = cand.slice().sort(function(x, y){ return o.stats[x] - o.stats[y]; })[0];
+  var stat = (sto && WALL_INFO[sto.wall]) ? sto.wall : cand.slice().sort(function(x, y){ return o.stats[x] - o.stats[y]; })[0];   // 이야기 선수 = 프로필의 결함
   var base = Math.round(o.stats[stat]);
   var target = Math.min(base + 12, Math.round(o.potential[stat]) - 1);
   if (target < base + 5) target = base + 5;
   arcSave({ cardId: card.id, name: card.name, pos: card.pos, stat: stat, base: base, target: target,
-            then: null, now: null, cleared: false, proven: false, defer: 0, matches: [] });
+            then: null, now: null, cleared: false, proven: false, defer: 0, matches: [], picks: [], bond: 0 });
 }
 function arcForSession(){ var a = arcLoad(); return (a && ses && a.cardId === ses.trainee.card.id) ? a : null; }
 function arcStrip(o){
   var a = arcForSession(); if (!a) return '';
-  var w = WALL_INFO[a.stat], cur = Math.round(o.stats[a.stat]);
+  var w = WALL_INFO[a.stat], cur = Math.round(o.stats[a.stat]), sto = storyFor(a.cardId);
   var pct = Math.max(0, Math.min(100, (cur - a.base) / Math.max(1, a.target - a.base) * 100));
   var done = cur >= a.target;
   return '<div class="arc-strip'+(done?' done':'')+'"><span class="as-ic">🧱</span><div class="as-tx">'+
     '<b>'+esc(a.name)+'의 벽 — '+w.act+'</b>'+
-    '<div class="tiny">'+esc(w.story)+' · '+STATK[a.stat]+' '+cur+' / 목표 '+a.target+(done?' · <b style="color:var(--good);font-size:12px">넘을 준비 완료</b>':'')+'</div>'+
+    '<div class="tiny">'+esc(sto ? sto.flaw : w.story)+' · '+STATK[a.stat]+' '+cur+' / 목표 '+a.target+(done?' · <b style="color:var(--good);font-size:12px">넘을 준비 완료</b>':'')+'</div>'+
+    (sto ? '<div class="as-dream">💭 꿈 — '+esc(sto.dream)+'</div>' : '')+
     '<div class="arc-bar"><span style="width:'+pct+'%"></span></div></div></div>';
 }
 // 평가전(모의고사)에서 벽이 처음 시험받은 장면 = '그때'. 복선으로 남긴다.
@@ -2217,7 +2248,8 @@ function arcCaptureEval(o){
     arcSave(a);
     // 이미 감을 잡았으면 '굳었다'고 하지 않는다 — 실전 증명이 남았다는 쪽으로.
     if (m && m.att && m.made / m.att >= 0.5) return '🧱 벽 테스트 · '+wallText(a.stat, m)+' — 감은 잡았다. 이제 실전에서 증명할 차례.';
-    return '🧱 벽 테스트 · '+wallText(a.stat, m)+' — 이 장면, 기억해 두세요.';
+    var stoE = storyFor(a.cardId);
+    return '🧱 벽 테스트 · '+wallText(a.stat, m)+' — '+(stoE ? stoE.evalNote+' ' : '')+'이 장면, 기억해 두세요.';
   }
   return '🧱 벽 · '+wallText(a.stat, m)+' (그때 '+wallText(a.stat, { made:a.then.made, att:a.then.att })+')';
 }
@@ -2249,7 +2281,11 @@ function arcProofTouch(r, t){
   if (!wallSuccessTouch(a.stat, t, r)) return null;
   if (r.set < 2 && !(r.point && r.point.clutch)) { mv.arcSeen = (mv.arcSeen || 0) + 1; if (mv.arcSeen < 3) return null; }   // 1세트 초반은 빌드업
   mv.arcProved = true; mv.arcProvedRi = mv.ri;
-  var w = WALL_INFO[a.stat];
+  var w = WALL_INFO[a.stat], stoP = storyFor(a.cardId);
+  if (stoP) {   // 캠프에서 내가 건넨 마지막 말(이야기 3)을 경기 장면이 회수한다
+    var pk = (a.picks && a.picks[2] !== undefined && a.picks[2] !== null) ? a.picks[2] : 0;
+    return { p: t.player, side: t.side, title: stoP.proof.title, name: t.name, proof: true, sub: stoP.proof.sub[pk] || stoP.proof.sub[0] };
+  }
   return { p: t.player, side: t.side, title: w.proof, name: t.name, proof: true,
            sub: (a.then && a.then.stage && a.then.stage !== '캠프 시작' && !(a.then.att && a.then.made / a.then.att >= 0.5)
              ? a.then.stage+' 땐 굳었는데 — 벽을 넘었다' : '캠프에서 쌓은 그대로 — 벽을 넘었다') };
@@ -2305,7 +2341,7 @@ function showArcSplit(){
   var a = arcLoad(); if (!a || !a.proven || !a.provenAt) return;
   var rep = arcRep(a), e = rep ? artEntry(rep) : null, card = rep ? artOf(rep, 'card') : null;
   var sad = e && e.x && e.x.sad, cheer = e && e.x && e.x.cheer;
-  var w = WALL_INFO[a.stat], pa = a.provenAt;
+  var w = WALL_INFO[a.stat], pa = a.provenAt, stoS = storyFor(a.cardId);
   var thenRate = (a.then && a.then.att) ? wallText(a.stat, { made:a.then.made, att:a.then.att }) : null;
   var nowRate = wallText(a.stat, { made:pa.made, att:pa.att });
   // 비율은 '확실히 나아졌을 때'만 — 1/6 같은 약한 숫자는 오히려 김을 뺀다. 그땐 장면 서사 + 능력치 성장으로.
@@ -2319,12 +2355,13 @@ function showArcSplit(){
     '<div class="asp-k">🧱 '+esc(a.name)+'의 벽 — '+w.act+'</div><div class="asp-t">벽을 넘었다</div>'+
     '<div class="asp-two">'+
       '<div class="asp-side then">'+pic(sad, 'gray')+'<div class="asp-lb">그때 · '+esc((a.then && a.then.stage) || '캠프 시작')+'</div>'+
-        '<div class="asp-v">'+esc(showRates ? thenRate : w.story)+'</div></div>'+
+        '<div class="asp-v">'+esc(showRates ? thenRate : (stoS ? stoS.then : w.story))+'</div></div>'+
       '<div class="asp-side now">'+pic(cheer, '')+'<div class="asp-lb">지금 · vs '+esc(pa.opp || '')+'</div>'+
-        '<div class="asp-v">'+esc(showRates ? nowRate : w.proof)+'</div></div>'+
+        '<div class="asp-v">'+esc(showRates ? nowRate : (stoS ? stoS.proof.title : w.proof))+'</div></div>'+
     '</div>'+
     '<div class="asp-stat">'+STATK[a.stat]+' <b>'+a.base+'</b> → <b>'+(pa.statNow || a.now || a.target)+'</b> · 캠프에서 키운 만큼</div>'+
-    '<div class="asp-next">다음 이야기: 새 꿈 <b>"클러치 해결사"</b><br><span>(프로토타입은 여기까지)</span></div>'+
+    (stoS ? '<div class="asp-next">💭 '+esc(stoS.dream)+'<br><b>'+esc(stoS.next)+'</b><br><span>(프로토타입은 여기까지)</span></div>'
+          : '<div class="asp-next">다음 이야기: 새 꿈 <b>"클러치 해결사"</b><br><span>(프로토타입은 여기까지)</span></div>')+
     '<button class="btn" data-act="arcclose">계속</button></div>';
   el.addEventListener('click', function(ev){ if (ev.target === el && el.parentNode) el.parentNode.removeChild(el); });
   document.body.appendChild(el);
@@ -2332,6 +2369,74 @@ function showArcSplit(){
   try { ensureAudio(); if (snd && snd.on) sfx('ssr'); } catch(err){}
   haptic([0,60,40,60,40,90]);
 }
+
+// ---------- 선수 이야기 (engine/stories.js) — 결함 → 장면 → 감독의 말 → 경기에서 회수. 글·연출만, 효과는 원본 그대로.
+var STORY_PICK_KEY = 'bloom-story-pick-v1';
+function storyFor(cid){ try { return E.storyOf(cid); } catch(e){ return null; } }
+function storyIds(){ try { return Object.keys(E.STORIES || {}); } catch(e){ return []; } }
+function faceOf(p, mood){   // 표정 얼굴(집중·환호·낙담) → 없으면 카드 → 없으면 SVG 초상
+  var e = artEntry(p), src = (e && e.x && e.x[mood]) || (e && e.card);
+  return src ? '<img class="sr-face" src="'+src+'" alt="">' : '<span class="sr-face">'+portraitSvg(p, 96)+'</span>';
+}
+// 스토리 선택 직후: 선수의 반응을 크게. 이야기 선수는 '기다린 말'이었는지(마음이 통했다)를 표정으로 보여 준다.
+function storyReact(card, beatIdx, choiceIdx, text){
+  var sto = storyFor(card.id), beat = sto && sto.beats[beatIdx], right = beat ? (beat.right === choiceIdx) : null;
+  var a = arcForSession();
+  if (a && sto && beatIdx >= 0) { a.picks = a.picks || []; if (a.picks[beatIdx] === undefined || a.picks[beatIdx] === null) { a.picks[beatIdx] = choiceIdx; if (right) a.bond = (a.bond || 0) + 1; } arcSave(a); }
+  if (!text) return;
+  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
+  var mood = right === null ? 'focus' : (right ? 'cheer' : 'focus');
+  var tag = right === null ? '' : (right ? '<div class="sr-tag ok">💗 마음이 통했다</div>' : '<div class="sr-tag">…조금 다른 말을 기다렸던 것 같다</div>');
+  var el = document.createElement('div'); el.className = 'storyreact';
+  el.innerHTML = '<div class="sr-card">'+faceOf(card, mood)+'<div class="sr-name">'+esc(card.name)+'</div>'+
+    '<div class="sr-text">'+esc(text)+'</div>'+tag+'<div class="sr-tap">탭해서 계속</div></div>';
+  el.addEventListener('click', function(){ if (el.parentNode) el.parentNode.removeChild(el); });
+  document.body.appendChild(el);
+  haptic(right ? [0,30,30,50] : 20);
+  try { ensureAudio(); if (snd && snd.on) tone('sine', right ? 660 : 440, right ? 880 : 520, 0.35, 0.05); } catch(e){}
+}
+// 졸업 종료 장면 — 등급과 상관없이 반드시 한 장면(실패에도 이야기).
+var END_GENERIC = [
+  function(n){ return '짐을 싸던 '+n+', 돌아서며 웃는다. "감독님, 다음 캠프도 같이 해요."'; },
+  function(n){ return n+', 손바닥을 펴 본다. "조금은 늘었죠? 다음엔 더요."'; },
+  function(n){ return n+', 고개를 숙였다가 다시 든다. "…다음엔, 더 잘할게요."'; }
+];
+function gradEnding(g){
+  var inst = g && g.instance; if (!inst) return '';
+  var tier = inst.grade <= 1 ? 0 : (inst.grade === 2 ? 1 : 2), sto = storyFor(inst.cardId);
+  var line = sto ? sto.endings[tier] : END_GENERIC[tier](inst.name);
+  var a = arcLoad(), bond = (sto && a && a.cardId === inst.cardId) ? (a.bond || 0) : null;
+  return '<div class="end-scene t'+tier+'">'+faceOf(inst, ['cheer','focus','sad'][tier])+
+    '<div class="es-tx"><div class="es-k">캠프의 끝</div><div class="es-line">'+esc(line)+'</div>'+
+    (bond !== null ? '<div class="es-bond">💗 마음이 통한 순간 '+bond+' / 3</div>' : '')+'</div></div>';
+}
+// 첫 주인공 고르기 — 이야기 선수 3명 중 1명을 1회 데려온다(프로토타입 체험용).
+function storyPickAvailable(){
+  try { if (localStorage.getItem(STORY_PICK_KEY)) return false; } catch(e){}
+  var own = (G && G.ownedCards) || {};
+  return !storyIds().some(function(id){ return own[id] !== undefined; });
+}
+function storyBanner(){
+  if (!storyPickAvailable()) return '';
+  return '<button class="story-banner" data-act="storypick"><span class="sb-ic">📖</span><span class="sb-tx"><b>이야기가 있는 선수</b><span>첫 주인공을 골라 보세요 · 1회 무료</span></span><span class="sb-go">›</span></button>';
+}
+function showStoryPick(){
+  var el = document.createElement('div'); el.className = 'storypick';
+  el.innerHTML = '<div class="sp-sheet"><div class="sp-h">📖 누구의 이야기를 함께할까요?</div>'+
+    '<div class="tiny" style="margin:-2px 2px 10px">한 명을 골라 캠프에 데려갑니다. 그 아이의 약점이 <b>벽</b>이 되고, 리그 경기에서 넘는 순간이 이야기의 끝이에요.</div>'+
+    storyIds().map(function(id){
+      var c = null; try { c = E.cardById(G, id); } catch(e){}
+      if (!c) return '';
+      var sto = storyFor(id);
+      return '<button class="sp-card" data-storypick="'+id+'">'+faceOf(c, 'focus')+
+        '<div class="sp-tx"><div class="pname">'+esc(c.name)+' <span class="pill pos">'+POSK[c.pos]+'</span></div>'+
+        '<div class="sp-flaw">🧱 '+esc(sto.flaw)+'</div><div class="sp-dream">💭 '+esc(sto.dream)+'</div></div></button>';
+    }).join('')+
+    '<button class="btn ghost" data-act="storypickclose">나중에</button></div>';
+  el.addEventListener('click', function(ev){ if (ev.target === el && el.parentNode) el.parentNode.removeChild(el); });
+  document.body.appendChild(el);
+}
+function closeStoryPick(){ var el = document.querySelector('.storypick'); if (el && el.parentNode) el.parentNode.removeChild(el); }
 
 function campEnter(onDone){
   try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(e){}
@@ -2429,8 +2534,10 @@ function vTrainTurn(){
     // 스토리 컷은 육성 선수의 상반신, 선배 이벤트는 그 선배의 초상(art-pipeline 16.4)
     var who = card, whoCls = '';
     if (o.event.supporterName) { var sup = repByName(o.event.supporterName); if (sup) who = sup; }
-    var recEv = coachShowRec() ? coachRec() : null;
+    var authored = o.event.kind === 0 && !!storyFor(card.id);   // 이야기 선수: '추천' 대신 이해 테스트
+    var recEv = (coachShowRec() && !authored) ? coachRec() : null;
     body = '<div class="evbox vn">'+bustBox(who, whoCls, 56)+'<div class="vt"><div class="evtitle">'+esc(o.event.title)+'</div><div class="evtext">'+esc(o.event.text)+'</div></div></div>'+
+      (authored ? '<div class="tiny" style="margin:2px 4px 8px;font-size:14px;color:var(--ink2)">💬 지금 '+esc(card.name)+'에게 필요한 말은? <span style="color:var(--ink3)">마음이 통하면 표정이 달라져요. 틀려도 손해는 없어요.</span></div>' : '')+
       o.options.map(function(c){
         var isRec = recEv !== null && c.id === recEv;
         return '<button class="act" data-choice="'+c.id+'"'+(isRec?' data-rec="1"':'')+'><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+(isRec?'<span class="rec">추천</span>':'')+'</span>'+
@@ -2496,7 +2603,7 @@ function vTrainGrad(){
     '<div><b>'+(goalMet?'목표 달성!':'목표까지 조금 더')+'</b>'+
     '<div class="tiny">'+esc(goalLabel)+(goalMet?' — 해냈어요.':' — 다시 도전하면 더 좋게 나올 수 있어요.')+'</div></div></div>';
   return h('<h2>졸업</h2>'+
-    goalBanner+arcGradCard(g)+
+    goalBanner+gradEnding(g)+arcGradCard(g)+
     '<div class="card" style="text-align:center;border-color:var(--line2)">'+
       '<div class="rv rone" style="width:58%;position:relative;margin-bottom:8px">'+cardFace(inst, ['N','R','SR','SSR'][inst.rarity], { eager:true, sub: POSK[inst.pos]+' · OVR '+g.ovr.toFixed(1) })+
         '<span class="stamp g-'+gc+'">'+gc+'</span></div>'+
@@ -4050,7 +4157,14 @@ function doScout10(){
 }
 
 function applyChoice(id){
+  var pre = null;   // 스토리 컷 선택이면 반응 장면을 띄운다
+  try { var o0 = E.trainingOptions(ses);
+    if (o0.kind === 'event' && o0.event && o0.event.kind === 0 && /^event:/.test(id))
+      pre = { card: ses.trainee.card, beat: ses.cfg.storyTurns.indexOf(o0.turn), choice: +id.split(':')[1] };
+  } catch(e){}
   var res = E.applyTrainingChoice(ses, id);
+  if (pre) { var evR = (res.events||[]).filter(function(ev){ return ev.type === 'event'; })[0];
+    try { storyReact(pre.card, pre.beat, pre.choice, evR && evR.resultText); } catch(e){} }
   (res.events||[]).forEach(function(ev){ pushFeed(ev); });
   var o = E.trainingOptions(ses);
   if (o.kind === 'graduated') { finishCamp(); return; }
@@ -4273,7 +4387,7 @@ function copyFallback(txt){
 // ---------------------------------------------------------------- events
 document.addEventListener('click', function(e){
   ensureAudio();
-  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown],[data-fbkind],[data-slot],[data-slotpick]');
+  var t = e.target.closest('[data-tab],[data-go],[data-act],[data-scoutpos],[data-pick],[data-sup],[data-choice],[data-auto],[data-play],[data-trainthis],[data-mv],[data-detail],[data-ltab],[data-fac],[data-report],[data-viewreport],[data-dex],[data-dexclub],[data-dexown],[data-fbkind],[data-slot],[data-slotpick],[data-storypick]');
   if (!t) return;
   var d = t.dataset;
 
@@ -4311,6 +4425,15 @@ document.addEventListener('click', function(e){
   if (d.scoutpos !== undefined) return doScout(POSK[+d.scoutpos]);
   if (d.trainthis) { trainPick = d.trainthis; supPick = null;
     if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); campEnter(); } return; }
+  if (d.act === 'storypick') { showStoryPick(); return; }
+  if (d.act === 'storypickclose') { closeStoryPick(); return; }
+  if (d.storypick) {
+    closeStoryPick();
+    try { localStorage.setItem(STORY_PICK_KEY, d.storypick); } catch(e){}
+    if (G.ownedCards[d.storypick] === undefined) { G.ownedCards[d.storypick] = 0; save(); }
+    trainPick = d.storypick; supPick = null;
+    if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); campEnter(); } return;
+  }
   if (d.pick) { trainPick = d.pick; supPick = null;
     if (E.supporterCandidates(G, trainPick).length) go('trainSup'); else { startCamp([]); render(); window.scrollTo(0,0); campEnter(); } return; }
   if (d.sup) {
@@ -4386,7 +4509,7 @@ document.addEventListener('click', function(e){
     if (!confirm('저장된 진행을 지우고 처음부터 시작할까요?')) return;
     try { localStorage.removeItem(SAVE_KEY); } catch(err){}
     try { localStorage.removeItem(MISSION_KEY); } catch(err2){}
-    try { localStorage.removeItem(ARC_KEY); } catch(err3){}   // 성장 아크도 처음부터
+    try { localStorage.removeItem(ARC_KEY); localStorage.removeItem(STORY_PICK_KEY); } catch(err3){}   // 성장 아크도 처음부터
     claimed = {};
     G = newGame();
     coach.on = true; coach.done = false; coachLastKey = null; saveCoach();

@@ -1,6 +1,7 @@
 // 육성 이벤트 카탈로그. TrainingEvent.cs 의 EventCatalog 전체를 텍스트까지 그대로 옮겼다.
 import { STAT, STAT_NAMES_KO } from './domain.js';
 import { archetypeOf, fillName, josa } from './commentary.js';
+import { storyOf } from './stories.js';
 
 export const EVENT_KIND = { Story: 0, Senior: 1, Random: 2, Bond: 3 };
 
@@ -102,6 +103,12 @@ export function storyEvent(index, pos, cfg, card) {
       choice('네 무기를 믿어라', txt(hin(st(st(effect(), core[0], 2), STAT.mental, 1), 1), '고개를 끄덕인다. "제 무기, 알고 있어요."')),
       choice('져도 괜찮다', txt(con(st(effect(), core[1], 1), 1), '"…그래도 이기고 싶어요." 웃는다.')),
     ];
+  }
+  // 저작 이야기가 있는 선수(stories.js)는 글만 바꾼다 — 선택지 순서·효과·추천은 그대로.
+  const sto = storyOf(card && card.id), beat = sto && sto.beats[index];
+  if (beat) {
+    ev.title = beat.title; ev.text = beat.text;
+    ev.choices.forEach((c, i) => { const b = beat.choices[i]; if (b) { c.label = b.label; c.onSuccess.resultText = b.react; } });
   }
   return ev;
 }

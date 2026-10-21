@@ -94,5 +94,6 @@ export { simulateMatch, setScoreLine, totalPoints } from './engine/match.js';
 export { generateTeamState, generatePlayer } from './engine/generator.js';
 export { DEFAULT_SIM_CONFIG, createSimConfig } from './engine/config.js';
 export { PLAYERS, TEAMS } from './data.js';
+export { STORIES, storyOf } from './engine/stories.js';
 
 export const ENGINE_VERSION = '0.3.0-js';
