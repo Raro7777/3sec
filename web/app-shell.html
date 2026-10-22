@@ -482,6 +482,7 @@ details[open] summary::after{content:"▴"}
 .mstory{margin-top:9px;padding:8px 10px;border-left:2px solid var(--hot);background:var(--panel2);border-radius:6px;font-size:12.5px;color:var(--ink2);line-height:1.5}
 .mstory+.mstory{margin-top:5px}
 .intro .st{text-align:center;font-size:12.5px;color:var(--ink2);line-height:1.5;padding:0 10px}
+.intro .st.hero{font-size:15px;font-weight:800;color:#FFE6A3;text-shadow:0 2px 10px rgba(0,0,0,.6)}
 /* 육성→코트 연결 연출: 데뷔전 선수 표시 */
 .avw{position:relative;display:inline-block;line-height:0}
 .avw .ava{border-color:var(--ssr)!important;box-shadow:0 0 0 2px rgba(233,185,73,.45)}
@@ -783,11 +784,58 @@ body.camp main{position:relative;z-index:1;padding:0 14px 28px}
 .er-note{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.5} .er-note b{color:var(--court)}
 @media (prefers-reduced-motion:no-preference){ .er-card{animation:erin .35s cubic-bezier(.2,.8,.2,1.1) both} @keyframes erin{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}} }
 /* ===== 성장 아크 프로토타입(core-loop v3 검증) — 선수 1명 · 벽 1개 · 증명 1번. 연출만, 판정 무관. ===== */
+/* VN 씬 */
+.vnscene{position:fixed;inset:0;z-index:82;background:#0A1220;display:flex;flex-direction:column;animation:srIn .25s ease;color:#fff;overflow:hidden}
+.vnscene.out{animation:srOut .25s ease forwards}
+@keyframes srOut{to{opacity:0}}
+.vn-bg{position:absolute;inset:0;background:#12223c center 40%/cover no-repeat;opacity:.55}
+.vnscene::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,18,32,.55),rgba(10,18,32,.15) 35%,rgba(10,18,32,.75) 70%,rgba(10,18,32,.96))}
+.vn-top{position:relative;display:flex;align-items:center;gap:10px;padding:max(14px,env(safe-area-inset-top)) 18px 0}
+.vn-ep{font-family:"Barlow Condensed",sans-serif;font-weight:700;letter-spacing:.18em;font-size:13px;color:var(--hot-2);background:rgba(0,0,0,.35);padding:4px 10px;border-radius:999px}
+.vn-ttl{font-weight:800;font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.vn-stage{position:relative;flex:1;display:flex;align-items:flex-end;justify-content:center;min-height:0;padding-bottom:6px}
+.vn-bust{position:relative;width:min(58vw,250px);aspect-ratio:4/5;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5))}
+.vn-bust .bust{width:100%;height:100%;border-radius:18px;border:2px solid rgba(255,255,255,.35)}
+.vn-bust .bust.ph{display:flex;align-items:center;justify-content:center}
+.vn-face{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 62%;border-radius:18px;border:2px solid rgba(255,255,255,.5);opacity:0;transition:opacity .2s;background:#fff}
+.vn-face{clip-path:inset(0 round 18px)} .vn-bust.face .vn-face{transform:scale(1.12);transform-origin:50% 60%}
+.vn-bust.face .vn-face{opacity:1}
+.vn-bust.pop{animation:vnPop .35s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes vnPop{0%{transform:scale(.94)}60%{transform:scale(1.03)}100%{transform:none}}
+.vn-box{position:relative;margin:0 14px;background:rgba(14,24,40,.86);border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:12px 16px 14px;min-height:118px;backdrop-filter:blur(6px)}
+.vn-name{font-weight:800;font-size:14px;color:var(--hot-2);margin-bottom:4px;min-height:18px}
+.vn-text{font-size:18px;line-height:1.6;word-break:keep-all;min-height:58px}
+.vn-text.narr{color:rgba(233,240,247,.9);font-style:normal}
+.vn-next{position:absolute;right:14px;bottom:8px;font-size:12px;color:var(--hot-2);animation:vnBlink 1s infinite}
+@keyframes vnBlink{50%{opacity:.2}}
+.vn-choices{position:relative;padding:10px 14px max(18px,env(safe-area-inset-bottom));display:none;flex-direction:column;gap:8px}
+.vn-choices.show{display:flex;animation:srUp .3s ease}
+.vn-q{font-size:14px;font-weight:700;color:rgba(233,240,247,.8);margin:0 2px 2px}
+.vn-ch{position:relative;width:100%;min-height:52px;text-align:left;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:#fff;border-radius:14px;padding:12px 16px;font:inherit;font-size:16px;font-weight:700;cursor:pointer;word-break:keep-all}
+.vn-ch:active{background:rgba(255,255,255,.22)}
+.vn-ch small{display:block;font-size:12px;font-weight:600;color:rgba(233,240,247,.7);margin-top:3px}
+.vn-ch .rec{position:absolute;right:12px;top:12px;font-size:11px;background:var(--hot);color:#fff;padding:2px 8px;border-radius:999px}
+.vn-ch.go{text-align:center;background:var(--hot);border-color:var(--hot);font-size:17px}
+.vn-tag{align-self:center;font-size:15px;font-weight:800;color:rgba(233,240,247,.85);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 16px;margin-bottom:4px}
+.vn-tag.ok{color:#fff;background:linear-gradient(90deg,#E85A8C,#FF9BB7);box-shadow:0 6px 18px rgba(232,90,140,.4);animation:vnPop .4s}
+.ep-track{display:flex;align-items:center;gap:4px;margin-top:8px;overflow:hidden}
+.ep-track .ep{position:relative;display:flex;flex-direction:column;align-items:center;font-size:11px;font-weight:700;color:var(--ink3);min-width:34px}
+.ep-track .ep i{display:block;width:16px;height:16px;border-radius:50%;border:2px solid var(--line2);background:var(--panel);font-size:10px;line-height:12px;text-align:center;font-style:normal;margin-bottom:2px}
+.ep-track .ep.done{color:var(--ink2)} .ep-track .ep.done i{background:var(--good);border-color:var(--good);color:#fff}
+.ep-track .ep.ok i{background:#FFE1EC;border-color:#E85A8C;color:#B23A66}
+.ep-track .ep.cur{color:var(--hot)} .ep-track .ep.cur i{border-color:var(--hot);box-shadow:0 0 0 3px rgba(255,140,60,.25)}
+.ep-track b{flex:1;height:2px;background:var(--line2);min-width:6px}
+.story-home{display:flex;gap:12px;align-items:flex-start}
+.story-home .sr-face{width:72px;height:72px;margin:0;flex:none;border-width:3px}
+.sh-tx{flex:1;min-width:0}.sh-tx>b{font-size:17px}
+.sh-flaw{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.45;word-break:keep-all}
+.sh-state{font-size:14px;font-weight:700;margin-top:6px;word-break:keep-all}
+.story-home .btn.sm{margin-top:10px;min-height:44px;font-size:15px}
 /* 선수 이야기 */
 .as-dream{font-size:12px;color:var(--ink2);margin-top:3px;line-height:1.4}
 .storyreact{position:fixed;inset:0;z-index:80;background:rgba(10,18,30,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px 16px 24px;animation:srIn .25s ease}
 .sr-card{width:100%;max-width:440px;background:var(--panel);border-radius:22px;padding:18px 18px 14px;text-align:center;box-shadow:0 18px 40px rgba(0,0,0,.25);animation:srUp .3s cubic-bezier(.2,.9,.3,1.2)}
-.sr-face{display:block;width:132px;height:132px;margin:-64px auto 8px;border-radius:50%;object-fit:cover;border:4px solid var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.2);background:var(--panel2);overflow:hidden}
+.sr-face{display:block;width:132px;height:132px;margin:-64px auto 8px;border-radius:50%;object-fit:cover;object-position:50% 60%;border:4px solid var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.2);background:var(--panel2);overflow:hidden}
 .sr-name{font-weight:800;font-size:15px;color:var(--ink2)}
 .sr-text{font-size:17px;line-height:1.6;margin:8px 2px 10px;word-break:keep-all}
 .sr-tag{display:inline-block;font-size:14px;font-weight:700;color:var(--ink3);background:var(--panel2);border-radius:999px;padding:6px 12px}
@@ -1467,6 +1515,7 @@ function render(){
   if (view === 'matchLive') mountCourt();
   renderCoach();
   renderIntro();
+  try { maybeStoryScene(); } catch(e){}
 }
 // 화면 전환 방향 — 탭은 깊이 0, 하위 화면은 1. 깊어지면 앞으로(오른쪽서), 얕아지면 뒤로(왼쪽서), 같은 탭끼리는 탭 순서로.
 var TAB_ORDER = { home:0, scout:1, train:2, roster:3, match:4 };
@@ -1756,6 +1805,7 @@ function vHome(){
        '<div class="hub-dock">'+dock+'</div>'+
      '</div>'+
    '</div>'+
+   storyHomeCard()+
    '<details class="hub-more"><summary>구단 운영 · 시설 · 기록</summary>'+
      facilityCard()+
      '<button class="help-open" data-act="help">배구가 어떻게 돌아가는지 · 포지션이 하는 일</button>'+
@@ -2207,7 +2257,7 @@ function wallSuccessTouch(stat, t, r){
   if (stat === 0) return t.type === 3 && t.outcome !== 4 && (t.outcome === 2 || (r.point && (r.point.clutch || r.point.side === t.side)));   // 에이스 · 클러치 · 그 서브로 시작한 랠리를 따냈다
   if (stat === 1) return t.type === 4 && t.quality === 1;
   if (stat === 3) return t.type === 6 && (t.outcome === 3 || t.outcome === 7);
-  if (stat === 4) return t.type === 7 && t.outcome === 5;
+  if (stat === 4) return t.type === 7 && (t.outcome === 5 || (t.outcome === 6 && r.point && r.point.side === t.side));   // 블록 득점 · 우리 득점으로 이어진 블록 터치
   return false;
 }
 // 첫 캠프에 들어온 선수가 주인공. 벽 = 포지션 핵심 능력치 중 가장 약한 것, 목표 = 한 캠프에 넘을 만큼(+12, 잠재력 상한 안).
@@ -2236,7 +2286,7 @@ function arcStrip(o){
     '<b>'+esc(a.name)+'의 벽 — '+w.act+'</b>'+
     '<div class="tiny">'+esc(sto ? sto.flaw : w.story)+' · '+STATK[a.stat]+' '+cur+' / 목표 '+a.target+(done?' · <b style="color:var(--good);font-size:12px">넘을 준비 완료</b>':'')+'</div>'+
     (sto ? '<div class="as-dream">💭 꿈 — '+esc(sto.dream)+'</div>' : '')+
-    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div></div></div>';
+    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div>'+(sto ? epTrack(a, sto) : '')+'</div></div>';
 }
 // 평가전(모의고사)에서 벽이 처음 시험받은 장면 = '그때'. 복선으로 남긴다.
 function arcCaptureEval(o){
@@ -2263,12 +2313,12 @@ function arcOnGrad(g){
 }
 function arcGradCard(g){
   var a = arcLoad(); if (!a || !g || !g.instance || g.instance.cardId !== a.cardId) return '';
-  var w = WALL_INFO[a.stat], now = (a.now !== null && a.now !== undefined) ? a.now : a.base;
+  var w = WALL_INFO[a.stat], now = (a.now !== null && a.now !== undefined) ? a.now : a.base, stoG = storyFor(a.cardId);
   var pct = Math.max(0, Math.min(100, (now - a.base) / Math.max(1, a.target - a.base) * 100));
   return '<div class="arc-strip'+(a.cleared?' done':'')+'"><span class="as-ic">🧱</span><div class="as-tx">'+
     '<b>'+esc(a.name)+'의 벽 — '+w.act+'</b>'+
     '<div class="tiny">'+STATK[a.stat]+' '+a.base+' → '+now+' / 목표 '+a.target+'</div>'+
-    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div>'+
+    '<div class="arc-bar"><span style="width:'+pct+'%"></span></div>'+(stoG ? epTrack(a, stoG) : '')+
     '<div class="tiny" style="margin-top:6px;color:var(--ink2)">'+(a.cleared
       ? '벽을 넘을 준비 완료! 이제 <b>진짜 경기</b>에서 증명할 차례예요.'
       : '아직 벽 앞이에요. 다시 캠프에서 '+w.act+' 훈련을 더 하면 넘을 수 있어요.')+'</div></div></div>';
@@ -2279,7 +2329,8 @@ function arcProofTouch(r, t){
   var a = arcGet(); if (!a || !a.cleared || a.proven) return null;
   var rep = arcRep(a); if (!rep || t.playerId !== rep.instanceId || t.side !== mySide) return null;
   if (!wallSuccessTouch(a.stat, t, r)) return null;
-  if (r.set < 2 && !(r.point && r.point.clutch)) { mv.arcSeen = (mv.arcSeen || 0) + 1; if (mv.arcSeen < 3) return null; }   // 1세트 초반은 빌드업
+  var need = WALL_INFO[a.stat].type === 'count' ? 1 : 3;   // 블로킹 득점은 드물다 — 첫 성공은 넘기고 두 번째부터
+  if (r.set < 2 && !(r.point && r.point.clutch)) { mv.arcSeen = (mv.arcSeen || 0) + 1; if (mv.arcSeen <= need - 1 && mv.ri < 40) return null; }   // 1세트 초반은 빌드업
   mv.arcProved = true; mv.arcProvedRi = mv.ri;
   var w = WALL_INFO[a.stat], stoP = storyFor(a.cardId);
   if (stoP) {   // 캠프에서 내가 건넨 마지막 말(이야기 3)을 경기 장면이 회수한다
@@ -2299,10 +2350,10 @@ function arcAfterMatch(m){
   var oppName = m.ctx ? (mySide === 0 ? m.ctx.awayName : m.ctx.homeName) : '';
   var played = !!(box && ((box.receptions||0) + (box.attacks||0) + (box.serves||0) + (box.blockKills||0) + (box.digAttempts||0) > 0));
   a.matches = (a.matches || []).concat([{ opp: oppName, made: met ? met.made : 0, att: met ? met.att : null, played: played }]).slice(-12);
-  if (a.cleared && !a.proven && played && met && met.made >= 1) {
+  if (a.cleared && !a.proven && played && met) {
     var thenR = (a.then && a.then.att) ? a.then.made / a.then.att : null, nowR = met.att ? met.made / met.att : null;
     var better = (thenR === null || nowR === null) ? true : nowR > thenR;
-    if ((mv && mv.arcProved) || better || (a.defer || 0) >= 2) {
+    if ((mv && mv.arcProved) || (met.made >= 1 && (better || (a.defer || 0) >= 2))) {   // 컷인이 떴으면 증명. 아니면 기록으로.
       a.proven = true;
       a.provenAt = { opp: oppName, made: met.made, att: met.att, better: better, statNow: Math.round(rep.finalStats ? rep.finalStats[a.stat] : a.target) };
       lastArcProof = true;
@@ -2378,37 +2429,195 @@ function faceOf(p, mood){   // 표정 얼굴(집중·환호·낙담) → 없으�
   var e = artEntry(p), src = (e && e.x && e.x[mood]) || (e && e.card);
   return src ? '<img class="sr-face" src="'+src+'" alt="">' : '<span class="sr-face">'+portraitSvg(p, 96)+'</span>';
 }
-// 스토리 선택 직후: 선수의 반응을 크게. 이야기 선수는 '기다린 말'이었는지(마음이 통했다)를 표정으로 보여 준다.
-function storyReact(card, beatIdx, choiceIdx, text){
+// 장면 줄 — 이야기 선수는 저작 줄, 그 외는 한 문단을 문장 단위로 나눈다. 맨 앞 [cheer]/[sad]/[focus] = 표정 전환.
+function storyLines(text){
+  if (!text) return [];
+  return String(text).split(/(?<=[.!?…」”"])\s+(?=[^\s])/).map(function(x){ return x.trim(); }).filter(Boolean);
+}
+function parseLine(raw, who){
+  var m = /^\[(cheer|sad|focus)\]/.exec(raw), t = raw.replace(/^\[(cheer|sad|focus)\]/, '');
+  var speech = /^[“"「]/.test(t);
+  return { mood: m ? m[1] : null, text: t, who: speech ? who : null };
+}
+// 이야기 선택 기록 — 기다린 말이었는지(이해 테스트). 표정·회수 문장만 달라진다, 효과는 원본 그대로.
+function storyRecordPick(card, beatIdx, choiceIdx){
   var sto = storyFor(card.id), beat = sto && sto.beats[beatIdx], right = beat ? (beat.right === choiceIdx) : null;
   var a = arcForSession();
   if (a && sto && beatIdx >= 0) { a.picks = a.picks || []; if (a.picks[beatIdx] === undefined || a.picks[beatIdx] === null) { a.picks[beatIdx] = choiceIdx; if (right) a.bond = (a.bond || 0) + 1; } arcSave(a); }
-  if (!text) return;
-  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
-  var mood = right === null ? 'focus' : (right ? 'cheer' : 'focus');
-  var tag = right === null ? '' : (right ? '<div class="sr-tag ok">💗 마음이 통했다</div>' : '<div class="sr-tag">…조금 다른 말을 기다렸던 것 같다</div>');
-  var el = document.createElement('div'); el.className = 'storyreact';
-  el.innerHTML = '<div class="sr-card">'+faceOf(card, mood)+'<div class="sr-name">'+esc(card.name)+'</div>'+
-    '<div class="sr-text">'+esc(text)+'</div>'+tag+'<div class="sr-tap">탭해서 계속</div></div>';
-  el.addEventListener('click', function(){ if (el.parentNode) el.parentNode.removeChild(el); });
+  return right;
+}
+/* VN 씬 — 전체 화면. 장면 배경 + 선수 상반신(표정 전환) + 대사창(한 줄씩, 탭해서 진행) → 선택지 → 반응 → 계속.
+   opts: { card, ep, title, lines, choices:[{id,label,badge,rec}], onChoice(id)→{lines,right}, onDone, mood } */
+var vnScene = null;
+function openStoryScene(opts){
+  closeStoryScene();
+  var card = opts.card, sc = sceneOf('train');
+  var el = document.createElement('div'); el.className = 'vnscene';
+  var bust = artBust(card, card.name);
+  el.innerHTML = '<div class="vn-bg"'+(sc?' style="background-image:url('+sc+')"':'')+'></div>'+
+    '<div class="vn-top"><span class="vn-ep">📖 '+esc(opts.ep || '이야기')+'</span><span class="vn-ttl">'+esc(opts.title || '')+'</span></div>'+
+    '<div class="vn-stage"><div class="vn-bust">'+(bust ? '<span class="bust">'+bust+'</span>' : '<span class="bust ph">'+portraitSvg(card, 160)+'</span>')+
+      '<img class="vn-face" alt="">'+'</div></div>'+
+    '<div class="vn-box"><div class="vn-name"></div><div class="vn-text"></div><div class="vn-next">▼</div></div>'+
+    '<div class="vn-choices"></div>';
   document.body.appendChild(el);
-  haptic(right ? [0,30,30,50] : 20);
-  try { ensureAudio(); if (snd && snd.on) tone('sine', right ? 660 : 440, right ? 880 : 520, 0.35, 0.05); } catch(e){}
+  var st = { el: el, lines: opts.lines.slice(), i: -1, phase: 'lines', typing: null, opts: opts, mood: opts.mood || null };
+  vnScene = st;
+  if (st.mood) vnFace(st, st.mood);
+  el.addEventListener('click', function(ev){
+    if (ev.target.closest('.vn-choices')) return;
+    vnAdvance(st);
+  });
+  vnAdvance(st);
+  try { ensureAudio(); if (snd && snd.on) tone('sine', 520, 640, 0.25, 0.04); } catch(e){}
+}
+function closeStoryScene(){ if (vnScene) { clearInterval(vnScene.typing); var el = vnScene.el; vnScene = null; if (el.parentNode) { el.classList.add('out'); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 260); } } }
+function vnFace(st, mood){
+  var e = artEntry(st.opts.card), src = e && e.x && e.x[mood];
+  var img = st.el.querySelector('.vn-face'), wrap = st.el.querySelector('.vn-bust');
+  if (!src) { wrap.classList.remove('face'); return; }
+  img.src = src; wrap.classList.remove('pop'); void wrap.offsetWidth; wrap.classList.add('face', 'pop');
+}
+function vnShow(st, line){
+  var ln = parseLine(line, st.opts.card.name);
+  if (ln.mood) vnFace(st, ln.mood);
+  var nm = st.el.querySelector('.vn-name'), tx = st.el.querySelector('.vn-text'), nx = st.el.querySelector('.vn-next');
+  nm.textContent = ln.who || ''; nm.style.visibility = ln.who ? 'visible' : 'hidden';
+  tx.classList.toggle('narr', !ln.who);
+  nx.style.visibility = 'hidden';
+  clearInterval(st.typing);
+  var full = ln.text, n = 0; tx.textContent = '';
+  st.full = full;
+  st.typing = setInterval(function(){
+    n += 2; tx.textContent = full.slice(0, n);
+    if (n >= full.length) { clearInterval(st.typing); st.typing = null; nx.style.visibility = 'visible'; }
+  }, 22);
+  try { if (snd && snd.on) tone('square', 900, 900, 0.03, 0.012); } catch(e){}
+}
+function vnAdvance(st){
+  if (st !== vnScene) return;
+  if (st.typing) { clearInterval(st.typing); st.typing = null; st.el.querySelector('.vn-text').textContent = st.full; st.el.querySelector('.vn-next').style.visibility = 'visible'; return; }
+  if (st.phase === 'lines' || st.phase === 'react') {
+    st.i++;
+    if (st.i < st.lines.length) { vnShow(st, st.lines[st.i]); return; }
+    if (st.phase === 'lines' && st.opts.choices && st.opts.choices.length) { vnChoices(st); return; }
+    vnEnd(st); return;
+  }
+}
+function vnChoices(st){
+  st.phase = 'choices';
+  var box = st.el.querySelector('.vn-choices');
+  box.innerHTML = '<div class="vn-q">'+esc(st.opts.prompt || '뭐라고 말할까?')+'</div>'+st.opts.choices.map(function(c){
+    return '<button class="vn-ch" data-vnc="'+esc(c.id)+'">'+esc(c.label)+(c.rec ? '<span class="rec">추천</span>' : '')+(c.badge ? '<small>'+esc(c.badge)+'</small>' : '')+'</button>';
+  }).join('');
+  box.classList.add('show');
+  st.el.querySelector('.vn-next').style.visibility = 'hidden';
+  box.querySelectorAll('[data-vnc]').forEach(function(b){
+    b.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      if (st.phase !== 'choices') return;
+      var r = st.opts.onChoice ? st.opts.onChoice(b.getAttribute('data-vnc')) : null;
+      box.classList.remove('show'); box.innerHTML = '';
+      st.phase = 'react'; st.lines = (r && r.lines) || []; st.i = -1; st.right = r ? r.right : null;
+      haptic(st.right ? [0,30,30,50] : 20);
+      try { if (snd && snd.on) tone('sine', st.right ? 660 : 440, st.right ? 880 : 520, 0.35, 0.05); } catch(e){}
+      vnAdvance(st);
+    });
+  });
+}
+function vnEnd(st){
+  st.phase = 'end';
+  var box = st.el.querySelector('.vn-choices');
+  var tag = st.right === true ? '<div class="vn-tag ok">💗 마음이 통했다</div>' : (st.right === false ? '<div class="vn-tag">…조금 다른 말을 기다렸던 것 같다</div>' : '');
+  box.innerHTML = tag + '<button class="vn-ch go" data-vnc="__done">'+esc(st.opts.doneLabel || '계속')+'</button>';
+  box.classList.add('show');
+  st.el.querySelector('.vn-next').style.visibility = 'hidden';
+  if (st.right === true) { vnFace(st, 'cheer'); try { if (snd && snd.on) sfx('ssr'); } catch(e){} }
+  box.querySelector('[data-vnc]').addEventListener('click', function(ev){ ev.stopPropagation(); var cb = st.opts.onDone; closeStoryScene(); cb && cb(); });
+}
+// 캠프 스토리 컷 → VN 씬. 연출 끔(회귀 테스트)이면 인라인 선택지만 쓴다.
+var storySceneTurn = 0;
+function maybeStoryScene(){
+  if (!ses || view !== 'trainTurn') return;
+  try { if (localStorage.getItem('bloom-fx-off')) return; } catch(e){}
+  var o = E.trainingOptions(ses);
+  if (o.kind !== 'event' || !o.event || o.event.kind !== 0) return;
+  if (storySceneTurn === o.turn) return;
+  storySceneTurn = o.turn;
+  var card = ses.trainee.card, sto = storyFor(card.id), bi = ses.cfg.storyTurns.indexOf(o.turn), beat = sto && sto.beats[bi];
+  var rec = coachShowRec() && !sto ? coachRec() : null;
+  openStoryScene({
+    card: card, ep: beat ? beat.ep : ('이야기 '+(bi+1)), title: beat ? beat.title.replace(/^.*? · /, '') : o.event.title.replace(/^.*? · /, ''),
+    lines: beat ? beat.lines : storyLines(o.event.text),
+    prompt: sto ? '지금 '+card.name+'에게 필요한 말은?' : '뭐라고 말할까?',
+    choices: o.options.map(function(c){ return { id: c.id, label: c.label, badge: sto ? '' : c.effect, rec: c.id === rec }; }),
+    onChoice: function(id){
+      var ci = +id.split(':')[1];
+      var right = storyRecordPick(card, bi, ci);
+      var res = E.applyTrainingChoice(ses, id);
+      (res.events||[]).forEach(function(ev){ pushFeed(ev); });
+      var evR = (res.events||[]).filter(function(ev){ return ev.type === 'event'; })[0];
+      var lines = (beat && beat.choices[ci]) ? beat.choices[ci].lines : storyLines(evR && evR.resultText);
+      return { lines: lines, right: right };
+    },
+    onDone: function(){ afterChoice(); }
+  });
 }
 // 졸업 종료 장면 — 등급과 상관없이 반드시 한 장면(실패에도 이야기).
 var END_GENERIC = [
-  function(n){ return '짐을 싸던 '+n+', 돌아서며 웃는다. "감독님, 다음 캠프도 같이 해요."'; },
-  function(n){ return n+', 손바닥을 펴 본다. "조금은 늘었죠? 다음엔 더요."'; },
-  function(n){ return n+', 고개를 숙였다가 다시 든다. "…다음엔, 더 잘할게요."'; }
+  function(n){ return ['[cheer]짐을 싸던 '+n+', 돌아서며 웃는다.', '"감독님, 다음 캠프도 같이 해요."']; },
+  function(n){ return [n+', 손바닥을 펴 본다.', '[focus]"조금은 늘었죠? 다음엔 더요."']; },
+  function(n){ return ['[sad]'+n+', 고개를 숙였다가 다시 든다.', '"…다음엔, 더 잘할게요."']; }
 ];
-function gradEnding(g){
-  var inst = g && g.instance; if (!inst) return '';
+function endingLines(g){
+  var inst = g && g.instance; if (!inst) return null;
   var tier = inst.grade <= 1 ? 0 : (inst.grade === 2 ? 1 : 2), sto = storyFor(inst.cardId);
-  var line = sto ? sto.endings[tier] : END_GENERIC[tier](inst.name);
-  var a = arcLoad(), bond = (sto && a && a.cardId === inst.cardId) ? (a.bond || 0) : null;
-  return '<div class="end-scene t'+tier+'">'+faceOf(inst, ['cheer','focus','sad'][tier])+
+  return { tier: tier, lines: sto ? sto.endings[tier] : END_GENERIC[tier](inst.name), sto: sto };
+}
+function gradEnding(g){
+  var e = endingLines(g); if (!e) return '';
+  var inst = g.instance, line = e.lines.map(function(l){ return parseLine(l, inst.name).text; }).join(' ');
+  var a = arcLoad(), bond = (e.sto && a && a.cardId === inst.cardId) ? (a.bond || 0) : null;
+  return '<div class="end-scene t'+e.tier+'">'+faceOf(inst, ['cheer','focus','sad'][e.tier])+
     '<div class="es-tx"><div class="es-k">캠프의 끝</div><div class="es-line">'+esc(line)+'</div>'+
     (bond !== null ? '<div class="es-bond">💗 마음이 통한 순간 '+bond+' / 3</div>' : '')+'</div></div>';
+}
+function playEndingScene(g, onDone){
+  var e = endingLines(g); if (!e) { onDone && onDone(); return; }
+  try { if (localStorage.getItem('bloom-fx-off')) { onDone && onDone(); return; } } catch(err){}
+  var inst = g.instance;
+  openStoryScene({ card: inst, ep: '캠프의 끝', title: ['S','A','B','C','D'][inst.grade]+'등급 졸업', lines: e.lines, mood: ['cheer','focus','sad'][e.tier], doneLabel: '졸업식으로', onDone: onDone });
+}
+// 에피소드 트랙 — 1화·2화·3화·졸업·증명. 이야기 선수의 아크 띠에 붙는다.
+function epTrack(a, sto){
+  var turns = (ses && ses.cfg.storyTurns) || [2, 6, 10], turn = ses ? ses.turn : 99;
+  var picks = a.picks || [];
+  var nodes = sto.beats.map(function(b, i){
+    var done = picks[i] !== undefined && picks[i] !== null, cur = ses && turn === turns[i] && !done;
+    return { k: b.ep, done: done, cur: cur, ok: done && sto.beats[i].right === picks[i] };
+  });
+  nodes.push({ k: '졸업', done: a.now !== null && a.now !== undefined, cur: !!ses && turn >= 11 });
+  nodes.push({ k: '증명', done: !!a.proven, cur: !!a.cleared && !a.proven && !ses });
+  return '<div class="ep-track">'+nodes.map(function(n){
+    return '<span class="ep'+(n.done?' done':'')+(n.cur?' cur':'')+(n.ok?' ok':'')+'"><i>'+(n.done ? (n.ok ? '💗' : '✓') : '')+'</i>'+esc(n.k)+'</span>';
+  }).join('<b></b>')+'</div>';
+}
+// 감독실 — 진행 중인 이야기 카드.
+function storyHomeCard(){
+  var a = arcGet(); if (!a) return '';
+  var sto = storyFor(a.cardId); if (!sto) return '';
+  var rep = arcRep(a), c = null; try { c = E.cardById(G, a.cardId); } catch(e){}
+  var who = rep || c; if (!who) return '';
+  var inCamp = !!(ses && ses.trainee.card.id === a.cardId);
+  var state, cta, go;
+  if (a.proven) { state = '벽을 넘었다 — '+sto.next; cta = '그때 vs 지금 다시 보기'; go = 'data-act="arcreplay"'; }
+  else if (inCamp) { state = '캠프 '+ses.turn+'/12 · '+WALL_INFO[a.stat].act+' 벽 넘는 중'; cta = '캠프로 돌아가기'; go = 'data-go="trainTurn"'; }
+  else if (a.cleared) { state = '벽을 넘을 준비 완료 — 다음 경기에서 증명할 차례'; cta = '경기하러 가기'; go = 'data-go="match"'; }
+  else { state = '아직 벽 앞 — 캠프에서 '+WALL_INFO[a.stat].act+'을 더'; cta = '다시 캠프로'; go = 'data-go="train"'; }
+  return '<div class="card story-home">'+faceOf(who, a.proven ? 'cheer' : 'focus')+
+    '<div class="sh-tx"><div class="es-k">📖 진행 중인 이야기</div><b>'+esc(a.name)+'</b>'+
+    '<div class="sh-flaw">🧱 '+esc(sto.flaw)+'</div><div class="sh-state">'+esc(state)+'</div>'+epTrack(a, sto)+
+    '<button class="btn sm" '+go+'>'+esc(cta)+'</button></div></div>';
 }
 // 첫 주인공 고르기 — 이야기 선수 3명 중 1명을 1회 데려온다(프로토타입 체험용).
 function storyPickAvailable(){
@@ -2484,7 +2693,7 @@ function coachBadge(sup){
 function startCamp(ids){
   ses = E.startTraining(G, trainPick, ids || supPick || []);
   try { arcEnsure(); } catch(e){}   // 성장 아크(프로토타입): 첫 캠프 선수에게 벽을 준다
-  feed = [];
+  feed = []; storySceneTurn = 0;
   usedAutoThisCamp = false;
   view = 'trainTurn';
 }
@@ -2541,7 +2750,7 @@ function vTrainTurn(){
       o.options.map(function(c){
         var isRec = recEv !== null && c.id === recEv;
         return '<button class="act" data-choice="'+c.id+'"'+(isRec?' data-rec="1"':'')+'><span class="lbl" style="width:auto;flex:1">'+esc(c.label)+(isRec?'<span class="rec">추천</span>':'')+'</span>'+
-          '<span class="right"><span class="tiny">'+esc(c.effect||'')+(c.isBranch?' · 성공 '+Math.round(c.successRate*100)+'%':'')+'</span></span></button>';
+          '<span class="right"><span class="tiny">'+(authored ? '' : esc(c.effect||'')+(c.isBranch?' · 성공 '+Math.round(c.successRate*100)+'%':''))+'</span></span></button>';
       }).join('');
   } else if (o.treating) {
     // 부상 치료 턴 — 훈련 선택지가 모두 잠긴다. 넘길 수단이 없으면 화면이 막히므로 전용 버튼을 둔다.
@@ -3805,8 +4014,14 @@ function showIntro(){
   var story = []; try { story = matchStory(oppId, G.league ? E.seasonView(G) : null); } catch(e){}
   var debutNames = Object.keys(debut).map(function(id){ var p = m.ctx.players[id]; return p ? p.name : ''; }).filter(Boolean);
   if (debutNames.length) story = ['오늘 데뷔전: ' + debutNames.join(', ') + ' — 캠프에서 키운 것이 코트에서 보이는 첫날.'].concat(story);
+  try {   // 이야기 주인공이 선발이면 — 오늘이 최종화
+    var aI = arcGet(), stoI = aI && storyFor(aI.cardId), repI = aI && arcRep(aI);
+    var mine = m.ctx.homeId === G.clubId ? m.ctx.homeLineup : m.ctx.awayLineup;
+    if (stoI && repI && aI.cleared && !aI.proven && mine.indexOf(repI.instanceId) >= 0)
+      story = ['📖 최종화 — '+aI.name+'의 벽 "'+WALL_INFO[aI.stat].act+'". 오늘, 증명할 차례.'].concat(story);
+  } catch(e){}
   el.innerHTML = '<div class="tm a"><b>'+esc(m.ctx.awayName)+'</b>'+row(m.ctx.awayLineup)+'</div>'+
-    '<div class="vs">VS</div>'+(story.length ? '<div class="st">'+esc(story[0])+'</div>' : '')+
+    '<div class="vs">VS</div>'+(story.length ? '<div class="st'+(story[0].indexOf('📖')===0?' hero':'')+'">'+esc(story[0])+'</div>' : '')+
     '<div class="tm h"><b>'+esc(m.ctx.homeName)+'</b>'+row(m.ctx.homeLineup)+'</div>';
   el.className = 'intro show';
   return Math.round(2000 / ((mv && mv.speed) || 1));
@@ -4157,15 +4372,16 @@ function doScout10(){
 }
 
 function applyChoice(id){
-  var pre = null;   // 스토리 컷 선택이면 반응 장면을 띄운다
-  try { var o0 = E.trainingOptions(ses);
-    if (o0.kind === 'event' && o0.event && o0.event.kind === 0 && /^event:/.test(id))
-      pre = { card: ses.trainee.card, beat: ses.cfg.storyTurns.indexOf(o0.turn), choice: +id.split(':')[1] };
+  try { var o0 = E.trainingOptions(ses);   // 인라인(연출 끔) 스토리 선택도 이해 테스트 기록은 남긴다
+    if (o0.kind === 'event' && o0.event && o0.event.kind === 0 && /^event:/.test(id)) storyRecordPick(ses.trainee.card, ses.cfg.storyTurns.indexOf(o0.turn), +id.split(':')[1]);
   } catch(e){}
   var res = E.applyTrainingChoice(ses, id);
-  if (pre) { var evR = (res.events||[]).filter(function(ev){ return ev.type === 'event'; })[0];
-    try { storyReact(pre.card, pre.beat, pre.choice, evR && evR.resultText); } catch(e){} }
   (res.events||[]).forEach(function(ev){ pushFeed(ev); });
+  afterChoice(res);
+}
+// 선택(훈련·이벤트)이 적용된 뒤 — 졸업 판정, 다시 그리기, 평가전 리포트.
+function afterChoice(res){
+  res = res || { events: [] };
   var o = E.trainingOptions(ses);
   if (o.kind === 'graduated') { finishCamp(); return; }
   render();
@@ -4217,7 +4433,8 @@ function finishCamp(){
   var goalMet0 = isRetrain0 ? (g0.kept === 'replaced') : (g0.instance.grade <= 1);
   runGradeReveal(lastGrad.grade, function(){   // 12턴의 보상 — 등급을 극적으로 공개하고 결과 화면으로
     view = 'trainGrad'; render(); window.scrollTo(0,0);
-    if (goalMet0) setTimeout(confetti, 150);   // 캠프 목표 달성 축포(B)
+    playEndingScene(lastGrad, function(){ if (goalMet0) setTimeout(confetti, 150); });   // 캠프의 끝 장면 → 목표 달성 축포(B)
+    if (goalMet0) { try { if (localStorage.getItem('bloom-fx-off')) setTimeout(confetti, 150); } catch(e){} }
     if (earned && !gotMissions.length) setTimeout(function(){ toast('자동 진행이 열렸습니다'); }, 600);
   });
 }
@@ -4416,6 +4633,7 @@ document.addEventListener('click', function(e){
   if (d.act === 'dexback') { var back = dexBack; dexFocus = null; go(back === 'scout' ? 'scout' : 'album'); return; }
 
   if (d.act === 'dailyclaim') return claimDaily();
+  if (d.act === 'arcreplay') { showArcSplit(); return; }
   if (d.act === 'arcclose') { var asp = document.querySelector('.arcsplit'); if (asp && asp.parentNode) asp.parentNode.removeChild(asp); return; }
   if (d.act === 'scout') return doScout();
   if (d.act === 'scout10') return doScout10();
@@ -4519,6 +4737,6 @@ document.addEventListener('click', function(e){
 
 boot();
 // QA/스크린샷용 연출 훅(순수 연출, 판정 무관). 실제 게임 흐름은 이걸 쓰지 않는다.
-try { window.__fx = { grade: runGradeReveal, summon: runSummon, eval: evalFlash, arcSplit: showArcSplit }; } catch(e){}
+try { window.__fx = { grade: runGradeReveal, summon: runSummon, eval: evalFlash, arcSplit: showArcSplit, mv: function(){ return mv; } }; } catch(e){}
 })();
 </script>
